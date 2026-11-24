@@ -86,3 +86,70 @@ export async function declarerServeurMcp(
 		return { manuel, introuvable: e.code === 'ENOENT', raison: raisonCourte(e.message ?? '') };
 	}
 }
+
+/** Déclaration de Mnemo, quel que soit son chemin : arguments `<…>/adaptateurs/cli/main.ts mcp`. */
+function estDeclarationMnemo(sortie: string): boolean {
+	const args = valeurDeLigne(sortie, 'args');
+	return args !== undefined && /adaptateurs[\\/]cli[\\/]main\.ts mcp$/u.test(args);
+}
+
+/** Portée lue dans la sortie de `claude mcp get` (`User config (…)` → `user`) ; absente : null. */
+function porteeLue(sortie: string): PorteeMcp | null {
+	const portee = valeurDeLigne(sortie, 'scope');
+	return portee === undefined ? null : porteeDe(portee);
+}
+
+/**
+ * `absent` : aucune déclaration `mnemo` (rien n'est déclaré) ; `deja` : elle lance déjà ce Node et ce `main.ts` ; `remplace` :
+ * une déclaration de Mnemo de portée utilisateur qui lançait un autre Node ou un autre `main.ts`, retirée puis refaite ;
+ * `autre` : une déclaration `mnemo` qui ne lance pas Mnemo, ou d'une autre portée : laissée.
+ */
+export type ResultatRedeclaration = 'absent' | 'deja' | 'remplace' | 'autre' | { echec: string };
+/** `retire` : retirée ; `autre` : elle ne lance pas ce Mnemo (ou d'une autre portée) : laissée. */
+export type ResultatRetraitMcp = 'absent' | 'retire' | 'autre' | { echec: string };
+
+const echecDe = (erreur: unknown): { echec: string } => {
+	const e = erreur as { code?: string; message?: string };
+	return { echec: e.code === 'ENOENT' ? '`claude` introuvable.' : raisonCourte(e.message ?? '') || 'claude ne répond pas.' };
+};
+
+/**
+ * Remet la déclaration de Mnemo (portée utilisateur) sur ce Node et ce `main.ts`, seulement si elle existe déjà (après une
+ * mise à jour de Node ou un déplacement de Mnemo) : rien n'est déclaré quand il n'y en a pas, et une déclaration `mnemo`
+ * qui ne lance pas Mnemo, ou d'une autre portée, n'est jamais touchée.
+ */
+export async function redeclarerServeurMcp(executer: Executer, cheminMain: string, claude: CommandeClaude | null, plateforme: string = process.platform): Promise<ResultatRedeclaration> {
+	if (claude === null) return { echec: '`claude` introuvable (PATH, ou MNEMO_CLAUDE).' };
+	const node = nodeDurable(plateforme as NodeJS.Platform);
+	const lancer = (args: string[]) => executer(claude.commande, [...claude.avant, ...args]);
+	try {
+		const existante = await lancer(['mcp', 'get', 'mnemo']);
+		if (existante.code !== 0) return 'absent';
+		if (memeDeclaration(existante.sortie, node, cheminMain)) return 'deja';
+		if (!estDeclarationMnemo(existante.sortie) || porteeLue(existante.sortie) !== 'user') return 'autre';
+		const retrait = await lancer(['mcp', 'remove', '--scope', 'user', 'mnemo']);
+		if (retrait.code !== 0) return { echec: raisonCourte(retrait.erreur) || `claude mcp remove : code ${retrait.code}` };
+		const ajout = await lancer(['mcp', 'add-json', '--scope', 'user', 'mnemo', JSON.stringify({ type: 'stdio', command: node, args: [cheminMain, 'mcp'] })]);
+		if (ajout.code !== 0) return { echec: raisonCourte(ajout.erreur) || `claude mcp add-json : code ${ajout.code}` };
+		return 'remplace';
+	} catch (erreur) {
+		return echecDe(erreur);
+	}
+}
+
+/** Retire la déclaration de Mnemo (portée utilisateur) seulement si elle lance ce Node et ce `main.ts`. */
+export async function retirerServeurMcp(executer: Executer, cheminMain: string, claude: CommandeClaude | null, plateforme: string = process.platform): Promise<ResultatRetraitMcp> {
+	if (claude === null) return { echec: '`claude` introuvable (PATH, ou MNEMO_CLAUDE).' };
+	const node = nodeDurable(plateforme as NodeJS.Platform);
+	const lancer = (args: string[]) => executer(claude.commande, [...claude.avant, ...args]);
+	try {
+		const existante = await lancer(['mcp', 'get', 'mnemo']);
+		if (existante.code !== 0) return 'absent';
+		if (!memeDeclaration(existante.sortie, node, cheminMain) || porteeLue(existante.sortie) !== 'user') return 'autre';
+		const retrait = await lancer(['mcp', 'remove', '--scope', 'user', 'mnemo']);
+		if (retrait.code !== 0) return { echec: raisonCourte(retrait.erreur) || `claude mcp remove : code ${retrait.code}` };
+		return 'retire';
+	} catch (erreur) {
+		return echecDe(erreur);
+	}
+}

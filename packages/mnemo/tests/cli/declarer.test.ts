@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { commandeManuelle, declarerServeurMcp, type Executer } from '../../src/adaptateurs/cli/declarer.ts';
+import { commandeDeclarer } from '../../src/adaptateurs/cli/declaration.ts';
+import { commandeManuelle, declarerServeurMcp, redeclarerServeurMcp, retirerServeurMcp, type Executer } from '../../src/adaptateurs/cli/declarer.ts';
 import { executeurReel } from '../../src/adaptateurs/cli/executeur.ts';
 
 const MAIN = '/chemin/absolu/main.ts';
@@ -147,5 +148,60 @@ describe('executeurReel', () => {
 		setTimeout(() => controleur.abort(), 100);
 		await expect(attente).rejects.toThrow();
 		expect(Date.now() - debut).toBeLessThan(10_000);
+	});
+});
+
+describe('redeclarerServeurMcp et retirerServeurMcp (mnemo declarer)', () => {
+	const ANCIEN = '/ancien/depot/packages/mnemo/src/adaptateurs/cli/main.ts';
+	const portee = (sortie: string, mot: string) => sortie.replace('User config (available in all your projects)', mot);
+
+	it('remplace une déclaration de Mnemo périmée de portée utilisateur : retrait puis ajout', async () => {
+		const { appels, executer } = simule([{ code: 0, sortie: sortieGet('/vieux/node', ANCIEN) }, 0, 0]);
+		expect(await redeclarerServeurMcp(executer, MAIN, CLAUDE)).toBe('remplace');
+		expect(appels[1]).toEqual(['claude', 'mcp', 'remove', '--scope', 'user', 'mnemo']);
+		expect(appels[2]?.slice(0, 6)).toEqual(['claude', 'mcp', 'add-json', '--scope', 'user', 'mnemo']);
+		expect(JSON.parse(appels[2]?.[6] ?? '')).toEqual({ type: 'stdio', command: process.execPath, args: [MAIN, 'mcp'] });
+	});
+
+	it('ne déclare jamais rien de neuf, ne touche ni une autre commande « mnemo » ni une autre portée', async () => {
+		for (const [reponse, attendu] of [
+			[1, 'absent'],
+			[{ code: 0, sortie: sortieGet(process.execPath, MAIN) }, 'deja'],
+			[{ code: 0, sortie: sortieGet('/usr/bin/autre', '/autre/serveur.js') }, 'autre'],
+			[{ code: 0, sortie: portee(sortieGet('/vieux/node', ANCIEN), 'Local config (private to you in this project)') }, 'autre'],
+		] as const) {
+			const { appels, executer } = simule([reponse]);
+			expect(await redeclarerServeurMcp(executer, MAIN, CLAUDE)).toBe(attendu);
+			expect(appels).toHaveLength(1);
+		}
+	});
+
+	it('échecs : claude introuvable, retrait refusé', async () => {
+		expect(await redeclarerServeurMcp(simule([]).executer, MAIN, null)).toMatchObject({ echec: expect.any(String) });
+		const { executer } = simule([{ code: 0, sortie: sortieGet('/vieux/node', ANCIEN) }, 1]);
+		expect(await redeclarerServeurMcp(executer, MAIN, CLAUDE)).toMatchObject({ echec: expect.stringContaining('remove') });
+	});
+
+	it('retire seulement une déclaration qui lance ce Node et ce main.ts', async () => {
+		const ok = simule([{ code: 0, sortie: sortieGet(process.execPath, MAIN) }, 0]);
+		expect(await retirerServeurMcp(ok.executer, MAIN, CLAUDE)).toBe('retire');
+		expect(ok.appels[1]).toEqual(['claude', 'mcp', 'remove', '--scope', 'user', 'mnemo']);
+		for (const [reponse, attendu] of [
+			[1, 'absent'],
+			[{ code: 0, sortie: sortieGet('/vieux/node', ANCIEN) }, 'autre'],
+		] as const) {
+			const { appels, executer } = simule([reponse]);
+			expect(await retirerServeurMcp(executer, MAIN, CLAUDE)).toBe(attendu);
+			expect(appels).toHaveLength(1);
+		}
+	});
+
+	it('mnemo declarer : une ligne JSON ; usage refusé sans action ou avec les deux', async () => {
+		const lignes: string[] = [];
+		const { executer } = simule([1]);
+		await commandeDeclarer(['--remplacer', '--json'], { executer, claude: () => CLAUDE, main: MAIN }, (l) => lignes.push(l));
+		expect(JSON.parse(lignes[0]!)).toMatchObject({ resultat: 'absent' });
+		await expect(commandeDeclarer(['--json'], { executer, claude: () => CLAUDE })).rejects.toMatchObject({ code: 2 });
+		await expect(commandeDeclarer(['--remplacer', '--retirer'], { executer, claude: () => CLAUDE })).rejects.toMatchObject({ code: 2 });
 	});
 });

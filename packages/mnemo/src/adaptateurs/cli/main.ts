@@ -36,6 +36,7 @@ Commandes :
   arreter [dossier] arrête le service du dossier (comme Ctrl-C ; pour un service démarré par « ouvrir »)
   lanceur           crée ~/Applications/Mnemo.app (macOS), qui fait « mnemo ouvrir » pour ce dossier [--retirer]
   commande          installe la commande « mnemo » dans ~/.local/bin (macOS, Linux) [--retirer]
+  declarer          déclaration MCP à Claude Code existante : --remplacer (sur ce Node et ce Mnemo) | --retirer [--json]
   mcp               serveur MCP pour Claude Code (stdio)
   hook <événement>  hook de session Claude Code (debut, message, outil, arret, fin), entrée JSON sur stdin
   ligne-etat        ligne d'état des sessions Mnemo : transmet les quotas du compte au service, entrée JSON sur stdin
@@ -94,6 +95,8 @@ async function executer(args: string[]): Promise<void> {
 			return (await import('./lanceur.ts')).commandeLanceur(reste);
 		case 'commande':
 			return (await import('./commande.ts')).commandeCommande(reste);
+		case 'declarer':
+			return (await import('./declaration.ts')).commandeDeclarer(reste);
 		case 'mcp':
 			return (await import('./mcp.ts')).commandeMcp(reste);
 		case 'hook':

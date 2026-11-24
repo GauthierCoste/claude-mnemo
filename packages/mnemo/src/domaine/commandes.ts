@@ -23,6 +23,7 @@ export const COMMANDES_CLI: readonly string[] = [
 	'arreter',
 	'lanceur',
 	'commande',
+	'declarer',
 	'mcp',
 	'hook',
 	'ligne-etat',
