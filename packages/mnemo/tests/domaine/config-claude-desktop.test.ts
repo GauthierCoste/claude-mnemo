@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	adresseVue,
 	brancherMnemo,
 	debrancherMnemo,
 	ecrireServeur,
@@ -67,6 +68,23 @@ describe('configuration de l’app Claude : lecture', () => {
 			{ nom: 'bizarre', commande: 'outil', args: [], env: [], modifiable: false },
 		]);
 		expect(JSON.stringify(vus)).not.toContain('secret-123');
+	});
+
+	it('vue : l’adresse d’un serveur distant sans identifiants, paramètres ni fragment', () => {
+		const vus = serveursVus(
+			lire(
+				JSON.stringify({
+					mcpServers: {
+						jeton: { url: 'https://exemple.test/mcp?token=sk-secret-123&x=1#frag' },
+						compte: { type: 'sse', url: 'https://alice:mot-secret@exemple.test:8443/sse/' },
+						casse: { url: 'pas une adresse secret-456' },
+					},
+				}),
+			),
+		);
+		expect(vus.map((v) => v.commande)).toEqual(['https://exemple.test/mcp', 'https://exemple.test:8443/sse/', 'adresse illisible']);
+		expect(JSON.stringify(vus)).not.toMatch(/secret|alice|token|frag/u);
+		expect(adresseVue('http://[::1')).toBe('adresse illisible');
 	});
 
 	it('forme stdio : type « stdio » toléré, toute autre forme refusée', () => {

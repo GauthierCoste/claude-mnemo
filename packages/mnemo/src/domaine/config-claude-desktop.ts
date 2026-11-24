@@ -86,6 +86,23 @@ export function serveurStdio(brut: unknown): ServeurStdio | null {
 	return { commande: command, args: args ?? [], env: (env ?? {}) as Record<string, string> };
 }
 
+/**
+ * Adresse d'un serveur distant telle que la vue la montre : origine et chemin seulement, sans identifiants (`user:pass@`),
+ * paramètres (`?…`, un jeton peut s'y trouver) ni fragment ; illisible : un texte neutre, jamais l'adresse brute.
+ */
+export function adresseVue(url: string): string {
+	try {
+		const u = new URL(url);
+		u.username = '';
+		u.password = '';
+		u.search = '';
+		u.hash = '';
+		return u.href;
+	} catch {
+		return 'adresse illisible';
+	}
+}
+
 /** Vue d'un serveur : jamais les valeurs des variables ; décrit autrement, ce qui s'en lit (commande, arguments, noms). */
 function serveurVu(nom: string, brut: unknown): ServeurVu {
 	const stdio = serveurStdio(brut);
@@ -93,7 +110,7 @@ function serveurVu(nom: string, brut: unknown): ServeurVu {
 	const objet = estObjet(brut) ? brut : {};
 	return {
 		nom,
-		commande: typeof objet['command'] === 'string' ? objet['command'] : typeof objet['url'] === 'string' ? objet['url'] : '',
+		commande: typeof objet['command'] === 'string' ? objet['command'] : typeof objet['url'] === 'string' ? adresseVue(objet['url']) : '',
 		args: listeDeTextes(objet['args']) ? [...objet['args']] : [],
 		env: estObjet(objet['env']) ? Object.keys(objet['env']) : [],
 		modifiable: false,
