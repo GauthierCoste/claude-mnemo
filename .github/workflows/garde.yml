@@ -1,0 +1,29 @@
+# À chaque poussée et demande de fusion, documentation comprise : gitleaks et garde de publication (liste blanche, secrets,
+# chemins personnels ; sans termes interdits, qui restent sur la machine de l'auteur : mode non strict).
+name: garde
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  publication:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      # Sans installation : le script n'utilise que Node et git.
+      - run: pnpm verifier-publication
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # gitleaks, épinglé par SHA (v2.3.9), version du moteur fixée (la syntaxe `[[allowlists]]` de .gitleaks.toml
+      # demande gitleaks ≥ 8.25) ; règles par défaut et faux positifs admis : .gitleaks.toml.
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.28.0

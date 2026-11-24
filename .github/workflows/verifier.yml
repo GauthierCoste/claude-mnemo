@@ -1,9 +1,13 @@
-# Vérifications à chaque poussée et demande de fusion (dépôt public : minutes gratuites, sans quota) : types et tests
-# (sans modèles) sous Linux et Windows avec Node 24, la version minimale, et sous macOS, la plateforme d'usage, avec Node 26 ;
-# gitleaks ; garde de publication (liste blanche, secrets, chemins personnels ; sans termes interdits, qui restent sur la
-# machine de l'auteur : mode non strict).
+# Types et tests (sans modèles) à chaque poussée et demande de fusion qui touche autre chose que la documentation : sous
+# Linux et Windows avec Node 24, la version minimale, et sous macOS, la plateforme d'usage, avec Node 26. Une modification
+# de documentation seule (Markdown, images) ne les lance pas ; la garde (garde.yml) tourne toujours.
 name: verifier
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    paths-ignore: ['**.md', 'docs/**']
+  pull_request:
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -26,25 +30,3 @@ jobs:
           node -e "const d = require('node:path').join(process.env.RUNNER_TEMP, 'mnemo-modeles-vides'); require('node:fs').mkdirSync(d, { recursive: true }); require('node:fs').appendFileSync(process.env.GITHUB_ENV, 'MNEMO_MODELES=' + d + String.fromCharCode(10))"
       - run: pnpm verifier
       - run: pnpm test
-  publication:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26
-      # Sans installation : le script n'utilise que Node et git.
-      - run: pnpm verifier-publication
-  secrets:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      # gitleaks, épinglé par SHA (v2.3.9), version du moteur fixée (la syntaxe `[[allowlists]]` de .gitleaks.toml
-      # demande gitleaks ≥ 8.25) ; règles par défaut et faux positifs admis : .gitleaks.toml.
-      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_VERSION: 8.28.0
