@@ -107,7 +107,7 @@
 
 /*
  * App de bureau : la barre de titre est la poignée de la fenêtre ; à gauche, la place des trois boutons de macOS
- * (`titleBarStyle: 'hiddenInset'`) ; ce qui s'y clique ou s'y saisit reste hors de la poignée.
+ * (barre de titre du système masquée, boutons incrustés) ; ce qui s'y clique ou s'y saisit reste hors de la poignée.
  */
 :global([data-coquille='app']) .titre {
 	-webkit-app-region: drag;

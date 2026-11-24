@@ -13,7 +13,7 @@ describe('coquille de l’app de bureau', () => {
 	it('reconnaît l’agent utilisateur de l’app de bureau, et lui seul', () => {
 		expect(estAppDeBureau(APP)).toBe(true);
 		expect(estAppDeBureau(NAVIGATEUR)).toBe(false);
-		expect(estAppDeBureau(`${NAVIGATEUR} Electron/38.0.0`)).toBe(false);
+		expect(estAppDeBureau(`${NAVIGATEUR} AutreApp/2.0.0`)).toBe(false);
 	});
 
 	it('pose data-coquille="app" sur <html> dans l’app de bureau', () => {
