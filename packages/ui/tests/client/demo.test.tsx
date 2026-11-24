@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { avertissementNonCherchable, consigneATraiter } from '@mnemo/commun';
-import { ROUTES, type DocumentVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseProfils, type ReponseValidationLot, type SessionTermineeVue, type SessionVue } from '@mnemo/contrat';
+import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseProfils, type ReponseValidationLot, type SessionTermineeVue, type SessionVue } from '@mnemo/contrat';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ErreurApi } from '../../src/client/api.ts';
@@ -33,6 +33,23 @@ describe('mode démo', () => {
 		const terminee = sessions.find((s) => s.etat === 'terminee')!;
 		expect((await api.lire<{ session: SessionVue }>(ROUTES.session.replace(':id', terminee.id))).session.id).toBe(terminee.id);
 		await expect(api.lire(ROUTES.session.replace(':id', 'inconnue'))).rejects.toMatchObject({ statut: 404 });
+	});
+
+	it('app Claude : brancher la mémoire, ajouter, modifier (NOM seul garde la valeur), retirer ; jamais de valeur de variable', async () => {
+		const { api } = creerClientDemo();
+		const avant = await api.lire<ClaudeDesktopVue>(ROUTES.claudeDesktop);
+		expect(avant).toMatchObject({ installee: true, mnemo: 'perime' });
+		expect(JSON.stringify(avant)).not.toContain('valeur-fictive');
+		expect((await api.remplacer<ClaudeDesktopVue>(ROUTES.claudeDesktopMnemo, {})).mnemo).toBe('branche');
+		expect((await api.supprimer<ClaudeDesktopVue>(ROUTES.claudeDesktopMnemo)).mnemo).toBe('absent');
+		await api.envoyer(ROUTES.claudeDesktopServeurs, { nom: 'outil', commande: 'uvx', args: ['outil-mcp'], env: { JETON: 'x' } });
+		await expect(api.envoyer(ROUTES.claudeDesktopServeurs, { nom: 'outil', commande: 'uvx', args: [], env: {} })).rejects.toMatchObject({ statut: 409 });
+		const renomme = await api.remplacer<ClaudeDesktopVue>(ROUTES.claudeDesktopServeur.replace(':id', 'notes'), { nom: 'notes-2', commande: 'npx', args: [], env: { CLE_API: null } });
+		expect(renomme.serveurs.map((x) => x.nom)).toEqual(['notes-2', 'agenda', 'outil']);
+		expect(renomme.serveurs[0]!.env).toEqual(['CLE_API']);
+		const retire = await api.supprimer<ClaudeDesktopVue>(ROUTES.claudeDesktopServeur.replace(':id', 'agenda'));
+		expect(retire.serveurs.map((x) => x.nom)).toEqual(['notes-2', 'outil']);
+		await expect(api.supprimer(ROUTES.claudeDesktopServeur.replace(':id', 'agenda'))).rejects.toMatchObject({ statut: 404 });
 	});
 
 	it('première session : journal au format des pistes (position ◆, pistes ◇ variées dont une liée, classement vide, fiches lues)', async () => {

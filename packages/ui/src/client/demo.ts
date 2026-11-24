@@ -4,6 +4,7 @@
  */
 import { ErreurApi, type Api } from './api.ts';
 import { lotsDemo } from './demo-lots.ts';
+import { creerClaudeDesktopDemo } from './demo-claude-desktop.ts';
 import { creerProfilsDemo } from './demo-profils.ts';
 import type { Connexion, EtatConnexion, FluxTerminal } from './connexion.ts';
 import type { Client } from './contexte.tsx';
@@ -1049,6 +1050,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 
 	// Réglages de la démo : en mémoire ; comme le service, le port changé attend un redémarrage
 	const profilsDemo = creerProfilsDemo();
+	const claudeDesktopDemo = creerClaudeDesktopDemo();
 	/** Route de profil (`:id`) du chemin, décodée ; undefined sinon. */
 	const profilDe = (route: string, chemin: string) => {
 		const id = idDans(route, chemin);
@@ -1089,11 +1091,14 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 		lire: <T>(chemin: string, params?: Record<string, string>, options?: { signal?: AbortSignal }) =>
 			attendre(() => {
 				options?.signal?.throwIfAborted();
-				return lire(chemin, params) as T;
+				return (claudeDesktopDemo.traiter('GET', chemin) ?? lire(chemin, params)) as T;
 			}),
-		envoyer: <T>(chemin: string, corps?: unknown) => attendre(() => envoyer(chemin, (corps ?? {}) as Record<string, unknown>) as T),
+		envoyer: <T>(chemin: string, corps?: unknown) =>
+			attendre(() => (claudeDesktopDemo.traiter('POST', chemin, corps) ?? envoyer(chemin, (corps ?? {}) as Record<string, unknown>)) as T),
 		remplacer: <T>(chemin: string, corps: unknown) =>
 			attendre(() => {
+				const app = claudeDesktopDemo.traiter('PUT', chemin, corps);
+				if (app !== undefined) return app as T;
 				const profil = profilDe(ROUTES.profil, chemin);
 				if (profil !== undefined) return ecritureProfil(profilsDemo.enregistrer(profil, corps), profil) as T;
 				if (chemin !== ROUTES.reglages) throw new ErreurApi('Route inconnue (données de démonstration).', 404);
@@ -1101,6 +1106,8 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			}),
 		supprimer: <T>(chemin: string, params?: Record<string, string>) =>
 			attendre(() => {
+				const app = claudeDesktopDemo.traiter('DELETE', chemin);
+				if (app !== undefined) return app as T;
 				const profil = profilDe(ROUTES.profil, chemin);
 				if (profil !== undefined) return ecritureProfil(profilsDemo.supprimer(profil), profil) as T;
 				// comme le service : seule une session terminée est retirée de l'historique

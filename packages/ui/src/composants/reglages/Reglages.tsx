@@ -1,26 +1,29 @@
 /**
- * Vue Réglages (roue dentée en bas du rail, ⌥,) : deux onglets, « Profils » (les profils de session : consigne, skills,
- * plugins, hooks, lancement, avatar, et l'aperçu de ce que reçoit une session) et « Système » (les réglages du dossier).
+ * Vue Réglages (roue dentée en bas du rail, ⌥,) : trois onglets, « Profils » (les profils de session : consigne, skills,
+ * plugins, hooks, lancement, avatar, et l'aperçu de ce que reçoit une session), « Système » (les réglages du dossier) et
+ * « App Claude » (les serveurs MCP de l'app Claude : brancher la mémoire, gérer les autres).
  * Le dernier onglet ouvert est retenu dans ce navigateur. Changer d'onglet avec des modifications non enregistrées est
  * retenu : un avertissement propose de les abandonner ou de rester.
  */
 import { useCallback, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Bouton } from '../commun/Bouton.tsx';
+import { AppClaude } from './claude-desktop/AppClaude.tsx';
 import { Profils } from './profils/Profils.tsx';
 import { ReglagesSysteme } from './ReglagesSysteme.tsx';
 import s from './Reglages.module.css';
 
-type Onglet = 'profils' | 'systeme';
+type Onglet = 'profils' | 'systeme' | 'app-claude';
 const ONGLETS: { cle: Onglet; titre: string }[] = [
 	{ cle: 'profils', titre: 'Profils' },
 	{ cle: 'systeme', titre: 'Système' },
+	{ cle: 'app-claude', titre: 'App Claude' },
 ];
 const CLE_ONGLET = 'mnemo.reglages.onglet';
 
 function ongletRetenu(): Onglet {
 	try {
 		const v = localStorage.getItem(CLE_ONGLET);
-		return v === 'systeme' ? 'systeme' : 'profils';
+		return ONGLETS.find((o) => o.cle === v)?.cle ?? 'profils';
 	} catch {
 		return 'profils';
 	}
@@ -96,7 +99,13 @@ export function Reglages(): ReactNode {
 				</div>
 			)}
 			<div id={`panneau-${onglet}`} role="tabpanel" aria-labelledby={`onglet-${onglet}`} className={s.panneau}>
-				{onglet === 'profils' ? <Profils surModifie={surModifie} /> : <ReglagesSysteme surModifie={surModifie} />}
+				{onglet === 'profils' ? (
+					<Profils surModifie={surModifie} />
+				) : onglet === 'systeme' ? (
+					<ReglagesSysteme surModifie={surModifie} />
+				) : (
+					<AppClaude surModifie={surModifie} />
+				)}
 			</div>
 		</section>
 	);

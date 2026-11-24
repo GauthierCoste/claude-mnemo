@@ -1,0 +1,121 @@
+/* Onglet App Claude : état de la mémoire, liste des serveurs MCP, formulaire (la disposition vient de profils/Profils.module.css). */
+
+.etat {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--esp-3);
+}
+
+.texteEtat {
+	margin: 0;
+	flex: 1;
+	min-width: 240px;
+	display: flex;
+	align-items: baseline;
+	gap: var(--esp-2);
+}
+
+.pastille {
+	flex: none;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--dim);
+}
+
+.pastille[data-etat='branche'] {
+	background: var(--vert);
+}
+
+.pastille[data-etat='perime'] {
+	background: var(--amber);
+}
+
+.illisible {
+	padding: var(--esp-3);
+	border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+	border-radius: var(--r-2);
+	background: color-mix(in srgb, var(--red) 8%, transparent);
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-2);
+}
+
+.illisible p {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.serveurs {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.serveur {
+	padding: var(--esp-3) 0;
+	border-top: 1px solid var(--bd);
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.serveur:first-child {
+	border-top: none;
+	padding-top: 0;
+}
+
+.enteteServeur {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--esp-2);
+}
+
+.nomServeur {
+	font-weight: 600;
+	margin-right: auto;
+}
+
+.lectureSeule {
+	padding: 1px 8px;
+	border-radius: var(--r-pastille);
+	background: color-mix(in srgb, var(--mu) 14%, transparent);
+	color: var(--mu);
+	font-size: 11px;
+}
+
+.commande {
+	display: block;
+	padding: 4px 8px;
+	border-radius: var(--r-1);
+	background: var(--s1);
+	font-family: var(--mono);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+
+.formulaire {
+	padding-top: var(--esp-3);
+	border-top: 1px solid var(--bd);
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-3);
+}
+
+.titreFormulaire {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.champ {
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-1);
+	min-width: 0;
+}

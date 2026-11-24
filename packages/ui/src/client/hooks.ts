@@ -24,6 +24,7 @@ import {
 	type ReponseLots,
 	type ReponseDocuments,
 	type ApercuProfilVue,
+	type ClaudeDesktopVue,
 	type ProfilDetailVue,
 	type ReponseProfils,
 	type ReglagesVue,
@@ -62,6 +63,12 @@ export function useNomRacine(): string {
 export function useReglages(): Ressource<ReglagesVue> {
 	const { api } = useClient();
 	return useRessource('reglages', () => api.lire<ReglagesVue>(ROUTES.reglages));
+}
+
+/** Configuration de l'app Claude (Claude Desktop), lue à l'ouverture de Réglages › App Claude ; jamais de valeur de variable. */
+export function useClaudeDesktop(): Ressource<ClaudeDesktopVue> {
+	const { api } = useClient();
+	return useRessource('claude-desktop', () => api.lire<ClaudeDesktopVue>(ROUTES.claudeDesktop));
 }
 
 /** Profils de session qui peuvent être lancés ; relus quand la mémoire change (un profil ajouté sous `profils/`). */
