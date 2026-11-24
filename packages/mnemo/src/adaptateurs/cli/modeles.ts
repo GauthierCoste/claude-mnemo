@@ -22,6 +22,10 @@ export type ContexteModeles = {
 	telecharger: Telecharger;
 	/** Dossier Mnemo dont on montre ou arrête les serveurs ; par défaut celui du dossier courant (null : aucun). */
 	racine: string | null;
+	/** Lignes de `installer` : la sortie et l'erreur standard par défaut (`mnemo init --json` les garde pour lui). */
+	journal: { info(ligne: string): void; erreur(ligne: string): void };
+	/** Progression de chaque téléchargement de `installer` ; null : en pourcentage sur un terminal (stderr), sinon rien. */
+	progression: ((piece: Piece, recu: number, total: number | null) => void) | null;
 };
 
 /** Progression sur stderr, seulement vers un terminal, par pas d'environ 5 %. */
@@ -54,6 +58,8 @@ function contexteReel(partiel: Partial<ContexteModeles>): ContexteModeles {
 		pieces: partiel.pieces !== undefined ? partiel.pieces : piecesPourPlateforme(plateforme, arch),
 		telecharger: partiel.telecharger ?? ((url, vers) => telechargerFichier(url, vers)),
 		racine: partiel.racine !== undefined ? partiel.racine : trouverRacine(process.cwd()),
+		journal: partiel.journal ?? { info: (ligne) => console.log(ligne), erreur: (ligne) => console.error(ligne) },
+		progression: partiel.progression ?? null,
 	};
 }
 
@@ -78,28 +84,33 @@ async function serveursEnMarche(racine: string | null): Promise<void> {
 }
 
 async function installer(contexte: ContexteModeles, pieces: Piece[], depuis: string | undefined, injecte: boolean): Promise<void> {
+	const { journal, progression } = contexte;
 	let echecs = 0;
 	let nouvelles = 0;
 	for (const piece of pieces) {
-		const telecharger = injecte ? contexte.telecharger : telechargerAvecProgression(piece.libelle);
+		const telecharger: Telecharger = injecte
+			? contexte.telecharger
+			: progression !== null
+				? (url, vers) => telechargerFichier(url, vers, { progression: (recu, total) => progression(piece, recu, total) })
+				: telechargerAvecProgression(piece.libelle);
 		try {
 			const resultat = await installerPiece(contexte.dossier, piece, { telecharger, ...(depuis === undefined ? {} : { depuis }) });
 			for (const ecarte of resultat.statut === 'deja' ? [] : (resultat.ecartes ?? [])) {
-				console.log(`${piece.libelle} : ${ecarte} écarté (empreinte différente)`);
+				journal.info(`${piece.libelle} : ${ecarte} écarté (empreinte différente)`);
 			}
 			if (resultat.statut !== 'deja') nouvelles++;
-			if (resultat.statut === 'deja') console.log(`${piece.libelle} : déjà installé`);
-			else if (resultat.statut === 'copie') console.log(`${piece.libelle} : installé depuis ${resultat.depuis}`);
-			else console.log(`${piece.libelle} : téléchargé`);
+			if (resultat.statut === 'deja') journal.info(`${piece.libelle} : déjà installé`);
+			else if (resultat.statut === 'copie') journal.info(`${piece.libelle} : installé depuis ${resultat.depuis}`);
+			else journal.info(`${piece.libelle} : téléchargé`);
 		} catch (erreur) {
 			echecs++;
-			console.error(`${piece.libelle} : échec — ${erreur instanceof Error ? erreur.message : String(erreur)}`);
+			journal.erreur(`${piece.libelle} : échec — ${erreur instanceof Error ? erreur.message : String(erreur)}`);
 		}
 	}
 	// Des serveurs lancés avant cette installation ne connaissent pas la pièce neuve : ceux de ce dossier sont arrêtés, le
 	// prochain appel les relance avec tout ce qui est installé (ceux des autres dossiers s'arrêtent après 15 min sans requête).
 	if (nouvelles > 0 && contexte.racine !== null && (await arreterServeurs(contexte.racine)) === 'arrete') {
-		console.log('Serveurs de ce dossier arrêtés : ils repartiront avec les pièces neuves.');
+		journal.info('Serveurs de ce dossier arrêtés : ils repartiront avec les pièces neuves.');
 	}
 	if (echecs > 0) throw new ErreurCli(`${echecs} ${echecs === 1 ? 'pièce non installée' : 'pièces non installées'}.`, 1);
 }

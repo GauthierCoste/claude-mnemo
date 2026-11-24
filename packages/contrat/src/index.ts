@@ -1,6 +1,7 @@
 /**
  * Contrat de l'API du service Mnemo : types et constantes seulement, ne dépend que de `@mnemo/commun`. L'application ne
- * l'importe pas ; seuls l'adaptateur HTTP du service et ses clients (interface web) s'y réfèrent.
+ * l'importe pas ; seuls l'adaptateur HTTP du service et ses clients (interface web) s'y réfèrent, et, pour les sorties
+ * `--json` de `mnemo init`, `mnemo verifier-poste` et `mnemo declarer`, la CLI et les programmes qui les lisent.
  */
 import type { AvecAvertissements, Avatar, GroupeReglage, LanceurDeProfil, RaisonCarte } from '@mnemo/commun';
 
@@ -721,3 +722,40 @@ export type DemandeValidationLot = { lignes: number[] };
 /** Lot validé : `lignes` appliquées (triées), `commit`, ce qui a changé ; `avertissements` : réindexation incomplète. */
 export type ReponseValidationLot = { id: string; fiche: string; commit: string; lignes: number[]; changements: string[] } & AvecAvertissements;
 export type ReponseRejetLot = { id: string };
+
+/**
+ * `mnemo init --json` (lu par un programme qui pilote l'installation) : une ligne JSON par événement sur la sortie
+ * standard, et rien d'autre. Une étape menée s'annonce (`debut`) puis finit (`fait` ou `echec`) ; une étape laissée de
+ * côté ne donne qu'une ligne `saute`. `lanceur` : macOS seulement. `motif` (étape `mcp`, `echec` seulement) : `perime`,
+ * une déclaration `mnemo` existe déjà et lance un autre Node ou un autre `main.ts` (autre installation de Mnemo), que
+ * `mnemo declarer --remplacer` reprend. Absent : tout autre échec.
+ */
+export type EtapeInit = 'memoire' | 'mcp' | 'modeles' | 'commande' | 'lanceur';
+export type MotifEchecInit = 'perime';
+export type EvenementInit = { etape: EtapeInit; etat: 'debut' | 'fait' | 'saute' | 'echec'; message: string; motif?: MotifEchecInit };
+/**
+ * Progression du téléchargement d'une pièce de modèle, au plus une ligne par seconde et par pièce : `piece`, son nom
+ * (`moteur`, `sens`, `reranker`) ; `libelle`, à montrer ; `total` : null si le serveur ne donne pas la taille.
+ */
+export type ProgressionInit = { etape: 'modeles'; etat: 'progression'; piece: string; libelle: string; recu: number; total: number | null };
+/** Dernière ligne : `racine`, le dossier Mnemo ; `ok` faux si une étape a échoué (le code de sortie est alors 1). */
+export type FinInit = { fin: true; racine: string; ok: boolean };
+export type LigneInit = EvenementInit | ProgressionInit | FinInit;
+
+/**
+ * `mnemo verifier-poste --json` : ce dont Mnemo a besoin sur le poste. `git.version` : « 2.50.1 » ; `claude.chemin` : le
+ * `claude` que lanceront les sessions ; `motif` : pourquoi ce n'est pas utilisable ; `node.version` : celle qui exécute Mnemo.
+ */
+export type PosteVerifie = {
+	git: { ok: boolean; version?: string; motif?: string };
+	claude: { ok: boolean; chemin?: string; motif?: string };
+	node: { version: string };
+};
+
+/**
+ * `mnemo declarer (--remplacer | --retirer) --json` : une ligne.
+ * `absent` : aucune déclaration `mnemo` ; `deja` : elle lance déjà ce Node et ce Mnemo ; `remplace` : refaite sur eux ;
+ * `retire` : retirée ; `autre` : laissée (elle ne lance pas ce Mnemo, ou n'est pas de portée utilisateur) ; `echec` : code
+ * de sortie 1, `message` dit pourquoi.
+ */
+export type SortieDeclarer = { resultat: 'absent' | 'deja' | 'remplace' | 'autre' | 'retire' | 'echec'; message: string };

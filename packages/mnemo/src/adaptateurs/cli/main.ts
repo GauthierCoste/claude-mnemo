@@ -13,7 +13,9 @@ const USAGE = `Usage : mnemo [dossier] | mnemo <commande>
 
 Commandes :
   init [dossier]    crée la mémoire (dossier ${DOSSIER_MEMOIRE}/) ; dans un terminal, guide pas à pas (dossier, projets,
-                    déclaration MCP à Claude Code, modèles, commande, lanceur) [--oui : les défauts, sans question] [--sans-mcp]
+                    déclaration MCP à Claude Code, modèles, commande, lanceur) [--oui : les défauts, sans question]
+                    [--mcp|--sans-mcp] [--modeles|--sans-modeles] [--commande|--sans-commande] [--lanceur|--sans-lanceur] :
+                    l'étape faite ou sautée sans question ; [--json] : une ligne JSON par événement, sans question
   lit <chemin>      affiche une fiche, chemin relatif à ${DOSSIER_MEMOIRE}/
   liste [dossier]   liste le contenu d'un dossier de la mémoire
   cherche <texte>   cherche dans la mémoire [--dossier <chemin>] [--tout] [--limite N] [--contexte]

@@ -6,45 +6,66 @@ import { createInterface } from 'node:readline';
 import type { Interface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import type { EtapeInit, MotifEchecInit } from '@mnemo/contrat';
 import { initialiser } from '../../application/initialiser.ts';
 import type { ResultatInitialisation } from '../../application/initialiser.ts';
 import { trouverClaude } from '../../infra/claude.ts';
 import { commandeAJour, dossierDeCommande } from '../../infra/commande-mnemo.ts';
+import type { Piece } from '../../infra/modeles/catalogue.ts';
 import { dependancesReelles } from '../../infra/systeme.ts';
 import { nodeDurable } from '../../infra/node-durable.ts';
 import { citerPosix, citerPowerShell, commandeManuelle, declarerServeurMcp } from './declarer.ts';
 import type { ResultatDeclaration } from './declarer.ts';
 import { ErreurCli } from './erreurs.ts';
 import { executeurReel } from './executeur.ts';
+import { journalInit } from './init-journal.ts';
+import { lireOptionsInit } from './init-options.ts';
+import type { ChoixExplicite } from './init-options.ts';
 import { DOSSIER_MEMOIRE } from '../../domaine/dossier-memoire.ts';
 
 const MAIN = fileURLToPath(new URL('./main.ts', import.meta.url));
 const SCHEMA = new URL('../../../modeles/SCHEMA.md', import.meta.url);
-const USAGE = 'Usage : mnemo init [dossier] [--oui] [--sans-mcp]';
 /** Une réponse invalide est reposée ; après ce nombre d'essais, le défaut est pris. */
 const ESSAIS = 3;
 
-/** Ce que `init` fait hors de la mémoire, à la demande seulement ; remplaçable (tests : rien n'est téléchargé ni installé). */
+/** Suivi de l'installation des modèles par `init --json` : ses lignes et la progression de chaque téléchargement. */
+export type SuiviModeles = {
+	journal: { info(ligne: string): void; erreur(ligne: string): void };
+	progression(piece: Piece, recu: number, total: number | null): void;
+};
+
+/**
+ * Ce que `init` fait hors de la mémoire, à la demande seulement ; remplaçable (tests : rien n'est téléchargé ni installé).
+ * `suivi`, `ecrire` : donnés par `--json` seulement (rien sur la sortie standard) ; sinon, chaque action écrit elle-même.
+ */
 export type ActionsInit = {
 	declarerMcp(): Promise<ResultatDeclaration>;
-	installerModeles(racine: string): Promise<void>;
-	creerLanceur(racine: string): Promise<void>;
-	installerCommande(): Promise<void>;
+	installerModeles(racine: string, suivi?: SuiviModeles): Promise<void>;
+	creerLanceur(racine: string, ecrire?: (ligne: string) => void): Promise<void>;
+	installerCommande(ecrire?: (ligne: string) => void): Promise<void>;
 	/** La commande `mnemo` installée lance-t-elle déjà ce Mnemo ? (Alors elle n'est pas proposée.) */
 	commandeAJour(): boolean;
 };
 
 /**
  * Échanges de `init` : `interactif` (un terminal, par défaut si l'entrée et la sortie en sont un) pose les questions, sauf
- * `--oui` ; sans terminal (script, CI), les défauts sont pris comme avec `--oui`.
+ * `--oui` ou `--json` ; sans terminal (script, CI), les défauts sont pris comme avec `--oui`. `maintenant` : l'horloge du
+ * rythme des lignes de progression (tests).
  */
-export type OptionsInit = { entree?: Readable; sortie?: Writable; interactif?: boolean; plateforme?: NodeJS.Platform; actions?: Partial<ActionsInit> };
+export type OptionsInit = {
+	entree?: Readable;
+	sortie?: Writable;
+	interactif?: boolean;
+	plateforme?: NodeJS.Platform;
+	actions?: Partial<ActionsInit>;
+	maintenant?: () => number;
+};
 
 const actionsReelles: ActionsInit = {
 	declarerMcp: () => declarerServeurMcp(executeurReel(), MAIN, trouverClaude(process.env, process.platform)),
-	installerModeles: async (racine) => (await import('./modeles.ts')).commandeModeles(['installer'], { racine }),
-	creerLanceur: async (racine) => (await import('./lanceur.ts')).commandeLanceur([], racine),
-	installerCommande: async () => (await import('./commande.ts')).commandeCommande([]),
+	installerModeles: async (racine, suivi) => (await import('./modeles.ts')).commandeModeles(['installer'], { racine, ...suivi }),
+	creerLanceur: async (racine, ecrire) => (await import('./lanceur.ts')).commandeLanceur([], racine, ecrire),
+	installerCommande: async (ecrire) => (await import('./commande.ts')).commandeCommande([], ecrire === undefined ? {} : { ecrire }),
 	commandeAJour: () => commandeAJour(dossierDeCommande(homedir()), { node: process.execPath, main: MAIN }),
 };
 
@@ -73,26 +94,43 @@ function questionneur(entree: Readable, sortie: Writable): Questionneur {
 	};
 }
 
+const texteErreur = (erreur: unknown): string => (erreur instanceof Error ? erreur.message : String(erreur));
+
+/** Échec d'une étape dont la cause est dite au programme qui lit le JSON (`motif` de la ligne). */
+class EchecMotive extends Error {
+	readonly motif: MotifEchecInit;
+	constructor(message: string, motif: MotifEchecInit) {
+		super(message);
+		this.motif = motif;
+	}
+}
+
 /**
- * `mnemo init [dossier] [--oui] [--sans-mcp]` : crée la mémoire (`_mnemo/`) ; dans un terminal, sur un dossier vierge, guide
- * pas à pas : dossier (`~/…` admis, chemin absolu affiché et confirmé avant création), déclaration à Claude Code,
- * modèles locaux (téléchargement, non par défaut), commande `mnemo` et lanceur macOS (oui par défaut). `--oui` : tous les défauts, sans question. Sans terminal ni `--oui` : les défauts
- * aussi, mais rien hors du dossier (ni déclaration MCP, ni modèles, ni lanceur) : la commande à lancer est donnée. Une
- * mémoire existante n'est jamais réécrite : seuls la déclaration MCP, la commande et le lanceur sont demandés.
+ * `mnemo init [dossier] [options]` : crée la mémoire (`_mnemo/`) ; dans un terminal, sur un dossier vierge, guide pas à pas :
+ * dossier (`~/…` admis, chemin absolu affiché et confirmé avant création), déclaration à Claude Code, modèles locaux
+ * (téléchargement, non par défaut), commande `mnemo` et lanceur macOS (oui par défaut). `--oui` : tous les défauts, sans
+ * question. Sans terminal ni `--oui` : les défauts aussi, mais rien hors du dossier (ni déclaration MCP, ni modèles, ni
+ * lanceur) : la commande à lancer est donnée. Une mémoire existante n'est jamais réécrite : seuls la déclaration MCP, la
+ * commande et le lanceur sont demandés.
+ *
+ * Options explicites (`--mcp`/`--sans-mcp`, `--modeles`/`--sans-modeles`, `--commande`/`--sans-commande`,
+ * `--lanceur`/`--sans-lanceur`) : l'étape est faite ou sautée sans question, avec ou sans terminal, mémoire existante ou
+ * non (`MNEMO_SANS_MCP=1` l'emporte sur `--mcp`). `--json` : aucune question, une ligne `LigneInit` (`@mnemo/contrat`) par
+ * événement et rien d'autre sur la sortie standard. L'échec d'une étape hors mémoire n'arrête pas les suivantes : il est
+ * dit, puis le code de sortie est 1 (en texte, une déclaration MCP impossible reste dite sans être un échec, comme avant).
  */
 export async function commandeInit(args: string[], o: OptionsInit = {}): Promise<void> {
-	const sansMcp = args.includes('--sans-mcp') || process.env.MNEMO_SANS_MCP === '1';
-	const oui = args.includes('--oui');
-	const inconnue = args.find((a) => a.startsWith('-') && a !== '--sans-mcp' && a !== '--oui');
-	if (inconnue !== undefined) throw new ErreurCli(`Option inconnue : « ${inconnue} ».\n${USAGE}`, 2);
-	const positionnels = args.filter((a) => !a.startsWith('-'));
-	if (positionnels.length > 1) throw new ErreurCli(USAGE, 2);
+	const choix = lireOptionsInit(args);
+	const sansMcpEnv = process.env.MNEMO_SANS_MCP === '1';
+	const { oui, json } = choix;
 	const sortie = o.sortie ?? process.stdout;
 	const plateforme = o.plateforme ?? process.platform;
 	const actions = { ...actionsReelles, ...o.actions };
-	const ecrire = (ligne: string) => void sortie.write(`${ligne}\n`);
-	const guide = !oui && (o.interactif ?? (process.stdin.isTTY === true && process.stdout.isTTY === true));
+	const j = journalInit((ligne) => void sortie.write(`${ligne}\n`), json, o.maintenant);
+	const ecrire = (ligne: string) => j.texte(ligne);
+	const guide = !oui && !json && (o.interactif ?? (process.stdin.isTTY === true && process.stdout.isTTY === true));
 	const q: Questionneur | null = guide ? questionneur(o.entree ?? process.stdin, sortie) : null;
+	const echecs: EtapeInit[] = [];
 	try {
 		/** Oui ou non ; vide ou trop d'essais : le défaut ; fin de l'entrée : `siFin` (le défaut, sauf mention). */
 		const ouiNon = async (question: string, defaut: boolean, siFin: boolean = defaut): Promise<boolean> => {
@@ -107,62 +145,154 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 			}
 			return defaut;
 		};
+		/** Le choix explicite s'il y en a un (aucune question), sinon la réponse (ou le défaut). */
+		const decider = async (explicite: ChoixExplicite, question: string, defaut: boolean, siFin: boolean = defaut): Promise<boolean> =>
+			explicite ?? (await ouiNon(question, defaut, siFin));
+		/** Une étape hors mémoire : son échec est dit (texte : `libelle : échec — …`), compté, et la suite continue. */
+		const mener = async (etape: EtapeInit, libelle: string, debut: string, action: () => Promise<string>): Promise<boolean> => {
+			j.evenement(etape, 'debut', debut);
+			try {
+				j.evenement(etape, 'fait', await action());
+				return true;
+			} catch (erreur) {
+				echecs.push(etape);
+				ecrire(`${libelle} : échec — ${texteErreur(erreur)}`);
+				j.evenement(etape, 'echec', texteErreur(erreur), erreur instanceof EchecMotive ? erreur.motif : undefined);
+				return false;
+			}
+		};
 
 		const ici = process.cwd();
 		const avecMemoire = (dossier: string) => existsSync(join(dossier, DOSSIER_MEMOIRE, 'SCHEMA.md'));
 		let racine: string;
-		if (positionnels[0] !== undefined) {
-			const donne = cheminSaisi(positionnels[0]);
-			if (donne === null) throw new ErreurCli(`Forme « ${positionnels[0]} » non prise en charge : donnez un chemin absolu, relatif ou ~/…`, 2);
+		if (choix.dossier !== undefined) {
+			const donne = cheminSaisi(choix.dossier);
+			if (donne === null) throw new ErreurCli(`Forme « ${choix.dossier} » non prise en charge : donnez un chemin absolu, relatif ou ~/…`, 2);
 			racine = donne;
 		} else if (q === null || avecMemoire(ici)) racine = ici;
 		else racine = await choisirDossier(q, ici, avecMemoire, ecrire, ouiNon);
 		ecrire(`Dossier Mnemo : ${racine}`);
+		j.evenement('memoire', 'debut', `Dossier Mnemo : ${racine}`);
 		const existante = avecMemoire(racine);
-		await mkdir(racine, { recursive: true });
-		const schema = await readFile(SCHEMA, 'utf8');
-		const dependances = dependancesReelles(racine);
 		let resultat: ResultatInitialisation;
 		try {
-			resultat = await initialiser(dependances, schema);
-		} finally {
-			dependances.index.fermer();
+			await mkdir(racine, { recursive: true });
+			const schema = await readFile(SCHEMA, 'utf8');
+			const dependances = dependancesReelles(racine);
+			try {
+				resultat = await initialiser(dependances, schema);
+			} finally {
+				dependances.index.fermer();
+			}
+		} catch (erreur) {
+			// sans mémoire, rien d'autre n'est tenté : l'erreur part sur la sortie d'erreur
+			j.evenement('memoire', 'echec', texteErreur(erreur));
+			j.fin(racine, false);
+			throw erreur;
 		}
-		// la déclaration touche la configuration de Claude Code : seulement sur réponse, ou avec --oui
+		j.evenement('memoire', 'fait', messagesInit(racine, resultat, null)[0]!);
+
+		// la déclaration touche la configuration de Claude Code : seulement sur réponse, avec --oui ou --mcp
 		let declaration: ResultatDeclaration | null = null;
 		let sansDeclaration: string | null = null;
-		if (!sansMcp) {
-			if (oui || (q !== null && (await ouiNon('Déclarer Mnemo à Claude Code pour toutes les sessions (serveur MCP) ?', true)))) declaration = await actions.declarerMcp();
-			else if (q === null) {
-				sansDeclaration = `Serveur MCP non déclaré (ni terminal ni --oui) : relancez « mnemo init --oui », ou lancez vous-même : ${commandeManuelle(nodeDurable(), MAIN, process.platform)}`;
-			} else sansDeclaration = 'Serveur MCP non déclaré ; plus tard : mnemo init (dans ce dossier).';
+		const mcp = sansMcpEnv ? false : choix.mcp;
+		if (mcp === false) j.evenement('mcp', 'saute', sansMcpEnv ? 'Serveur MCP non déclaré (MNEMO_SANS_MCP=1).' : 'Serveur MCP non déclaré (--sans-mcp).');
+		else if (mcp ?? (oui || (q !== null && (await ouiNon('Déclarer Mnemo à Claude Code pour toutes les sessions (serveur MCP) ?', true))))) {
+			await mener('mcp', 'Serveur MCP', 'Déclaration du serveur MCP à Claude Code.', async () => {
+				declaration = await actions.declarerMcp();
+				const message = messagesInit(racine, resultat, declaration)[1]!;
+				// en JSON, une déclaration à refaire à la main est un échec ; en texte, elle est dite seulement
+				// (déclarée pour une autre installation de Mnemo : `perime`, que `mnemo declarer --remplacer` reprend)
+				if (json && declaration !== 'declare' && declaration !== 'deja') throw 'perime' in declaration ? new EchecMotive(message, 'perime') : new Error(message);
+				return message;
+			});
+		} else {
+			sansDeclaration =
+				q === null
+					? `Serveur MCP non déclaré (ni terminal ni --oui) : relancez « mnemo init --oui », ou lancez vous-même : ${commandeManuelle(nodeDurable(), MAIN, process.platform)}`
+					: 'Serveur MCP non déclaré ; plus tard : mnemo init (dans ce dossier).';
+			j.evenement('mcp', 'saute', sansDeclaration);
 		}
 		for (const ligne of messagesInit(racine, resultat, declaration)) ecrire(ligne);
 		if (sansDeclaration !== null) ecrire(sansDeclaration);
 
-		if (!existante) {
-			if (await ouiNon('Installer les modèles locaux (recherche par le sens ; environ 1,3 Go à télécharger) ?', false)) await actions.installerModeles(racine);
-			else ecrire('Modèles locaux : non installés (la recherche se fait par les mots) ; plus tard : mnemo modeles installer.');
+		// sur une mémoire existante, les modèles ne sont pas proposés (seulement installés sur --modeles)
+		if (choix.modeles ?? (!existante && (await ouiNon('Installer les modèles locaux (recherche par le sens ; environ 1,3 Go à télécharger) ?', false)))) {
+			await mener('modeles', 'Modèles locaux', 'Installation des modèles locaux.', async () => {
+				if (!json) {
+					await actions.installerModeles(racine);
+					return 'Modèles locaux installés.';
+				}
+				const infos: string[] = [];
+				const erreurs: string[] = [];
+				const suivi: SuiviModeles = {
+					journal: { info: (ligne) => void infos.push(ligne), erreur: (ligne) => void erreurs.push(ligne) },
+					progression: (piece, recu, total) => j.progression(piece, recu, total),
+				};
+				try {
+					await actions.installerModeles(racine, suivi);
+				} catch (erreur) {
+					throw new Error([...erreurs, texteErreur(erreur)].join(' ; '), { cause: erreur });
+				}
+				return infos.length > 0 ? infos.join(' ; ') : 'Modèles locaux installés.';
+			});
+		} else {
+			const message = 'Modèles locaux : non installés (la recherche se fait par les mots) ; plus tard : mnemo modeles installer.';
+			if (!existante) ecrire(message);
+			j.evenement('modeles', 'saute', message);
 		}
+
 		// hors du dossier : proposés (oui par défaut) seulement à qui répond ; ni avec --oui, ni sans terminal, ni en fin d'entrée
 		let commande = false;
-		if (plateforme !== 'win32') {
-			if (actions.commandeAJour()) commande = true;
-			else if (await ouiNon('Installer la commande « mnemo » dans le terminal (~/.local/bin/mnemo) ?', q !== null, false)) {
-				await actions.installerCommande();
-				commande = true;
-			} else if (!existante) ecrire('Commande « mnemo » : non installée ; plus tard : mnemo commande.');
+		if (plateforme === 'win32') j.evenement('commande', 'saute', 'Sous Windows, la commande s’installe depuis packages/mnemo : pnpm link --global.');
+		else if (actions.commandeAJour()) {
+			commande = true;
+			// déjà là : une étape menée (`debut` puis `fait`, comme le dit le contrat), ou sautée sur --sans-commande
+			const message = 'Commande « mnemo » déjà installée pour ce Mnemo.';
+			if (choix.commande === false) j.evenement('commande', 'saute', message);
+			else {
+				j.evenement('commande', 'debut', 'Vérification de la commande « mnemo ».');
+				j.evenement('commande', 'fait', message);
+			}
+		} else if (await decider(choix.commande, 'Installer la commande « mnemo » dans le terminal (~/.local/bin/mnemo) ?', q !== null, false)) {
+			commande = await mener('commande', 'Commande « mnemo »', 'Installation de la commande « mnemo ».', async () => {
+				if (!json) {
+					await actions.installerCommande();
+					return 'Commande « mnemo » installée.';
+				}
+				const lignes: string[] = [];
+				await actions.installerCommande((ligne) => void lignes.push(ligne));
+				return lignes.length > 0 ? lignes.join(' ') : 'Commande « mnemo » installée.';
+			});
+		} else {
+			const message = 'Commande « mnemo » : non installée ; plus tard : mnemo commande.';
+			if (!existante) ecrire(message);
+			j.evenement('commande', 'saute', message);
 		}
+
 		let lanceur = false;
-		if (plateforme === 'darwin') {
-			if (await ouiNon('Créer l’application Mnemo (~/Applications/Mnemo.app, à mettre dans le Dock) ?', q !== null, false)) {
-				await actions.creerLanceur(racine);
-				lanceur = true;
-			} else if (!existante) ecrire('Application Mnemo : non créée ; plus tard : mnemo lanceur.');
+		if (plateforme !== 'darwin') j.evenement('lanceur', 'saute', 'L’application Mnemo (lanceur) est propre à macOS.');
+		else if (await decider(choix.lanceur, 'Créer l’application Mnemo (~/Applications/Mnemo.app, à mettre dans le Dock) ?', q !== null, false)) {
+			lanceur = await mener('lanceur', 'Application Mnemo', 'Création de l’application Mnemo (~/Applications/Mnemo.app).', async () => {
+				if (!json) {
+					await actions.creerLanceur(racine);
+					return 'Application Mnemo créée.';
+				}
+				const lignes: string[] = [];
+				await actions.creerLanceur(racine, (ligne) => void lignes.push(ligne));
+				return lignes[0] ?? 'Application Mnemo créée.';
+			});
+		} else {
+			const message = 'Application Mnemo : non créée ; plus tard : mnemo lanceur.';
+			if (!existante) ecrire(message);
+			j.evenement('lanceur', 'saute', message);
 		}
+
 		const demarrer = lanceur ? 'ouvrez l’application Mnemo (Launchpad, Spotlight ou Dock)' : commande ? `mnemo ${racine}` : commandeDemarrage(nodeDurable(plateforme), MAIN, racine, plateforme);
 		ecrire(`Pour démarrer : ${demarrer}.`);
 		if (!existante) ecrire('Première ouverture dans un navigateur : mnemo jeton.');
+		j.fin(racine, echecs.length === 0);
+		if (echecs.length > 0) throw new ErreurCli(`Installation incomplète, en échec : ${echecs.join(', ')}.`, 1);
 	} finally {
 		q?.fermer();
 	}

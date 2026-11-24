@@ -34,9 +34,9 @@ function icones(): { type: TypeIcns; png: Buffer }[] {
  * `mnemo lanceur` : crée `~/Applications/Mnemo.app` pour le dossier Mnemo courant (macOS seulement) ; au clic, il démarre
  * le service s'il ne tourne pas (détaché, journal `.mnemo/service.log`) et ouvre `http://127.0.0.1:<port>/` en fenêtre
  * d'application. `--retirer` le supprime. Jamais lancé ni inscrit au démarrage de la session. `racineDonnee` : le dossier Mnemo
- * (`mnemo init`), au lieu de celui du dossier courant.
+ * (`mnemo init`), au lieu de celui du dossier courant ; `ecrire` : la sortie standard par défaut.
  */
-export async function commandeLanceur(args: string[], racineDonnee?: string): Promise<void> {
+export async function commandeLanceur(args: string[], racineDonnee?: string, ecrire: (ligne: string) => void = (ligne) => console.log(ligne)): Promise<void> {
 	const inconnues = args.filter((a) => a !== '--retirer');
 	if (inconnues.length > 0) throw new ErreurCli(`Option inconnue : « ${inconnues[0]} ».\n${USAGE}`, 2);
 	if (process.platform !== 'darwin') throw new ErreurCli('Le lanceur est une application macOS : ailleurs, installez Mnemo depuis le navigateur (« Installer Mnemo »).');
@@ -45,7 +45,7 @@ export async function commandeLanceur(args: string[], racineDonnee?: string): Pr
 	if (args.includes('--retirer')) {
 		const r = retirerLanceur(applications);
 		if ('refus' in r) throw new ErreurCli(r.refus);
-		console.log('absent' in r ? `Aucun lanceur à retirer (${r.absent}).` : `Lanceur retiré : ${r.retire}.`);
+		ecrire('absent' in r ? `Aucun lanceur à retirer (${r.absent}).` : `Lanceur retiré : ${r.retire}.`);
 		return;
 	}
 
@@ -62,10 +62,10 @@ export async function commandeLanceur(args: string[], racineDonnee?: string): Pr
 		icones: lues,
 	});
 	if ('refus' in r) throw new ErreurCli(r.refus);
-	console.log(`${r.remplace ? 'Lanceur remplacé' : 'Lanceur créé'} : ${r.app} (dossier ${racine}).`);
-	console.log(`Il appelle ${process.execPath} et ${MAIN} : si Node ou le code de Mnemo change de place, relancez « mnemo lanceur ».`);
-	if (lues.length === 0) console.log('Sans icône : construisez l’interface (pnpm construire), puis relancez « mnemo lanceur ».');
+	ecrire(`${r.remplace ? 'Lanceur remplacé' : 'Lanceur créé'} : ${r.app} (dossier ${racine}).`);
+	ecrire(`Il appelle ${process.execPath} et ${MAIN} : si Node ou le code de Mnemo change de place, relancez « mnemo lanceur ».`);
+	if (lues.length === 0) ecrire('Sans icône : construisez l’interface (pnpm construire), puis relancez « mnemo lanceur ».');
 	const navigateur = navigateurInstalle(lireReglagesDuDossier(racine).reglages.service.navigateur, posteCourant());
-	console.log(`Première fois : ouvrez une fois dans ${navigateur?.nom ?? 'votre navigateur par défaut'} l’adresse donnée par « mnemo jeton », pour que la fenêtre soit reconnue.`);
-	console.log('Le retirer : mnemo lanceur --retirer.');
+	ecrire(`Première fois : ouvrez une fois dans ${navigateur?.nom ?? 'votre navigateur par défaut'} l’adresse donnée par « mnemo jeton », pour que la fenêtre soit reconnue.`);
+	ecrire('Le retirer : mnemo lanceur --retirer.');
 }
