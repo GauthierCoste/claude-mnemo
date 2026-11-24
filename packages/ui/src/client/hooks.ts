@@ -91,7 +91,8 @@ export function useApercuProfil(nom: string | null): Ressource<ApercuProfilVue> 
 
 // --- Sessions : un magasin par client, alimenté par le WebSocket ---
 
-type MagasinSessions = { lire(): SessionVue[]; ecouter(f: () => void): () => void };
+/** `recue` : la liste a été reçue (message du WebSocket ou lecture initiale) ; avant, `lire` rend une liste vide d'attente. */
+type MagasinSessions = { lire(): SessionVue[]; recue(): boolean; ecouter(f: () => void): () => void };
 const magasins = new WeakMap<Client, MagasinSessions>();
 
 function magasinSessions(client: Client): MagasinSessions {
@@ -99,9 +100,11 @@ function magasinSessions(client: Client): MagasinSessions {
 	if (existant) return existant;
 	let sessions: SessionVue[] = [];
 	let recuParMessage = false;
+	let recue = false;
 	const ecouteurs = new Set<() => void>();
 	const publier = (s: SessionVue[]) => {
 		sessions = s;
+		recue = true;
 		for (const f of [...ecouteurs]) f();
 	};
 	client.connexion.surMessage((m) => {
@@ -123,6 +126,7 @@ function magasinSessions(client: Client): MagasinSessions {
 	);
 	const magasin: MagasinSessions = {
 		lire: () => sessions,
+		recue: () => recue,
 		ecouter(f) {
 			ecouteurs.add(f);
 			return () => void ecouteurs.delete(f);
@@ -135,6 +139,12 @@ function magasinSessions(client: Client): MagasinSessions {
 export function useSessions(): SessionVue[] {
 	const magasin = magasinSessions(useClient());
 	return useSyncExternalStore(magasin.ecouter, magasin.lire, magasin.lire);
+}
+
+/** Vrai dès que la liste des sessions a été reçue : une session absente l'est alors vraiment, pas seulement en attente. */
+export function useSessionsRecues(): boolean {
+	const magasin = magasinSessions(useClient());
+	return useSyncExternalStore(magasin.ecouter, magasin.recue, magasin.recue);
 }
 
 /**

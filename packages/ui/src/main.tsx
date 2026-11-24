@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Client } from './client/contexte.tsx';
 import { creerClientReel } from './client/creer-client.ts';
+import { lireSessionDuFragment } from './client/fragment.ts';
 import { effacerJetonDeLAdresse, lireJeton } from './client/jeton.ts';
 import { Application, type Depart } from './composants/Application.tsx';
 import './styles/jetons.css';
@@ -16,7 +17,7 @@ function stockageDeLOrigine(): Storage | null {
 	}
 }
 
-async function creerClient(): Promise<{ client: Client | null; depart?: Depart }> {
+async function creerClient(): Promise<{ client: Client | null; depart?: Depart; session?: string | null }> {
 	// Mode démo : en développement seulement ; la construction de production retire cette branche et son import.
 	const parametres = new URLSearchParams(location.search);
 	if (import.meta.env.DEV && parametres.has('demo')) {
@@ -30,12 +31,14 @@ async function creerClient(): Promise<{ client: Client | null; depart?: Depart }
 		const avecEnPlus = depart ? { ...depart, ...enPlus } : Object.keys(enPlus).length ? { vue: 'sessions' as const, ...enPlus } : undefined;
 		return { client: creerClientDemo(conflit), ...(avecEnPlus ? { depart: avecEnPlus } : {}) };
 	}
-	// le jeton de la première ouverture : rangé dans le stockage de cette origine, retiré de l'adresse tout de suite
+	// le jeton de la première ouverture : rangé dans le stockage de cette origine ; la session demandée (`#session=<id>`,
+	// seule ou avec le jeton) : ouverte une fois la liste reçue ; le fragment est retiré de l'adresse tout de suite
 	const stockage = stockageDeLOrigine();
 	const jeton = lireJeton(location.hash, stockage);
+	const session = lireSessionDuFragment(location.hash);
 	if (location.hash) effacerJetonDeLAdresse(history, location.href);
 	if (!jeton) return { client: null };
-	return { client: creerClientReel({ jeton, origine: location.origin, fetch: (entree, init) => fetch(entree, init), WebSocket, stockage }) };
+	return { client: creerClientReel({ jeton, origine: location.origin, fetch: (entree, init) => fetch(entree, init), WebSocket, stockage }), session };
 }
 
 const FICHE_DEMO = 'projets/erp-saas/Module stocks.md';
@@ -60,10 +63,10 @@ if (!import.meta.env.DEV && 'serviceWorker' in navigator) navigator.serviceWorke
 const element = document.getElementById('racine');
 if (!element) throw new Error('Élément #racine absent de index.html');
 const racine = createRoot(element);
-void creerClient().then(({ client, depart }) =>
+void creerClient().then(({ client, depart, session }) =>
 	racine.render(
 		<StrictMode>
-			<Application client={client} {...(depart ? { depart } : {})} />
+			<Application client={client} {...(depart ? { depart } : {})} session={session ?? null} />
 		</StrictMode>,
 	),
 );

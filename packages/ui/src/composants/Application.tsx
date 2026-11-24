@@ -18,6 +18,7 @@ import { Navigation } from './Navigation.tsx';
 import { Palette } from './Palette.tsx';
 import { Reglages } from './reglages/Reglages.tsx';
 import { Sessions } from './sessions/Sessions.tsx';
+import { useSessionDeLAdresse } from './sessions/session-de-l-adresse.ts';
 import { FournisseurToast } from './Toast.tsx';
 
 /**
@@ -27,8 +28,11 @@ import { FournisseurToast } from './Toast.tsx';
  */
 export type Depart = { vue: Vue; ongletMemoire?: OngletMemoire; zoom?: number; fiche?: string; edition?: boolean; archiviste?: boolean; palette?: string };
 
-/** Racine de l'interface : sans client (jeton absent), l'écran du jeton ; sinon la coquille de l'interface. */
-export function Application(p: { client: Client | null; depart?: Depart }): ReactNode {
+/**
+ * Racine de l'interface : sans client (jeton absent), l'écran du jeton ; sinon la coquille de l'interface. `session` : l'id
+ * demandé par l'adresse au chargement (`#session=<id>`), ouvert dès qu'il est dans la liste des sessions.
+ */
+export function Application(p: { client: Client | null; depart?: Depart; session?: string | null }): ReactNode {
 	if (!p.client) return <EcranJeton />;
 	return (
 		<FournisseurClient client={p.client}>
@@ -39,7 +43,7 @@ export function Application(p: { client: Client | null; depart?: Depart }): Reac
 				{...(p.depart?.palette !== undefined ? { paletteInitiale: true } : {})}
 			>
 				<FournisseurToast>
-					<Coquille depart={p.depart} />
+					<Coquille depart={p.depart} session={p.session ?? null} />
 				</FournisseurToast>
 			</FournisseurNavigation>
 		</FournisseurClient>
@@ -104,7 +108,7 @@ function useAccent(): void {
 	}, [accent]);
 }
 
-function Coquille(p: { depart: Depart | undefined }): ReactNode {
+function Coquille(p: { depart: Depart | undefined; session: string | null }): ReactNode {
 	const depart = p.depart;
 	const client = useClient();
 	const nav = useNavigation();
@@ -121,6 +125,7 @@ function Coquille(p: { depart: Depart | undefined }): ReactNode {
 	const champPalette = useRef<HTMLButtonElement>(null);
 	useRaccourcis();
 	useAccent();
+	useSessionDeLAdresse(p.session);
 
 	if (refuse || etat === 'jeton_refuse') return <EcranJeton />;
 
