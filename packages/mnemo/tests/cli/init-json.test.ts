@@ -203,7 +203,7 @@ describe('mnemo init --json', () => {
 		const racine = await dossierTemporaire();
 		avecMcpFactice();
 		const manuel = 'claude mcp add --scope user mnemo -- node main.ts mcp';
-		const a = { ...actions(), declarerMcp: vi.fn(async () => ({ perime: true as const, manuel, portee: 'User config', scope: 'user' as const })) };
+		const a = { ...actions(), declarerMcp: vi.fn(async () => ({ perime: true as const, manuel, portee: 'User config', scope: 'user' as const, remplacable: true })) };
 		const sortie = capture();
 		await expect(commandeInit([racine, '--json', '--mcp'], { sortie: sortie.flux, plateforme: 'linux', actions: a })).rejects.toMatchObject({ code: 1 });
 		const lignes = lignesJson(sortie.texte());
@@ -211,6 +211,23 @@ describe('mnemo init --json', () => {
 		expect(echec).toMatchObject({ motif: 'perime' });
 		expect((echec as { message: string }).message).toContain('déclaré avec un autre chemin');
 		expect(lignes.at(-1)).toEqual({ fin: true, racine, ok: false });
+	});
+
+	it('déjà déclaré par autre chose que Mnemo, ou d’une autre portée : échec sans motif (`mnemo declarer --remplacer` le laisserait)', async () => {
+		avecMcpFactice();
+		const manuel = 'claude mcp add --scope user mnemo -- node main.ts mcp';
+		for (const perime of [
+			{ perime: true as const, manuel, portee: 'Local config', scope: 'local' as const, remplacable: false },
+			{ perime: true as const, manuel, scope: 'user' as const, remplacable: false },
+		]) {
+			const racine = await dossierTemporaire();
+			const a = { ...actions(), declarerMcp: vi.fn(async () => perime) };
+			const sortie = capture();
+			await expect(commandeInit([racine, '--json', '--mcp'], { sortie: sortie.flux, plateforme: 'linux', actions: a })).rejects.toMatchObject({ code: 1 });
+			const echec = lignesJson(sortie.texte()).find((l) => 'etat' in l && l.etape === 'mcp' && l.etat === 'echec');
+			expect(echec).toBeDefined();
+			expect(echec).not.toHaveProperty('motif');
+		}
 	});
 
 	it('processus réel : la sortie standard n’a que des lignes JSON, code 0', async () => {

@@ -727,8 +727,8 @@ export type ReponseRejetLot = { id: string };
  * `mnemo init --json` (lu par un programme qui pilote l'installation) : une ligne JSON par événement sur la sortie
  * standard, et rien d'autre. Une étape menée s'annonce (`debut`) puis finit (`fait` ou `echec`) ; une étape laissée de
  * côté ne donne qu'une ligne `saute`. `lanceur` : macOS seulement. `motif` (étape `mcp`, `echec` seulement) : `perime`,
- * une déclaration `mnemo` existe déjà et lance un autre Node ou un autre `main.ts` (autre installation de Mnemo), que
- * `mnemo declarer --remplacer` reprend. Absent : tout autre échec.
+ * une déclaration de Mnemo de portée utilisateur existe déjà et lance un autre Node ou un autre `main.ts` (autre
+ * installation de Mnemo), que `mnemo declarer --remplacer` reprend. Absent : tout autre échec.
  */
 export type EtapeInit = 'memoire' | 'mcp' | 'modeles' | 'commande' | 'lanceur';
 export type MotifEchecInit = 'perime';

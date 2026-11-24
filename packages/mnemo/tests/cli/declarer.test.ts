@@ -75,6 +75,16 @@ describe('declarerServeurMcp', () => {
 		expect(r).not.toHaveProperty('portee');
 	});
 
+	it('périmé : remplaçable par `mnemo declarer --remplacer` seulement pour une déclaration de Mnemo de portée utilisateur', async () => {
+		const autreMnemo = '/autre/depot/packages/mnemo/src/adaptateurs/cli/main.ts';
+		const utilisateur = simule([{ code: 0, sortie: sortieGet('/vieux/node', autreMnemo) }]);
+		expect(await declarerServeurMcp(utilisateur.executer, MAIN, CLAUDE)).toMatchObject({ perime: true, remplacable: true });
+		const local = simule([{ code: 0, sortie: sortieGet('/vieux/node', autreMnemo).replace('User config (available in all your projects)', 'Local config (private to you in this project)') }]);
+		expect(await declarerServeurMcp(local.executer, MAIN, CLAUDE)).toMatchObject({ perime: true, remplacable: false });
+		const etranger = simule([{ code: 0, sortie: sortieGet('/usr/bin/python3', '/opt/serveur.py') }]);
+		expect(await declarerServeurMcp(etranger.executer, MAIN, CLAUDE)).toMatchObject({ perime: true, remplacable: false });
+	});
+
 	it('claude trouvé comme pour les sessions (Windows : la cible du shim npm, MNEMO_CLAUDE) : get et add-json passent par lui', async () => {
 		const { appels, executer } = simule([1, 0]);
 		const shim = { commande: 'C:\\Program Files\\nodejs\\node.exe', avant: ['C:\\npm\\node_modules\\@anthropic-ai\\claude-code\\cli.js'] };

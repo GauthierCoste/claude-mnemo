@@ -202,8 +202,8 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 				declaration = await actions.declarerMcp();
 				const message = messagesInit(racine, resultat, declaration)[1]!;
 				// en JSON, une déclaration à refaire à la main est un échec ; en texte, elle est dite seulement
-				// (déclarée pour une autre installation de Mnemo : `perime`, que `mnemo declarer --remplacer` reprend)
-				if (json && declaration !== 'declare' && declaration !== 'deja') throw 'perime' in declaration ? new EchecMotive(message, 'perime') : new Error(message);
+				// (déclarée pour une autre installation de Mnemo, de portée utilisateur : `perime`, que `mnemo declarer --remplacer` reprend)
+				if (json && declaration !== 'declare' && declaration !== 'deja') throw 'perime' in declaration && declaration.remplacable === true ? new EchecMotive(message, 'perime') : new Error(message);
 				return message;
 			});
 		} else {

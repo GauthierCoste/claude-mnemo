@@ -13,9 +13,10 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   [--lanceur | --sans-lanceur]`: creates the memory (`_mnemo/`, with `SCHEMA.md`, the note of the `travail`
   profile and a first git commit; no folder is imposed); does nothing if it already exists. In a terminal, on a fresh folder, it guides you step by step:
   folder (`~/…` accepted; absolute path shown and confirmed before creation), declaration to Claude Code, local models
-  and macOS launcher (no by default: nothing is downloaded or installed without an answer). `--oui` (yes): all defaults,
-  no question, MCP declaration included. Without a terminal and without `--oui`: the memory only, nothing outside the
-  folder (the declaration command is printed). On an existing memory, only the MCP declaration is asked.
+  (no by default), the `mnemo` command and the macOS launcher (yes by default). `--oui` (yes): no question, MCP
+  declaration included, but nothing else outside the folder (no models, command or launcher). Without a terminal and
+  without `--oui`: the memory only, nothing outside the folder (the declaration command is printed). On an existing
+  memory, only the MCP declaration, the command and the launcher are asked.
 
   Explicit options decide a step without any question, with or without a terminal, and override the defaults:
   `--mcp` / `--sans-mcp` (declare to Claude Code or not; `MNEMO_SANS_MCP=1` wins over `--mcp`), `--modeles` /
@@ -43,8 +44,8 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   a step left aside gives a single `saute` line. Download progress (`piece`: `moteur`, `sens` or `reranker`; `total` is
   `null` when the size is unknown) comes at most once per second and per piece. The last line is `fin`; `ok` is false
   when a step failed (exit code 1). In JSON, a declaration that must be done by hand (Claude Code not found, declared
-  with another path) is a failure; when a `mnemo` declaration already runs another Node.js or another copy of Mnemo,
-  the failure line also carries `"motif":"perime"` (`mnemo declarer --remplacer` then rewrites it). The
+  with another path) is a failure; when a user-scope declaration of Mnemo already runs another Node.js or another copy
+  of Mnemo, the failure line also carries `"motif":"perime"` (`mnemo declarer --remplacer` then rewrites it). The
   types are `LigneInit` and `PosteVerifie` in `@mnemo/contrat`.
 - `mnemo verifier-poste [--json]` (check this computer): `git` (runs `git --version`), Claude Code (the `claude` the
   sessions will run) and the Node version. Without `--json`, one line each, exit code 1 if git or Claude Code is

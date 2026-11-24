@@ -10,11 +10,12 @@ export type Executer = (commande: string, args: string[], options?: OptionsExecu
 
 /**
  * `deja` : déclaré avec cette commande ; `perime` : déclaré avec un autre Node ou un autre `main.ts` (mise à jour de Node,
- * dépôt déplacé) — l'utilisateur retire lui-même l'ancienne déclaration ; sinon : échec, commande manuelle.
+ * dépôt déplacé) — l'utilisateur retire lui-même l'ancienne déclaration (`remplacable` : c'est une déclaration de Mnemo de
+ * portée utilisateur, que `mnemo declarer --remplacer` refait) ; sinon : échec, commande manuelle.
  */
 export type PorteeMcp = 'user' | 'local' | 'project';
 
-export type ResultatDeclaration = 'declare' | 'deja' | { perime: true; manuel: string; portee?: string; scope?: PorteeMcp } | { manuel: string; introuvable: boolean; raison: string };
+export type ResultatDeclaration = 'declare' | 'deja' | { perime: true; manuel: string; portee?: string; scope?: PorteeMcp; remplacable?: boolean } | { manuel: string; introuvable: boolean; raison: string };
 
 export function citerPosix(chemin: string): string {
 	return `'${chemin.replaceAll("'", "'\\''")}'`;
@@ -76,7 +77,8 @@ export async function declarerServeurMcp(
 			// Jamais de retrait automatique : la déclaration existante peut être voulue.
 			if (memeDeclaration(existante.sortie, node, cheminMain)) return 'deja';
 			const portee = valeurDeLigne(existante.sortie, 'scope');
-			return { perime: true, manuel, ...(portee ? { portee } : {}), scope: portee ? porteeDe(portee) : 'user' };
+			const scope = portee ? porteeDe(portee) : 'user';
+			return { perime: true, manuel, ...(portee ? { portee } : {}), scope, remplacable: scope === 'user' && estDeclarationMnemo(existante.sortie) };
 		}
 		const ajout = await lancer(['mcp', 'add-json', '--scope', 'user', 'mnemo', json]);
 		if (ajout.code === 0) return 'declare';
