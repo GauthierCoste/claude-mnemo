@@ -55,6 +55,18 @@ function cibleDuShim(shim: string): CommandeClaude | null {
 	return estFichier(paquet) ? { commande: process.execPath, avant: [paquet] } : null;
 }
 
+/**
+ * `claude<extension>` dans `dossier`, l'extension telle que `PATHEXT` l'écrit puis en minuscules : Windows ignore la casse,
+ * un disque sensible à la casse (tests sous Linux) non. Null s'il n'y est pas.
+ */
+function fichierClaude(dossier: string, extension: string): string | null {
+	for (const variante of new Set([extension, extension.toLowerCase()])) {
+		const candidat = join(dossier, `claude${variante}`);
+		if (estFichier(candidat)) return candidat;
+	}
+	return null;
+}
+
 /** Windows : dossiers du PATH, sans guillemets ni entrées vides. */
 function dossiersDuPath(env: NodeJS.ProcessEnv, plateforme: NodeJS.Platform): string[] {
 	const chemin = variable(env, 'PATH', plateforme) ?? '';
@@ -91,15 +103,15 @@ export function trouverClaude(env: NodeJS.ProcessEnv, plateforme: NodeJS.Platfor
 	const exe = extensions.filter((e) => e.toLowerCase() === '.exe');
 	for (const dossier of dossiers) {
 		for (const extension of exe.length > 0 ? exe : ['.exe']) {
-			const candidat = join(dossier, `claude${extension}`);
-			if (estFichier(candidat)) return { commande: candidat, avant: [] };
+			const candidat = fichierClaude(dossier, extension);
+			if (candidat !== null) return { commande: candidat, avant: [] };
 		}
 	}
 	for (const dossier of dossiers) {
 		for (const extension of extensions) {
 			if (extension.toLowerCase() === '.exe') continue;
-			const candidat = join(dossier, `claude${extension}`);
-			if (!estFichier(candidat)) continue;
+			const candidat = fichierClaude(dossier, extension);
+			if (candidat === null) continue;
 			if (!SHIM.test(candidat)) return { commande: candidat, avant: [] };
 			const cible = cibleDuShim(candidat);
 			if (cible !== null) return cible;

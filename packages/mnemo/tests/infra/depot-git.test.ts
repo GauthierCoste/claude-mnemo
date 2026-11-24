@@ -1,6 +1,6 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { depotGit } from '../../src/infra/depot-git.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { git } from '../aides/git.ts';
@@ -125,8 +125,17 @@ describe('depotGit', () => {
 		expect(r.total).toBe(230);
 	});
 
-	it('délai dépassé : git tué, appel rejeté', async () => {
+	// un faux git qui ne répond jamais (un vrai git peut finir avant un délai de 1 ms) ; script Node exécutable : POSIX seulement
+	it.skipIf(process.platform === 'win32')('délai dépassé : git tué, appel rejeté', async () => {
 		const { racine } = await depotDeTest();
-		await expect(depotGit(racine, { delaiMs: 1 }).etat('projet')).rejects.toThrow(/délai/u);
+		const faux = await dossierTemporaire();
+		await writeFile(join(faux, 'git'), `#!${process.execPath}\nsetTimeout(() => {}, 60_000);\n`);
+		await chmod(join(faux, 'git'), 0o755);
+		vi.stubEnv('PATH', `${faux}:${process.env.PATH ?? ''}`);
+		try {
+			await expect(depotGit(racine, { delaiMs: 300 }).etat('projet')).rejects.toThrow(/délai/u);
+		} finally {
+			vi.unstubAllEnvs();
+		}
 	});
 });

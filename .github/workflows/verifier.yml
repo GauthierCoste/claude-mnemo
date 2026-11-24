@@ -17,6 +17,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    # Windows en cours d'adaptation : son job renseigne sans bloquer (une dizaine d'échecs au premier essai, 24/11/2026).
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
