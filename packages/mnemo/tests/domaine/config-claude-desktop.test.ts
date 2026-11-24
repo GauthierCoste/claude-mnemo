@@ -50,6 +50,15 @@ describe('configuration de l’app Claude : lecture', () => {
 		expect(lireConfigClaudeDesktop('{"mcpServers": "x"}')).toMatchObject({ ok: false });
 	});
 
+	it('illisible : le motif ne cite jamais le texte du fichier (valeurs de variables)', () => {
+		for (const texte of ['{"env":{"KEY":sk-secret-123}}', '{"env":{"KEY":"sk-secret-123","A":tru}}', '{"env":{"KEY":"sk-secret-123"}} x']) {
+			const lu = lireConfigClaudeDesktop(texte);
+			expect(lu).toMatchObject({ ok: false, erreur: expect.stringContaining('JSON invalide') });
+			expect(JSON.stringify(lu)).not.toContain('secret');
+			expect(JSON.stringify(lu)).not.toContain('sk-');
+		}
+	});
+
 	it('vue : noms des variables seulement, jamais leurs valeurs ; serveurs décrits autrement en lecture seule', () => {
 		const vus = serveursVus(lire(FICHIER));
 		expect(vus).toEqual([

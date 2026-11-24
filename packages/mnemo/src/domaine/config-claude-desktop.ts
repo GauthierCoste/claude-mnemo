@@ -38,6 +38,16 @@ export type ResultatConfig = { ok: true; config: ConfigClaudeDesktop } | RefusCo
 
 const refus = (genre: RefusConfig['genre'], motif: string): RefusConfig => ({ ok: false, genre, motif });
 
+/**
+ * Motif d'un JSON invalide sans rien du texte : le message de `JSON.parse` cite parfois un extrait du fichier autour de
+ * l'erreur (« Unexpected token 's', ..."KEY":sk-…"... »), qui peut porter la valeur d'une variable ; seul un message qui
+ * ne donne qu'une position est gardé.
+ */
+function motifJsonInvalide(erreur: unknown): string {
+	const message = erreur instanceof Error ? erreur.message : '';
+	return / in JSON at position \d+/u.test(message) && !message.includes('"') ? message : 'caractère inattendu';
+}
+
 /** Lit le texte du fichier ; `null` (fichier absent) : configuration vide. JSON invalide, racine ou `mcpServers` qui n'est pas un objet : erreur. */
 export function lireConfigClaudeDesktop(texte: string | null): { ok: true; config: ConfigClaudeDesktop } | { ok: false; erreur: string } {
 	if (texte === null) return { ok: true, config: { brut: {}, serveurs: {} } };
@@ -46,7 +56,7 @@ export function lireConfigClaudeDesktop(texte: string | null): { ok: true; confi
 		// fichier vide ou blanc : vide, comme absent
 		brut = texte.trim() === '' ? {} : JSON.parse(texte);
 	} catch (erreur) {
-		return { ok: false, erreur: `JSON invalide (${erreur instanceof Error ? erreur.message : String(erreur)}).` };
+		return { ok: false, erreur: `JSON invalide (${motifJsonInvalide(erreur)}).` };
 	}
 	if (!estObjet(brut)) return { ok: false, erreur: 'Le fichier ne contient pas un objet JSON.' };
 	const serveurs = brut['mcpServers'];
