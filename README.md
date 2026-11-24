@@ -5,7 +5,9 @@ window, each in its own terminal; they share a memory you can read, edit and cle
 it has been given from that memory.
 
 The memory is a plain folder of Markdown notes, versioned with git. Claude reads from it at each message and writes to
-it as it learns; every change is a commit you can see.
+it as it learns; every change is a commit you can see. At each message, Mnemo searches that memory locally (words,
+meaning, links between notes, the project you are in) and injects only a few ranked leads into the session, never a
+wall of text: Claude stays focused and reads what it needs.
 
 ![Sessions view: sessions grouped by project, the folder tree, and the context injected into the selected session](docs/images/sessions.png)
 
@@ -24,6 +26,11 @@ it as it learns; every change is a commit you can see.
 - **Profiles.** A profile sets what a session receives: its instruction, the memory skills, the Claude Code plugins
   switched on (every other installed plugin is switched off), the hooks, where it starts, and an avatar shown on its
   sessions. A read-only preview shows everything a session of the profile receives, and where each part comes from.
+- **Search that knows where you are.** One score ranks every result: how well it matches (words, meaning, a local
+  reranker, the links between notes), plus small weights for being close to the current project, trusted, part of the
+  memory rather than an imported document, and recent. A weight moves a result up or down but never lets an irrelevant
+  one in. Identical texts and a note's duplicate passages show once. Everything runs on your machine, and it still
+  works by words alone when the local models are off.
 - **Memory kept by Claude.** Through an MCP server, Claude searches the memory, reads notes and proposes changes;
   anything that changes what is trusted waits for your OK. At the end of a session, Claude writes a short episode of
   what was done and learned.
@@ -42,9 +49,16 @@ it as it learns; every change is a commit you can see.
   learned, how long it is valid and how much to trust it. You organise the folders however you like; Mnemo only reserves
   five note types (instruction, profile, source, episode, folder). The full grammar is in
   [docs/format-coffre.md](docs/format-coffre.md).
-- **Search** uses a local SQLite full-text index. Mnemo can also run two small local models with llama.cpp (bge-m3 for
-  search by meaning, bge-reranker-v2-m3 to rank results) on macOS (Apple silicon or Intel). Without them, search by words works just
-  fine. The cards proposed to a session also follow the links between notes.
+- **Search** uses a local SQLite full-text index with French stemming, and can also run two small local models with
+  llama.cpp: bge-m3 finds a fact worded differently from the question, bge-reranker-v2-m3 reorders the best results.
+  Without them, search by words works just fine. Each result gets `score = base + weights`: the base (0 to 1) is the
+  match, the weights reward the neighbourhood of the current project, confidence, belonging to the memory and freshness;
+  each weight is a setting. Budgets are short (3.5 s for a tool, 400 ms for a hook): a slow model is skipped, never
+  waited for.
+- **Injection** follows the session. The first message brings the note of the project and cards for the notes around
+  it, ranked by meaning against that message; a message that names a note brings its card; a note you inject by hand
+  lends a weight to the notes linked to it for the next few messages. Mute messages ("ok, go") bring nothing. The
+  [details](docs/usage.md) are in the usage guide.
 - **Sessions** started from Mnemo get a Claude Code plugin generated for them (`.mnemo/plugins/<session>/`): the
   instruction of their profile, the memory skills, the hooks, and Claude Code's own auto-memory turned off. The hooks
   are built to stay out of the way: short time limits, and a hook that fails lets the session carry on. When the profile
