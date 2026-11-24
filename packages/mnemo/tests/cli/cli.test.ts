@@ -17,9 +17,10 @@ function mnemo(cwd: string, ...args: string[]): Promise<{ code: number; out: str
 	});
 }
 
+/** git avec une identité : les tests ne dépendent pas de la configuration de la machine (aucune sur une machine de CI). */
 function git(cwd: string, ...args: string[]): Promise<string> {
 	return new Promise((resoudre, rejeter) => {
-		execFile('git', args, { cwd }, (e, out) => (e ? rejeter(e) : resoudre(out)));
+		execFile('git', ['-c', 'user.name=Test', '-c', 'user.email=test@localhost', '-c', 'commit.gpgsign=false', ...args], { cwd }, (e, out) => (e ? rejeter(e) : resoudre(out)));
 	});
 }
 
