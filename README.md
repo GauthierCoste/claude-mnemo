@@ -101,7 +101,8 @@ run `pnpm installer` inside it.)
 2. whether to declare the Mnemo MCP server to Claude Code;
 3. whether to download the optional local models (about 1.3 GB; no by default);
 4. whether to install the `mnemo` command (`~/.local/bin/mnemo`; yes by default);
-5. whether to install the Mnemo app (`~/Applications/Mnemo.app`; yes by default).
+5. whether to install the Mnemo launcher (`~/Applications/Mnemo.app`, which opens the interface in a browser window;
+   yes by default).
 
 To open it:
 

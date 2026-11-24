@@ -9,12 +9,55 @@ Commands, messages and the interface are in French; this page gives their meanin
 
 Node 24 or later is required. The `mnemo` command (see [installation.md](installation.md) to make it available):
 
-- `mnemo init [folder] [--oui] [--sans-mcp]`: creates the memory (`_mnemo/`, with `SCHEMA.md`, the note of the `travail`
+- `mnemo init [folder] [--oui] [--json] [--mcp | --sans-mcp] [--modeles | --sans-modeles] [--commande | --sans-commande]
+  [--lanceur | --sans-lanceur]`: creates the memory (`_mnemo/`, with `SCHEMA.md`, the note of the `travail`
   profile and a first git commit; no folder is imposed); does nothing if it already exists. In a terminal, on a fresh folder, it guides you step by step:
   folder (`~/…` accepted; absolute path shown and confirmed before creation), declaration to Claude Code, local models
   and macOS launcher (no by default: nothing is downloaded or installed without an answer). `--oui` (yes): all defaults,
   no question, MCP declaration included. Without a terminal and without `--oui`: the memory only, nothing outside the
   folder (the declaration command is printed). On an existing memory, only the MCP declaration is asked.
+
+  Explicit options decide a step without any question, with or without a terminal, and override the defaults:
+  `--mcp` / `--sans-mcp` (declare to Claude Code or not; `MNEMO_SANS_MCP=1` wins over `--mcp`), `--modeles` /
+  `--sans-modeles` (install the local models or not; `--modeles` also applies to an existing memory), `--commande` /
+  `--sans-commande` (the `mnemo` command in `~/.local/bin`), `--lanceur` / `--sans-lanceur` (the macOS launcher). Giving
+  both options of a pair is a usage error (exit code 2). A failing step outside the memory (MCP, models, command,
+  launcher) does not stop the next ones: it is reported, and the exit code is 1.
+
+  `--json` (for a program that drives the installation): no question, and standard output carries only JSON lines,
+  one per event (errors before the memory step, such as usage errors, go to standard error only):
+
+  ```
+  {"etape":"memoire","etat":"debut","message":"Dossier Mnemo : /path"}
+  {"etape":"memoire","etat":"fait","message":"Mémoire créée dans /path/_mnemo (commit …)."}
+  {"etape":"mcp","etat":"saute","message":"…"}
+  {"etape":"modeles","etat":"debut","message":"…"}
+  {"etape":"modeles","etat":"progression","piece":"sens","libelle":"…","recu":1048576,"total":639152416}
+  {"etape":"modeles","etat":"fait","message":"…"}
+  {"etape":"commande","etat":"echec","message":"…"}
+  {"etape":"lanceur","etat":"saute","message":"…"}
+  {"fin":true,"racine":"/path","ok":false}
+  ```
+
+  `etape` is `memoire`, `mcp`, `modeles`, `commande` or `lanceur`. A step that runs gives `debut` then `fait` or `echec`;
+  a step left aside gives a single `saute` line. Download progress (`piece`: `moteur`, `sens` or `reranker`; `total` is
+  `null` when the size is unknown) comes at most once per second and per piece. The last line is `fin`; `ok` is false
+  when a step failed (exit code 1). In JSON, a declaration that must be done by hand (Claude Code not found, declared
+  with another path) is a failure; when a `mnemo` declaration already runs another Node.js or another copy of Mnemo,
+  the failure line also carries `"motif":"perime"` (`mnemo declarer --remplacer` then rewrites it). The
+  types are `LigneInit` and `PosteVerifie` in `@mnemo/contrat`.
+- `mnemo verifier-poste [--json]` (check this computer): `git` (runs `git --version`), Claude Code (the `claude` the
+  sessions will run) and the Node version. Without `--json`, one line each, exit code 1 if git or Claude Code is
+  missing; with `--json`, one line, exit code 0:
+  `{"git":{"ok":true,"version":"2.50.1"},"claude":{"ok":false,"motif":"…"},"node":{"version":"26.13.1"}}`.
+- `mnemo declarer (--remplacer | --retirer) [--json]` (declare): looks after an existing MCP declaration of Mnemo to
+  Claude Code, of user scope; it never declares anew, which is
+  `mnemo init --mcp`. `--remplacer` (replace): a Mnemo declaration that runs another Node.js or another copy of Mnemo is
+  removed and made again with this Node.js and this Mnemo; `--retirer` (remove): the declaration is removed only if it
+  runs this Node.js and this Mnemo. A declaration named `mnemo` that does not run Mnemo, or of another scope, is left
+  alone. With `--json`, one line `{"resultat":"…","message":"…"}`, `resultat` being `absent` (nothing declared), `deja`
+  (already up to date), `remplace`, `retire`, `autre` (left alone) or `echec` (type `SortieDeclarer` in
+  `@mnemo/contrat`). Exit code 1 on a failure (`claude` not found, for example), 2 on a usage error.
 - `mnemo lit <path>` (read): prints a note (path relative to `_mnemo/`, for example `clients/acme/acme.md`).
 - `mnemo liste [folder]` (list): prints the note of the folder, its notes, then its subfolders.
 - `mnemo cherche <text…> [--dossier <path>] [--tout] [--limite N] [--contexte]` (search): searches the memory (the index

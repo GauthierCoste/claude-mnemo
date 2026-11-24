@@ -83,7 +83,7 @@ In a terminal, `init` guides you step by step, with a default for each question:
 3. installing the local models, about 1.3 GB to download (default: **no**; later: `mnemo modeles installer`);
 4. on macOS and Linux, installing the `mnemo` command in `~/.local/bin` (default: yes; not asked when it is already
    there and up to date; later: `mnemo commande`);
-5. on macOS, creating the Mnemo application `~/Applications/Mnemo.app` (default: yes; later: `mnemo lanceur`).
+5. on macOS, creating the Mnemo launcher `~/Applications/Mnemo.app` (default: yes; later: `mnemo lanceur`).
 
 `mnemo init --oui` accepts the defaults without asking anything, the MCP declaration included (for scripts and CI), but
 installs nothing outside the folder: no models, no command, no application. Without a terminal and without `--oui`,
@@ -92,7 +92,10 @@ that declares the MCP server. Running `init` on a folder that already has a memo
 the MCP declaration, the command and the application: this is also how an existing installation gets them, and how you
 plug a new installation into a memory you already have (give its folder at the first question). If Claude Code already
 declares a Mnemo MCP server pointing to another copy of Mnemo, `init` leaves it and prints the two commands that replace
-it (`claude mcp remove mnemo --scope user`, then `claude mcp add …`).
+it (`claude mcp remove mnemo --scope user`, then `claude mcp add …`); `mnemo declarer --remplacer` does both at once.
+Explicit options (`--mcp`, `--sans-modeles`…) decide a step without asking, and `--json` gives one JSON line per event,
+for a program that drives the installation; `mnemo verifier-poste` checks git and Claude Code first (see
+[usage.md](usage.md#command-line)).
 
 ## First opening
 
