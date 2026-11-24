@@ -44,6 +44,9 @@ describe('mode démo', () => {
 		expect((await api.supprimer<ClaudeDesktopVue>(ROUTES.claudeDesktopMnemo)).mnemo).toBe('absent');
 		await api.envoyer(ROUTES.claudeDesktopServeurs, { nom: 'outil', commande: 'uvx', args: ['outil-mcp'], env: { JETON: 'x' } });
 		await expect(api.envoyer(ROUTES.claudeDesktopServeurs, { nom: 'outil', commande: 'uvx', args: [], env: {} })).rejects.toMatchObject({ statut: 409 });
+		// comme le service : « mnemo » réservé quelle que soit la casse, une variable nouvelle a besoin d'une valeur
+		await expect(api.envoyer(ROUTES.claudeDesktopServeurs, { nom: 'Mnemo', commande: 'uvx', args: [], env: {} })).rejects.toMatchObject({ statut: 400 });
+		await expect(api.envoyer(ROUTES.claudeDesktopServeurs, { nom: 'autre', commande: 'uvx', args: [], env: { JETON: null } })).rejects.toMatchObject({ statut: 400 });
 		const renomme = await api.remplacer<ClaudeDesktopVue>(ROUTES.claudeDesktopServeur.replace(':id', 'notes'), { nom: 'notes-2', commande: 'npx', args: [], env: { CLE_API: null } });
 		expect(renomme.serveurs.map((x) => x.nom)).toEqual(['notes-2', 'agenda', 'outil']);
 		expect(renomme.serveurs[0]!.env).toEqual(['CLE_API']);

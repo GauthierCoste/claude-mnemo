@@ -3,6 +3,7 @@
  * (brancher la mémoire, ajouter, modifier, retirer un serveur), pour voir Réglages › App Claude sans service. Comme le
  * service, aucune valeur de variable n'est rendue.
  */
+import { MOTIF_NOM_SERVEUR } from '@mnemo/commun';
 import { ROUTES, type ClaudeDesktopVue, type ServeurMcpEcriture } from '@mnemo/contrat';
 import { ErreurApi } from './api.ts';
 
@@ -25,10 +26,15 @@ export function creerClaudeDesktopDemo() {
 		return chemin.startsWith(prefixe) ? decodeURIComponent(chemin.slice(prefixe.length)) : undefined;
 	};
 	const ecrire = (demande: ServeurMcpEcriture, avant: Serveur | undefined): Serveur => {
-		if (!/^[A-Za-z0-9_.-]{1,64}$/u.test(demande.nom) || demande.nom === 'mnemo') throw new ErreurApi(`Nom de serveur refusé : « ${demande.nom} ».`, 400);
+		// mêmes règles que le service : nom réservé quelle que soit la casse, variable nouvelle sans valeur refusée
+		if (!MOTIF_NOM_SERVEUR.test(demande.nom) || demande.nom.toLowerCase() === 'mnemo') throw new ErreurApi(`Nom de serveur refusé : « ${demande.nom} ».`, 400);
 		if (demande.commande.trim() === '') throw new ErreurApi('Commande vide.', 400);
 		const env: Record<string, string> = {};
-		for (const [nom, valeur] of Object.entries(demande.env)) env[nom] = valeur ?? avant?.env[nom] ?? '';
+		for (const [nom, valeur] of Object.entries(demande.env)) {
+			const gardee = valeur ?? (avant !== undefined && Object.hasOwn(avant.env, nom) ? avant.env[nom] : undefined);
+			if (gardee === undefined) throw new ErreurApi(`Variable « ${nom} » : valeur requise (elle n'existe pas encore).`, 400);
+			env[nom] = gardee;
+		}
 		return { commande: demande.commande, args: [...demande.args], env, modifiable: true };
 	};
 

@@ -660,7 +660,8 @@ export type ReglagesVue = { champs: ChampReglageVue[]; avertissements: string[];
 /**
  * Un serveur MCP de l'app Claude (autre que Mnemo) : `commande` et `args` tels quels, `env` : les noms des variables
  * seulement (leurs valeurs ne sortent jamais du service) ; `modifiable` faux : décrit autrement que par une commande (`url`,
- * champs inconnus), en lecture seule (il peut seulement être retiré ; `commande` est alors son `url` s'il en a une).
+ * champs inconnus), en lecture seule (il peut seulement être retiré ; `commande` est alors sa `command` s'il en a une, sinon
+ * son `url` sans identifiants, paramètres ni fragment).
  */
 export type ServeurMcpVue = { nom: string; commande: string; args: string[]; env: string[]; modifiable: boolean };
 
