@@ -5,6 +5,7 @@ import { afterEach } from 'vitest';
 import type { EtatSessions, Modeles, Pilotage } from '../../src/application/ports.ts';
 import { demarrerService } from '../../src/adaptateurs/http/serveur.ts';
 import type { ReglagesService, Service } from '../../src/adaptateurs/http/serveur.ts';
+import type { AppClaude } from '../../src/adaptateurs/http/claude-desktop.ts';
 import { retirerPlugin } from '../../src/infra/claude.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
 import { preparerDossierLocal } from '../../src/infra/systeme.ts';
@@ -42,7 +43,7 @@ export type ContexteService = {
  */
 export async function serviceFaux(
 	reglages: ReglagesService = {},
-	options: { pil?: (pil: Pilotage) => void; avant?: (etat: EtatSessions) => Promise<void>; interface?: string; dossierClaude?: string; portFixePar?: string } = {},
+	options: { pil?: (pil: Pilotage) => void; avant?: (etat: EtatSessions) => Promise<void>; interface?: string; dossierClaude?: string; portFixePar?: string; appClaude?: Partial<Omit<AppClaude, 'racine'>> } = {},
 ): Promise<ContexteService> {
 	const racine = await dossierTemporaire();
 	const dep = fauxPorts();
@@ -88,7 +89,9 @@ export async function serviceFaux(
 		},
 	};
 	const journal: string[] = [];
-	const service = await demarrerService({ racine, dep, pil, reglages: { journal: (m) => journal.push(m), ...reglages }, interface: options.interface ?? join(racine, 'interface-absente'), dossierClaude, modeles, ...(options.portFixePar === undefined ? {} : { portFixePar: options.portFixePar }) });
+	// app Claude : jamais le vrai fichier ; un dossier absent par défaut (app non installée), faux Node et faux main.ts
+	const appClaude = { fichier: join(racine, 'app-claude-absente', 'claude_desktop_config.json'), maison: racine, node: '/opt/node/bin/node', main: '/opt/mnemo/main.ts', ...options.appClaude };
+	const service = await demarrerService({ racine, dep, pil, reglages: { journal: (m) => journal.push(m), ...reglages }, interface: options.interface ?? join(racine, 'interface-absente'), dossierClaude, modeles, appClaude, ...(options.portFixePar === undefined ? {} : { portFixePar: options.portFixePar }) });
 	services.push(service);
 	// relance du démarrage faite : les sessions créées ensuite par le test ne sont pas relancées par elle
 	await service.pret;

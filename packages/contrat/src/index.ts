@@ -306,6 +306,12 @@ export type MessageClient =
  * - `sourcesMarquerTraite` POST `{ chemins }` → `ReponseMarquerTraite` : retire la marque « à traiter » sans rien créer
  *   (un commit par fiche ; celles déjà traitées sont ignorées) ;
  * - `reglages` GET → `ReglagesVue` ; PUT `{ valeurs: { "<cle>": valeur | null } }` → `ReglagesVue` (voir `ReglagesVue`) ;
+ * - `claudeDesktop` GET → `ClaudeDesktopVue` : la configuration de l'app Claude (Claude Desktop), sans valeur de variable ;
+ * - `claudeDesktopMnemo` PUT (sans corps) → `ClaudeDesktopVue` : branche ou met à jour l'entrée `mnemo` ; DELETE → `ClaudeDesktopVue` : la retire ;
+ * - `claudeDesktopServeurs` POST `ServeurMcpEcriture` → 201 `ClaudeDesktopVue` : ajoute un serveur (409 : nom déjà pris) ;
+ * - `claudeDesktopServeur` PUT `ServeurMcpEcriture` → `ClaudeDesktopVue` : modifie le serveur `:id` (renommé si `nom` diffère ;
+ *   404 inconnu, 409 nouveau nom déjà pris) ; DELETE → `ClaudeDesktopVue` : le retire, quelle que soit sa forme (404 inconnu) ;
+ *   écritures refusées (409) si l'app Claude n'est pas installée ou si son fichier est illisible (jamais réécrit) ; 400 : demande invalide ;
  * - `ws` : WebSocket (`MessageServeur`, `MessageClient`) ; jeton en sous-protocole `PREFIXE_JETON_WS` + jeton (avec
  *   `PROTOCOLE_WS`, que le service choisit), sinon en `?jeton=` (ligne de commande ; l'interface ne l'envoie jamais).
  * Hors de `/api/` et de `/ws`, le service sert l'interface (`/`, `/assets/…`) sans jeton.
@@ -366,6 +372,10 @@ export const ROUTES = {
 	sourcesMarquerTraite: '/api/memoire/sources/marquer-traite',
 	dossiersTraiter: '/api/memoire/dossiers-non-rattaches/traiter',
 	reglages: '/api/reglages',
+	claudeDesktop: '/api/claude-desktop',
+	claudeDesktopMnemo: '/api/claude-desktop/mnemo',
+	claudeDesktopServeurs: '/api/claude-desktop/serveurs',
+	claudeDesktopServeur: '/api/claude-desktop/serveurs/:id',
 	lots: '/api/lots',
 	lotValider: '/api/lots/:id/valider',
 	lotRejeter: '/api/lots/:id/rejeter',
@@ -646,6 +656,34 @@ export type ChampReglageVue = {
  * requis). PUT reçoit `{ valeurs: { "<cle>": valeur | null } }` (null : rétablir le défaut), tout ou rien.
  */
 export type ReglagesVue = { champs: ChampReglageVue[]; avertissements: string[]; enAttente: string[] };
+
+/**
+ * Un serveur MCP de l'app Claude (autre que Mnemo) : `commande` et `args` tels quels, `env` : les noms des variables
+ * seulement (leurs valeurs ne sortent jamais du service) ; `modifiable` faux : décrit autrement que par une commande (`url`,
+ * champs inconnus), en lecture seule (il peut seulement être retiré ; `commande` est alors son `url` s'il en a une).
+ */
+export type ServeurMcpVue = { nom: string; commande: string; args: string[]; env: string[]; modifiable: boolean };
+
+/**
+ * Réponse des routes `claudeDesktop…` : `installee` faux si le dossier de l'app Claude n'existe pas (rien n'est écrit) ;
+ * `fichier` : chemin du fichier (`~` abrégé) ; `erreur` : fichier illisible, jamais réécrit (`serveurs` vide) ; `mnemo` :
+ * état de l'entrée `mnemo` (`perime` : présente mais différente de l'attendue) ; `serveurs` : les autres, dans l'ordre du
+ * fichier. Un changement ne vaut qu'au redémarrage de l'app Claude.
+ */
+export type ClaudeDesktopVue = {
+	installee: boolean;
+	fichier: string;
+	erreur?: string;
+	mnemo: 'absent' | 'branche' | 'perime';
+	serveurs: ServeurMcpVue[];
+};
+
+/**
+ * Corps de `claudeDesktopServeurs` POST et `claudeDesktopServeur` PUT : nom (`^[A-Za-z0-9_.-]{1,64}$`, jamais `mnemo`),
+ * commande non vide, arguments, variables ; une variable à `null` garde sa valeur actuelle (modification), une variable
+ * absente est retirée.
+ */
+export type ServeurMcpEcriture = { nom: string; commande: string; args: string[]; env: Record<string, string | null> };
 
 /** Genre d'un lot d'informations : fusionner des doublons, supprimer, confirmer (« à confirmer » retiré). */
 export type GenreLotVue = 'fusionner' | 'supprimer' | 'confirmer';

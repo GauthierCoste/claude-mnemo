@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
@@ -21,6 +22,10 @@ import { dossiersAAmorcer } from '../../application/dossiers.ts';
 import { lireReglagesMemoire, modifierReglagesMemoire } from '../../application/reglages-memoire.ts';
 import { routesProfils } from './profils.ts';
 import { routesReglages } from './reglages.ts';
+import { routesClaudeDesktop } from './claude-desktop.ts';
+import type { AppClaude } from './claude-desktop.ts';
+import { fichierConfigClaudeDesktop } from '../../infra/config-claude-desktop.ts';
+import { nodeDurable } from '../../infra/node-durable.ts';
 import { choixDesTypesAConfirmer } from '../../application/types-du-coffre.ts';
 import { CORPS_MAX, ErreurHttp, routes, trouverRoute } from './routes.ts';
 import type { Reponse, Route } from './routes.ts';
@@ -30,6 +35,9 @@ import { racineAffichee, titresDeLIndex } from './vues.ts';
 import { creerHub } from './websocket.ts';
 import { routesLots } from './lots.ts';
 import { versionMnemo } from '../../infra/version.ts';
+
+/** `main.ts` de Mnemo : l'entrée `mnemo` de l'app Claude le lance (`mnemo mcp`), comme la déclaration à Claude Code. */
+const MAIN = fileURLToPath(new URL('../cli/main.ts', import.meta.url));
 
 /** Adresse d'écoute : jamais `0.0.0.0`, `::` ni `localhost` résolu. */
 const ADRESSE = '127.0.0.1';
@@ -231,6 +239,11 @@ export async function demarrerService(options: {
 	modeles?: Modeles;
 	/** Variable d'environnement qui a fixé `port` (`MNEMO_PORT`) : le réglage `service.port` est alors sans effet. */
 	portFixePar?: string;
+	/**
+	 * App Claude (Claude Desktop) : fichier de configuration, dossier personnel, Node et `main.ts` de l'entrée `mnemo` ; par
+	 * défaut ceux de la machine (`fichierConfigClaudeDesktop`, `homedir()`, `nodeDurable()`, ce `main.ts`).
+	 */
+	appClaude?: Partial<Omit<AppClaude, 'racine'>>;
 }): Promise<Service> {
 	const { racine, dep, pil } = options;
 	const dossierUi = options.interface ?? dossierInterface();
@@ -315,6 +328,13 @@ export async function demarrerService(options: {
 		}),
 		...routesProfils(dep, () => hub.diffuser({ type: 'memoire', modifieeMs: Date.now() })),
 		...routesLots(dep, hub.diffuser),
+		...routesClaudeDesktop({
+			fichier: options.appClaude?.fichier ?? fichierConfigClaudeDesktop(process.platform, homedir(), process.env),
+			maison: options.appClaude?.maison ?? homedir(),
+			node: options.appClaude?.node ?? nodeDurable(),
+			main: options.appClaude?.main ?? MAIN,
+			racine,
+		}),
 		...routesReglages(racine, options.portFixePar === undefined ? {} : { 'service.port': options.portFixePar }, (coches) => choixDesTypesAConfirmer(dep, coches), {
 			lire: () => lireReglagesMemoire(dep),
 			modifier: async (valeurs) => {
