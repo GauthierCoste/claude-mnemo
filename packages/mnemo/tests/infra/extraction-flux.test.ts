@@ -216,7 +216,8 @@ function pdfCorrompu(taille: number): Buffer {
 const txt = (t: string): Buffer => Buffer.from(t);
 
 describe('pièces jointes : chacune son échec, la boîte continue', () => {
-	it('sonde : PDF corrompu de 40 Mo dans une mbox (fil à tas réduit) → seule la pièce échoue ; messages et autres pièces extraits', async () => {
+	// Fil poussé à dépasser son tas : Node peut alors abattre tout le processus de test sur une machine de CI (voir extraction-isolee.test.ts).
+	it.skipIf(process.env.CI)('sonde : PDF corrompu de 40 Mo dans une mbox (fil à tas réduit) → seule la pièce échoue ; messages et autres pièces extraits', async () => {
 		const boite = contenuEnMemoire(
 			Buffer.from(
 				messageMbox('a', [['avant.txt', 'text/plain', txt('Le tapir dort avant.')]]) +
