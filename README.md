@@ -78,11 +78,11 @@ wall of text: Claude stays focused and reads what it needs.
 
 You'll need:
 
-- a Mac, with Apple silicon or Intel (see [Status](#status));
+- macOS (Apple silicon or Intel) or Windows (x64 or ARM; being adapted, see [Status](#status));
 - Node.js 24 or later, git and pnpm (`npm install -g pnpm`);
 - the `claude` command line tool, signed in with your subscription.
 
-No build tools are needed: the session terminals (node-pty) come prebuilt for macOS.
+No build tools are needed: the session terminals (node-pty) come prebuilt for macOS and Windows.
 
 Then:
 
@@ -121,9 +121,9 @@ are masked before anything is written or indexed. What the web interface does an
 
 ## Status
 
-Version 1.5.0. Mnemo runs on macOS (Apple silicon, and Intel); the CI runs the type check and the tests at each push on
-Linux and Windows with Node.js 24, and on macOS with Node.js 26. Windows is being adapted and has not been tried in real use
-yet; Linux has not been used. The interface runs in the browser for now.
+Version 1.5.0. Mnemo runs on macOS (Apple silicon and Intel) and is being adapted to Windows, where it has not been
+tried in real use yet; Linux has not been used. The CI runs the type check and the tests at each push on Linux and
+Windows with Node.js 24, and on macOS with Node.js 26. The interface runs in the browser for now.
 
 **Next: [coming next](docs/coming-next.md).** Search now ranks by one score (a base of relevance plus four weights),
 shows one entry per note and per identical text, and the archivist has tools to delete, merge and fix links in the
