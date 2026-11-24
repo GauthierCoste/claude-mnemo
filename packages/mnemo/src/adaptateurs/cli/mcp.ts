@@ -9,13 +9,14 @@ const cheminDefini = (chemin: string | undefined): string | undefined => (chemin
 /**
  * `mnemo mcp` : serveur MCP sur stdio, lancé par Claude Code pour chaque session. Le projet est `CLAUDE_PROJECT_DIR`
  * (le dossier courant n'est pas garanti) ; la racine est cherchée en remontant depuis lui, puis depuis le dossier courant,
- * et la position part du dossier qui l'a trouvée. Lancé par une session Mnemo (`MNEMO_SESSION`) : instructions réduites.
+ * et la position part du dossier qui l'a trouvée ; à défaut, `MNEMO_RACINE` (l'app Claude lance le serveur hors de tout
+ * dossier Mnemo, avec cette variable). Lancé par une session Mnemo (`MNEMO_SESSION`) : instructions réduites.
  * stdout ne porte que le protocole. Arrêt propre (index fermé, file d'extraction arrêtée) puis sortie à la fin de stdin, sur
  * SIGINT et SIGTERM : une extraction en cours ne retient pas le processus.
  */
 export async function commandeMcp(args: string[]): Promise<void> {
 	if (args.length > 0) throw new ErreurCli('Usage : mnemo mcp', 2);
-	const { racine, projet } = racineDeSession(cheminDefini(process.env.CLAUDE_PROJECT_DIR), cheminReel(process.cwd()));
+	const { racine, projet } = racineDeSession(cheminDefini(process.env.CLAUDE_PROJECT_DIR), cheminReel(process.cwd()), cheminDefini(process.env.MNEMO_RACINE));
 	const serveur = await creerServeur({ racineDossier: racine, dossierProjet: projet, origine: origineDeSession(process.env) });
 
 	let arret: Promise<void> | null = null;

@@ -148,4 +148,21 @@ describe('commande mnemo', () => {
 		// Aucune mémoire : pas de racine.
 		expect(racineDeSession(dehors, dehors)).toEqual({ racine: null, projet: dehors });
 	});
+
+	it('racineDeSession : MNEMO_RACINE en dernier recours (app Claude), le projet est la racine', async () => {
+		const d = await dossierTemporaire();
+		await mnemo(d, 'init');
+		const autre = await dossierTemporaire();
+		await mnemo(autre, 'init');
+		const dehors = await dossierTemporaire();
+		// ni CLAUDE_PROJECT_DIR ni le dossier courant ne trouvent de racine : MNEMO_RACINE
+		expect(racineDeSession(undefined, dehors, d)).toEqual({ racine: d, projet: d });
+		expect(racineDeSession(dehors, dehors, d)).toEqual({ racine: d, projet: d });
+		// l'ordre ne change pas : CLAUDE_PROJECT_DIR et le dossier courant l'emportent (sessions Mnemo)
+		expect(racineDeSession(autre, dehors, d)).toEqual({ racine: autre, projet: autre });
+		expect(racineDeSession(undefined, autre, d)).toEqual({ racine: autre, projet: autre });
+		// MNEMO_RACINE qui n'est pas une racine, ou vide : ignorée
+		expect(racineDeSession(undefined, dehors, dehors)).toEqual({ racine: null, projet: dehors });
+		expect(racineDeSession(undefined, dehors, '')).toEqual({ racine: null, projet: dehors });
+	});
 });
