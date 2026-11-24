@@ -7,6 +7,11 @@ import { effacerJetonDeLAdresse, lireJeton } from './client/jeton.ts';
 import { Application, type Depart } from './composants/Application.tsx';
 import './styles/jetons.css';
 import './styles/base.css';
+import './styles/coquille.css';
+import { poserCoquille } from './coquille.ts';
+
+// App de bureau : le marqueur est posé avant le premier rendu (pas de saut de la carte à la fenêtre pleine).
+poserCoquille(document.documentElement, navigator.userAgent);
 
 /** `localStorage` de cette origine (port compris), ou null s'il est bloqué. */
 function stockageDeLOrigine(): Storage | null {

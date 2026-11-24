@@ -71,3 +71,9 @@
 .fermer:focus-visible {
 	outline: 2px solid var(--ac);
 }
+
+/* App de bureau : jamais dans la poignée de la fenêtre, même si la pile monte jusqu'à la barre de titre. */
+:global([data-coquille='app']) :is(.toast, .pile) {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}

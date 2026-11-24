@@ -68,3 +68,10 @@
 	justify-content: flex-start;
 	gap: 8px;
 }
+
+/* App de bureau : le dialogue et son fond recouvrent la barre de titre, poignée de la fenêtre ; ils restent cliquables. */
+:global([data-coquille='app']) .dialogue,
+:global([data-coquille='app']) .dialogue::backdrop {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}

@@ -271,3 +271,9 @@
 	font-size: 11.5px;
 	cursor: pointer;
 }
+
+/* App de bureau : la palette recouvre la barre de titre, poignée de la fenêtre ; ses couches restent cliquables. */
+:global([data-coquille='app']) :is(.fond, .palette, .cadreChamp, .menu) {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}

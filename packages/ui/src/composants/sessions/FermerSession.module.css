@@ -61,3 +61,9 @@
 .danger {
 	color: var(--red);
 }
+
+/* App de bureau : le menu (position fixe) peut recouvrir la barre de titre, poignée de la fenêtre ; il reste cliquable. */
+:global([data-coquille='app']) .menu {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}

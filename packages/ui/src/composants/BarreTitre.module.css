@@ -104,3 +104,20 @@
 	color: var(--amber);
 	font-size: 11px;
 }
+
+/*
+ * App de bureau : la barre de titre est la poignée de la fenêtre ; à gauche, la place des trois boutons de macOS
+ * (`titleBarStyle: 'hiddenInset'`) ; ce qui s'y clique ou s'y saisit reste hors de la poignée.
+ */
+:global([data-coquille='app']) .titre {
+	-webkit-app-region: drag;
+	app-region: drag;
+	-webkit-user-select: none;
+	user-select: none;
+	padding-left: 78px;
+}
+
+:global([data-coquille='app']) .titre :is(button, a, input, select, textarea, summary, label, [role='button'], [role='link'], [role='menu'], [role='menuitem'], [role='switch'], [tabindex]) {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}

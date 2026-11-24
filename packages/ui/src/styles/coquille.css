@@ -1,0 +1,14 @@
+/*
+ * App de bureau (`data-coquille="app"` sur <html>, posé par `coquille.ts`) : la fenêtre macOS fournit le cadre, donc pas
+ * de marge autour de l'app. La barre de titre est la poignée de la fenêtre (BarreTitre.module.css) ; une région
+ * `drag` (`app-region`) capte les clics même sous un élément posé par-dessus : tout ce qui peut recouvrir la barre de titre
+ * (dialogues, menus) est déclaré `no-drag`. Les modules protègent en plus leurs propres couches (palette, toasts, menus).
+ */
+:root[data-coquille='app'] body {
+	padding: 0;
+}
+
+:root[data-coquille='app'] :is(dialog, [role='dialog'], [role='alertdialog'], [role='menu'], [role='listbox']) {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}

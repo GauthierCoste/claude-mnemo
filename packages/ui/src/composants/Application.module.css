@@ -28,3 +28,10 @@
 	min-height: 0;
 	min-width: 0;
 }
+
+/* App de bureau : la fenêtre macOS fournit le cadre, l'arrondi et l'ombre (styles/coquille.css). */
+:global([data-coquille='app']) .app {
+	border: none;
+	border-radius: 0;
+	box-shadow: none;
+}
