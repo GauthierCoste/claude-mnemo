@@ -16,6 +16,7 @@ Commandes :
                     déclaration MCP à Claude Code, modèles, commande, lanceur) [--oui : les défauts, sans question]
                     [--mcp|--sans-mcp] [--modeles|--sans-modeles] [--commande|--sans-commande] [--lanceur|--sans-lanceur] :
                     l'étape faite ou sautée sans question ; [--json] : une ligne JSON par événement, sans question
+  verifier-poste    git, Claude Code et Node sur ce poste [--json]
   lit <chemin>      affiche une fiche, chemin relatif à ${DOSSIER_MEMOIRE}/
   liste [dossier]   liste le contenu d'un dossier de la mémoire
   cherche <texte>   cherche dans la mémoire [--dossier <chemin>] [--tout] [--limite N] [--contexte]
@@ -63,6 +64,8 @@ async function executer(args: string[]): Promise<void> {
 			return;
 		case 'init':
 			return (await import('./init.ts')).commandeInit(reste);
+		case 'verifier-poste':
+			return (await import('./poste.ts')).commandeVerifierPoste(reste);
 		case 'lit':
 			return (await import('./lit.ts')).commandeLit(reste);
 		case 'liste':

@@ -8,6 +8,7 @@ export const COMMANDES_CLI: readonly string[] = [
 	'-h',
 	'aide',
 	'init',
+	'verifier-poste',
 	'lit',
 	'liste',
 	'cherche',
