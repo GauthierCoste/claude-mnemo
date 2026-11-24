@@ -13,5 +13,6 @@ export * from './memoire.ts';
 export * from './parametres.ts';
 export * from './raisons-carte.ts';
 export * from './reglages.ts';
+export * from './serveurs-mcp.ts';
 export * from './taille.ts';
 export * from './texte.ts';

@@ -42,6 +42,8 @@ export function AppClaude(p: { surModifie?(modifie: boolean): void }): ReactNode
 		try {
 			setEcrite(await appel());
 			setFait(true);
+			// le cache suit : rouvert plus tard, l'onglet ne montre pas d'abord la configuration d'avant l'écriture
+			ressource.recharger();
 			return null;
 		} catch (e) {
 			return e instanceof ErreurApi ? e.message : 'Écriture impossible.';

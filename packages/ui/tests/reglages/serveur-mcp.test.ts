@@ -24,6 +24,12 @@ describe('saisie d’un serveur MCP de l’app Claude', () => {
 		const double = demandeDe({ ...SAISIE_VIDE, env: 'A=secret-1\nA=secret-2' }, []);
 		expect(double).toMatchObject({ ok: false, motif: expect.stringContaining('« A »') });
 		expect(JSON.stringify(double)).not.toContain('secret');
+		// une valeur collée seule (sans « NOM= ») ou un nom invalide : le rang de la ligne, jamais son texte
+		for (const env of ['A=1\nsk-secret-123', 'Authorization: Bearer secret=1']) {
+			const invalide = demandeDe({ ...SAISIE_VIDE, env }, ['sk-secret-123']);
+			expect(invalide).toMatchObject({ ok: false, motif: expect.stringMatching(/ligne \d : nom invalide/u) });
+			expect(JSON.stringify(invalide)).not.toMatch(/secret|Bearer/u);
+		}
 	});
 
 	it('ligne de commande : arguments à espaces entre guillemets', () => {

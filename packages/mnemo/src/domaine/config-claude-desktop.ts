@@ -4,12 +4,11 @@
  * modifier, retirer un serveur) et texte à écrire. Les autres clés et les serveurs qu'on ne touche pas sont gardés tels quels ;
  * les valeurs des variables d'environnement ne sortent jamais d'ici que vers le fichier.
  */
+import { MOTIF_NOM_SERVEUR, MOTIF_NOM_VARIABLE } from '@mnemo/commun';
 import { estObjet } from './valeurs.ts';
 
 /** Nom de l'entrée de Mnemo dans `mcpServers` : réservé, refusé pour les autres serveurs. */
 export const NOM_MNEMO = 'mnemo';
-export const MOTIF_NOM_SERVEUR = /^[A-Za-z0-9_.-]{1,64}$/u;
-export const MOTIF_NOM_VARIABLE = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 export const COMMANDE_MAX = 1000;
 export const ARGUMENTS_MAX = 50;
 export const ARGUMENT_MAX = 4000;
@@ -88,11 +87,14 @@ export function serveurStdio(brut: unknown): ServeurStdio | null {
 
 /**
  * Adresse d'un serveur distant telle que la vue la montre : origine et chemin seulement, sans identifiants (`user:pass@`),
- * paramètres (`?…`, un jeton peut s'y trouver) ni fragment ; illisible : un texte neutre, jamais l'adresse brute.
+ * paramètres (`?…`, un jeton peut s'y trouver) ni fragment ; illisible : un texte neutre, jamais l'adresse brute. Une
+ * adresse sans hôte ni chemin en `/` (`utilisateur:jeton@hote`, `data:…`) est lue comme un schéma suivi d'un chemin opaque,
+ * que rien ne nettoie : illisible aussi.
  */
 export function adresseVue(url: string): string {
 	try {
 		const u = new URL(url);
+		if (u.host === '' && !u.pathname.startsWith('/')) return 'adresse illisible';
 		u.username = '';
 		u.password = '';
 		u.search = '';

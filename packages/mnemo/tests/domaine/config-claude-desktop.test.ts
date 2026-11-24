@@ -87,6 +87,10 @@ describe('configuration de l’app Claude : lecture', () => {
 		expect(vus.map((v) => v.commande)).toEqual(['https://exemple.test/mcp', 'https://exemple.test:8443/sse/', 'adresse illisible']);
 		expect(JSON.stringify(vus)).not.toMatch(/secret|alice|token|frag/u);
 		expect(adresseVue('http://[::1')).toBe('adresse illisible');
+		// sans « // » : schéma et chemin opaque, gardé tel quel par `URL` (identifiants compris)
+		expect(adresseVue(['alice', 'jeton-secret@exemple.test/mcp'].join(':'))).toBe('adresse illisible');
+		expect(adresseVue('data:text/plain,secret')).toBe('adresse illisible');
+		expect(adresseVue('file:///srv/mcp')).toBe('file:///srv/mcp');
 	});
 
 	it('forme stdio : type « stdio » toléré, toute autre forme refusée', () => {
