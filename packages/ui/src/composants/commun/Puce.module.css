@@ -1,0 +1,27 @@
+.puce {
+	display: inline-block;
+	font: 11px var(--mono);
+	padding: 1px 7px;
+	border-radius: var(--r-pastille);
+	border: 1px solid var(--bd2);
+	color: var(--mu);
+	white-space: nowrap;
+	unicode-bidi: isolate;
+}
+
+.avertissement {
+	color: var(--amber);
+	border-color: color-mix(in srgb, var(--amber) 40%, transparent);
+	background: color-mix(in srgb, var(--amber) 7%, transparent);
+}
+
+.succes {
+	color: var(--ac);
+	border-color: color-mix(in srgb, var(--ac) 35%, transparent);
+	background: color-mix(in srgb, var(--ac) 6%, transparent);
+}
+
+.coloree {
+	color: var(--c);
+	border-color: var(--c);
+}

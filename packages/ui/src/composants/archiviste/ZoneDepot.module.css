@@ -1,0 +1,60 @@
+/* Zone de dépôt : colonne « Enrichir » de Mémoire › Archiviste, et calque du tiroir pendant un glisser. */
+.zone {
+	margin: 0 16px 14px;
+	border: 1.5px dashed var(--bd2);
+	border-radius: var(--r-4);
+	padding: 14px;
+	text-align: left;
+	color: var(--mu);
+	background: linear-gradient(180deg, color-mix(in srgb, var(--ac) 4%, transparent), transparent);
+	transition: border-color 0.15s, background-color 0.15s;
+	flex: none;
+}
+
+.survol {
+	border-color: var(--ac);
+	background-color: color-mix(in srgb, var(--ac) 6%, transparent);
+}
+
+.zone b {
+	display: block;
+	color: var(--tx);
+	font-size: 14px;
+	margin-bottom: 3px;
+}
+
+.actions {
+	margin-top: 10px;
+	display: flex;
+	gap: 8px;
+	justify-content: flex-start;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.destination {
+	margin-top: 10px;
+	text-align: left;
+	font-size: 12px;
+}
+
+/* Envoi d'un gros fichier : barre et texte de progression. */
+.progression {
+	margin-top: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 12px;
+	color: var(--mu);
+}
+
+.progression progress {
+	width: 100%;
+	height: 6px;
+	accent-color: var(--ac);
+}
+
+/* « Annuler l'envoi » : sous le texte, aligné à gauche. */
+.progression button {
+	align-self: flex-start;
+}

@@ -1,0 +1,403 @@
+# Banc d'essai de Mnemo : questions posées à la mémoire fictive de banc/corpus/ (jamais tirée de données réelles).
+#
+# Section `recherche` : chaque question porte
+#   question  le texte posé, tel qu'un utilisateur l'écrirait ;
+#   genre     mots (mots de la réponse), paraphrase (aucun mot commun avec la réponse, après la normalisation de la
+#             recherche plein texte : vérifié par tests/application/banc.test.ts), graphe (réponse dans une fiche liée à
+#             la fiche évidente), texte-libre (réponse seulement dans une section libre d'une fiche), long-texte
+#             (réponse au milieu d'un document de plus de 20 000 caractères), flexion (la réponse n'a qu'une autre forme
+#             du mot de la question : « déployer » / « déploiement »), contexte (la réponse n'a son sujet que dans le
+#             contexte de sa fiche ou de son document : synthèse, premières lignes) ;
+#   attendus  ids d'éléments (`fiche.md#^f-0001`, passage de fiche `fiche.md#section`) ou chemins de fiche (`fiche.md` :
+#             tout élément ou passage de la fiche) ;
+#   position  (facultatif) position de la session, relative à _mnemo/, pour la variante « + position » ;
+#   perimetre (facultatif) dossier où chercher, relatif à _mnemo/ ;
+#   unSeulDe  (facultatif) chemins de fiche dont un seul au plus doit figurer dans les 10 premiers résultats (copies).
+# Genres de la note unique : saturation (le bon fait, observé à 51 %, porte les mots exacts ; trois faits déclarés à 100 %
+# de la même fiche n'en portent aucun : ils ne doivent pas le devancer) ; doublons (la règle citée doit être dans les 3
+# premiers, et une seule des trois copies importées de sa source dans les 10 premiers).
+# Les sections de l'archiviste (extraction, contradictions, consignes) suivent la section `recherche`.
+
+recherche:
+  # --- Paraphrases : aucun mot commun avec la bonne réponse ---
+  - question: Sous quel délai la chaîne de boulangeries paie-t-elle ?
+    genre: paraphrase
+    attendus: [clients/fournil/fournil.md#^f-0002]
+  - question: Qui tient les livres de compte des boulangeries bretonnes ?
+    genre: paraphrase
+    attendus: [clients/fournil/fournil.md#^f-0003]
+  - question: À quel moment déployer sans gêner les ventes de pain ?
+    genre: paraphrase
+    attendus: [clients/fournil/fournil.md#^f-0004]
+  - question: Faut-il attendre un document d'achat avant de travailler pour l'assureur santé angevin ?
+    genre: paraphrase
+    attendus: [clients/mutuelle-ligerienne/mutuelle-ligerienne.md#^f-0002]
+  - question: Où envoyer mes notes d'honoraires à l'assureur angevin ?
+    genre: paraphrase
+    attendus: [clients/mutuelle-ligerienne/mutuelle-ligerienne.md#^f-0003]
+  - question: Combien coûte l'entretien mensuel du site de la maroquinière lyonnaise ?
+    genre: paraphrase
+    attendus: [clients/atelier-vermeil/atelier-vermeil.md#^f-0001]
+  - question: Quand est-il interdit de modifier la boutique de sacs à cause de Noël ?
+    genre: paraphrase
+    attendus: [clients/atelier-vermeil/atelier-vermeil.md#^f-0003]
+  - question: Quel matériel ont les conducteurs de camion ?
+    genre: paraphrase
+    attendus: [clients/transports-mercier/transports-mercier.md#^f-0003]
+  - question: Quel prix global pour la première étape chez le transporteur nantais ?
+    genre: paraphrase
+    attendus: [clients/transports-mercier/transports-mercier.md#^f-0002]
+  - question: Avant quel moment faut-il réserver ses croissants pour demain ?
+    genre: paraphrase
+    attendus: [projets/commandes-fournil/commandes-fournil.md#^f-0003]
+  - question: Comment l'acheteur est-il averti que son pain l'attend ?
+    genre: paraphrase
+    attendus: [projets/commandes-fournil/commandes-fournil.md#^f-0004]
+  - question: Comment se connecter au dépôt de sources de l'assureur ?
+    genre: paraphrase
+    attendus: [projets/extranet-adherents/extranet-adherents.md#^f-0001]
+  - question: Avec quel outil produit-on les justificatifs imprimables pour les pharmacies ?
+    genre: paraphrase
+    attendus: [projets/extranet-adherents/extranet-adherents.md#^f-0003]
+  - question: Personnaliser un sac avec des lettres retarde-t-il l'expédition ?
+    genre: paraphrase
+    attendus: [projets/boutique-vermeil/boutique-vermeil.md#^f-0003]
+  - question: Où sont rangées les images des articles de maroquinerie ?
+    genre: paraphrase
+    attendus: [projets/boutique-vermeil/boutique-vermeil.md#^f-0004]
+  - question: À quelle fréquence les véhicules signalent-ils où ils se trouvent ?
+    genre: paraphrase
+    attendus: [projets/suivi-tournees/suivi-tournees.md#^f-0002]
+  - question: Comment prouve-t-on qu'une marchandise a bien été remise ?
+    genre: paraphrase
+    attendus: [projets/suivi-tournees/suivi-tournees.md#^f-0003, sources/cahier-des-charges-tournees.md]
+  - question: Le responsable informatique de l'assureur va-t-il quitter son poste ?
+    genre: paraphrase
+    attendus: [personnes/herve-douanel.md#^f-0003]
+  - question: Quand a lieu la réunion récurrente avec l'assureur ?
+    genre: paraphrase
+    attendus: [personnes/sophie-arnaudet.md#^f-0002]
+  - question: Quels contrôles faire sur mon code prêt à partir vers le serveur Git ?
+    genre: paraphrase
+    attendus: [consignes/phpstan-avant-push.md]
+  - question: Ai-je le droit d'importer la base de production de l'assureur sur mon ordinateur ?
+    genre: paraphrase
+    attendus: [consignes/donnees-de-sante.md]
+  - question: Pourquoi a-t-on abandonné le traitement nocturne planifié ?
+    genre: paraphrase
+    attendus: [projets/extranet-adherents/decision-messenger.md#^f-0002]
+
+  # --- Mots : la question reprend des mots de la réponse ---
+  - question: taux journalier de la Mutuelle Ligérienne
+    genre: mots
+    attendus: [clients/mutuelle-ligerienne/mutuelle-ligerienne.md#^f-0001]
+  - question: paiement Stripe Checkout
+    genre: mots
+    attendus: [projets/commandes-fournil/commandes-fournil.md#^f-0002, projets/commandes-fournil/decision-paiement.md]
+  - question: étiquettes Colissimo
+    genre: mots
+    attendus: [projets/boutique-vermeil/boutique-vermeil.md#^f-0002]
+  - question: anomalies bloquantes de la recette des remboursements
+    genre: mots
+    attendus: [episodes/2026-11-03-point-mensuel-mutuelle.md#^f-0001]
+  - question: scénarios Behat du tunnel de commande
+    genre: mots
+    attendus: [consignes/behat-tunnel-commande.md]
+  - question: hébergeur certifié HDS
+    genre: mots
+    attendus: [clients/mutuelle-ligerienne/mutuelle-ligerienne.md#^f-0004, sources/mail-mutuelle-hebergement.md]
+  - question: acompte à la signature du devis
+    genre: mots
+    attendus: [sources/devis-fournil-2026.md]
+  - question: taux d'abandon de panier
+    genre: mots
+    attendus: [sources/cr-comite-vermeil.md]
+  - question: fonctionner hors connexion
+    genre: mots
+    attendus: [sources/cahier-des-charges-tournees.md]
+  - question: restaurer la sauvegarde Borg
+    genre: mots
+    attendus: [sources/note-astreinte.md]
+
+  # --- Mots, avec une position : la même question n'a pas la même réponse selon le dossier ---
+  - question: taux journalier convenu
+    genre: mots
+    position: clients/fournil
+    attendus: [clients/fournil/fournil.md#^f-0001]
+  - question: taux journalier convenu
+    genre: mots
+    position: projets/suivi-tournees
+    attendus: [clients/transports-mercier/transports-mercier.md#^f-0001]
+  - question: taux journalier convenu
+    genre: mots
+    position: projets/extranet-adherents
+    attendus: [clients/mutuelle-ligerienne/mutuelle-ligerienne.md#^f-0001]
+  - question: qui valide la mise en production
+    genre: mots
+    position: projets/suivi-tournees
+    attendus: [personnes/bastien-mercier.md#^f-0002]
+
+  # --- Graphe : la réponse est dans une fiche liée à la fiche évidente ---
+  - question: Suivi des tournées, qui connaît le terrain ?
+    genre: graphe
+    attendus: [personnes/bastien-mercier.md#^f-0003]
+  - question: Commandes en ligne du Fournil, qui valide les dépenses ?
+    genre: graphe
+    attendus: [personnes/nadia-kerbrat.md#^f-0003]
+  - question: Extranet adhérents, qui signe ?
+    genre: graphe
+    attendus: [personnes/herve-douanel.md#^f-0002]
+  - question: Boutique en ligne Vermeil, comment joindre la fondatrice ?
+    genre: graphe
+    attendus: [personnes/lucie-vermeil.md]
+  - question: Transports Mercier, qui réalise l'application mobile ?
+    genre: graphe
+    attendus: [projets/suivi-tournees/suivi-tournees.md#^f-0004]
+  - question: Mutuelle Ligérienne, où se fait la recette ?
+    genre: graphe
+    attendus: [projets/extranet-adherents/extranet-adherents.md#^f-0002]
+
+  # --- Texte libre : la réponse n'est que dans une section libre d'une fiche (passage `fiche.md#section`) ---
+  - question: avec quoi tournent les tests de bout en bout ?
+    genre: texte-libre
+    attendus: [stacks/symfony.md#conventions-de-code]
+  - question: comment lancer le simulateur de flotte ?
+    genre: texte-libre
+    attendus: [projets/suivi-tournees/suivi-tournees.md#demarrer]
+  - question: qui reprendra la boulangerie de Lannion ?
+    genre: texte-libre
+    attendus: [personnes/nadia-kerbrat.md#notes]
+
+  # --- Long texte : réponse au milieu du manuel d'exploitation (plus de 20 000 caractères) ---
+  - question: Combien de mois sont conservés les journaux applicatifs ?
+    genre: long-texte
+    attendus: [sources/manuel-exploitation-tournees.md#p-add96b34]
+  - question: Qui renouvelle le certificat TLS de l'API ?
+    genre: long-texte
+    attendus: [sources/manuel-exploitation-tournees.md#p-864bdfe0]
+
+  # --- Flexion : la réponse dit « déploiement », « configuration » ; la question « déployer », « configurer » ---
+  - question: Quand déployer l'application mobile ?
+    genre: flexion
+    attendus: [sources/manuel-exploitation-tournees.md#p-007adca5]
+  - question: Comment configurer l'API en production ?
+    genre: flexion
+    attendus: [sources/manuel-exploitation-tournees.md#p-0b94df2f]
+
+  # --- Contexte : le sujet n'est que dans le contexte (synthèse de la fiche, premières lignes du document) ---
+  - question: Où part l'export de la base de l'extranet des adhérents ?
+    genre: contexte
+    attendus: [sources/notes-de-passation.md#p-79d4342e]
+  - question: Pourquoi le scan échoue-t-il dans l'application mobile des chauffeurs ?
+    genre: contexte
+    attendus: [projets/suivi-tournees/journal-de-recette.md#anomalies-ouvertes]
+  # --- Saturation et doublons : la note unique de la recherche (docs/banc.md) ---
+  - question: Quel plafond de vitesse de refroidissement pour le four des verrières Aubépine ?
+    genre: saturation
+    position: projets/atelier-vitrail/atelier-vitrail.md
+    attendus: [projets/atelier-vitrail/atelier-vitrail.md#^f-0006]
+  - question: Quel plafond de vitesse de refroidissement pour le four des verrières Aubépine ?
+    genre: saturation
+    position: projets/atelier-vitrail/atelier-vitrail.md
+    perimetre: projets
+    attendus: [projets/atelier-vitrail/atelier-vitrail.md#^f-0006]
+  - question: Confirmer par écrit la date de pose avant de commander le verre
+    genre: doublons
+    attendus: [pratiques/pose-verrieres.md#^f-0001]
+    unSeulDe:
+      - sources/claude-code/verrieres/regle-pose.md
+      - sources/claude-code/boutique/regle-pose.md
+      - sources/claude-code/tournees/regle-pose.md
+
+# --- Bancs de l'archiviste (corpus fictif banc/corpus-archiviste/, écrit pour le banc) ---
+#
+# Section `extraction` : documents de corpus-archiviste/extraction/documents/, copiés dans documents/ d'une mémoire neuve.
+#   faits      les 50 faits attendus : `document` (chemin relatif à la racine du dossier), `termes` (mots ou valeurs
+#              obligatoires : un fait les contient tous, comparés sans accents, sans casse, sans espaces ni ponctuation,
+#              dates ramenées à AAAA-MM-JJ), `citation` (le passage exact du document qui le porte).
+#   decisions  les 20 décisions clés, mesurées par la couverture : `document`, `termes`.
+# Section `contradictions` : mémoire de corpus-archiviste/contradictions/memoire/ (copiée dans _mnemo/), documents de
+#   corpus-archiviste/contradictions/documents/. Chaque paire : `ancien` (texte d'un fait de la mémoire de départ),
+#   `nouveau` (valeur qui distingue le fait nouveau), `attendu` : `remplace` (l'ancien est barré, un fait vivant de la
+#   même fiche porte la valeur nouvelle) ou `a_confirmer` (l'ancien reste, un fait à confirmer de la même fiche le contredit).
+# Section `consignes` : chaque cas porte `consigne` (texte, portée globale), et `regle` + `action` + `attendu` (refus ou
+#   permis, rejoué par la vérification du hook `outil`) et/ou `message` (le message d'utilisateur doit servir la consigne).
+#   Une consigne avec règle est posée au niveau `verifiee`, sans règle au niveau `rappelee`. Racine fictive : /banc.
+
+extraction:
+  faits:
+    # devis-boutique-heron.md
+    - { document: documents/devis-boutique-heron.md, termes: ["14 800"], citation: "Le montant total de la prestation est de 14 800 € HT." }
+    - { document: documents/devis-boutique-heron.md, termes: [acompte, "30"], citation: "Un acompte de 30 % est versé à la signature du devis." }
+    - { document: documents/devis-boutique-heron.md, termes: ["2027-04-30"], citation: "La mise en ligne de la boutique est prévue le 30 avril 2027." }
+    - { document: documents/devis-boutique-heron.md, termes: [sylius], citation: "La boutique est développée avec Sylius sur Symfony 7." }
+    - { document: documents/devis-boutique-heron.md, termes: [paylune], citation: "Le paiement en ligne passe par le prestataire Paylune." }
+    # cr-lancement-heron.md
+    - { document: documents/cr-lancement-heron.md, termes: [darcourt, valid], citation: "Maëlle Darcourt est l'interlocutrice unique pour valider les livrables." }
+    - { document: documents/cr-lancement-heron.md, termes: [orlac, "180", "2026-02-05"], citation: "Yannick Orlac fournira le fichier des 180 références avant le 5 février 2026." }
+    - { document: documents/cr-lancement-heron.md, termes: [mardi, vendredi], citation: "Les expéditions ne partent que du mardi au vendredi." }
+    - { document: documents/cr-lancement-heron.md, termes: ["60", port], citation: "Les frais de port sont offerts à partir de 60 € d'achat." }
+    - { document: documents/cr-lancement-heron.md, termes: [mineur, âge], citation: "La vente aux mineurs est bloquée par une case de confirmation d'âge" }
+    # mail-heron-transporteur.eml
+    - { document: documents/mail-heron-transporteur.eml, termes: [colirail], citation: "Le transporteur retenu est Colirail." }
+    - { document: documents/mail-heron-transporteur.eml, termes: [enlèvement, "15"], citation: "L'enlèvement des colis a lieu chaque jour à 15 h 30" }
+    - { document: documents/mail-heron-transporteur.eml, termes: ["12", kg], citation: "Un colis de bières pèse au maximum 12 kg" }
+    - { document: documents/mail-heron-transporteur.eml, termes: ["2,10", colis], citation: "Le contrat avec Colirail coûte 2,10 € par colis." }
+    - { document: documents/mail-heron-transporteur.eml, termes: ["48", cass], citation: "Les colis cassés sont signalés à Colirail sous 48 heures" }
+    # spec-rendez-vous-greves.md
+    - { document: documents/spec-rendez-vous-greves.md, termes: ["20", minutes], citation: "Les clients prennent rendez-vous en ligne sur des créneaux de 20 minutes." }
+    - { document: documents/spec-rendez-vous-greves.md, termes: [urgence], citation: "Les urgences ne passent jamais par la prise de rendez-vous en ligne" }
+    - { document: documents/spec-rendez-vous-greves.md, termes: [sms, "24"], citation: "Un SMS de rappel est envoyé 24 heures avant le rendez-vous." }
+    - { document: documents/spec-rendez-vous-greves.md, termes: [héberg, france], citation: "Les données des animaux sont hébergées en France." }
+    - { document: documents/spec-rendez-vous-greves.md, termes: [vetaxis], citation: "L'agenda est synchronisé avec le logiciel de la clinique, Vetaxis." }
+    # cr-comite-greves-2026-02.md
+    - { document: documents/cr-comite-greves-2026-02.md, termes: ["2027-05-02"], citation: "La clinique ouvre la prise de rendez-vous en ligne le 2 mai 2027." }
+    - { document: documents/cr-comite-greves-2026-02.md, termes: [annul, gratuit, "12"], citation: "Une annulation est gratuite jusqu'à 12 heures avant le rendez-vous." }
+    - { document: documents/cr-comite-greves-2026-02.md, termes: ["9 500"], citation: "Le budget de la phase 2 est plafonné à 9 500 € HT." }
+    - { document: documents/cr-comite-greves-2026-02.md, termes: [fesquet, annul], citation: "Coralie Fesquet gère les annulations de rendez-vous." }
+    - { document: documents/cr-comite-greves-2026-02.md, termes: [valmorin, texte], citation: "Le Dr Inès Valmorin valide les textes affichés aux clients." }
+    # contrat-maintenance-greves.md
+    - { document: documents/contrat-maintenance-greves.md, termes: ["2026-03-01", "2027-02-28"], citation: "Le contrat de maintenance court du 1er mars 2026 au 28 février 2027." }
+    - { document: documents/contrat-maintenance-greves.md, termes: [préavis, "3"], citation: "Le contrat est résiliable avec un préavis de 3 mois." }
+    - { document: documents/contrat-maintenance-greves.md, termes: ["340"], citation: "La maintenance coûte 340 € HT par mois." }
+    - { document: documents/contrat-maintenance-greves.md, termes: [bloquant, "4"], citation: "Une panne bloquante est prise en charge sous 4 heures ouvrées." }
+    - { document: documents/contrat-maintenance-greves.md, termes: [sécurité, mardi], citation: "Les mises à jour de sécurité sont appliquées chaque premier mardi du mois." }
+    # cr-pervenche-catalogue.md
+    - { document: documents/cr-pervenche-catalogue.md, termes: ["420"], citation: "Le nouveau catalogue en ligne présente les 420 titres disponibles." }
+    - { document: documents/cr-pervenche-catalogue.md, termes: [onix], citation: "Les fiches des livres sont importées chaque nuit depuis le fichier ONIX du distributeur." }
+    - { document: documents/cr-pervenche-catalogue.md, termes: [libraire], citation: "Le site n'affiche pas de prix de vente : il renvoie vers les libraires." }
+    - { document: documents/cr-pervenche-catalogue.md, termes: [brissemont, nouveauté], citation: "Hugo Brissemont arbitre l'ordre des nouveautés en page d'accueil." }
+    - { document: documents/cr-pervenche-catalogue.md, termes: [quintard, "1 600"], citation: "Salomé Quintard fournit les couvertures en 1 600 pixels de haut." }
+    # mail-pervenche-maquettes.eml
+    - { document: documents/mail-pervenche-maquettes.eml, termes: [maquette, valid], citation: "les maquettes sont validées dans leur version 3." }
+    - { document: documents/mail-pervenche-maquettes.eml, termes: [marbre], citation: "La police des titres est Marbre Sans" }
+    - { document: documents/mail-pervenche-maquettes.eml, termes: ["#6C7BD0"], citation: "La couleur principale du site est le bleu pervenche #6C7BD0." }
+    - { document: documents/mail-pervenche-maquettes.eml, termes: [salon, "2027-04-12"], citation: "Le site doit être prêt pour le salon du livre du 12 avril 2027." }
+    - { document: documents/mail-pervenche-maquettes.eml, termes: [extrait, "10"], citation: "Les extraits de livres sont limités à 10 pages par titre." }
+    # note-hebergement.md
+    - { document: documents/note-hebergement.md, termes: [nuagerie], citation: "Les trois sites sont hébergés chez Nuagerie, à Strasbourg." }
+    - { document: documents/note-hebergement.md, termes: [sauvegard, nuit], citation: "Chaque serveur est sauvegardé chaque nuit à 2 h." }
+    - { document: documents/note-hebergement.md, termes: ["35"], citation: "Les sauvegardes sont conservées 35 jours." }
+    - { document: documents/note-hebergement.md, termes: ["89"], citation: "L'hébergement coûte 89 € HT par mois pour les trois sites." }
+    - { document: documents/note-hebergement.md, termes: [tls, "90"], citation: "Le certificat TLS se renouvelle automatiquement tous les 90 jours." }
+    # note-astreinte-2027.md
+    - { document: documents/note-astreinte-2027.md, termes: [samedi, "9", "13"], citation: "L'astreinte couvre les samedis de 9 h à 13 h." }
+    - { document: documents/note-astreinte-2027.md, termes: ["75"], citation: "Une intervention d'astreinte est facturée 75 € HT de l'heure." }
+    - { document: documents/note-astreinte-2027.md, termes: [signal], citation: "L'astreinte est joignable par la messagerie Signal uniquement." }
+    - { document: documents/note-astreinte-2027.md, termes: ["2027-08-01", "2027-08-21"], citation: "L'astreinte est suspendue du 1er août 2027 au 21 août 2027." }
+    - { document: documents/note-astreinte-2027.md, termes: [ticket, alerte], citation: "Une alerte de supervision ouvre un ticket automatiquement." }
+  decisions:
+    - { document: documents/devis-boutique-heron.md, termes: ["14 800"] }
+    - { document: documents/devis-boutique-heron.md, termes: ["2027-04-30"] }
+    - { document: documents/cr-lancement-heron.md, termes: [darcourt, valid] }
+    - { document: documents/cr-lancement-heron.md, termes: ["60", port] }
+    - { document: documents/mail-heron-transporteur.eml, termes: [colirail] }
+    - { document: documents/spec-rendez-vous-greves.md, termes: ["20", minutes] }
+    - { document: documents/spec-rendez-vous-greves.md, termes: [sms, "24"] }
+    - { document: documents/cr-comite-greves-2026-02.md, termes: ["2027-05-02"] }
+    - { document: documents/cr-comite-greves-2026-02.md, termes: [annul, gratuit, "12"] }
+    - { document: documents/cr-comite-greves-2026-02.md, termes: ["9 500"] }
+    - { document: documents/contrat-maintenance-greves.md, termes: ["340"] }
+    - { document: documents/contrat-maintenance-greves.md, termes: [bloquant, "4"] }
+    - { document: documents/cr-pervenche-catalogue.md, termes: [onix] }
+    - { document: documents/cr-pervenche-catalogue.md, termes: [libraire] }
+    - { document: documents/mail-pervenche-maquettes.eml, termes: [maquette, valid] }
+    - { document: documents/mail-pervenche-maquettes.eml, termes: [salon, "2027-04-12"] }
+    - { document: documents/note-hebergement.md, termes: [nuagerie] }
+    - { document: documents/note-hebergement.md, termes: ["35"] }
+    - { document: documents/note-astreinte-2027.md, termes: [samedi, "9", "13"] }
+    - { document: documents/note-astreinte-2027.md, termes: ["75"] }
+
+contradictions:
+  # Brasserie du Héron (clients/heron/heron.md)
+  - { ancien: "La mise en ligne de la boutique est prévue le 30 avril 2027", nouveau: "2027-05-21", attendu: a_confirmer }   # contrat → email
+  - { ancien: "Les frais de port sont offerts à partir de 60 € d'achat", nouveau: "75", attendu: remplace }                    # compte rendu → compte rendu plus récent
+  - { ancien: "Le transporteur retenu est Colirail", nouveau: transbrume, attendu: remplace }                                  # email → compte rendu
+  - { ancien: "Le montant total de la prestation est de 14 800 € HT", nouveau: "16 300", attendu: remplace }                   # contrat → avenant
+  - { ancien: "Les expéditions partent du mardi au vendredi", nouveau: lundi, attendu: a_confirmer }                            # compte rendu → note
+  - { ancien: "Le paiement en ligne passe par le prestataire Paylune", nouveau: monetis, attendu: a_confirmer }                 # contrat → email
+  # Clinique vétérinaire des Grèves (clients/greves/greves.md)
+  - { ancien: "Les créneaux de rendez-vous en ligne durent 20 minutes", nouveau: "30", attendu: remplace }                      # spec v2 → spec v3
+  - { ancien: "Un SMS de rappel est envoyé 24 heures avant le rendez-vous", nouveau: "48", attendu: a_confirmer }               # spec → email
+  - { ancien: "La maintenance coûte 340 € HT par mois", nouveau: "390", attendu: remplace }                                     # contrat → avenant
+  - { ancien: "Une annulation est gratuite jusqu'à 12 heures avant le rendez-vous", nouveau: "8", attendu: a_confirmer }        # compte rendu → note
+  - { ancien: "La clinique ouvre la prise de rendez-vous en ligne le 2 mai 2027", nouveau: "2027-05-16", attendu: remplace }    # compte rendu → compte rendu plus récent
+  - { ancien: "Les données des animaux sont hébergées en France", nouveau: belgique, attendu: a_confirmer }                     # spec → email
+  - { ancien: "Le logiciel de la clinique est Vetaxis", nouveau: clinora, attendu: a_confirmer }                                # spec → compte rendu
+  # Éditions de la Pervenche (clients/pervenche/pervenche.md)
+  - { ancien: "Le catalogue en ligne présente 420 titres", nouveau: "460", attendu: remplace }                                  # compte rendu → compte rendu plus récent
+  - { ancien: "Les fiches des livres sont importées chaque nuit depuis le fichier ONIX du distributeur", nouveau: heure, attendu: a_confirmer }  # compte rendu → email
+  - { ancien: "Le site n'affiche pas de prix de vente et renvoie vers les libraires", nouveau: prix public, attendu: remplace }  # compte rendu → compte rendu plus récent
+  - { ancien: "La couleur principale du site est le bleu pervenche #6C7BD0", nouveau: "#5A68C4", attendu: remplace }            # email → email plus récent
+  - { ancien: "Le site doit être prêt pour le salon du livre du 12 avril 2027", nouveau: "2027-04-26", attendu: remplace }       # email → compte rendu
+  - { ancien: "Les extraits de livres sont limités à 10 pages par titre", nouveau: "20 pages", attendu: a_confirmer }               # contrat → note
+  - { ancien: "Salomé Quintard fournit les couvertures en 1 600 pixels de haut", nouveau: "2 000", attendu: remplace }          # email → email plus récent
+
+consignes:
+  # Vérifiées : rejouées par la vérification du hook `outil` (racine /banc, dossier courant /banc/code/heron)
+  - consigne: Ne jamais pousser en force sur un dépôt git.
+    regle: { type: commandes_interdites, motifs: ["git push *--force*", "git push -f*", "git push * -f*"] }
+    action: { nom: Bash, entree: { command: "git push --force origin main" } }
+    attendu: refus
+  - consigne: Ne jamais pousser en force sur un dépôt git.
+    action: { nom: Bash, entree: { command: "git push -f" } }
+    attendu: refus
+  - consigne: Ne jamais pousser en force sur un dépôt git.
+    action: { nom: Bash, entree: { command: "git push origin main --force-with-lease" } }
+    attendu: refus
+  - consigne: Ne jamais pousser en force sur un dépôt git.
+    action: { nom: Bash, entree: { command: "composer test && git push --force" } }
+    attendu: refus
+  - consigne: Ne jamais pousser en force sur un dépôt git.
+    action: { nom: Bash, entree: { command: "sudo git push --force" } }
+    attendu: refus
+  - consigne: Ne jamais pousser en force sur un dépôt git.
+    action: { nom: Bash, entree: { command: "git push origin feature-fix" } }
+    attendu: permis
+  # Limite connue : la vérification est un rappel ferme, pas une sécurité ; `env` n'est pas retiré en tête de commande.
+  - consigne: Ne jamais pousser en force sur un dépôt git.
+    action: { nom: Bash, entree: { command: "env git push --force" } }
+    attendu: refus
+  - consigne: Ne pas toucher au dossier vendor/.
+    regle: { type: chemins_interdits, motifs: ["**/vendor/**"] }
+    action: { nom: Write, entree: { file_path: /banc/code/heron/vendor/autoload.php, content: "" } }
+    attendu: refus
+  - consigne: Ne pas toucher au dossier vendor/.
+    action: { nom: Edit, entree: { file_path: /banc/code/heron/src/Kernel.php, old_string: a, new_string: b } }
+    attendu: permis
+  - consigne: Ne pas toucher au dossier vendor/.
+    action: { nom: MultiEdit, entree: { file_path: vendor/sylius/sylius/composer.json, edits: [] } }
+    attendu: refus
+  - consigne: Ne jamais modifier les fichiers .env.
+    regle: { type: chemins_interdits, motifs: ["**/.env", "**/.env.*"] }
+    action: { nom: Edit, entree: { file_path: /banc/code/heron/.env, old_string: a, new_string: b } }
+    attendu: refus
+  - consigne: Ne jamais modifier les fichiers .env.
+    action: { nom: Write, entree: { file_path: /banc/code/heron/.env.local, content: "" } }
+    attendu: refus
+  - consigne: Ne jamais lancer de migration de base de données sans mon accord.
+    regle: { type: commandes_interdites, motifs: ["php bin/console doctrine:migrations:migrate*", "bin/console doctrine:migrations:migrate*"] }
+    action: { nom: Bash, entree: { command: "php bin/console doctrine:migrations:migrate --no-interaction" } }
+    attendu: refus
+  - consigne: Ne jamais lancer de migration de base de données sans mon accord.
+    action: { nom: Bash, entree: { command: "php bin/console doctrine:migrations:status" } }
+    attendu: permis
+  - consigne: Ne jamais lancer rm -rf.
+    regle: { type: commandes_interdites, motifs: ["rm -rf*", "rm -fr*"] }
+    action: { nom: Bash, entree: { command: "APP_ENV=test rm -rf var/cache" } }
+    attendu: refus
+  - consigne: Ne jamais publier de paquet npm.
+    regle: { type: commandes_interdites, motifs: ["npm publish*", "pnpm publish*"] }
+    action: { nom: Bash, entree: { command: "pnpm publish --access public" } }
+    attendu: refus
+  # Rappelées : le message de l'utilisateur doit les servir (hook `message`)
+  - consigne: Toujours écrire les messages de commit en français.
+    message: Rédige le message de commit pour ce correctif.
+  - consigne: Prévenir Maëlle Darcourt avant toute mise en production de la boutique du Héron.
+    message: On peut faire la mise en production de la boutique ce soir ?
+  - consigne: Les maquettes de la Pervenche passent par Salomé Quintard avant toute intégration.
+    message: J'intègre les nouvelles maquettes de la Pervenche cet après-midi.
+  - consigne: Aucun déploiement le vendredi.
+    message: Je lance le déploiement vendredi matin ?
+  - consigne: Les textes affichés aux clients de la clinique des Grèves sont validés par le Dr Valmorin.
+    message: Je change les textes de la page de rendez-vous de la clinique.

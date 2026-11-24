@@ -1,0 +1,50 @@
+/* Bouton « Importer la mémoire de Claude » et son bilan dépliable (dans le flux de la colonne « Enrichir »). */
+.import {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.erreur {
+	color: var(--red);
+	font-size: 12px;
+}
+
+.bilan {
+	flex-basis: 100%;
+}
+
+.bilan summary {
+	cursor: pointer;
+	color: var(--mu);
+	font-size: 12px;
+}
+
+.detail {
+	margin-top: 6px;
+	max-height: 360px;
+	overflow: auto;
+	padding: var(--esp-2) var(--esp-4);
+	background: var(--fond-panneau);
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-2);
+	box-shadow: var(--ombre);
+	font-size: 12px;
+}
+
+.detail ul {
+	margin: 0;
+	padding-left: 18px;
+}
+
+.sousTitre {
+	margin: var(--esp-2) 0 4px;
+	color: var(--mu);
+}
+
+.ignores {
+	font-family: var(--mono);
+	color: var(--mu);
+	word-break: break-all;
+}

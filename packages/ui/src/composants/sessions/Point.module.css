@@ -1,0 +1,24 @@
+/* Point d'état : couleur de l'état posée par le composant (--c). */
+.point {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--c);
+	flex: none;
+}
+
+.petit {
+	width: 6px;
+	height: 6px;
+}
+
+.anime {
+	animation: clignote 1.6s infinite;
+}
+
+@keyframes clignote {
+	50% {
+		opacity: 0.35;
+	}
+}

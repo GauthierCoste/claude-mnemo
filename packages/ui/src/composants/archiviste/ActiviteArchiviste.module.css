@@ -1,0 +1,41 @@
+/* Activité de l'archiviste ; le défilement est celui du conteneur. */
+.activite {
+	padding: 0 0 8px;
+}
+
+.liste {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.ligne {
+	display: grid;
+	grid-template-columns: 42px 1fr;
+	gap: 1px 8px;
+	font-size: 12px;
+	padding: 4px 0;
+}
+
+.heure {
+	font-family: var(--mono);
+	color: var(--dim);
+}
+
+.quoi {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.quoi em {
+	font-style: normal;
+	color: var(--mu);
+}
+
+.vide {
+	margin: 6px 0 0;
+	font-size: 12px;
+	color: var(--mu);
+}

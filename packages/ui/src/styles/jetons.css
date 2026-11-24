@@ -1,0 +1,125 @@
+/*
+ * Jetons de l'interface : seul fichier où une couleur s'écrit en clair ; les modules CSS n'utilisent que var(--…) et color-mix(in srgb, var(--…) N%, transparent) ; three.js et xterm lisent ces
+ * jetons à l'exécution (getComputedStyle).
+ */
+:root {
+	/* --- Couleurs et polices --- */
+	--bg: #09090b;
+	--s1: #0f1013;
+	--s2: #15171c;
+	--s3: #1c1f26;
+	--bd: rgba(255, 255, 255, 0.07);
+	--bd2: rgba(255, 255, 255, 0.13);
+	--tx: #eceef2;
+	--mu: #8b90a0;
+	--dim: #5b6070;
+	--ac: #7df0c6;
+	/* Vert de Mnemo, fixe : identité (avatar, puce verte) et état « travaille » ; ne suit pas la couleur principale. */
+	--vert: #7df0c6;
+	--violet: #a394ff;
+	--blue: #6cb6ff;
+	--amber: #f5b658;
+	--pink: #ff8fb8;
+	--red: #ff7a7a;
+	--mono: 'Geist Mono', 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+	--sans: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+	/* --- Valeurs fixes de la page --- */
+	--fond-page: #050506;
+	--fond-terminal: #07080a;
+	/* Texte posé sur l'accent : l'interface choisit l'un des deux selon la luminance de l'accent (reglages/accent.ts). */
+	--sur-accent-sombre: #06281d;
+	--sur-accent-clair: #ffffff;
+	--sur-accent: var(--sur-accent-sombre);
+	--sur-badge: #1a1205;
+	--sur-toast: #0b0c0f;
+	--ombre: 0 30px 80px rgba(0, 0, 0, 0.6);
+	--ombre-tiroir: -30px 0 60px rgba(0, 0, 0, 0.5);
+	--barre-defilement: rgba(255, 255, 255, 0.08);
+	--fond-tiroir: rgba(15, 16, 19, 0.96);
+	--fond-panneau: rgba(15, 16, 19, 0.82);
+	--texte-reponse: #cfd3dc;
+	--degrade-titre: linear-gradient(#121317, #0e0f12);
+	--degrade-graphe: radial-gradient(ellipse at 50% 40%, #12141c 0%, #07080a 70%);
+	/* Couleur d'une pastille ou d'un point, posée par le composant (style --c vers un jeton d'état ou de branche). */
+	--c: var(--dim);
+	/* Autres propriétés posées par un composant (style en ligne), ici leur valeur par défaut. */
+	--profil: var(--vert); /* couleur du profil d'une session (avatar, en-tête du panneau Contexte) */
+	--couleur-profil: var(--ac); /* couleur du profil dans l'éditeur de profils */
+	--etat: var(--dim); /* pastille d'état sur l'avatar d'une session */
+	--part: 0; /* part remplie de la jauge de la fenêtre de contexte, de 0 à 1 */
+	--l-a-faire: 340px; /* largeurs des panneaux redimensionnables : Archiviste */
+	--l-enrichir: 380px;
+	--l-arbre: 260px; /* … et Mémoire › Fichiers */
+	--l-liens: 280px;
+
+	/* --- États des sessions --- */
+	--etat-attend: var(--amber);
+	--etat-travaille: var(--vert);
+	--etat-a-relire: var(--blue);
+	--etat-en-pause: var(--dim);
+	--etat-terminee: var(--dim);
+
+	/* --- Branches de l'arbre (premier niveau, dans l'ordre de l'arbre) --- */
+	--branche-1: #a394ff;
+	--branche-2: #7df0c6;
+	--branche-3: #6cb6ff;
+	--branche-4: #f5b658;
+	--branche-5: #ff8fb8;
+	--branche-6: #ff7a7a;
+	--branche-7: #5fd3e8;
+	--branche-8: #b8e986;
+	--branche-9: #ff9f68;
+	--branche-10: #d4a5ff;
+
+	/* --- Graph 3D : lus par three.js (src/graphe/couleurs.ts), en hexadécimal ; l'opacité est celle de la scène --- */
+	--graphe-lien: #a0aac8;
+	--graphe-parente: #f5b658;
+	--graphe-eclaire: var(--ac);
+	--graphe-survol: #ffffff;
+	--graphe-lueur: #6cb6ff;
+	--graphe-lumiere: #ffffff;
+	--graphe-axe: #8b90a0;
+	--graphe-texte-secondaire: #9aa3b8;
+	--graphe-fond: #07080a;
+	--graphe-discret: #767b8b;
+	--graphe-etat-a-confirmer: #f5b658;
+	--graphe-etat-a-reprendre: #ff7a7a;
+	--graphe-etat-illisible: #ff7a7a;
+
+	/* --- Terminal (xterm) --- */
+	--terminal-fond: #07080a;
+	--terminal-texte: #cfd3dc;
+	--terminal-curseur: var(--ac);
+	--terminal-selection: rgba(163, 148, 255, 0.3);
+	--terminal-noir: #1c1f26;
+	--terminal-rouge: #ff7a7a;
+	--terminal-vert: #7df0c6;
+	--terminal-jaune: #f5b658;
+	--terminal-bleu: #6cb6ff;
+	--terminal-magenta: #a394ff;
+	--terminal-cyan: #5fd3e8;
+	--terminal-blanc: #cfd3dc;
+	--terminal-noir-vif: #5b6070;
+	--terminal-rouge-vif: #ff9b9b;
+	--terminal-vert-vif: #a6f5d8;
+	--terminal-jaune-vif: #f8cb85;
+	--terminal-bleu-vif: #98cbff;
+	--terminal-magenta-vif: #c2b8ff;
+	--terminal-cyan-vif: #8fe2f0;
+	--terminal-blanc-vif: #eceef2;
+
+	/* --- Rayons et espacements --- */
+	--r-1: 6px;
+	--r-2: 8px;
+	--r-3: 10px;
+	--r-4: 14px;
+	--r-pastille: 20px;
+	--esp-1: 4px;
+	--esp-2: 8px;
+	--esp-3: 10px;
+	--esp-4: 14px;
+	--esp-5: 18px;
+	/* Largeur du rail de navigation (Sessions, Mémoire), à gauche du contenu. */
+	--largeur-navigation: 64px;
+}

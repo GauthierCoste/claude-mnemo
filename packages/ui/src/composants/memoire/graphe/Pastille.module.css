@@ -1,0 +1,14 @@
+.pastille {
+	flex: none;
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--c);
+	box-shadow: 0 0 8px color-mix(in srgb, var(--c) 70%, transparent);
+}
+
+.anneau {
+	background: none;
+	box-shadow: inset 0 0 0 1.5px var(--c);
+}

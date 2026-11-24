@@ -1,0 +1,13 @@
+{
+  "name": "@mnemo/commun",
+  "version": "1.5.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "verifier": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json"
+  }
+}

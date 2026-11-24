@@ -1,0 +1,55 @@
+/* Colonne des liens de la fiche. */
+.liens {
+	overflow: auto;
+	padding: var(--esp-4);
+	border-left: 1px solid var(--bd);
+	background: var(--s1);
+	min-width: 0;
+}
+
+.lbl {
+	font: 500 10.5px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--dim);
+}
+
+.sec {
+	margin-top: var(--esp-5);
+}
+
+.ml {
+	display: flex;
+	align-items: center;
+	gap: var(--esp-2);
+	width: 100%;
+	padding: 6px 9px;
+	border: 0;
+	border-radius: var(--r-2);
+	background: none;
+	text-align: left;
+	cursor: pointer;
+	margin-top: 3px;
+}
+
+.ml:hover {
+	background: var(--s3);
+}
+
+.ml i {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--c);
+	flex: none;
+}
+
+.ml bdi {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.vide {
+	margin: 6px 0;
+	color: var(--mu);
+}

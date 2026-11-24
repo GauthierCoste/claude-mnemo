@@ -1,0 +1,60 @@
+# Fichiers publiables du dépôt (lu par `pnpm verifier-publication`).
+# Un motif glob par ligne, chemin relatif à la racine : `**` traverse les dossiers, `*` et `?` non. `!motif` exclut ;
+# la dernière ligne qui s'applique à un fichier gagne. Tout fichier suivi par git hors de cette liste fait échouer la
+# vérification : ajouter un fichier ici est une décision de publication.
+
+# Racine
+README.md
+LICENSE
+CONTRIBUTING.md
+package.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+tsconfig.base.json
+.nvmrc
+.gitignore
+.gitattributes
+
+# Intégration continue
+.github/workflows/*.yml
+.gitleaks.toml
+
+# Outillage du dépôt
+outils/**
+outils-tests/**
+publication/**
+
+# Paquets : sources, tests, configuration
+packages/*/package.json
+packages/*/tsconfig*.json
+packages/*/vite.config.ts
+packages/*/vitest.config.ts
+packages/*/.gitattributes
+packages/*/src/**
+packages/*/tests/**
+packages/mnemo/banc/**
+packages/mnemo/modeles/**
+packages/ui/index.html
+packages/ui/public/**
+packages/ui/outils/**
+
+# Documentation destinée aux utilisateurs (en anglais)
+docs/installation.md
+docs/usage.md
+docs/format-coffre.md
+docs/coming-next.md
+docs/references/**
+docs/images/**
+
+# Documents de conception et notes de travail : locaux, ignorés par git (.gitignore), jamais publiés (exclus
+# explicitement, même si un motif plus large venait à les couvrir).
+!docs/superpowers/**
+!docs/SPEC.md
+!docs/decisions.md
+!docs/conception.md
+!maquette/**
+!CLAUDE.md
+!docs/banc.md
+!docs/infographie-memoire.html
+!.superpowers/**
+!.worktrees/**

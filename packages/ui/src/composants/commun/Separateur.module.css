@@ -1,0 +1,68 @@
+/* Séparateur redimensionnable : trait fin à l'œil, zone de 8 px à la souris, accent au survol, au focus et au glisser. */
+.separateur {
+	flex: none;
+	touch-action: none;
+	z-index: 1;
+}
+
+.separateur:focus-visible {
+	outline: none;
+}
+
+.vertical {
+	position: relative;
+	width: 8px;
+	cursor: ew-resize;
+}
+
+/* Sur la bordure d'un panneau latéral : centré sur elle, sans largeur ajoutée. */
+.bord {
+	margin: 0 -4px;
+}
+
+.horizontal {
+	position: relative;
+	height: 8px;
+	margin: -4px 0;
+	cursor: ns-resize;
+}
+
+.separateur::before,
+.separateur::after {
+	content: '';
+	position: absolute;
+}
+
+/* Trait au repos (horizontal seulement : le bord du tiroir a déjà le sien). */
+.horizontal::before {
+	left: 0;
+	right: 0;
+	top: 4px;
+	height: 1px;
+	background: var(--bd);
+}
+
+.separateur::after {
+	background: transparent;
+	transition: background 0.15s;
+}
+
+.vertical::after {
+	top: 0;
+	bottom: 0;
+	left: 3px;
+	width: 2px;
+}
+
+.horizontal::after {
+	left: 0;
+	right: 0;
+	top: 3px;
+	height: 2px;
+}
+
+.separateur:hover::after,
+.separateur:focus-visible::after,
+.separateur[data-glisse='true']::after {
+	background: var(--ac);
+}

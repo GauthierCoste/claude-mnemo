@@ -1,0 +1,97 @@
+/* Groupe « À traiter » : en-tête (compteur, « Tout traiter »), une carte par fiche source, ses actions dessous. */
+.groupe {
+	min-width: 0;
+}
+
+.entete {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 4px;
+}
+
+.lbl {
+	font: 500 10.5px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--dim);
+}
+
+.espace {
+	flex: 1;
+}
+
+.liste {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.ligne {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 8px;
+	margin-top: 7px;
+	padding: 9px 11px;
+	border: 1px solid var(--bd);
+	border-radius: var(--r-3);
+	background: var(--s2);
+}
+
+.ligne:focus-visible {
+	outline: 2px solid var(--ac);
+	outline-offset: 1px;
+}
+
+.enCours {
+	border-color: color-mix(in srgb, var(--ac) 40%, transparent);
+}
+
+.titre {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.titre bdi {
+	font-weight: 550;
+	overflow-wrap: anywhere;
+}
+
+.fichier {
+	font: 11px var(--mono);
+	color: var(--mu);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.actions {
+	flex-basis: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.manuel {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+	font-size: 12px;
+	max-width: 100%;
+	margin-bottom: 8px;
+}
+
+.manuel code {
+	font: 11.5px var(--mono);
+	color: var(--tx);
+	background: var(--s2);
+	border: 1px solid var(--bd);
+	border-radius: var(--r-2);
+	padding: 4px 8px;
+	overflow-wrap: anywhere;
+}

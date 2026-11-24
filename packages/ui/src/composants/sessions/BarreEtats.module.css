@@ -1,0 +1,37 @@
+/* Barre des états des sessions. */
+.barre {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 8px 14px;
+	border-bottom: 1px solid var(--bd);
+	background: var(--s1);
+	min-width: 0;
+	white-space: nowrap;
+}
+
+.decompte {
+	color: var(--mu);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}
+
+.espace {
+	flex: 1;
+}
+
+.terminees {
+	border: 0;
+	background: none;
+	padding: 0;
+	color: var(--mu);
+	text-decoration: underline dotted;
+	text-underline-offset: 3px;
+	cursor: pointer;
+	flex: none;
+}
+
+.terminees:hover {
+	color: var(--tx);
+}

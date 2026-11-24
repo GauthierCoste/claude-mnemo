@@ -1,0 +1,88 @@
+import type { EcarteVue, EntreeServieVue, SessionTermineeVue, SessionVue } from '@mnemo/contrat';
+import { estMinimal } from '../../application/episode.ts';
+import type { SessionTerminee } from '../../application/historique.ts';
+import type { Ecarte, EntreeServie } from '../../application/ports.ts';
+import { nomDeLaFiche } from '../../domaine/chemin.ts';
+import { dialogueOuvert } from '../../domaine/session.ts';
+import { texteDossierNonRattache } from '../../domaine/rattachement.ts';
+import type { Session } from '../../domaine/session.ts';
+
+/**
+ * Ce que l'API montre d'une session : les champs du contrat, rien de plus (ni pid, ni trace du processus, ni arrêt attendu).
+ * `terminal` : un terminal de ce service est attaché à la session.
+ */
+export function vueSession(s: Session, terminal: boolean): SessionVue {
+	return {
+		id: s.id,
+		profil: s.profil,
+		dossier: s.dossier,
+		position: s.position,
+		projet: s.projet,
+		dossierNonRattache: s.dossierNonRattache === true ? texteDossierNonRattache(s.dossier) : null,
+		objectif: s.objectif,
+		etat: s.etat,
+		creeeMs: s.creeeMs,
+		majMs: s.majMs,
+		bilanDemandeMs: s.bilanDemandeMs,
+		commitDebut: s.commitDebut,
+		branche: s.branche,
+		terminal,
+		dialogueOuvert: dialogueOuvert(s),
+	};
+}
+
+/** Une session de l'historique et son épisode (titre : celui de la fiche, sinon son nom de fichier). */
+export function vueSessionTerminee(t: SessionTerminee, terminal: boolean): SessionTermineeVue {
+	const e = t.episode;
+	return {
+		...vueSession(t.session, terminal),
+		episode: e === null ? null : { chemin: e.chemin, titre: e.fiche.titre || nomDeLaFiche(e.chemin), minimal: estMinimal(e.fiche) },
+	};
+}
+
+/** Titre d'une fiche : son vrai titre si l'index le connaît, sinon son nom de fichier. */
+export function titreDeFiche(chemin: string, titres: ReadonlyMap<string, string>): string {
+	return titres.get(chemin) || nomDeLaFiche(chemin);
+}
+
+/** Titres des fiches de l'index (vide si l'index est illisible : le nom du fichier en tient lieu). Un seul endroit : route du hook et sondage. */
+export async function titresDeLIndex(index: { titres(): Promise<{ chemin: string; titre: string }[]> }): Promise<Map<string, string>> {
+	return new Map((await index.titres().catch(() => [])).map((t) => [t.chemin, t.titre]));
+}
+
+export function vueServie(e: EntreeServie, titres: ReadonlyMap<string, string> = new Map()): EntreeServieVue {
+	return {
+		session: e.session,
+		moment: e.moment,
+		horodatageMs: e.horodatageMs,
+		ids: [...e.ids],
+		texte: e.texte,
+		ms: e.ms,
+		sens: e.sens,
+		classement: e.classement.map((c) => ({ id: c.id, titre: c.titre, note: c.note, servi: c.servi, rang: c.rang })),
+		muet: e.muet,
+		cartes: e.cartes.map((c) => ({
+			id: c.chemin,
+			titre: titreDeFiche(c.chemin, titres),
+			raison: c.raison,
+			...(c.depuis === undefined ? {} : { depuis: { id: c.depuis, titre: titreDeFiche(c.depuis, titres) } }),
+			...(c.note === undefined ? {} : { note: c.note }),
+		})),
+		titres: Object.fromEntries(e.ids.map((id) => id.split('#')[0]!).map((chemin) => [chemin, titreDeFiche(chemin, titres)])),
+	};
+}
+
+/** Ce que l'API montre d'un écarté. */
+export function vueEcarte(e: Ecarte): EcarteVue {
+	return { id: e.id, titre: e.titre, horodatageMs: e.horodatageMs };
+}
+
+/** Racine affichée : `~` pour le dossier personnel `maison` (séparateur gardé), sinon le chemin tel quel. */
+export function racineAffichee(racine: string, maison: string): string {
+	if (maison === '' || maison === '/') return racine;
+	if (racine === maison) return '~';
+	for (const separateur of ['/', '\\']) {
+		if (racine.startsWith(maison + separateur)) return `~${racine.slice(maison.length)}`;
+	}
+	return racine;
+}

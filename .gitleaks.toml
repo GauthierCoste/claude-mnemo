@@ -1,0 +1,28 @@
+# Configuration de gitleaks (CI, .github/workflows/verifier.yml ; syntaxe `[[allowlists]]`, gitleaks ≥ 8.25) : règles par
+# défaut, plus les valeurs exactes des secrets fictifs qui servent de jeux d'essai à la détection et au caviardage des
+# secrets de Mnemo (mêmes valeurs que publication/exceptions.txt ; un caractère entre crochets, pour que ce fichier ne
+# se signale pas lui-même). Aucun fichier n’est exclu en entier.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Secrets fictifs des jeux d'essai (suites abcdefghij…, clé d'exemple AWS, JWT d'exemple)"
+regexTarget = "match"
+regexes = [
+  '''ghp[_]abcdefghijklmnopqrstuvwxyz0123456789''',
+  '''github[_]pat_11ABCDEFG0123456789_abcdefghij''',
+  '''AKIA[I]OSFODNN7EXAMPLE''',
+  '''sk-abcdefghijklmnopqrstuvwxyz''',
+  '''xox[bp]-123456789012-abcdefghij''',
+  '''abc123def45[6]''',
+  '''abcdef12345[6]''',
+  '''wJalrXUtnFEMI/K7MDENG/bPxR[f]''',
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTYifQ\.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c''',
+]
+
+[[allowlists]]
+description = "En-têtes PEM sans clé : le test vérifie qu'un bloc de clé privée est caviardé"
+condition = "AND"
+paths = ['''^packages/mnemo/tests/domaine/secrets\.test\.ts$''']
+regexTarget = "match"
+regexes = ['''-----BEGIN (RSA )?PRIVATE KEY-----''']

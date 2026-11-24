@@ -1,0 +1,19 @@
+{
+  "name": "mnemo-racine",
+  "private": true,
+  "packageManager": "pnpm@12.15.0",
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "installer": "pnpm install && pnpm construire && node packages/mnemo/src/adaptateurs/cli/main.ts init",
+    "test": "pnpm -r --workspace-concurrency=1 --no-bail test && vitest run --config outils/vitest.config.ts",
+    "verifier": "pnpm -r verifier && tsc --noEmit -p outils",
+    "verifier-publication": "node outils/verifier-publication.ts",
+    "construire": "pnpm --filter @mnemo/ui construire"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

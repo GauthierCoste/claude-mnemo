@@ -1,0 +1,38 @@
+{
+  "name": "mnemo",
+  "version": "1.5.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "mnemo": "./src/adaptateurs/cli/main.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "verifier": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mnemo/commun": "workspace:*",
+    "@mnemo/contrat": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@orama/stemmers": "3.1.18",
+    "jszip": "^3.10.2",
+    "mammoth": "^1.13.0",
+    "postal-mime": "^4.2.1",
+    "proper-lockfile": "^4.1.2",
+    "tar": "^7.5.23",
+    "turndown": "^7.2.5",
+    "ulid": "^3.0.2",
+    "unpdf": "^2.2.1",
+    "ws": "^8.23.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/proper-lockfile": "^4.1.4",
+    "@types/turndown": "^5.0.6",
+    "@types/ws": "^8.18.2"
+  },
+  "optionalDependencies": {
+    "node-pty": "^1.1.0"
+  }
+}

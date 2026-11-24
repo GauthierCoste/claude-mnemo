@@ -1,0 +1,63 @@
+/* Bouton × de la barre d'une carte et son petit menu (terminer avec bilan, abandonner). */
+.fermer {
+	position: relative;
+	flex: none;
+}
+
+.bouton {
+	border: 0;
+	background: none;
+	color: var(--mu);
+	cursor: pointer;
+	padding: 2px 6px;
+	border-radius: var(--r-1);
+	font: 13px var(--mono);
+	line-height: 1;
+}
+
+.bouton:hover,
+.bouton[aria-expanded='true'] {
+	background: var(--s3);
+	color: var(--tx);
+}
+
+.menu {
+	position: fixed;
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	min-width: 170px;
+	margin-top: 4px;
+	padding: 4px;
+	background: var(--s2);
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-2);
+	box-shadow: var(--ombre);
+	transform: translateX(calc(-100% + 24px));
+}
+
+.item {
+	border: 0;
+	background: none;
+	text-align: left;
+	padding: 6px 10px;
+	border-radius: var(--r-1);
+	font: 12.5px var(--sans);
+	color: var(--tx);
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.item:hover:not(:disabled),
+.item:focus-visible {
+	background: var(--s3);
+}
+
+.item:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.danger {
+	color: var(--red);
+}

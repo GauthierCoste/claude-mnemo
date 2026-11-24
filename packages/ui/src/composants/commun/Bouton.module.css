@@ -1,0 +1,53 @@
+.bouton {
+	background: var(--s3);
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-2);
+	padding: 6px 11px;
+	cursor: pointer;
+}
+
+.bouton:hover {
+	border-color: var(--ac);
+}
+
+.bouton:disabled {
+	opacity: 0.5;
+	cursor: default;
+	border-color: var(--bd2);
+}
+
+.primaire {
+	background: var(--ac);
+	border-color: var(--ac);
+	color: var(--sur-accent);
+	font-weight: 600;
+}
+
+/* Bouton primaire désactivé : neutre, pour ne pas sembler prêt à agir. */
+.primaire:disabled {
+	background: var(--s3);
+	border-color: var(--bd2);
+	color: var(--mu);
+	opacity: 1;
+}
+
+.petit {
+	padding: 3px 9px;
+	font-size: 12px;
+	border-radius: 7px;
+}
+
+.icone {
+	border: 0;
+	background: none;
+	color: var(--mu);
+	cursor: pointer;
+	padding: 2px 6px;
+	border-radius: var(--r-1);
+	font: 12px var(--mono);
+}
+
+.icone:hover {
+	background: var(--s3);
+	color: var(--tx);
+}

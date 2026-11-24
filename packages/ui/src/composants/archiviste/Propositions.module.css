@@ -1,0 +1,192 @@
+/* Propositions à arbitrer : genre et fiche, texte, détail, boutons. */
+.panneau {
+	min-width: 0;
+}
+
+.entete {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 10px;
+}
+
+.lbl {
+	font: 500 10.5px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--dim);
+}
+
+.proposition {
+	border: 1px solid var(--bd);
+	border-radius: var(--r-3);
+	padding: 9px 11px;
+	margin-top: 7px;
+	background: var(--s2);
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 3px 10px;
+	transition: opacity 0.2s;
+}
+
+.off {
+	opacity: 0.4;
+}
+
+.genre {
+	font: 10.5px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.aConfirmer {
+	color: var(--amber);
+}
+
+.niveau {
+	color: var(--ac);
+}
+
+.modification {
+	color: var(--blue);
+}
+
+.texte {
+	overflow-wrap: anywhere;
+}
+
+.detail {
+	color: var(--mu);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+
+.actions {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+	margin-top: 6px;
+}
+
+.correction {
+	margin-top: 6px;
+}
+
+.correction textarea {
+	width: 100%;
+	resize: vertical;
+	background: var(--s1);
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-2);
+	padding: 6px 9px;
+	outline: none;
+}
+
+/* Lots d'informations proposés par l'archiviste : même carte ; « Revoir » déplie une ligne par information, ce qui change,
+   et les lignes écrites sous « Détail ». */
+.lot {
+	color: var(--violet);
+}
+
+.revue {
+	margin-top: 6px;
+}
+
+.lignes {
+	border: 0;
+	padding: 0;
+	margin: 0;
+	min-width: 0;
+	display: grid;
+	gap: 8px;
+}
+
+.legende {
+	padding: 0;
+	margin-bottom: 4px;
+	font: 10.5px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--dim);
+}
+
+.ligne {
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+	padding-top: 7px;
+	border-top: 1px solid var(--bd);
+}
+
+.case {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	cursor: pointer;
+}
+
+.case input {
+	margin-top: 3px;
+	flex: none;
+}
+
+.enonce {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.categorie {
+	margin-right: 6px;
+	vertical-align: 1px;
+}
+
+/* Ce que change la ligne : une ou deux lignes courtes sous l'énoncé, alignées sur lui. */
+.changement {
+	padding-left: 20px;
+	color: var(--mu);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+
+.ecrit {
+	padding-left: 20px;
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+}
+
+.ecrit summary {
+	cursor: pointer;
+	width: fit-content;
+	color: var(--dim);
+	font-size: 11px;
+}
+
+.etape {
+	font: 10px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--dim);
+	margin-top: 2px;
+}
+
+.information {
+	display: grid;
+	gap: 1px;
+	min-width: 0;
+}
+
+.role {
+	font-size: 11px;
+	color: var(--mu);
+}
+
+.brut {
+	font: 11px var(--mono);
+	color: var(--mu);
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+}

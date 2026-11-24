@@ -1,0 +1,43 @@
+.bascule {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	color: var(--mu);
+	font: 12px var(--sans);
+	cursor: pointer;
+	background: none;
+	border: 0;
+	padding: 0;
+}
+
+.glissiere {
+	width: 30px;
+	height: 17px;
+	border-radius: 9px;
+	background: var(--s3);
+	border: 1px solid var(--bd2);
+	position: relative;
+	flex: none;
+}
+
+.glissiere::after {
+	content: '';
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 11px;
+	height: 11px;
+	border-radius: 50%;
+	background: var(--mu);
+	transition: 0.15s;
+}
+
+.on {
+	background: color-mix(in srgb, var(--ac) 25%, transparent);
+	border-color: var(--ac);
+}
+
+.on::after {
+	left: 15px;
+	background: var(--ac);
+}

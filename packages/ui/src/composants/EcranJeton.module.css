@@ -1,0 +1,38 @@
+.ecran {
+	height: 100%;
+	display: grid;
+	place-items: start;
+	align-content: start;
+	padding: 48px 56px;
+	background: var(--bg);
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-4);
+	box-shadow: var(--ombre);
+}
+
+.carte {
+	max-width: 460px;
+	padding: 22px 24px;
+	background: var(--s1);
+	border: 1px solid var(--bd2);
+	border-radius: 12px;
+	font-size: 14px;
+	line-height: 1.6;
+}
+
+.carte p {
+	margin: 10px 0 0;
+}
+
+.carte code {
+	color: var(--ac);
+}
+
+.marque {
+	font: 600 13px var(--mono);
+	letter-spacing: 0.02em;
+}
+
+.marque b {
+	color: var(--ac);
+}

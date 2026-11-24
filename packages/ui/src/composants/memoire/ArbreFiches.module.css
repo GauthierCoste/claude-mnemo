@@ -1,0 +1,108 @@
+/* Arbre des fiches : dossiers et fiches. */
+/* En-tête : le filtre, puis localiser, tout replier, tout déplier ; reste en haut quand l'arbre défile. */
+.entete {
+	position: sticky;
+	top: calc(-1 * var(--esp-4));
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin-top: calc(-1 * var(--esp-4));
+	padding: var(--esp-4) 0 var(--esp-2);
+	background: var(--s1);
+}
+
+.filtre {
+	flex: 1;
+	min-width: 0;
+}
+
+.arbre {
+	display: flex;
+	flex-direction: column;
+}
+
+.fo,
+.fi {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	border: 0;
+	background: none;
+	text-align: left;
+	border-radius: var(--r-1);
+	cursor: pointer;
+	padding-top: 4px;
+	padding-bottom: 4px;
+	padding-right: 6px;
+}
+
+.fo {
+	gap: 6px;
+	color: var(--mu);
+	font-weight: 550;
+	margin-top: 4px;
+}
+
+.fo::before {
+	content: '▾';
+	font-size: 10px;
+	color: var(--dim);
+}
+
+.fo.c::before {
+	content: '▸';
+}
+
+.fi {
+	gap: 7px;
+	color: var(--tx);
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.fi:hover {
+	background: var(--s2);
+}
+
+.fi.on {
+	background: color-mix(in srgb, var(--ac) 9%, transparent);
+	color: var(--ac);
+}
+
+.fi i {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--c);
+	flex: none;
+}
+
+.titre {
+	display: block;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.vide {
+	margin: var(--esp-2) 0;
+	color: var(--mu);
+}
+
+/* Fenêtre autour d'une fiche localisée loin dans l'arbre : retour au début. */
+.debut {
+	display: block;
+	margin: 0 0 var(--esp-2);
+	padding: 2px 6px;
+	border: 0;
+	background: none;
+	color: var(--mu);
+	font: inherit;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.debut:hover {
+	color: var(--tx);
+}

@@ -1,0 +1,69 @@
+/* Documents récents de la colonne « Enrichir » : titre et fichier, date, état. */
+.lbl {
+	margin: 0 0 6px;
+	font: 500 10.5px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--dim);
+}
+
+.mu {
+	margin: 0;
+	color: var(--mu);
+}
+
+.liste {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.document {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 6px 6px;
+	border: 0;
+	border-radius: var(--r-2);
+	background: none;
+	text-align: left;
+	cursor: pointer;
+}
+
+.document:hover {
+	background: var(--s2);
+}
+
+.titre {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	overflow: hidden;
+}
+
+.titre bdi {
+	font-weight: 550;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fichier {
+	font: 11px var(--mono);
+	color: var(--mu);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.date {
+	font: 11.5px var(--mono);
+	color: var(--dim);
+	flex: none;
+}

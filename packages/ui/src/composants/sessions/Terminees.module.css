@@ -1,0 +1,70 @@
+/* Liste des sessions terminées, dans le tiroir de la vue Sessions. */
+.contenu {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 12px 16px;
+}
+
+.liste {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.session {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: 10px 12px;
+	border: 1px solid var(--bd);
+	border-radius: var(--r-3);
+	background: var(--s1);
+}
+
+.titre {
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.mu {
+	color: var(--mu);
+	margin: 0;
+}
+
+.dates {
+	font: 11.5px var(--mono);
+	color: var(--dim);
+}
+
+.bilan {
+	align-self: flex-start;
+	border: 0;
+	background: none;
+	padding: 0;
+	color: var(--ac);
+	cursor: pointer;
+	text-align: left;
+}
+
+.bilan:hover {
+	text-decoration: underline;
+}
+
+.actions {
+	display: flex;
+	gap: 6px;
+	margin-top: 4px;
+}
+
+.danger {
+	color: var(--red);
+	border-color: color-mix(in srgb, var(--red) 45%, transparent);
+}
+
+.demandee {
+	border-color: var(--ac);
+}

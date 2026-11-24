@@ -1,0 +1,93 @@
+/* Vue Mémoire : barre d'onglets et colonnes. */
+.memoire {
+	display: grid;
+	grid-template-rows: auto 1fr;
+	min-height: 0;
+	min-width: 0;
+}
+
+.memoire[hidden],
+.panneau[hidden] {
+	display: none;
+}
+
+.barre {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: var(--esp-2) var(--esp-4);
+	border-bottom: 1px solid var(--bd);
+	background: var(--s1);
+}
+
+.onglets {
+	display: flex;
+	gap: 6px;
+}
+
+.onglet {
+	border: 0;
+	background: none;
+	color: var(--mu);
+	padding: 6px 12px;
+	border-radius: var(--r-2);
+	cursor: pointer;
+	font-weight: 550;
+}
+
+.onglet.on {
+	background: var(--s3);
+	color: var(--tx);
+}
+
+.espace {
+	flex: 1;
+}
+
+.statistiques {
+	color: var(--mu);
+	margin-right: var(--esp-2);
+}
+
+.panneau {
+	display: grid;
+	min-height: 0;
+	min-width: 0;
+}
+
+.fichiers {
+	display: grid;
+	/* arbre | poignée | fiche | poignée | liens : les poignées sont posées sur les bordures, sans largeur */
+	grid-template-columns: var(--l-arbre, 260px) 0 minmax(0, 1fr) 0 var(--l-liens, 280px);
+	min-height: 0;
+	min-width: 0;
+}
+
+.fichiers > * {
+	min-height: 0;
+}
+
+/* Colonne de gauche. */
+.arbre {
+	overflow: auto;
+	padding: var(--esp-4);
+	border-right: 1px solid var(--bd);
+	background: var(--s1);
+}
+
+/* .col.r vide (aucune fiche ouverte). */
+.liensVides {
+	border-left: 1px solid var(--bd);
+	background: var(--s1);
+}
+
+.vide {
+	margin: 0;
+	place-self: start;
+	/* comme la colonne d'une fiche ouverte (VueFiche : 26px, puis 32px) */
+	padding: 26px 32px;
+	font: 500 10.5px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--dim);
+}

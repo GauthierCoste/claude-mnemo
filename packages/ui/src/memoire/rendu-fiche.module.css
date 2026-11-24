@@ -1,0 +1,157 @@
+/* Corps rendu d'une fiche : lignes, liens, puces ; citation et fait barré du format des fiches. */
+.corps {
+	font-size: 14.5px;
+	line-height: 1.7;
+	overflow-wrap: anywhere;
+}
+
+.corps h3 {
+	font-size: 15px;
+	margin: 22px 0 6px;
+	padding-bottom: 5px;
+	border-bottom: 1px solid var(--bd);
+}
+
+.corps p {
+	margin: 6px 0;
+}
+
+.li {
+	position: relative;
+	padding: 3px 0 3px 18px;
+}
+
+.li::before {
+	content: '';
+	position: absolute;
+	left: 4px;
+	top: 13px;
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: var(--dim);
+}
+
+/* Corroboration : sous l'information, en retrait, comme sa citation. */
+.corroboration {
+	margin: 0 0 2px 18px;
+	font-size: 13.5px;
+	color: var(--mu);
+}
+
+/* Fait barré : en --dim, énoncé barré. */
+.barre {
+	color: var(--dim);
+}
+
+.barre s {
+	text-decoration: line-through;
+}
+
+/* Citation du passage d'origine : bloc en retrait, filet --ac. */
+.corps blockquote {
+	margin: 2px 0 8px 18px;
+	padding: 2px 0 2px 12px;
+	border-left: 2px solid var(--ac);
+	color: var(--mu);
+	font-size: 13.5px;
+}
+
+.wl {
+	display: inline;
+	unicode-bidi: isolate;
+	padding: 0;
+	margin: 0;
+	border: 0;
+	border-bottom: 1px solid color-mix(in srgb, var(--ac) 35%, transparent);
+	border-radius: 0;
+	background: none;
+	color: var(--ac);
+	font: inherit;
+	line-height: inherit;
+	text-align: inherit;
+	cursor: pointer;
+}
+
+.wl:hover {
+	color: color-mix(in srgb, var(--ac) 70%, var(--tx));
+}
+
+.wl.x {
+	color: var(--dim);
+	border-bottom-style: dashed;
+}
+
+.puce {
+	margin-left: 5px;
+	vertical-align: 1px;
+	white-space: normal;
+}
+
+.categorie {
+	margin-right: 7px;
+	vertical-align: 1px;
+}
+
+/* Informations groupées par catégorie : un titre-bouton (chevron, catégorie, nombre) qui replie le groupe. */
+.groupe {
+	margin: 4px 0;
+}
+
+.titreGroupe {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 3px 0;
+	border: 0;
+	background: none;
+	color: var(--mu);
+	font: inherit;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.titreGroupe::before {
+	content: '';
+	width: 0;
+	height: 0;
+	border-left: 5px solid currentColor;
+	border-top: 4px solid transparent;
+	border-bottom: 4px solid transparent;
+	transition: transform 0.12s;
+}
+
+.titreGroupe[aria-expanded='true']::before {
+	transform: rotate(90deg);
+}
+
+.titreGroupe:hover {
+	color: var(--tx);
+}
+
+.nombre {
+	font-weight: 400;
+}
+
+.contenuGroupe {
+	margin-left: 4px;
+}
+
+/* Bloc de code : retraits et lignes vides gardés ; défile en largeur. */
+.code {
+	margin: 8px 0;
+	padding: 9px 11px;
+	border: 1px solid var(--bd);
+	border-radius: var(--r-2);
+	background: var(--s2);
+	font: 12.5px/1.55 var(--mono);
+	white-space: pre;
+	overflow-x: auto;
+	overflow-wrap: normal;
+}
+
+.liste {
+	margin: 6px 0;
+	padding-left: 24px;
+}

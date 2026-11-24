@@ -1,0 +1,70 @@
+/* Commits du jour : heure dans sa case, message, nombre de fiches et puce de la session. */
+.liste {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.commit {
+	width: 100%;
+	display: grid;
+	grid-template-columns: 34px 1fr;
+	gap: 1px 10px;
+	padding: 9px 10px;
+	border-radius: var(--r-3);
+	border: 1px solid transparent;
+	margin-top: 4px;
+	background: none;
+	cursor: pointer;
+	text-align: left;
+}
+
+.commit:hover {
+	background: var(--s2);
+}
+
+.on,
+.on:hover {
+	background: var(--s3);
+	border-color: var(--bd2);
+}
+
+.heure {
+	grid-row: 1 / span 2;
+	width: 34px;
+	height: 34px;
+	border-radius: var(--r-2);
+	background: var(--s3);
+	display: grid;
+	place-items: center;
+	font: 600 10px var(--mono);
+	color: var(--mu);
+}
+
+.on .heure {
+	background: var(--s2);
+}
+
+.message {
+	font-weight: 550;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}
+
+.infos {
+	color: var(--mu);
+	font-size: 12px;
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	min-width: 0;
+	white-space: nowrap;
+}
+
+.puceSession {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}

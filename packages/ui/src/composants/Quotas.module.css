@@ -1,0 +1,92 @@
+/* Quotas du compte : bouton discret de la barre de titre ; cercle à deux anneaux replié, barres déplié. */
+.quotas {
+	display: flex;
+	align-items: center;
+	height: 30px;
+	padding: 0 6px;
+	border: 1px solid transparent;
+	border-radius: var(--r-2);
+	background: transparent;
+	color: var(--mu);
+	font: 11px var(--mono);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.quotas:hover,
+.quotas[aria-expanded='true'] {
+	border-color: var(--bd2);
+	background: var(--s2);
+}
+
+.quotas[aria-expanded='true'] {
+	padding: 0 10px;
+}
+
+.anneaux {
+	width: 22px;
+	height: 22px;
+	display: block;
+}
+
+.anneaux circle {
+	fill: none;
+	stroke-width: 2.5;
+}
+
+.piste {
+	stroke: var(--s3);
+}
+
+.arc {
+	stroke-linecap: round;
+	transition: stroke-dasharray 400ms ease-out, stroke 400ms;
+}
+
+.detail {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.ligne {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+}
+
+.nom,
+.remise {
+	color: var(--dim);
+}
+
+.barre {
+	width: 70px;
+	height: 5px;
+	border-radius: 3px;
+	background: var(--s3);
+	overflow: hidden;
+}
+
+.rempli {
+	display: block;
+	height: 100%;
+	width: calc(var(--part) * 100%);
+	background: var(--c);
+	border-radius: 3px;
+	transition: width 400ms ease-out, background-color 400ms;
+}
+
+.valeur {
+	color: var(--tx);
+	min-width: 4ch;
+	text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.arc,
+	.rempli {
+		transition: none;
+	}
+}

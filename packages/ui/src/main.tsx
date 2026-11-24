@@ -1,0 +1,69 @@
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import type { Client } from './client/contexte.tsx';
+import { creerClientReel } from './client/creer-client.ts';
+import { effacerJetonDeLAdresse, lireJeton } from './client/jeton.ts';
+import { Application, type Depart } from './composants/Application.tsx';
+import './styles/jetons.css';
+import './styles/base.css';
+
+/** `localStorage` de cette origine (port compris), ou null s'il est bloqué. */
+function stockageDeLOrigine(): Storage | null {
+	try {
+		return window.localStorage;
+	} catch {
+		return null;
+	}
+}
+
+async function creerClient(): Promise<{ client: Client | null; depart?: Depart }> {
+	// Mode démo : en développement seulement ; la construction de production retire cette branche et son import.
+	const parametres = new URLSearchParams(location.search);
+	if (import.meta.env.DEV && parametres.has('demo')) {
+		const { creerClientDemo } = await import('./client/demo.ts');
+		const fiche = parametres.get('fiche');
+		const conflit = parametres.get('conflit') === '1' ? { changementExterne: fiche ?? FICHE_DEMO } : {};
+		const { depart } = departDemo(parametres.get('vue'), Number(parametres.get('zoom')) || 0, fiche, parametres.get('edition') === '1');
+		const archiviste = parametres.get('archiviste') === '1';
+		const palette = parametres.get('palette');
+		const enPlus = { ...(archiviste ? { archiviste } : {}), ...(palette !== null ? { palette } : {}) };
+		const avecEnPlus = depart ? { ...depart, ...enPlus } : Object.keys(enPlus).length ? { vue: 'sessions' as const, ...enPlus } : undefined;
+		return { client: creerClientDemo(conflit), ...(avecEnPlus ? { depart: avecEnPlus } : {}) };
+	}
+	// le jeton de la première ouverture : rangé dans le stockage de cette origine, retiré de l'adresse tout de suite
+	const stockage = stockageDeLOrigine();
+	const jeton = lireJeton(location.hash, stockage);
+	if (location.hash) effacerJetonDeLAdresse(history, location.href);
+	if (!jeton) return { client: null };
+	return { client: creerClientReel({ jeton, origine: location.origin, fetch: (entree, init) => fetch(entree, init), WebSocket, stockage }) };
+}
+
+const FICHE_DEMO = 'projets/erp-saas/Module stocks.md';
+
+/**
+ * Mode démo : `&vue=graphe` (ou `fichiers`, `archiviste`, `sessions`, `memoire`, `reglages`) ouvre directement une vue ou un onglet, `&zoom=n` la n-ième session en
+ * grand ; `&fiche=<chemin>` ouvre une fiche dans Mémoire › Fichiers, `&edition=1` en édition, `&conflit=1` fait écrire la
+ * fiche par une « autre fenêtre » 2,5 s après le départ (avis de conflit, 409 à l'enregistrement) ; `&archiviste=1` ouvre
+ * le tiroir de l'archiviste, `&palette=<texte>` la palette avec ce texte ; pour les captures.
+ */
+function departDemo(vue: string | null, zoom: number, fiche: string | null, edition: boolean): { depart?: Depart } {
+	const enGrand = zoom > 0 ? { zoom } : {};
+	if (fiche !== null) return { depart: { vue: 'memoire', ongletMemoire: 'fichiers', fiche, edition, ...enGrand } };
+	if (vue === 'graphe' || vue === 'fichiers' || vue === 'archiviste') return { depart: { vue: 'memoire', ongletMemoire: vue, ...enGrand } };
+	if (vue === 'sessions' || vue === 'memoire' || vue === 'reglages') return { depart: { vue, ...enGrand } };
+	return zoom > 0 ? { depart: { vue: 'sessions', zoom } } : {};
+}
+
+// Application installable (PWA) : un service worker qui ne garde rien (public/sw.js) ; jamais en développement.
+if (!import.meta.env.DEV && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+
+const element = document.getElementById('racine');
+if (!element) throw new Error('Élément #racine absent de index.html');
+const racine = createRoot(element);
+void creerClient().then(({ client, depart }) =>
+	racine.render(
+		<StrictMode>
+			<Application client={client} {...(depart ? { depart } : {})} />
+		</StrictMode>,
+	),
+);

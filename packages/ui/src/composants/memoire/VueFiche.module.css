@@ -1,0 +1,158 @@
+/* Fiche ouverte : fil d'Ariane, titre, propriétés, éditeur ; avis de conflit. */
+.note {
+	overflow: auto;
+	padding: 26px 0;
+	min-width: 0;
+}
+
+/* Colonne de lecture alignée à gauche (pas centrée dans la largeur). */
+.in {
+	max-width: 720px;
+	margin: 0;
+	padding: 0 32px;
+}
+
+.crumb {
+	font: 12px var(--mono);
+	color: var(--dim);
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.chemin {
+	overflow-wrap: anywhere;
+}
+
+.espace {
+	flex: 1;
+}
+
+.note h1 {
+	font-size: 28px;
+	letter-spacing: -0.02em;
+	margin: 10px 0 12px;
+	font-weight: 650;
+	overflow-wrap: anywhere;
+}
+
+/* .props : grille clé | valeur ; chaque paire en `display: contents` pour garder une seule grille. */
+.props {
+	display: grid;
+	grid-template-columns: 110px 1fr;
+	gap: 5px 10px;
+	padding: 11px 13px;
+	border: 1px solid var(--bd);
+	border-radius: var(--r-3);
+	background: var(--s1);
+	font-size: 12.5px;
+	margin: 0 0 18px;
+}
+
+.prop {
+	display: contents;
+}
+
+.prop dt {
+	color: var(--mu);
+	font-family: var(--mono);
+	font-size: 11.5px;
+}
+
+.prop dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.deplacement {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--esp-2);
+	margin-top: var(--esp-3);
+}
+
+.deplacement input {
+	flex: 1;
+	min-width: 200px;
+}
+
+.refus {
+	flex-basis: 100%;
+	color: var(--red);
+	font-size: 12px;
+}
+
+.avis {
+	display: flex;
+	align-items: center;
+	gap: var(--esp-3);
+	padding: 9px 12px;
+	margin-bottom: var(--esp-3);
+	border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+	border-radius: var(--r-3);
+	background: color-mix(in srgb, var(--amber) 7%, transparent);
+	color: var(--amber);
+}
+
+.avis span {
+	flex: 1;
+}
+
+/* Avertissements de lecture de la fiche, sous leur titre. */
+.avis:has(.avertissements) {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.avertissements {
+	margin: 0;
+	padding-left: 18px;
+}
+
+.raw {
+	display: block;
+	width: 100%;
+	min-height: 380px;
+	background: var(--s1);
+	border: 1px solid var(--bd);
+	border-radius: var(--r-3);
+	padding: 14px;
+	font: 13px/1.65 var(--mono);
+	resize: vertical;
+	outline: none;
+}
+
+.actions {
+	margin-top: var(--esp-3);
+	display: flex;
+	gap: var(--esp-2);
+	align-items: center;
+}
+
+.aide {
+	color: var(--mu);
+}
+
+.attente {
+	color: var(--mu);
+}
+
+/* Avis « Modifications non enregistrées » : barre dans la fiche, pas une boîte du navigateur. */
+.quitter {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--esp-2);
+	margin-top: var(--esp-3);
+	padding: 9px 12px;
+	border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+	border-radius: var(--r-3);
+	background: var(--s2);
+	color: var(--amber);
+	font-weight: 550;
+}
+
+.quitter span {
+	flex: 1;
+}

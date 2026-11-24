@@ -1,0 +1,116 @@
+.recherche {
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-2);
+}
+
+.ligne {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+}
+
+.saisie {
+	flex: 1;
+	min-width: 0;
+}
+
+.filtres {
+	display: grid;
+	gap: 6px;
+}
+
+.champ {
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-1);
+}
+
+.lbl {
+	font: 500 10.5px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--dim);
+}
+
+.etatRecherche {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--esp-2);
+	color: var(--mu);
+	font: 11.5px var(--mono);
+}
+
+.resultats {
+	max-height: 300px;
+	overflow: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.section {
+	margin: var(--esp-2) 0 var(--esp-1);
+	font: 500 10.5px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--dim);
+}
+
+.resultat {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px 9px;
+	border: 0;
+	border-radius: var(--r-2);
+	background: none;
+	text-align: left;
+	cursor: pointer;
+}
+
+.resultat:hover,
+.resultat.actif {
+	background: var(--s3);
+}
+
+.resultatTitre {
+	display: flex;
+	align-items: center;
+	gap: var(--esp-2);
+	min-width: 0;
+}
+
+.resultatTitre > span:nth-child(2) {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.nombre {
+	color: var(--dim);
+	font: 11px var(--mono);
+	white-space: nowrap;
+}
+
+.extrait {
+	color: var(--mu);
+	font-size: 12px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.note {
+	margin: var(--esp-1) 0;
+	color: var(--mu);
+	font-size: 12px;
+}
+
+.erreur {
+	color: var(--red);
+}

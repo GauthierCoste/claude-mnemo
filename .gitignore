@@ -1,0 +1,13 @@
+node_modules/
+.superpowers/
+.DS_Store
+packages/ui/dist/
+# plans et spécifications de travail : temporaires, jamais commités
+docs/superpowers/
+# documents de conception et notes de travail : locaux, jamais publiés
+CLAUDE.md
+docs/decisions.md
+docs/banc.md
+docs/infographie-memoire.html
+maquette/
+.idea/

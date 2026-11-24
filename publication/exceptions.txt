@@ -1,0 +1,74 @@
+# Faux positifs admis par `pnpm verifier-publication`.
+# Une exception par ligne : `regle[:sous-règle] <glob de fichier> [expression régulière sur le texte trouvé]`.
+# Règles : secret (sous-règles aws, google, github, gitlab, npm, stripe, cle-privee, slack, cle-api, jwt, bearer,
+# url-identifiants, entropie), chemin-personnel (users, home, windows, claude, workspace), email, fichier-lourd, binaire,
+# lien-symbolique.
+# Chaque bloc (lignes non vides consécutives) commence par un commentaire qui dit pourquoi ce n'est pas une fuite ; une
+# exception sans commentaire fait échouer la vérification. Motifs au plus juste : une sous-règle, un fichier, un texte ancré.
+# Les motifs sont écrits pour que ce fichier ne se signale pas lui-même : barres échappées (`\/`), un caractère d'un
+# secret entre crochets (`ghp[_]…`).
+
+# Jeton GitHub fictif (suite abcdefghij…) des jeux d'essai de la détection de secrets de Mnemo.
+secret:github packages/mnemo/tests/application/amorcer.test.ts ^ghp[_]abcdefghijklmnopqrstuvwxyz0123456789$
+secret:github packages/mnemo/tests/application/episode.test.ts ^ghp[_]abcdefghijklmnopqrstuvwxyz0123456789$
+secret:github packages/mnemo/tests/application/extraire-source.test.ts ^ghp[_]abcdefghijklmnopqrstuvwxyz0123456789$
+secret:github packages/mnemo/tests/application/proposer-modification.test.ts ^ghp[_]abcdefghijklmnopqrstuvwxyz0123456789$
+secret:github packages/mnemo/tests/application/synchroniser-passages.test.ts ^ghp[_]abcdefghijklmnopqrstuvwxyz0123456789$
+secret:github packages/mnemo/tests/domaine/secrets.test.ts ^(ghp[_]abcdefghijklmnopqrstuvwxyz0123456789|github[_]pat_11ABCDEFG0123456789_abcdefghij)$
+secret:github packages/mnemo/tests/infra/extraction-isolee.test.ts ^ghp[_]abcdefghijklmnopqrstuvwxyz0123456789$
+
+# Clé d'exemple de la documentation AWS, dans les mêmes jeux d'essai.
+secret:aws packages/mnemo/tests/application/episode.test.ts ^AKIA[I]OSFODNN7EXAMPLE$
+secret:aws packages/mnemo/tests/application/passages-fiche.test.ts ^AKIA[I]OSFODNN7EXAMPLE$
+secret:aws packages/mnemo/tests/application/synchroniser-passages.test.ts ^AKIA[I]OSFODNN7EXAMPLE$
+secret:aws packages/mnemo/tests/domaine/secrets.test.ts ^AKIA[I]OSFODNN7EXAMPLE$
+
+# Autres secrets fictifs des tests de détection : clé `sk-` et jetons Slack en suites, JWT d'exemple (charge
+# `{"sub":"123456"}`), en-têtes PEM sans clé (le test vérifie qu'un bloc de clé privée est caviardé).
+secret:cle-api packages/mnemo/tests/application/synchroniser-passages.test.ts ^sk[-]abcdefghijklmnopqrstuvwxyz123456$
+secret:slack packages/mnemo/tests/domaine/secrets.test.ts ^xox[bp]-123456789012-abcdefghij$
+secret:jwt packages/mnemo/tests/domaine/secrets.test.ts ^eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTYifQ\.
+secret:cle-privee packages/mnemo/tests/domaine/secrets.test.ts ^-----BEGIN (RSA )?PRIVATE KEY-----$
+
+# Utilisateurs fictifs des tests de chemins (macOS, Linux, Windows, dossiers encodés par Claude Code).
+chemin-personnel:users packages/mnemo/tests/application/plugin.test.ts ^\/Users\/x$
+chemin-personnel:users packages/mnemo/tests/infra/service-verrou.test.ts ^\/Users\/x$
+chemin-personnel:users packages/mnemo/tests/domaine/regles-verifiees.test.ts ^\/Users\/[Aa]$
+chemin-personnel:users packages/mnemo/tests/infra/memoire-claude.test.ts ^\/Users\/a$
+chemin-personnel:users packages/mnemo/tests/infra/modeles-installer.test.ts ^\/Users\/a$
+chemin-personnel:users packages/mnemo/tests/http/memoire-vues.test.ts ^\/Users\/(ana|anabelle)$
+chemin-personnel:users packages/ui/tests/composants/*.test.tsx ^\/Users\/ana$
+chemin-personnel:home packages/mnemo/tests/application/pilote.test.ts ^\/home\/u$
+chemin-personnel:home packages/mnemo/tests/domaine/regles-verifiees.test.ts ^\/home\/u$
+chemin-personnel:home packages/mnemo/tests/infra/modeles-installer.test.ts ^\/home\/a$
+chemin-personnel:windows packages/mnemo/tests/application/evenements.test.ts ^C:\\{1,2}Users\\{1,2}a$
+chemin-personnel:windows packages/mnemo/tests/application/pilote.test.ts ^C:\\{1,2}Users\\{1,2}Jean$
+chemin-personnel:windows packages/mnemo/tests/application/plugin.test.ts ^C:\\{1,2}Users\\{1,2}Jean$
+chemin-personnel:windows packages/mnemo/tests/domaine/regles-verifiees.test.ts ^[Cc]:\\{1,2}Users\\{1,2}u$
+chemin-personnel:windows packages/mnemo/tests/http/memoire-vues.test.ts ^C:\\{1,2}Users\\{1,2}ana$
+chemin-personnel:windows packages/mnemo/tests/infra/modeles-installer.test.ts ^C:\\{1,2}Users\\{1,2}a$
+chemin-personnel:claude packages/mnemo/tests/application/amorcer.test.ts ^-User[s]-a-$
+chemin-personnel:claude packages/mnemo/tests/infra/memoire-claude.test.ts ^-User[s]-a-$
+chemin-personnel:users packages/mnemo/tests/infra/environnement.test.ts ^\/Users\/a$
+chemin-personnel:windows packages/mnemo/tests/infra/environnement.test.ts ^C:\\{1,2}Users\\{1,2}a$
+chemin-personnel:windows packages/mnemo/tests/infra/reglages-service.test.ts ^C:\\{1,2}Users\\{1,2}ana$
+chemin-personnel:home packages/mnemo/tests/infra/reglages-service.test.ts ^\/home\/ana$
+chemin-personnel:users packages/ui/tests/client/historique-partage.test.tsx ^\/Users\/ana$
+chemin-personnel:windows packages/ui/tests/client/nom-racine.test.ts ^C:\\{1,2}Users\\{1,2}ana$
+
+# Exemples de la documentation du code (encodage des dossiers par Claude Code) et dossier du mode démo de l'interface.
+chemin-personnel:users packages/mnemo/src/infra/memoire-claude.ts ^\/Users\/a$
+chemin-personnel:claude packages/mnemo/src/infra/memoire-claude.ts ^-User[s]-a-$
+chemin-personnel:claude packages/mnemo/src/application/ports.ts ^-User[s]-a-$
+chemin-personnel:users packages/ui/src/client/demo-donnees.ts ^\/Users\/demo$
+
+# Cas de test de la garde elle-même : chemins et adresse fictifs qu'elle doit signaler.
+chemin-personnel:users outils/tests/verifier-publication.test.ts ^\/Users\/x$
+chemin-personnel:claude outils/tests/verifier-publication.test.ts ^-User[s]-x-$
+chemin-personnel:workspace outils/tests/verifier-publication.test.ts ^((~|\$HOME)\/Workspace|[Ww]orkspace[\/-][Pp]rojets)$
+email outils/tests/verifier-publication.test.ts ^paul@societe\.fr$
+secret:url-identifiants outils/tests/verifier-publication.test.ts ^https:[/]/utilisateur:motdepasse@(depot\.exemple\.fr)?(\\n)?$
+
+
+# Octets compressés d'une image PNG qui ressemblent par hasard à une adresse (aucun texte dans l'image).
+email docs/images/graphe.png ^Bv@ok\.aR$

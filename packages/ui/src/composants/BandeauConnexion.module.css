@@ -1,0 +1,24 @@
+.bandeau {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 14px;
+	border-bottom: 1px solid color-mix(in srgb, var(--amber) 30%, transparent);
+	background: color-mix(in srgb, var(--amber) 7%, transparent);
+	color: var(--amber);
+	font: 12px var(--mono);
+}
+
+.point {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--amber);
+	animation: clignote 1.6s infinite;
+}
+
+@keyframes clignote {
+	50% {
+		opacity: 0.35;
+	}
+}

@@ -1,0 +1,218 @@
+/* Grille des sessions : lignes par dossier, cellules, séparateurs, barre d'aide. */
+.grille {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--fond-terminal);
+}
+
+/* Les lignes défilent ; la barre d'aide (`.aide`) reste en bas, hors du défilement. */
+.lignes {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow-y: auto;
+}
+
+.ligne {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 0;
+	min-height: 30px;
+	overflow: hidden;
+	transition: flex-grow 0.34s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.entete {
+	height: 30px;
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 0 10px;
+	background: var(--s1);
+	border-bottom: 1px solid var(--bd);
+	font: 12px var(--mono);
+	color: var(--mu);
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.entete b {
+	color: var(--blue);
+	font-weight: 600;
+}
+
+.espace {
+	flex: 1;
+}
+
+.ib {
+	border: 0;
+	background: none;
+	color: var(--mu);
+	cursor: pointer;
+	padding: 2px 6px;
+	border-radius: var(--r-1);
+	font: 12px var(--mono);
+	flex: none;
+}
+
+.ib:hover {
+	background: var(--s3);
+	color: var(--tx);
+}
+
+.pastilles {
+	display: none;
+	gap: 6px;
+	min-width: 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.mini .pastilles {
+	display: flex;
+}
+
+.pastille {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-pastille);
+	padding: 1px 9px;
+	background: none;
+	color: var(--tx);
+	font: 12px var(--sans);
+	cursor: pointer;
+	white-space: nowrap;
+	max-width: 230px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.pastille:hover {
+	border-color: var(--ac);
+}
+
+.cellules {
+	flex: 1;
+	display: flex;
+	min-height: 0;
+}
+
+.cellule {
+	flex: 1 1 0;
+	min-width: 0;
+	display: flex;
+	overflow: hidden;
+	position: relative;
+	transition:
+		flex-grow 0.34s cubic-bezier(0.2, 0.8, 0.2, 1),
+		flex-basis 0.34s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.grille:global(.drag) .ligne,
+.grille:global(.drag) .cellule {
+	transition: none;
+}
+
+.vs,
+.hs {
+	flex: none;
+	background: var(--bd);
+	transition: opacity 0.2s;
+	touch-action: none;
+}
+
+.vs {
+	width: 5px;
+	cursor: col-resize;
+}
+
+.hs {
+	height: 5px;
+	cursor: row-resize;
+}
+
+.vs:hover,
+.hs:hover,
+.vs:focus-visible,
+.hs:focus-visible {
+	background: var(--ac);
+}
+
+.zoomee .vs,
+.zoomee .hs {
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* Cellule voisine de la zoomée : le rail vertical remplace la carte. */
+.railb {
+	display: none;
+}
+
+.rail > :not(.railb) {
+	display: none;
+}
+
+.rail > .railb {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 9px;
+	padding: 11px 0 0;
+	width: 44px;
+	height: 100%;
+	background: var(--s1);
+	border: 0;
+	border-left: 1px solid var(--bd);
+	cursor: pointer;
+	color: var(--mu);
+	font: inherit;
+}
+
+.rail > .railb:hover {
+	color: var(--tx);
+	background: var(--s2);
+}
+
+.vertical {
+	writing-mode: vertical-rl;
+	font-size: 12px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-height: calc(100% - 70px);
+}
+
+.aide {
+	flex: none;
+	display: flex;
+	gap: 18px;
+	padding: 5px 14px;
+	border-top: 1px solid var(--bd);
+	background: var(--s1);
+	font: 11px var(--mono);
+	color: var(--dim);
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+@keyframes eclair {
+	0% {
+		background: color-mix(in srgb, var(--ac) 18%, transparent);
+	}
+	100% {
+		background: var(--s1);
+	}
+}
+
+.fl {
+	animation: eclair 0.9s ease-out;
+}

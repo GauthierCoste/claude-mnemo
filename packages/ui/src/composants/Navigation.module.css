@@ -1,0 +1,66 @@
+.cote {
+	width: var(--largeur-navigation);
+	flex: none;
+	border-right: 1px solid var(--bd);
+	background: var(--s1);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 10px 0;
+	gap: 4px;
+}
+
+.entree {
+	width: 50px;
+	padding: 8px 0 6px;
+	border-radius: var(--r-3);
+	border: 0;
+	background: none;
+	color: var(--mu);
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 3px;
+	font-size: 10px;
+	position: relative;
+}
+
+.bas {
+	margin-top: auto;
+}
+
+.entree svg {
+	width: 19px;
+	height: 19px;
+	stroke: currentColor;
+	fill: none;
+	stroke-width: 1.6;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.entree:hover {
+	color: var(--tx);
+	background: var(--s2);
+}
+
+.on,
+.on:hover {
+	color: var(--ac);
+	background: color-mix(in srgb, var(--ac) 8%, transparent);
+}
+
+.pastille {
+	position: absolute;
+	top: 3px;
+	right: 6px;
+	min-width: 15px;
+	height: 15px;
+	padding: 0 3px;
+	border-radius: 8px;
+	background: var(--amber);
+	color: var(--sur-badge);
+	font: 700 10px/15px var(--mono);
+	text-align: center;
+}

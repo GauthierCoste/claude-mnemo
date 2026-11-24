@@ -1,0 +1,76 @@
+/* Légende : panneau du bas à gauche. */
+.legende {
+	position: absolute;
+	bottom: var(--esp-4);
+	left: var(--esp-4);
+	max-width: calc(100% - 480px);
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px var(--esp-1);
+	background: var(--fond-panneau);
+	backdrop-filter: blur(10px);
+	border: 1px solid var(--bd2);
+	border-radius: 12px;
+	padding: 6px 8px;
+	font: 11.5px var(--mono);
+	color: var(--mu);
+}
+
+.entree {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 7px;
+	border: 0;
+	border-radius: var(--r-1);
+	background: none;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+
+.entree:hover {
+	background: var(--s3);
+	color: var(--tx);
+}
+
+.choisie {
+	background: var(--s3);
+	color: var(--tx);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ac) 55%, transparent);
+}
+
+.ecartee {
+	opacity: 0.45;
+}
+
+.nombre {
+	color: var(--dim);
+}
+
+.tout {
+	color: var(--ac);
+}
+
+.types {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px var(--esp-1);
+	width: 100%;
+}
+
+.trait {
+	display: inline-block;
+	width: 18px;
+	border-top-width: 2px;
+}
+
+.traitParente {
+	border-top-style: dashed;
+	border-top-color: var(--graphe-parente);
+}
+
+.traitPersonnalise {
+	border-top-style: solid;
+	border-top-color: var(--graphe-lien);
+}

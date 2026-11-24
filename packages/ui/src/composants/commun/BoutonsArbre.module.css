@@ -1,0 +1,29 @@
+/* Boutons icônes de l'en-tête d'un arbre. */
+.boutons {
+	display: flex;
+	gap: 2px;
+	flex: none;
+}
+
+.bouton {
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--r-1);
+	background: none;
+	color: var(--mu);
+	cursor: pointer;
+}
+
+.bouton:hover:not(:disabled) {
+	background: var(--s3);
+	color: var(--tx);
+}
+
+.bouton:disabled {
+	opacity: 0.4;
+	cursor: default;
+}

@@ -1,0 +1,63 @@
+/* Terminal de l'archiviste, ce qui le remplace, et les suggestions. */
+
+/* Toute la hauteur restante, jamais une hauteur fixe : xterm se réajuste à chaque changement de taille. */
+.terminal {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	margin: 10px 16px;
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-4);
+	overflow: hidden;
+	background: var(--terminal-fond);
+}
+
+.absent {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: flex-start;
+	gap: 10px;
+	padding: 14px 16px;
+	color: var(--mu);
+	text-align: left;
+}
+
+.absent p {
+	margin: 0;
+}
+
+.manuel {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+	font-size: 12px;
+	max-width: 100%;
+}
+
+.manuel code {
+	font: 11.5px var(--mono);
+	color: var(--tx);
+	background: var(--s2);
+	border: 1px solid var(--bd);
+	border-radius: var(--r-2);
+	padding: 4px 8px;
+	overflow-wrap: anywhere;
+}
+
+.suggestions {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+	padding: 0 16px 10px;
+	flex: none;
+}
+
+.suggestion {
+	font-size: 12px;
+	padding: 3px 9px;
+	border-radius: var(--r-pastille);
+}

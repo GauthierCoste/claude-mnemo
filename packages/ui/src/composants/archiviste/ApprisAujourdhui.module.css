@@ -1,0 +1,47 @@
+/* « Appris aujourd'hui » : jour, commits (`.fq`), commit choisi, puis ce qu'il a fait pour tes sessions. */
+.appris {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.entete {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px;
+}
+
+.lbl {
+	margin: 10px 0 0;
+	font: 500 10.5px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--dim);
+}
+
+.entete .lbl {
+	margin: 0;
+}
+
+.jour {
+	color-scheme: dark;
+	font: 12px var(--mono);
+	padding: 4px 8px;
+}
+
+.avis {
+	margin: 4px 0;
+	padding: 7px 10px;
+	border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
+	background: color-mix(in srgb, var(--amber) 5%, transparent);
+	border-radius: var(--r-2);
+	color: var(--amber);
+	font-size: 12px;
+}
+
+.vide {
+	color: var(--mu);
+	margin: 4px 2px;
+}

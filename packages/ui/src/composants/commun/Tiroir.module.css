@@ -1,0 +1,61 @@
+.tiroir {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 410px;
+	max-width: 100%;
+	background: var(--fond-tiroir);
+	backdrop-filter: blur(14px);
+	border-left: 1px solid var(--bd2);
+	box-shadow: var(--ombre-tiroir);
+	transform: translateX(105%);
+	transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+	display: flex;
+	flex-direction: column;
+	z-index: 20;
+}
+
+.on {
+	transform: none;
+}
+
+.entete {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 13px 16px;
+	border-bottom: 1px solid var(--bd);
+}
+
+.entete b {
+	font-size: 15px;
+}
+
+.espace {
+	flex: 1;
+}
+
+.pouls {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--ac);
+	box-shadow: 0 0 0 0 color-mix(in srgb, var(--ac) 50%, transparent);
+	animation: mnemo-pouls 2s infinite;
+}
+
+/* Agrandi : toute la zone sous la barre de titre (comme une session ouverte en grand). */
+.agrandi {
+	left: 0;
+	width: auto;
+	max-width: none;
+}
+
+/* Poignée de largeur (`Separateur`), à cheval sur le bord gauche. */
+.tiroir > .poignee {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: -4px;
+}

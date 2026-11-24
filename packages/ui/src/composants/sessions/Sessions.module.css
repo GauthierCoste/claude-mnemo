@@ -1,0 +1,38 @@
+/* Vue Sessions. */
+.sessions {
+	position: relative;
+	display: grid;
+	grid-template-rows: auto 1fr;
+	min-width: 0;
+	min-height: 0;
+}
+
+.sessions[hidden] {
+	display: none;
+}
+
+.corps {
+	position: relative;
+	display: flex;
+	min-height: 0;
+	min-width: 0;
+}
+
+.vide {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: flex-start;
+	gap: 4px;
+	padding: var(--esp-4);
+	background: var(--fond-terminal);
+}
+
+.vide p {
+	margin: 0;
+}
+
+.mu {
+	color: var(--mu);
+}

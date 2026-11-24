@@ -1,0 +1,137 @@
+# Mnemo
+
+Mnemo is an IDE for working with Claude Code sessions rather than with files. Your sessions run side by side in one
+window, each in its own terminal; they share a memory you can read, edit and clean up; and for each session you see what
+it has been given from that memory.
+
+The memory is a plain folder of Markdown notes, versioned with git. Claude reads from it at each message and writes to
+it as it learns; every change is a commit you can see.
+
+![Sessions view: sessions grouped by project, the folder tree, and the context injected into the selected session](docs/images/sessions.png)
+
+## What it does
+
+- **Sessions.** Each session is a real `claude` in a terminal inside the interface, started in a project folder. A grid
+  groups them by project with their state (working, waiting for you, paused, to review, finished); zoom one with ⌥1 to
+  ⌥9 and the others fold into a side rail. A thin gauge under each title bar shows how full Claude's context window is
+  (or how close it is to the automatic summary when Claude Code's `autoCompactWindow` is set; amber from 60 %, red from 85 %). The side panels resize from their border.
+- **Injected context.** Mnemo injects leads, not whole notes. Every message brings the instructions for the session's
+  folder; the first one also brings the note of the project the session is in. A few cards (title, path, one line) then
+  point to the notes that matter, and Claude reads the ones it needs. A message that names a note gets its card; a
+  silent message ("ok, go") gets none. The Contexte panel lists what was injected and proposed, and the notes the
+  session read. A click injects a whole note by hand at the next message; another stops suggesting a note for the rest
+  of the session.
+- **Profiles.** A profile sets what a session receives: its instruction, the memory skills, the Claude Code plugins
+  switched on (every other installed plugin is switched off), the hooks, where it starts, and an avatar shown on its
+  sessions. A read-only preview shows everything a session of the profile receives, and where each part comes from.
+- **Memory kept by Claude.** Through an MCP server, Claude searches the memory, reads notes and proposes changes;
+  anything that changes what is trusted waits for your OK. At the end of a session, Claude writes a short episode of
+  what was done and learned.
+- **Documents.** Drop a spec, an email, meeting notes or a PDF: an archivist session pulls out the facts worth keeping,
+  with their source, date and confidence. When something contradicts what is already there, it asks you instead of
+  overwriting.
+- **Plain files.** It is all Markdown in `_mnemo/`, one git commit per change. Browse it as a tree or as a 3D graph,
+  edit it in the interface or in your own editor, and `git revert` what you don't like.
+
+![Archivist page: facts to confirm or reject, the archivist session at work on dropped documents, and what was learned today](docs/images/archiviste.png)
+
+## How it works
+
+- **The memory** lives in `_mnemo/`, inside the folder that holds your projects. One note per topic, project, person,
+  document, instruction or session episode. Each fact is a single line that says where it comes from, when it was
+  learned, how long it is valid and how much to trust it. You organise the folders however you like; Mnemo only reserves
+  five note types (instruction, profile, source, episode, folder). The full grammar is in
+  [docs/format-coffre.md](docs/format-coffre.md).
+- **Search** uses a local SQLite full-text index. Mnemo can also run two small local models with llama.cpp (bge-m3 for
+  search by meaning, bge-reranker-v2-m3 to rank results) on macOS (Apple silicon or Intel). Without them, search by words works just
+  fine. The cards proposed to a session also follow the links between notes.
+- **Sessions** started from Mnemo get a Claude Code plugin generated for them (`.mnemo/plugins/<session>/`): the
+  instruction of their profile, the memory skills, the hooks, and Claude Code's own auto-memory turned off. The hooks
+  are built to stay out of the way: short time limits, and a hook that fails lets the session carry on. When the profile
+  keeps it, a `PreToolUse` hook also refuses actions that break an instruction you marked as checked. Treat it as a
+  safety net, not a sandbox: sessions keep your usual Claude Code permissions.
+- **A plain `claude`** started by hand in a folder under the memory still gets the MCP tools and the instructions for
+  that folder at startup, just not the per-message context.
+- **Documents** (PDF, Word, `.eml`, `.mbox`, text files) are indexed where they are, never copied. Every fact points
+  back to the passage it came from. Scanned PDFs, images and spreadsheets can be dropped and kept, but they are not
+  searchable yet (no OCR, no spreadsheet extractor).
+- **Settings** are in the interface too: what gets injected and how much, search, the memory's trust rules (kept in
+  `_mnemo/SCHEMA.md`, versioned with it), models and service.
+
+![Memory as a 3D graph: notes for projects, clients, people, decisions and sources, linked by their relations](docs/images/graphe.png)
+
+## Getting started
+
+You'll need:
+
+- a Mac, with Apple silicon or Intel (see [Status](#status));
+- Node.js 24 or later, git and pnpm (`npm install -g pnpm`);
+- the `claude` command line tool, signed in with your subscription.
+
+No build tools are needed: the session terminals (node-pty) come prebuilt for macOS.
+
+Then:
+
+```sh
+git clone https://github.com/GauthierCoste/claude-mnemo.git && cd claude-mnemo && pnpm installer
+```
+
+(From the ZIP: unzip, move the folder somewhere it can stay, since the `mnemo` command and the app point to it, then
+run `pnpm installer` inside it.)
+
+`pnpm installer` installs the dependencies, builds the interface and runs `mnemo init`, which asks you a few things:
+
+1. the folder that holds your projects (the memory goes into its `_mnemo/`; an existing memory is reused as is);
+2. whether to declare the Mnemo MCP server to Claude Code;
+3. whether to download the optional local models (about 1.3 GB; no by default);
+4. whether to install the `mnemo` command (`~/.local/bin/mnemo`; yes by default);
+5. whether to install the Mnemo app (`~/Applications/Mnemo.app`; yes by default).
+
+To open it:
+
+```sh
+mnemo ~/Projects        # or open Mnemo.app; the interface is at http://127.0.0.1:4747/
+mnemo jeton             # first time only: prints the address with its access token
+```
+
+From there, "+ session" on any folder of the tree starts a session (or `mnemo session lancer <folder>` from the
+terminal). Everything else is in [docs/usage.md](docs/usage.md).
+
+## Privacy
+
+Everything stays on your machine. The service only listens on `127.0.0.1`, behind a token, and the models run locally.
+The only thing Mnemo downloads is the optional models, once, from fixed addresses with checked SHA-256 hashes. Your
+sessions talk to Anthropic like any other Claude Code session. Secrets it recognises (API keys, tokens, private keys)
+are masked before anything is written or indexed. What the web interface does and does not protect is written down in
+[docs/usage.md](docs/usage.md#what-the-web-version-protects-and-what-it-does-not).
+
+## Status
+
+Version 1.5.0. Mnemo runs on macOS (Apple silicon, and Intel); the CI runs the type check and the tests at each push on
+Linux and Windows with Node.js 24, and on macOS with Node.js 26. Windows is being adapted and has not been tried in real use
+yet; Linux has not been used. The interface runs in the browser for now.
+
+**Next: [coming next](docs/coming-next.md).** Search now ranks by one score (a base of relevance plus four weights),
+shows one entry per note and per identical text, and the archivist has tools to delete, merge and fix links in the
+memory. What remains is tuning the weights on the bench with the local models. Managing skills from the interface comes
+after: today they are files in `_mnemo/skills/` and in each profile's folder.
+
+The interface, the command line messages and the note keywords are in French. This README and the docs are in English.
+Help towards an English interface is welcome.
+
+## Documentation
+
+- [Coming next](docs/coming-next.md): the next work item, with its reasons and open questions.
+- [Installation](docs/installation.md): requirements, disk and memory, settings, uninstalling.
+- [Usage](docs/usage.md): command line, service, sessions, profiles, interface and shortcuts.
+- [Memory format](docs/format-coffre.md): grammar of the notes and facts.
+- [Document size limits](docs/references/document-limits.md).
+- [Memory implementation guide](docs/references/guide-memoire.md): the design direction behind the memory.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE)

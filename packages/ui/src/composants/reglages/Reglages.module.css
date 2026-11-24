@@ -1,0 +1,191 @@
+/* Vue Réglages : barre d'onglets ; champs de l'onglet Système (la disposition vient de profils/Profils.module.css). */
+
+.titre {
+	margin: 0;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.discret {
+	margin: 0;
+	color: var(--mu);
+	font-size: 12px;
+}
+
+.champ {
+	margin: 0;
+	padding: var(--esp-3) 0 0;
+	border: none;
+	border-top: 1px solid var(--bd);
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.champ:first-of-type {
+	border-top: none;
+	padding-top: 0;
+}
+
+.ligne {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--esp-2);
+}
+
+.libelle {
+	font-weight: 600;
+}
+
+.effet {
+	padding: 1px 8px;
+	border-radius: var(--r-pastille);
+	background: color-mix(in srgb, var(--amber) 14%, transparent);
+	color: var(--amber);
+	font-size: 11px;
+}
+
+.explication {
+	margin: 0;
+	color: var(--mu);
+}
+
+.nombre,
+.texte {
+	background: var(--s1);
+	border: 1px solid var(--bd);
+	border-radius: var(--r-2);
+	padding: 6px 9px;
+	outline: none;
+	font-family: var(--mono);
+	font-size: 12px;
+}
+
+.nombre {
+	width: 120px;
+}
+
+.texte {
+	flex: 1;
+	min-width: 240px;
+}
+
+.couleur {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--esp-3);
+	font-size: 12px;
+}
+
+.couleur input[type='color'] {
+	width: 44px;
+	height: 28px;
+	padding: 2px;
+	background: var(--s1);
+	border: 1px solid var(--bd);
+	border-radius: var(--r-2);
+	cursor: pointer;
+}
+
+.avertissement {
+	margin: 0;
+	font-size: 12px;
+	color: var(--amber);
+}
+
+.cases {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--esp-2) var(--esp-4);
+}
+
+.case {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+}
+
+.actions {
+	display: flex;
+	gap: var(--esp-2);
+}
+
+/* Page à onglets : barre fixe en haut, panneau de l'onglet qui défile seul. */
+.reglages {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	background: var(--s1);
+}
+
+.barreOnglets {
+	display: flex;
+	align-items: center;
+	gap: var(--esp-5);
+	padding: var(--esp-4) 22px 0;
+	border-bottom: 1px solid var(--bd);
+}
+
+.onglets {
+	display: flex;
+	gap: var(--esp-1);
+}
+
+.onglet {
+	padding: 8px 14px;
+	border: none;
+	border-bottom: 2px solid transparent;
+	background: none;
+	color: var(--mu);
+	font: inherit;
+	cursor: pointer;
+}
+
+.onglet:hover {
+	color: var(--tx);
+}
+
+.onglet[aria-selected='true'] {
+	color: var(--tx);
+	border-bottom-color: var(--ac);
+}
+
+.onglet:focus-visible {
+	outline: 2px solid var(--ac);
+	outline-offset: -2px;
+}
+
+.retenu {
+	margin: var(--esp-3) 22px 0;
+	padding: var(--esp-3);
+	border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+	border-radius: var(--r-2);
+	background: color-mix(in srgb, var(--amber) 8%, transparent);
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--esp-3);
+}
+
+.retenu p {
+	margin: 0;
+}
+
+.panneau {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+
+@media (max-width: 640px) {
+	.barreOnglets {
+		padding: var(--esp-3) 16px 0;
+		gap: var(--esp-3);
+	}
+}

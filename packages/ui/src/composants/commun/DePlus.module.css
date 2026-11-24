@@ -1,0 +1,9 @@
+/* « N de plus » d'une liste coupée, discret, et son bouton « Tout voir ». */
+.dePlus {
+	display: flex;
+	align-items: center;
+	gap: var(--esp-3);
+	margin: 6px 0;
+	color: var(--mu);
+	font-size: 12px;
+}

@@ -1,0 +1,98 @@
+/* Règles globales (corps, contrôles natifs, barres de défilement, kbd). */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body,
+#racine {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	background: var(--fond-page);
+	color: var(--tx);
+	font: 13px/1.5 var(--sans);
+	-webkit-font-smoothing: antialiased;
+	padding: var(--esp-4);
+}
+
+button,
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+}
+
+input {
+	min-width: 0;
+}
+
+select,
+input[type='text'],
+input[type='search'],
+input[type='date'] {
+	background: var(--s2);
+	border: 1px solid var(--bd);
+	border-radius: var(--r-2);
+	padding: 6px 9px;
+	outline: none;
+}
+
+select:focus,
+input:focus,
+textarea:focus {
+	border-color: var(--ac);
+}
+
+:focus-visible {
+	outline: 2px solid var(--ac);
+	outline-offset: 2px;
+}
+
+kbd {
+	font: 11px var(--mono);
+	background: var(--s3);
+	border: 1px solid var(--bd);
+	border-radius: 5px;
+	padding: 1px 5px;
+	color: var(--mu);
+}
+
+code {
+	font-family: var(--mono);
+}
+
+::-webkit-scrollbar {
+	width: 9px;
+	height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--barre-defilement);
+	border-radius: 9px;
+	border: 2px solid transparent;
+	background-clip: padding-box;
+}
+
+@keyframes mnemo-pouls {
+	70% {
+		box-shadow: 0 0 0 7px color-mix(in srgb, var(--ac) 0%, transparent);
+	}
+	100% {
+		box-shadow: 0 0 0 0 color-mix(in srgb, var(--ac) 0%, transparent);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+	}
+}

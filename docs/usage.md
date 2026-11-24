@@ -1,0 +1,529 @@
+# Using Mnemo
+
+Reference for the command line, the service, sessions and the interface. Installation, requirements and uninstalling are
+in [installation.md](installation.md); the file format of the memory is in [format-coffre.md](format-coffre.md).
+
+Commands, messages and the interface are in French; this page gives their meaning in English.
+
+## Command line
+
+Node 24 or later is required. The `mnemo` command (see [installation.md](installation.md) to make it available):
+
+- `mnemo init [folder] [--oui] [--sans-mcp]`: creates the memory (`_mnemo/`, with `SCHEMA.md`, the note of the `travail`
+  profile and a first git commit; no folder is imposed); does nothing if it already exists. In a terminal, on a fresh folder, it guides you step by step:
+  folder (`~/…` accepted; absolute path shown and confirmed before creation), declaration to Claude Code, local models
+  and macOS launcher (no by default: nothing is downloaded or installed without an answer). `--oui` (yes): all defaults,
+  no question, MCP declaration included. Without a terminal and without `--oui`: the memory only, nothing outside the
+  folder (the declaration command is printed). On an existing memory, only the MCP declaration is asked.
+- `mnemo lit <path>` (read): prints a note (path relative to `_mnemo/`, for example `clients/acme/acme.md`).
+- `mnemo liste [folder]` (list): prints the note of the folder, its notes, then its subfolders.
+- `mnemo cherche <text…> [--dossier <path>] [--tout] [--limite N] [--contexte]` (search): searches the memory (the index
+  is updated before each search); one line per result. `--tout` includes information waiting for confirmation and
+  invalidated information; `--contexte` returns each result in full, a passage with its section or its neighbours (like
+  the hooks and the `chercher` tool).
+- `mnemo index [--reconstruire]`: updates the search index, or deletes and rebuilds it.
+- `mnemo amorce [--dossier-claude <path>]` (or the "Importer la mémoire de Claude" button of the Memory view): imports
+  the native memory of Claude Code (all `.md` files of `projects/*/memory/`, subfolders and `MEMORY.md` included, and the
+  global `CLAUDE.md`, in `CLAUDE_CONFIG_DIR` or `~/.claude`) as source notes under `sources/claude-code/`, attached to
+  their project when it is inside the folder, and references the `CLAUDE.md`, `CLAUDE.local.md` and `.claude/*.md` files
+  of the folders of the first 3 levels. The report names everything left out, with the reason; run again, it only
+  rewrites changed files. A note whose content is identical to one already imported under another origin (the same note found in several projects) gives no new note: the existing note (that of the first origin in alphabetical order) records its `origines`, and the report counts it as
+grouped the first time. A copy that later changes gets its own note and leaves the `origines` of the shared one. An
+  origin that the archivist merged into another note or redirected to it (`entretenir`, see "Profiles") is known as long
+  as the note does not change in Claude Code: it is not imported again; once it changes, it is new content, imported as a
+  note of its own. No information is extracted: the archivist does that. An imported note is never deleted when
+  the original disappears from `~/.claude`. Recognised secrets are masked before writing.
+- `mnemo source <path> [--type <type>] [--version-de <note>] [--apres-proches]`: references a document of the folder
+  (see "Documents"). Exit code: 0 written or already referenced, 1 refused, 2 near copy exists (nothing written).
+
+`lit`, `liste`, `cherche`, `index` and `source` look for the memory in the current folder, then in its parents.
+`mnemo --aide` lists the commands.
+
+## Settings
+
+The settings of a folder are in `.mnemo/reglages.json` (local state, never versioned) and can be changed in the
+interface (gear at the bottom of the rail, ⌥,): project markers (◆ in the folder tree), the injected context (number of cards proposed at the first message and per message),
+minimum similarity of search, model shutdown after inactivity, note types whose proposed information needs a
+confirmation, service port, launcher browser and the main colour of the interface (green by default). The table of settings and defaults is in [installation.md](installation.md#settings).
+The main colour is applied as soon as it is picked; below the picker, a warning appears when it is hard to read on the dark background (contrast under 3:1). The logo and the session state colours keep their own colours.
+
+## Documents
+
+A document of the folder (text `.pdf`, `.docx`, `.eml`, `.mbox`, and any text file: `.md`, `.txt`, `.csv`, `.yaml`…;
+UTF-8, UTF-16 only with a byte order mark, otherwise Windows-1252) is referenced, never copied: `mnemo source docs/specification.pdf` (or the
+`extraire_source` tool in Claude Code) writes a `source` note under `_mnemo/sources/` (path, hash, format) and indexes
+its passages, which `cherche` and `chercher` find with the document title, the heading path and the page. The path is
+relative to the root of the Mnemo folder (outside `_mnemo/` and `.mnemo/`; a hidden folder or file is a document like
+any other); recognised secrets are masked before indexing. A near copy of an existing source is not written, unless
+`--apres-proches` is given; `--version-de sources/<note>.md` links a new version to the previous one.
+
+A file dropped in the drop zone of the interface (Mémoire › Archiviste) is written into the folder and gets a `source`
+note marked "à traiter" (to process) for the archivist, whatever its format. A scanned PDF (pages without text), an
+image, a spreadsheet or any other binary file without an extractor is kept, but it is not searchable: Mnemo does no
+text recognition and has no spreadsheet extractor, and says so when the file is dropped or referenced.
+
+A document can weigh up to 10 GB: it is dropped, hashed and read as a stream, never loaded in one block. Each format
+then has its extraction limit (PDF 256 MB, Word 100 MB, email 256 MB per message, indexed text 32 Mi characters per
+document): see [references/document-limits.md](references/document-limits.md).
+
+A referenced document that changes, or disappears, is reindexed in the background by the service and the MCP server after
+a search (the search itself never waits: it serves the index as it is), or by `mnemo index`; never by the session
+hooks. An `.mbox` gives one note per thread, identified by a stable key (the Message-ID of its first message): when the
+mailbox grows, its known threads keep their passages, and `mnemo index` lists "Documents à compléter" (documents to
+complete). Running `mnemo source` (or `extraire_source`) again on the same path references the new threads, without
+touching anything else.
+
+## Search by meaning
+
+Search first finds by words. With local models, it also finds an answer worded differently: "How often do the vehicles
+report where they are?" finds "Each truck sends its GPS position every 30 seconds". These models are **optional**.
+Without them, or if they are slow, failing or loading, search works by words, without error and without waiting beyond
+its budget (3.5 s for a tool, 400 ms for a hook). They exist for macOS on Apple silicon and on Intel (processor only, slower:
+the budget may cut them short), Windows x64 and arm64 and Linux x64 (Intel, Windows and Linux untested); on another
+platform there is no search by meaning, and search works by words.
+
+- `mnemo modeles installer [--depuis <folder>]`: installs what is missing in the user cache: `MNEMO_MODELES` if set,
+  otherwise `~/Library/Caches/mnemo` on macOS, `$XDG_CACHE_HOME/mnemo` or
+  `~/.cache/mnemo` on Linux. The pieces: the llama.cpp engine b11671 (12 MB), the meaning model bge-m3 (635 MB), the
+  reranker bge-reranker-v2-m3 (636 MB). Each piece has a fixed address and SHA-256 hash, checked before installing.
+  `--depuis` copies a piece already present on the machine instead of downloading it, if its hash matches.
+- `mnemo modeles etat`: installed pieces and running servers for this folder.
+- `mnemo modeles arreter`: stops the servers of this folder. While the service of the folder runs, they stay started and
+  stop with it; without the service, they stop by themselves after 15 minutes without a request (setting
+  `modeles.inactiviteMinutes`).
+- `mnemo index` computes the vectors of the whole memory. `mnemo cherche` and the `chercher` tool compute the missing
+  ones, within their budget.
+
+The `llama-server` processes listen on `127.0.0.1`, with a random key. The first search of a tool or of the command line
+starts them when needed (the interface never starts them on its own); a hook never starts them and only uses meaning
+and the reranker if the servers are already running. The reranker
+sets the order of the first 40 merged candidates without changing the scale of their scores, so the recall threshold
+keeps its meaning.
+
+### How a result is ranked
+
+Each result of `chercher` (and of `mnemo cherche`) has one **score**: `score = base + weights`, the same model as the
+cards (see "Injected context").
+
+- The **base**, from 0 to 1, is how well the result matches the query: words, meaning, graph and reranker. Among words
+  matches, a fact that carries the precise words ranks above one that only shares the words of its note's title.
+- Four **weights** add to or subtract from it, each a setting from 0 to 0.5 (`recherche.poidsPosition`,
+  `poidsConfiance`, `poidsMemoire`, `poidsFraicheur`; see [installation.md](installation.md#settings)): the result is
+  in the neighbourhood of the current project (+ 0.10), its confidence (− 0.10 × (1 − confidence)), it belongs to the
+  memory rather than being an imported source (+ 0.05), its date (+ 0.05, halved after a year).
+- The **recall threshold** (`seuil_rappel`, 0.4) applies to the relevance of the match, never to the score: a weight
+  moves a result up or down, it never lets one in.
+
+Results are listed by score. The number shown on the line of a result is its base, not its score; after the status and
+date come the reasons that set it apart: `- 0,82 <id> (actif, 2026-11-20) · projet courant, confiance 60 %`. The reasons
+are « projet courant », a confidence below 100 %, and « récent » for a dated result less than a year old. The memory
+weight and the freshness of an undated or older result touch almost every result: they count in the score but are not
+written. The status « actif » is the former « servi ».
+
+Confidence is that of the information: a source note and its passages count with the reliability of their source type
+(`note` 0.6, `email` 0.7…). A declared fact that quotes the user, filed from a note imported from Claude Code (linked by
+path, name, title or alias to a note whose `origine` starts with `claude-code/`, wherever it is filed), counts with the
+`utilisateur` reliability: the imported note only carries what the user said.
+
+**Copies.** A search returns one entry per document (a note and its passages: the best passage when one is in the
+results, otherwise the note; the facts of a note stay separate entries) and one entry per identical text of the same
+kind (two facts, or two documents; a fact and a passage stay apart, and so do two instructions). The copy shown is one in
+the neighbourhood of the current project if there is one, then the one a fact of the results cites (by path, name, title
+or alias), otherwise the most recent one; the others are listed after it: `(+ 2 copies : <path>, <path>)`. An entry takes
+its place from the score of its group (its best-ranked member), but shows the base and reasons of the copy shown. A
+source note cited by a fact comes after that fact. `chronologie` keeps one entry per document but groups an identical
+text only at the same date: two dates are two moments. `proposer` checks near duplicates against every copy.
+
+Struck-out facts are not injected into a session (position note, note injected by hand); they stay in their note, and
+`lire` still shows the whole note.
+
+## Service
+
+`mnemo` starts the local service of the Mnemo folder: `mnemo ~/Sites/client` (a folder inside a memory, found by going
+up), or `mnemo` alone from a folder that contains one. The service always listens at the same address,
+`http://127.0.0.1:4747/` (`MNEMO_PORT` chooses another port; `MNEMO_PORT=0`, a free port, and the address then changes
+at each start). If the port is taken by another program (or by Mnemo for another folder), `mnemo` says so and stops:
+never another port silently. In a terminal it prints the first-opening address, `http://127.0.0.1:4747/#jeton=<token>`,
+and opens it in the browser when the interface is built (`MNEMO_SANS_NAVIGATEUR=1` prevents that). Ctrl-C (or SIGTERM,
+or closing the terminal, or `mnemo arreter [folder]` for a service without a terminal) stops the sessions cleanly; they
+resume with `claude --resume` at the next start. After a crash of the service, its sessions become "à relire" (to
+review, minimal episode written), then are relaunched.
+
+**Token and browser.** The service token is created once and kept in `.mnemo/jeton` (readable by you only). At the first
+opening of the address with the token in a browser, the interface stores the token in the `localStorage` of its origin,
+`http://127.0.0.1:4747` (specific to this port, never sent by the browser on its own), removes it from the address bar,
+then presents it at each request (`Authorization`, and a subprotocol for the WebSocket, never in an address). Afterwards
+`http://127.0.0.1:4747/` is enough in that browser. `mnemo jeton` prints the first-opening address again;
+`mnemo jeton --renouveler` creates a new token, valid after a restart of the service.
+
+The first-opening address stays in the browser history, and browser sync (Chrome, Edge) can carry it off the machine.
+Open it once, then use `mnemo ouvrir` or the launcher, which only open the plain address; delete it from the history if
+needed, and renew the token if it may have been seen.
+
+The service listens on `127.0.0.1` only and requires its token at each request (`Authorization: Bearer`; for the
+WebSocket, the subprotocol `mnemo.jeton.<token>`, or `?jeton=` for the command line and the hooks); it sets no cookie.
+It refuses a `Host` header other than `127.0.0.1:<port>` or `localhost:<port>`, and any request whose `Origin` header,
+when present, is not exactly the address it was reached at. Its address and token are in `.mnemo/service.json`
+(readable by you only), removed when it stops. Session hooks go through it first, and compute by themselves otherwise.
+
+### Opening Mnemo in one click
+
+- **Installed app (Chrome, Edge).** Once the interface is open (token kept), the browser menu offers "Install Mnemo": its
+  own window, an icon in the Dock. It opens `http://127.0.0.1:4747/`; the service must be running. Its service worker
+  caches nothing.
+- **macOS launcher.** `mnemo lanceur`, run from the Mnemo folder, creates `~/Applications/Mnemo.app`. A click starts the
+  service of this folder if it is not running (detached, log in `.mnemo/service.log`), then opens
+  `http://127.0.0.1:4747/` in an app window (Chrome, otherwise Edge, otherwise the default browser): this is
+  `mnemo ouvrir`. The launcher calls the Node and `main.ts` present when it was created: if they move, run
+  `mnemo lanceur` again. Nothing runs at login. Remove it with `mnemo lanceur --retirer`.
+
+### What the web version protects, and what it does not
+
+Protected: a web page open in the same browser (from another site, or served by another port of `127.0.0.1`) can
+neither read nor command Mnemo: it does not have the token (local storage is specific to each origin, port included, and
+the browser never sends it on its own, unlike a cookie), there is no CORS, `Origin` is checked, `Host` is checked against
+DNS rebinding; the interface loads nothing from elsewhere and only runs its own scripts (strict CSP, no `eval`); the
+content of the memory, documents and terminals is displayed as text, never as HTML; a note link never navigates.
+
+Not protected: a **script injected into the interface itself** would read the stored token; **browser extensions** with
+access to `127.0.0.1` see and command the interface as you do; **local programs** running under your account can read
+`.mnemo/jeton`; the first-opening address stays in the history; Claude sessions have your permissions.
+
+## Interface
+
+The interface is built once, at the root of the repository: `pnpm construire` (into `packages/ui/dist`, served by the
+service; to redo after an update). To work on the interface: `MNEMO_DOSSIER=<Mnemo folder> pnpm --filter @mnemo/ui dev`
+(service running in that folder), then the printed address.
+
+The title bar shows, left of the Archiviste button, the **quotas of the Claude account** (5-hour window and week),
+common to all sessions: a small circle with two rings (inner: 5 hours; outer: week), green, amber from 50 %, red from
+80 %. A click unfolds them into bars with the reset time; another click folds them. They come from Claude Code's
+status line in the sessions launched by Mnemo (`mnemo ligne-etat`, which shows nothing there), so they appear after a
+first answer of Claude, and only for a Pro, Max or Ultra subscription.
+
+The left rail has two views: **Sessions** (its badge: sessions waiting for your answer) and **Mémoire** (its badge: items
+to process).
+
+- **Sessions**: the grid of sessions, the Dossier panel (tree of all the folders of the root, two levels unfolded at
+  start, with session status dots, git status and "+ session" on each folder) and the Contexte panel ("Injecté dans
+  la session": one list for the selected session, see "Injected context"). The side panels are resized by dragging their
+  border (double-click: default width).
+- **Mémoire › Archiviste**: one page to enrich the memory and decide, in three columns: to decide (facts to confirm,
+  level raises and modifications proposed by a session) and to process (imported sources); the archivist terminal in the
+  centre; on the right, the drop zone, the recent documents and "Appris aujourd'hui" (learned today: the commits of the
+  memory of the day).
+- **Mémoire › Fichiers**: the tree, the note (reading, Markdown editing), its links and the sessions that used it. The side panels
+  (tree, links) and the side columns of Archiviste are resized like those of Sessions: drag the border (double-click:
+  default width).
+- **Mémoire › Graph 3D**: the memory as a graph (`/` search, `L` next label density, Alt+click releases a node).
+
+Shortcuts (read from the physical key, ⌥ = Alt): ⌥1…⌥9 opens session n full size, ⌥0 returns to the grid; ⌥A opens or
+closes the archivist drawer, ⌥⇧A maximises or reduces it; ⌥M opens the last note injected into the chosen session; ⌥L
+locates the open note; ⌥, opens the settings; ⌘K (Ctrl+K outside macOS) opens the palette; Escape outside a terminal
+closes the palette, reduces then closes the drawer, or returns to the grid. The ⌥ shortcuts do not apply while typing or
+inside a terminal.
+
+## Sessions
+
+Without the interface, sessions are driven from the command line, with the service running:
+
+- `mnemo sessions`: running sessions (id, state, profile, folder, objective);
+- `mnemo session lancer <folder> [--profil p] [--objectif t]`: starts `claude` in this folder (relative to the root);
+- `mnemo session terminer <id> [--sans-bilan]`: wrap-up (Claude writes the episode, then the session stops), or abandon;
+- `mnemo session voir <id>`: the terminal of the session inside yours; Ctrl-] to quit.
+
+`<id>` can be shortened to its start (8 characters are enough).
+
+A session follows a simple cycle: "travaille" (working) during a Claude turn, "attend" (waiting) when it is done or asks
+for a permission, "en pause" (paused) when you stopped it, "à relire" (to review) when it stopped by itself, "terminée"
+(finished) after the wrap-up or the abandon. The **wrap-up** types an instruction into the session: Claude writes the
+episode of the session (`_mnemo/episodes/<project>/`) and 0 to 3 lessons, then the session stops. A session stopped
+without a wrap-up receives a minimal episode, written without AI (objective, dates, branch, files changed according to
+git).
+
+Each session started by Mnemo receives a plugin (`.mnemo/plugins/<session>/`): the instruction of its profile, its
+skills, its hooks (`mnemo hook …`), Claude Code auto-memory turned off, and the Mnemo tools needed for the wrap-up allowed
+in advance. Depending on the profile, the hooks inject the instructions and a few leads at each message
+(see "Injected context"), and refuse an action that breaks a checked instruction. They never hold the session up (under one
+second, 2 s for the action check, 1.4 s for the end; exit code 0 even on failure). When the memory may contain checked
+instructions, the action check is declared so that Claude Code refuses the action if the hook itself fails or times out. `claude` is started without a shell, with your subscription only: `ANTHROPIC_API_KEY`,
+`ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` and the `CLAUDE_CODE_USE_*` provider selectors are removed from its
+environment. `MNEMO_CLAUDE` names another `claude` binary.
+
+### Injected context
+
+Mnemo proposes, it never forces. It does not push notes into the session: it hands Claude a few **cards** (title, path,
+one line) and Claude reads with `lire` the ones useful to its task. The tools `chercher`, `lire`, `lister`, `voisins`,
+`chronologie` and `contexte` stay available for the rest.
+
+What a session receives, in this order:
+
+1. **The instructions** that apply to the position of the session: `toujours` and `verifiee` at every message, `rappelee`
+   all together in the first message.
+2. **The note of the position**, whole, like a CLAUDE.md: the note of the project or client the session is started in.
+   It comes at the first message that is not mute, again after `/clear` or `/compact`, and again if the note changes.
+   Beyond 8000 characters it becomes a card.
+3. **The cards**, under the title `## Pistes de Mnemo (lis avec `lire` celles qui servent ta tâche)`. A card shows the
+   title, the path, the first sentence of the summary, the type and the reason.
+
+Cards come from three places:
+
+- **At the first message**: the notes of the folder of the position and the notes linked to the position (one or two
+  hops), ordered by meaning against that first message alone, at most `contexte.cartesPerimetre` (10 by default). Without
+  a position (session at the root), there are none.
+- **At any message that names a note**: a note whose title or alias is written in your message (whole words, at least 4
+  letters) becomes a card, at most `contexte.cartesNommees` per message (5 by default). Naming the place of a note from
+  elsewhere (another client, another project) unlocks the notes stored under it, and only those that are named too are
+  proposed.
+- **At the message that carries a note you inject by hand** (➤, below): the notes linked to it (one hop, a relation or a
+  written link, either way) are ranked with what is left of the folder of the position, at most
+  `contexte.cartesPerimetre`, even if they belong elsewhere; their reason reads *liée à <title of the injected note>*.
+
+Notes named in your message keep the order of the message. The others are ranked by one score: the meaning of the
+message (0 to 1, 0 without the model) plus weights. Injecting a note by hand adds `contexte.poidsInjection` (0.25 by
+default) to each note linked to it; the weight halves every `contexte.demiVieInjection` messages (3 by default; mute
+messages do not count, time does not either), is dropped below 0.02, and several injected notes add up to 0.40 at most on
+the same note. Injecting the note again restarts its weight; `/clear` and `/compact` clear all weights. A weight still
+active also counts in the `contexte` tool.
+
+What Mnemo does not do:
+
+- A **mute message** gets no card: a message that starts with a tag (`<task-notification>`, `<command-name>`…) or that
+  has fewer than two meaningful words ("oui vas-y pousse"). Only the instructions come, and the note of the position if
+  it was not injected yet.
+- **Nothing after a tool call**, and no computation in the background: `PostToolUse` only records which notes Claude
+  reads or writes.
+- No `source`, `dossier`, `consigne`, `profil` or `episode` note is proposed, and no note from another project or client
+  unless your message names it or it is linked to a note you injected by hand. Episodes stay findable with `chercher` and `chronologie`.
+- A card already proposed is not proposed again while the note is unchanged. A note you dismiss in the Contexte panel
+  (✗), and the note of the position if it was dismissed, are never injected again in that session (unless you ask for it with ➤).
+- After `/clear` or `/compact`, the cards can be proposed again and the note of the position is injected again.
+
+The `contexte(question)` MCP tool draws leads on demand: given a question, it returns up to 10 cards of the closest notes
+by meaning, notes from elsewhere included (Claude asked), to read with `lire`.
+
+The profile `travail` does not tell Claude how to use its own native memory. It says that the Mnemo memory holds
+information relevant to the work, that Mnemo proposes leads, and to write with `proposer` whatever is worth keeping. The
+automatic memory of Claude Code stays off in the sessions started by Mnemo.
+
+**Injecting a note by hand.** In the Contexte panel, ➤ "Injecter dans la session" (inject into the session) on a line
+queues the whole note for the session's **next message** (never after a tool call): it is then injected whole, under
+`## Fiches injectées à la demande de l’utilisateur`, framed as `<donnees>` if it cites documents, even if it was dismissed
+or already injected, and recorded as injected. ➤ stays lit until then; a second click cancels it. The notes linked to it
+are proposed with it as cards (*liée à …*), and keep a weight for the next few messages, used in the `contexte` tool or
+at a new injection.
+
+**Contexte panel.** For the selected session, one list, "Injecté dans la session", one line per note: on the left ◆
+for a note injected whole, or the score of a proposed card as a percentage (the meaning of the message plus the weights).
+Every proposed card has a score, a note named in the message and the oversized note of the position included: they are
+scored the same way but keep their place (named notes in the order of the message, the position note first). Without the
+meaning model, when it did not answer in time, or when the notes are not indexed yet, there is no score (« — »), and a
+discreet « sans note de sens » next to the panel title says so (not after a mute message, whose text is never scored).
+A note the session read (tools `lire`, `voisins`) is a line of the same list, placed at the time it was read, with ◈ on
+the left (tooltip: when it was read); it appears as soon as it is read, without reloading. A note already in the list
+(injected or proposed) keeps its line and its tooltip adds « lue aussi à HH:MM ». Then the type dot and the title on one line. The notes injected whole come first (the note of the position and the notes you
+asked for, oldest first), then the cards proposed to Claude, most recent first. The reason of a card is written on the
+right only when it tells something (*nommée*, *question*, *liée à <title>*); *du périmètre*, the default, is in the tooltip
+with the time the card was proposed and its path. The list scrolls on its own and stays anchored where the two meet. On
+hover, the reason gives way to ➤ (inject at the next message) and ✗ "ne plus suggérer" (dismiss the note for the
+session; dismissed notes stay under "Écartées (N)" with "Rétablir"); a note that was only read has ➤ alone, since only
+what Mnemo proposed can be dismissed. A mute message shows its reason under the list.
+Clicking a title opens the note. Above the list: the avatar of the profile, the state and the objective of the session,
+then its folder, start, duration, branch and, once known, the **Contexte** line: how full Claude Code's context window
+is (read from the end of the session's transcript by the service, for this gauge only; the same gauge runs under the
+title bar of the session). When Claude Code's `autoCompactWindow` setting is set (the project's `.claude/settings.local.json`,
+then `.claude/settings.json`, then `~/.claude/settings.json`; read again at each reading), the gauge fills up to that
+threshold instead of the size of the window, and its tooltip says "tokens avant résumé automatique" (before the automatic summary).
+
+The context settings (`contexte.cartesPerimetre`, `contexte.cartesNommees`, `contexte.poidsInjection`,
+`contexte.demiVieInjection`) and the minimum similarity of search are listed in [installation.md](installation.md#settings).
+
+**Permissions.** A Mnemo session runs with your own Claude Code permissions: Mnemo is not a sandbox. Checked
+instructions are reminders: they refuse the actions they recognise, without guaranteeing that no other one gets through.
+The archivist receives `--add-dir` on the whole root of the Mnemo folder.
+
+## Profiles
+
+A profile decides what a session receives. Two are shipped:
+
+- `travail` (work, default): started in the project folder; all hooks; the skills of `_mnemo/skills/` active for the
+  project;
+- `archiviste` (archivist): started in `_mnemo/`, with the root of the folder added by `--add-dir`; it files what you
+  give it (documents, emails, imported memory) through the Mnemo MCP tools; no context injected by the hooks (it reads the
+  memory with the tools), no action check; its own skills, placed at first launch in
+  `_mnemo/profils/archiviste/skills/`. Its instruction lets it organise the folder tree freely, reuse or create note
+  types, declare the scope of a place (`portee`) and move a note or a whole folder with `deplacer`.
+
+A default skill already placed in a memory is never rewritten, even when a newer Mnemo changes it (a memory created
+earlier keeps its old `menage` skill; delete its folder and the current one is placed at the next launch), whereas the
+default instruction of a profile, unless you replaced it, follows Mnemo updates.
+
+The archivist cleans the memory with the `entretenir` MCP tool (also a `menage` skill, and the memory's own « Ménage de la
+mémoire » note if there is one). Each action is one commit under the lock (`mnemo: supprime <path>`, `mnemo: fusionne
+<path> → <path>`, `mnemo: corrige_lien <path>`, like `mnemo: déplace <path> → <path>`), followed by a reindex. The MCP
+server offers `entretenir` to every profile, the work profile included; the only guard is Claude Code's permission
+prompt: Mnemo does not pre-allow it (it is not in the permissions Mnemo writes), so Claude Code asks you before each call
+unless your own settings allow it:
+
+- `supprimer` (delete a note): refused while other notes link to it (by path, name, title or alias), and the refusal lists
+  them; with `redirection`, their links are rewritten to that note (section or anchor dropped, displayed text kept), then
+  the note is deleted. No placeholder note or alias is left behind. A note imported from Claude Code (its `origine`
+  starts with `claude-code/`) that still exists in Claude Code comes back at the next import if it is deleted without
+  `redirection`; with one, its origins go to the redirection note (see `mnemo amorce`). Prefer a redirection or a merge.
+- `fusionner` (merge `id` into `dans`): facts (anchors renumbered after the highest one of `dans`, `contredit` and
+  `invalidé … par` references followed), summary, sections, relations, aliases, title and file name (as aliases) and missing
+  properties go into `dans`; the import origins of `id` (`origine`, `origines`) are added to the `origines` of `dans`
+  with the fingerprint of each note, so a new import does not bring `id` back; every link to `id`, `#^anchor` included,
+  is rewritten to `dans`; `id` is deleted. An anchor or
+  a `contredit` / `invalidé … par` reference that does not exist in `id` is dropped rather than pointed at an unrelated fact
+  of `dans`.
+- `corriger_lien` (fix a link in a note, a source note included): `ancien` becomes `nouveau` (an existing note), or, without
+  `nouveau`, loses its brackets.
+
+When `supprimer` or `fusionner` rewrites a link written by title, alias or name without a display alias (`[[Acme Corp]]`),
+the old text becomes the display alias (`[[clients/acme|Acme Corp]]`). Relations of a rewritten note that become identical
+(same verb, same target) are kept once.
+
+Renaming or moving stays `deplacer`. Refused: profiles, instructions (`consigne`, changed only with the user's consent),
+`profils/` and `skills/`, the note of a folder that still holds other notes; `corriger_lien` is refused in those notes
+too, and so is a `redirection` to one of them when the deleted note carries import origins. Links to a deleted or merged note that sit in one of them are still rewritten (otherwise they would break), and the
+result lists those notes for the user. Struck-out facts are never purged.
+
+To find what to clean, the archivist calls `diagnostiquer` (read-only, pre-allowed like the other reading tools): counts
+first, then for each section the paths (and anchors) to act on: broken links (missing note, missing `#^anchor`, internal
+`contredit` / `invalidé … par` reference to nothing), isolated notes (no link in or out), notes without a summary, folders
+without a note or with an empty one, facts of low confidence (under the value of `seuil_rappel`, which only ranks them
+lower in a search), to confirm, struck out, probable duplicates (same note,
+close wording, same numbers; a pair noted as `contredit` is left out), notes over 40 facts (struck-out ones counted), sources
+with the same document or never cited, rare categories (used twice at most, high-stake ones aside), file name different
+from the title (folder notes aside) and **lots en attente** (pending batches: note, batch, kind, number of lines, reason, and
+"périmé" when the note changed since the proposal). `rubriques` picks sections, `limite` the entries shown per section (20
+by default, 1 to 200); profiles, instructions, `profils/` and `skills/` are only checked for broken links. Nothing is
+written, synchronised or extracted.
+
+### Maintaining information
+
+Besides notes, `entretenir` acts on the information lines of a note (the `ancre` is `f-0001`, `^f-0001` or
+`path#^f-0001`; `id` is the note). Each action is one commit under the lock, except `proposer_lot`, which writes nothing.
+
+- `corroborer` (`id`, `ancre`, `source`, optional `citation`): adds a second source to an information, written as a
+  `  + src: … | corroboré AAAA-MM-JJ` line (see [format-coffre.md](format-coffre.md#corroborations)); the source note is
+  created if it does not exist, as `proposer` does. Refused: a struck-out information, a source already on it (the same
+  document counts once, whatever the way the link is written or its precision such as a page), a protected note.
+  The answer gives the confidence before and after.
+- `retoucher_information` (`id`, `ancre`, `texte` and/or `categorie`): corrects the form of an information (typo, wording,
+  a category) and keeps everything else (anchor, sources, quotes, dates, confidence, status). Refused when the meaning
+  would change: any other number, date, amount or month, a currency or unit, a negation or a word such as « avant » or
+  « maximum », a change to or from a high-stake category (`montant`, `echeance`, `perimetre`), or a rewriting beyond a few
+  characters (at most 20 % of the text and 8 characters; accents and case do not count). The refusal says to use
+  `proposer` with `remplace` instead. Limits: the check is a guard, not a judge. A short name swapped for another one in a
+  long text (« Paul » → « Marc ») or an antonym outside the word list (« accepté » → « refusé ») can pass, and a harmless
+  change is sometimes refused (a number moved in the sentence, « livre », « plus »). No duplicate check after a retouch.
+- `deplacer_informations` (`id`, `ancres`, `dans`, optional `titreSiNouvelle`): moves informations to another note,
+  created with `titreSiNouvelle` if it does not exist (otherwise refused). Nothing is left at the origin: git is the
+  history. The informations get new anchors in the target and keep everything else. Informations linked by an
+  `invalidé … par` or `contredit` reference move together, in both directions, so no reference crosses two notes (they are
+  listed in the answer). Every `[[origin#^f-…]]` link in the memory is rewritten to the new anchor. This is how a note over
+  40 informations is split.
+- `proposer_lot` (`id`, `genre`, `lignes`, `motif`): proposes a batch of `fusionner` (`{ garder, absorber }`: duplicates
+  merged into the information kept, whose sources are added as corroborations and whose confidence is cumulated),
+  `supprimer` or `confirmer` (`{ ancre }`) on one note. The whole batch is tried on the note, then only recorded: the
+  archivist never deletes or confirms an information itself. At most 50 batches wait; an information can be in only one
+  pending batch.
+
+**Validating a batch.** Pending batches appear in Mémoire › Archiviste, under « À arbitrer » (they count in the badges).
+**Tout valider** applies every line; **Revoir** shows each line before and after, with a checkbox: **Valider N lignes**
+applies the checked lines only; **Rejeter** drops the batch. A validation is one commit (`mnemo: fusionne|supprime|confirme
+<n> informations <path>`). A batch whose note changed since the proposal is stale: validating it is refused ("la fiche a
+changé"), it leaves the list, and the archivist sees it at its next proposal. Deleting a fact: the links to it lose their
+anchor, and a fact it struck out keeps its date without the reference; a live fact still to confirm that contradicts it
+makes the batch refused until that contradiction is decided.
+
+**Several sources and confidence.** An information can have several sources (first `src:` mention, then corroboration
+lines). Its `confiance` cumulates them: 1 − Π(1 − cᵢ), where cᵢ is the reliability of each distinct source, capped at 0.9
+unless one source is a `utilisateur` or `contrat` (then at 1). A source that was already counted is not counted again.
+Corroborating never lowers a confidence. Mnemo adds each source to the confidence already written (the format keeps
+neither the type nor the confidence of each source), so a confidence is not recomputed from scratch; one capped at 0.9
+before a user source was added can end a little below the full cumulation (0.97 against 0.982 in the worst case). The
+recall threshold applies to the relevance of a search match, not to the confidence of a fact: an information of low
+confidence is ranked lower, never hidden.
+
+**Anchors.** A note keeps `ancre_max` in its header ([format-coffre.md](format-coffre.md#frontmatter)) when its highest
+anchor leaves (moved, deleted, merged): an anchor number is never given twice.
+
+**Old format.** `mnemo migrer` rewrites notes written before this format (the `type_origine` key and the « Synthèse : »
+prefix of the first line) in one commit, `mnemo: migre format ancien (<n> fiches)`, then reindexes; nothing to migrate,
+no commit. Run it once per memory.
+
+Other fixes: links written with the full path or the `.md` extension are rewritten when a note moves; `retirer_dossier`
+removes a folder that holds only its own note; an episode that Claude writes over the minimal one takes a file name from
+its title, not from the objective.
+
+A profile is a note of the memory, `_mnemo/profils/<name>/<name>.md`: see [format-coffre.md](format-coffre.md#profile-notes).
+
+### Managing profiles
+
+**Settings › Profiles** lists the profiles in two groups: **Memory**, the archivist, always there, which files and keeps the memory (started from the Archivist drawer); and **Work profiles**, the sessions on your projects, started from New session, `travail` first (the default one, always there). Each line shows the avatar, the name and the first line of the instruction; the chosen profile is edited on the right:
+
+- **Avatar**: a small creature (12 shapes) and a colour, chosen separately; shown in New session and in the session lists.
+- **Instruction**: Mnemo's default instruction (which follows Mnemo updates) or your own text. « Restore the default
+  instruction » goes back to the default.
+- **Start**: in the chosen project folder, or in the memory (`_mnemo/`, the root added with `--add-dir`). The
+  archivist's cannot be changed.
+- **Mnemo hooks**: at least one of the six events.
+- **Memory skills**: all those of `_mnemo/skills/` (future ones included), or only the ticked ones. The skills of the
+  profile itself (`profils/<name>/skills/`) are always active and win over a memory skill of the same name.
+- **Claude Code plugins**: the installed plugins (read from `~/.claude/plugins/installed_plugins.json`, or
+  `CLAUDE_CONFIG_DIR`). The ticked ones are switched on in the session, every other installed plugin is switched off,
+  even one switched on in your Claude Code settings (`enabledPlugins` of the session settings). A profile with no plugin
+  ticked gets none.
+
+« New profile » starts from the default values of `travail`; « Duplicate » copies a profile (its effective values and its
+own skills); « Delete » removes `profils/<name>/` (not possible for `travail` and `archiviste`; the sessions of a deleted
+profile resume with the defaults of `travail`). Each save is one commit. If the note changed elsewhere since it was
+opened, the save is refused until you reload it.
+
+Below the editor, **What a session receives** previews, read-only and as saved: the profile instruction, the Mnemo MCP
+server instructions, the hooks, the memory skills (and why one is left out), the Claude Code plugins, what comes from
+Claude Code outside Mnemo (personal skills, `CLAUDE.md`), and the system instructions (wrap-up, import sent to the
+archivist).
+
+Mnemo creates no profile and switches no plugin on by itself: until you tick a plugin in a profile, sessions started by
+Mnemo get no Claude Code plugin.
+
+## Degraded mode
+
+Without node-pty, or if `claude` cannot be found, Mnemo cannot open a terminal. Everything else works: service, API,
+hooks, memory, search. Starting a session then returns a complete command line to paste into your own terminal. The
+session is followed through its hooks, without a terminal in Mnemo. The meaning models are another, independent option:
+without them, search works by words.
+
+node-pty is an optional dependency. On macOS and Windows it comes prebuilt (Node-API: it survives Node.js upgrades),
+with no build tools. On Linux it is compiled at install time (`pnpm install`: `python3`, `make`, a C++ compiler);
+`pnpm rebuild node-pty` compiles it again.
+
+## Benchmarks
+
+Benchmarks measure Mnemo on fictitious corpora shipped with it (`packages/mnemo/banc/`, never drawn from real data).
+
+- `mnemo banc [questions.yaml] [--json]`: search quality, step by step (words, meaning, reranker, graph, position), on the
+  test memory; with a file, your questions on the memory of the folder.
+- `mnemo banc consignes [--json]`: checked instructions (actions refused or allowed by the `outil` hook) and reminded
+  ones (injected at the right message). Without `claude`, in a few seconds.
+- `mnemo banc contexte [--json]` and `mnemo banc contexte --extraire <session>`: the cards proposed on messages labelled
+  by hand, from the file `.mnemo/banc-contexte.json` (private, never committed); see [banc.md](banc.md#banc-du-contexte-sobre).
+- `mnemo banc extraction --reel` and `mnemo banc contradictions --reel`: the archivist run by the real `claude -p` on
+  test documents, then scored. **They consume your Claude subscription**: without `--reel`, the command refuses.
+
+Each benchmark works in a temporary folder, deleted afterwards.
+
+## Connecting Claude Code
+
+`mnemo init` declares the `mnemo mcp` server to Claude Code at user level (all sessions); `--sans-mcp` skips this step.
+If `claude` cannot be found, `init` prints the command to run yourself:
+
+```
+claude mcp add --scope user mnemo -- '<path to node>' '<path to main.ts>' mcp
+```
+
+To undo: `claude mcp remove mnemo --scope user`. `MNEMO_SANS_MCP=1` is the same as `--sans-mcp`.

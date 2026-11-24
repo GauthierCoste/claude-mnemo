@@ -1,0 +1,106 @@
+.titre {
+	height: 44px;
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 0 14px;
+	border-bottom: 1px solid var(--bd);
+	background: var(--degrade-titre);
+}
+
+.marque {
+	flex: none;
+	width: 28px;
+	height: 28px;
+	display: block;
+}
+
+.racine {
+	font: 12px var(--mono);
+	color: var(--mu);
+	border: 1px solid var(--bd);
+	border-radius: 7px;
+	padding: 3px 9px;
+	background: var(--s2);
+	white-space: nowrap;
+}
+
+.fictif {
+	font: 11px var(--mono);
+	color: var(--amber);
+	border: 1px dashed color-mix(in srgb, var(--amber) 40%, transparent);
+	border-radius: var(--r-pastille);
+	padding: 1px 8px;
+	white-space: nowrap;
+}
+
+/* Le champ de recherche suit la racine, aligné à gauche ; les quotas et l'archiviste restent à droite. */
+.commande {
+	margin: 0;
+	width: 420px;
+	max-width: 40vw;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	background: var(--s2);
+	border: 1px solid var(--bd);
+	border-radius: var(--r-2);
+	padding: 5px 10px;
+	color: var(--mu);
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-align: left;
+}
+
+.commande:hover {
+	border-color: var(--bd2);
+}
+
+.commande span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.commande kbd {
+	margin-left: auto;
+}
+
+.droite {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.archiviste {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	background: var(--s2);
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-2);
+	padding: 5px 10px;
+	cursor: pointer;
+	font-weight: 550;
+}
+
+.archiviste:hover,
+.archiviste[aria-expanded='true'] {
+	border-color: var(--ac);
+}
+
+.pouls {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--ac);
+	box-shadow: 0 0 0 0 color-mix(in srgb, var(--ac) 50%, transparent);
+	animation: mnemo-pouls 2s infinite;
+}
+
+.attend {
+	color: var(--amber);
+	font-size: 11px;
+}

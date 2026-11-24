@@ -1,0 +1,285 @@
+/* « Injecté dans la session » (panneau Contexte), une ligne par fiche : ◆ ou note (%), pastille et titre sur toute la largeur, raison
+   utile, ▲/▼ ; au survol, ➤ injecter et ✗ écarter à la place de la raison. Puis « Écartées (N) ». */
+.classement {
+	margin-top: 18px;
+}
+
+.lbl:focus-visible {
+	outline: 1px solid var(--ac);
+	outline-offset: 2px;
+}
+
+.lbl {
+	font: 500 10.5px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--dim);
+}
+
+.mu {
+	color: var(--mu);
+}
+
+/* Repère discret à côté du titre : le dernier calcul s'est fait sans le sens (d'où les « — »). */
+.sansSens {
+	margin-left: 8px;
+	font-size: 10.5px;
+	color: var(--mu);
+	cursor: help;
+}
+
+.liste {
+	position: relative;
+	list-style: none;
+	margin: 6px 0 0;
+	padding: 0;
+	max-height: 360px;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+.ligne {
+	display: flex;
+	align-items: center;
+	position: relative;
+	gap: 6px;
+	/* à droite, un petit espace : le fond de la ligne dépasse le bouton (✗, ➤) ou la ◆ qui la termine */
+	padding: 2px var(--esp-1) 2px 4px;
+	border-radius: var(--r-2);
+	font-size: 12.5px;
+}
+
+.ligne:hover {
+	background: var(--s3);
+}
+
+/* Ce qui n'a été que proposé ou classé reste en retrait de ce qui a été injecté. */
+.ligne[data-servie='false'] .titre {
+	color: var(--mu);
+}
+
+.ligne[data-nouvelle='true'] {
+	animation: fondu 600ms ease-out;
+}
+
+@keyframes fondu {
+	from {
+		opacity: 0;
+		background: color-mix(in srgb, var(--ac) 18%, transparent);
+	}
+}
+
+/* La colonne de gauche : ◆ d'une fiche injectée, ou la note (« 100 % » au plus, « — » sans note). */
+.note {
+	width: 34px;
+	flex: none;
+	text-align: right;
+	font: 500 10.5px var(--mono);
+	color: var(--mu);
+}
+
+.note.injectee {
+	color: var(--ac);
+	font-size: 10px;
+}
+
+/* ◈ fiche lue par la session : l'accent, en retrait de ◆ (lue, pas injectée). */
+.note.lue {
+	color: color-mix(in srgb, var(--ac) 55%, var(--mu));
+	font-size: 10px;
+}
+
+.fiche {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	flex: 1;
+	padding: 4px 2px;
+	border: 0;
+	background: none;
+	cursor: pointer;
+	text-align: left;
+}
+
+.fiche i {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--c);
+	flex: none;
+}
+
+.titre {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	line-height: 1.3;
+}
+
+.ligne:hover .titre {
+	color: var(--tx);
+}
+
+/* Lu par les lecteurs d'écran, invisible à l'écran. */
+.masque {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.avis {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin: 6px 0 0;
+	font-size: 11.5px;
+	color: var(--mu);
+}
+
+.demarrer {
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-2);
+	background: var(--s2);
+	color: var(--tx);
+	padding: 1px 8px;
+	font-size: 11.5px;
+	cursor: pointer;
+}
+
+/* ▲/▼ quelques secondes après un nouveau calcul, sans colonne réservée : le titre garde toute la largeur le reste du temps. */
+.delta {
+	flex: none;
+}
+
+.monte,
+.descend {
+	flex: none;
+	font: 500 10px var(--mono);
+	white-space: nowrap;
+}
+
+.monte {
+	color: var(--etat-travaille);
+}
+
+.descend {
+	color: var(--amber);
+}
+
+/* ➤ et ✗ : posés sur la droite de la ligne au survol (ou au clavier), sans prendre de place le reste du temps */
+.gestes {
+	position: absolute;
+	right: 2px;
+	top: 50%;
+	transform: translateY(-50%);
+	display: flex;
+	gap: 2px;
+	padding-left: 8px;
+	background: linear-gradient(to right, transparent, var(--s3) 8px);
+	opacity: 0;
+	pointer-events: none;
+}
+
+.ligne:hover .gestes,
+.gestes:focus-within,
+.gestes:has([aria-pressed='true']) {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+/* la raison et ▲/▼ cèdent leur place aux gestes */
+.ligne:hover .raison,
+.ligne:hover .delta,
+.ligne:focus-within .raison {
+	visibility: hidden;
+}
+
+.croix {
+	flex: none;
+	width: 20px;
+	height: 20px;
+	border: 0;
+	border-radius: var(--r-1);
+	background: none;
+	/* `--mu` sur `--s1` : contraste AA pour une icône */
+	color: var(--mu);
+	cursor: pointer;
+}
+
+.croix:hover {
+	color: var(--red);
+	background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.servir {
+	font-size: 10px;
+}
+
+/* demandée : allumé jusqu'au prochain message de la session */
+.servir[aria-pressed='true'] {
+	color: var(--ac);
+	background: color-mix(in srgb, var(--ac) 18%, transparent);
+}
+
+.servir:hover {
+	color: var(--ac);
+	background: color-mix(in srgb, var(--ac) 14%, transparent);
+}
+
+.ecartees {
+	margin-top: 8px;
+	font-size: 12px;
+	color: var(--mu);
+}
+
+.ecartees summary {
+	cursor: pointer;
+	font: 500 10.5px var(--mono);
+	color: var(--dim);
+}
+
+.ecartees ul {
+	list-style: none;
+	margin: 4px 0 0;
+	padding: 0;
+}
+
+.ecartees li {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 0 2px 44px;
+}
+
+.ecartees .titre {
+	flex: 1;
+	text-decoration: line-through;
+}
+
+.retablir {
+	flex: none;
+	border: 0;
+	background: none;
+	color: var(--ac);
+	cursor: pointer;
+	font-size: 11.5px;
+}
+
+/* raison d'une carte quand elle apprend quelque chose (« nommée », « question », « liée à <titre> ») */
+.raison {
+	/* cède la place au titre : une raison longue (« liée à <titre> ») se coupe au lieu d'écraser le titre */
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: 45%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: 10.5px;
+	color: var(--dim);
+	white-space: nowrap;
+}
