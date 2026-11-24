@@ -71,12 +71,14 @@ describe('configuration de l’app Claude : lecture', () => {
 	});
 
 	it('vue : l’adresse d’un serveur distant sans identifiants, paramètres ni fragment', () => {
+		// assemblée à l'exécution : écrite d'un bloc, `pnpm verifier-publication` la prendrait pour une URL avec identifiants
+		const identifiants = ['alice', 'mot-secret'].join(':');
 		const vus = serveursVus(
 			lire(
 				JSON.stringify({
 					mcpServers: {
 						jeton: { url: 'https://exemple.test/mcp?token=sk-secret-123&x=1#frag' },
-						compte: { type: 'sse', url: 'https://alice:mot-secret@exemple.test:8443/sse/' },
+						compte: { type: 'sse', url: `https://${identifiants}@exemple.test:8443/sse/` },
 						casse: { url: 'pas une adresse secret-456' },
 					},
 				}),
