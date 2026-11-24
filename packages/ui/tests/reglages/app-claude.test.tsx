@@ -113,6 +113,13 @@ describe('Réglages › App Claude', () => {
 		expect(within(panneau).queryByText(RESTART)).toBeNull();
 	});
 
+	it('entrée périmée : « Débrancher » la retire sans la réécrire', async () => {
+		const { panneau, faux } = await ouvrirAppClaude({ '/api/claude-desktop': { ...VUE, mnemo: 'perime' } });
+		const memoire = section(panneau, 'Mémoire Mnemo');
+		await act(async () => within(memoire).getByRole('button', { name: 'Débrancher' }).click());
+		expect(faux.api.supprimer).toHaveBeenCalledWith('/api/claude-desktop/mnemo');
+	});
+
 	it('liste : commande et arguments en une ligne, noms des variables ; serveur décrit autrement en lecture seule (Retirer seulement)', async () => {
 		const { panneau } = await ouvrirAppClaude();
 		const serveurs = section(panneau, 'Autres serveurs MCP');

@@ -129,6 +129,12 @@ function MemoireMnemo(p: {
 				<Bouton petit genre={p.etat === 'branche' ? 'normal' : 'primaire'} disabled={p.envoi} onClick={() => void agir()}>
 					{bouton}
 				</Bouton>
+				{/* entrée d'un autre Node, d'un autre emplacement ou d'un autre dossier : on peut aussi la retirer sans la réécrire */}
+				{p.etat === 'perime' && (
+					<Bouton petit disabled={p.envoi} onClick={() => void (async () => setErreur(await p.ecrire(p.debrancher)))()}>
+						Débrancher
+					</Bouton>
+				)}
 			</div>
 			{erreur !== null && (
 				<p className={d.erreur} role="alert">
