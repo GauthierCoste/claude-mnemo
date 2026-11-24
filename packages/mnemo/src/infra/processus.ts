@@ -12,8 +12,11 @@ export const SONDE_MS = 50;
 const DELAI_SONDE_MS = 2000;
 /** Écart toléré entre deux mesures du démarrage de la machine. */
 const TOLERANCE_DEMARRAGE_MS = 5000;
-/** `lstart` est à la seconde (tronqué) : marge de chaque côté de la fenêtre de vie de la session. */
-const MARGE_FENETRE_MS = 1000;
+/**
+ * Marge de chaque côté de la fenêtre de vie de la session : `lstart` est à la seconde (tronqué), et sous Linux `ps` le
+ * déduit de l'heure de démarrage de la machine, qui peut dériver de quelques secondes sur une machine virtuelle (vu en CI).
+ */
+const MARGE_FENETRE_MS = 5000;
 
 /** Signal 0 à un pid (ou à un groupe : `-pgid`) ; `interdit` (EPERM) : il existe, sous un autre utilisateur. */
 export function existenceProcessus(cible: number): 'oui' | 'non' | 'interdit' {
