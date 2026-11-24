@@ -46,6 +46,8 @@ interface (gear at the bottom of the rail, ⌥,): project markers (◆ in the fo
 minimum similarity of search, model shutdown after inactivity, note types whose proposed information needs a
 confirmation, service port, launcher browser and the main colour of the interface (green by default). The table of settings and defaults is in [installation.md](installation.md#settings).
 The main colour is applied as soon as it is picked; below the picker, a warning appears when it is hard to read on the dark background (contrast under 3:1). The logo and the session state colours keep their own colours.
+The **App Claude** tab connects the memory to the Claude app (Claude Desktop) and manages its other MCP servers: see
+[Connecting the Claude app](#connecting-the-claude-app).
 
 ## Documents
 
@@ -527,3 +529,51 @@ claude mcp add --scope user mnemo -- '<path to node>' '<path to main.ts>' mcp
 ```
 
 To undo: `claude mcp remove mnemo --scope user`. `MNEMO_SANS_MCP=1` is the same as `--sans-mcp`.
+
+## Connecting the Claude app
+
+The Claude app (Claude Desktop) has its own list of MCP servers, in `claude_desktop_config.json`. **Settings › App Claude**
+(the third tab of the settings) edits it from the interface; the path of the file is shown at the top of the tab:
+
+| Platform | File |
+| --- | --- |
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Linux | `$XDG_CONFIG_HOME/Claude/claude_desktop_config.json` (by default `~/.config/Claude/`) |
+
+When the Claude app is not installed (its folder does not exist), the tab only says so. When the file cannot be read
+(invalid JSON, `mcpServers` not an object, no permission), the tab shows the error and the path and changes nothing: Mnemo
+never rewrites a file it cannot read. Fix it by hand, then open the tab again.
+
+- **Mémoire Mnemo** connects the memory of this folder: « Brancher la mémoire » adds a `mnemo` entry that runs
+  `mnemo mcp` with the Node and the copy of Mnemo of this installation, and the folder in `MNEMO_RACINE`; « Débrancher »
+  removes it. When the entry no longer matches this installation (another Node, Mnemo moved, another folder), the tab
+  says so and « Mettre à jour » rewrites it. The name `mnemo` is reserved: the other servers can never take it, in any
+  case.
+- **Autres serveurs MCP** lists the other servers of the file, in its order: name, command and arguments, and the names of
+  their environment variables. « Ajouter un serveur… » and « Modifier » open a form (name, command, arguments one per line,
+  variables as `NOM=valeur` one per line); « Retirer… » asks for a confirmation in the page. Only servers run by a command
+  (stdio: `command`, with optional `args` and `env`) can be changed; a server described otherwise (a remote `url`, other
+  fields) is marked « lecture seule » and can only be removed. A remote address is shown without credentials, query or
+  fragment.
+
+The values of environment variables (often API keys) are never shown: the service never sends them to the interface. When
+you change a server, its variables are listed by name only: a line with the name alone (`NOM`) keeps the current value, a
+line `NOM=valeur` replaces it, and a deleted line removes the variable. A new variable needs a value. Error messages never
+quote a value either, not even from an invalid file.
+
+Every other key of the file, and every server you do not touch, is kept as it is. Each change rereads the file and
+rewrites it in one go (a temporary file next to it, then renamed, readable by you only). Leaving the tab or the settings
+with a server form not saved asks first, as the other tabs do.
+
+**Restart the Claude app** after a change: it reads its MCP servers only at startup (the tab reminds you after each
+change).
+
+What the Claude app receives is the memory's MCP tools (`chercher`, `lire`, `contexte`, `proposer`, …) and the
+instructions of the MCP server. It does not get the hooks of a Claude Code session: nothing is injected automatically, no
+context at the first message, no cards per message, no episode at the end. Claude searches and reads the memory when it
+decides to, or when you ask it.
+
+`mnemo mcp` finds its folder from `CLAUDE_PROJECT_DIR`, then from the current folder. The Claude app starts it outside any
+Mnemo folder, so `mnemo mcp` then falls back to `MNEMO_RACINE` when that is a Mnemo folder; the position used by search is
+then the root of the memory.

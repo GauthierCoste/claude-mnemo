@@ -110,6 +110,12 @@ mnemo jeton
 (the same address with `#jeton=…`). The browser keeps the token for this address; afterwards the plain address is enough.
 `Ctrl-C` stops the service; sessions resume at the next start.
 
+## Claude app (Claude Desktop)
+
+To use the memory from the Claude app too, open the settings, **App Claude** tab, click « Brancher la mémoire », then
+restart the Claude app. It gets the memory's MCP tools, not the hooks of a Claude Code session: see
+[usage.md](usage.md#connecting-the-claude-app).
+
 ## Launcher (macOS)
 
 `mnemo lanceur`, run from the Mnemo folder, creates `~/Applications/Mnemo.app`. A click starts the service if needed
@@ -120,7 +126,8 @@ this way. Nothing is registered to run at login.
 
 Open the interface and click the gear at the bottom of the left rail (shortcut: ⌥, on macOS, Alt+, elsewhere; the key
 next to M on a US keyboard), then the **Système** tab (the **Profils** tab manages session profiles, see
-[usage.md](usage.md#managing-profiles)). The groups are listed on the left, by how often you will use them: injected
+[usage.md](usage.md#managing-profiles); the **App Claude** tab, the MCP servers of the Claude app, see
+[usage.md](usage.md#connecting-the-claude-app)). The groups are listed on the left, by how often you will use them: injected
 context, memory, archivist, search, projects, models, service, interface. Each setting shows a one-line explanation, its default, and "Rétablir le défaut" (reset to
 default); changes are saved only when you click "Enregistrer" (save; leaving the page with unsaved changes asks first).
 They are stored in `.mnemo/reglages.json` (only the values that differ from the defaults). A missing or invalid value
@@ -164,14 +171,16 @@ version) are kept, and so are invalid entries you did not touch (they stay liste
 
 ## Uninstall cleanly
 
-1. Stop what runs: `mnemo arreter` (service) and `mnemo modeles arreter` (model servers), from the Mnemo folder.
-2. Remove the launcher and the command: `mnemo lanceur --retirer` and `mnemo commande --retirer` (each removes only
+1. If the memory is connected to the Claude app, click « Débrancher » in **Settings › App Claude**, then restart the
+   Claude app.
+2. Stop what runs: `mnemo arreter` (service) and `mnemo modeles arreter` (model servers), from the Mnemo folder.
+3. Remove the launcher and the command: `mnemo lanceur --retirer` and `mnemo commande --retirer` (each removes only
    what Mnemo created).
-3. Remove the installed web app, if any: in its window menu, "Uninstall Mnemo".
-4. Remove the MCP declaration: `claude mcp remove mnemo --scope user`.
-5. Delete the models cache: `~/Library/Caches/mnemo` on macOS, `~/.cache/mnemo` (or `$XDG_CACHE_HOME/mnemo`) on Linux,
+4. Remove the installed web app, if any: in its window menu, "Uninstall Mnemo".
+5. Remove the MCP declaration: `claude mcp remove mnemo --scope user`.
+6. Delete the models cache: `~/Library/Caches/mnemo` on macOS, `~/.cache/mnemo` (or `$XDG_CACHE_HOME/mnemo`) on Linux,
    or the folder named by `MNEMO_MODELES`.
-6. Delete the local state of each Mnemo folder: its `.mnemo/` folder (index, settings, token, logs).
-7. Delete the clone of the sources.
+7. Delete the local state of each Mnemo folder: its `.mnemo/` folder (index, settings, token, logs).
+8. Delete the clone of the sources.
 
 Your memory, `_mnemo/`, is plain Markdown in a git repository: keep it, or delete it only if you no longer need it.

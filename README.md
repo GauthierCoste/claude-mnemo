@@ -34,6 +34,8 @@ wall of text: Claude stays focused and reads what it needs.
 - **Memory kept by Claude.** Through an MCP server, Claude searches the memory, reads notes and proposes changes;
   anything that changes what is trusted waits for your OK. At the end of a session, Claude writes a short episode of
   what was done and learned.
+- **The Claude app too.** One click in the settings connects the memory to the Claude app (Claude Desktop), whose other
+  MCP servers you can manage there as well, without ever showing their secrets.
 - **Documents.** Drop a spec, an email, meeting notes or a PDF: an archivist session pulls out the facts worth keeping,
   with their source, date and confidence. When something contradicts what is already there, it asks you instead of
   overwriting.
