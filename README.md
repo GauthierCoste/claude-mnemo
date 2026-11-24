@@ -134,4 +134,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE)
+[MIT with the Commons Clause](LICENSE): you may use, copy, modify and share Mnemo freely, including inside a company, but
+you may not sell it: no paid product, hosting or support service whose value comes from Mnemo. This makes Mnemo
+source-available, not open source in the OSI sense. For a commercial use, ask the author.
