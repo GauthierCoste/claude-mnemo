@@ -103,6 +103,41 @@ describe('reranker enveloppé', () => {
 		expect(duree.estimer(8)).toBeCloseTo(50 * (1 + MARGE_RELATIVE) * 2 + MARGE_MS, 9);
 	});
 
+	it('un appel chevauché par un autre (même de l’affinage) n’est pas mesuré, ni l’autre ; seul, il l’est', async () => {
+		const h = horloge();
+		const duree = dureeDuReranker(h.maintenant);
+		const finirs: ((n: number[]) => void)[] = [];
+		const lent: Reranker = { noter: (_q, textes) => new Promise((r) => finirs.push(() => (h.avancer(40), r(textes.map(() => 1))))) };
+		const hook = duree.envelopper(lent);
+		const fond = duree.envelopper(lent, { arrierePlan: true });
+		for (let i = 0; i < 3; i++) {
+			const a = hook.noter('q', ['a', 'b', 'c', 'd', 'e'], injection);
+			const b = fond.noter('q', ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'], injection);
+			for (const f of finirs.splice(0)) f([]);
+			await Promise.all([a, b]);
+		}
+		expect(duree.fiable()).toBe(false);
+		for (let i = 0; i < 3; i++) {
+			const a = fond.noter('q', ['a', 'b', 'c', 'd', 'e'], injection);
+			finirs.shift()!([]);
+			await a;
+		}
+		expect(duree.fiable()).toBe(true);
+	});
+
+	it('affinage (arrière-plan) : ne retient pas le hook, et n’est jamais noté coupé', async () => {
+		const h = horloge();
+		const duree = nourrie(h.maintenant);
+		let finir: (n: number[] | null) => void = () => {};
+		const appel = duree.envelopper({ noter: () => new Promise((r) => (finir = r)) }, { arrierePlan: true }).noter('q', ['a'], injection);
+		expect(duree.enCours()).toBe(0);
+		expect(duree.documentsAuHook(10_000, 40)).toBe(8);
+		h.avancer(200);
+		finir(null);
+		await appel;
+		expect(duree.fiable()).toBe(true);
+	});
+
 	it('jamais une enveloppe d’enveloppe', () => {
 		const duree = dureeDuReranker();
 		const r: Reranker = { noter: async () => null };

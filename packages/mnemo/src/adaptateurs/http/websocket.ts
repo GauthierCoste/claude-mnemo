@@ -9,7 +9,7 @@ import type { Pilote } from '../../application/pilote.ts';
 import type { EtatSessions } from '../../application/ports.ts';
 import type { Session } from '../../domaine/session.ts';
 import type { SuggestionEcarteeToujours } from '../../domaine/apriori-gestes.ts';
-import { vueServie, vueSession } from './vues.ts';
+import { estTraceDeDebut, vueServie, vueSession } from './vues.ts';
 import { DOSSIER_MEMOIRE } from '../../domaine/dossier-memoire.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
 
@@ -153,7 +153,8 @@ export function creerHub(o: {
 	 */
 	const sonderServi = async (s: Session, reference: boolean): Promise<void> => {
 		const [derniere] = await o.etat.servis(s.id, 1);
-		if (derniere === undefined) return;
+		// la trace d'un /clear n'est pas une entrée servie : jamais diffusée
+		if (derniere === undefined || estTraceDeDebut(derniere)) return;
 		// déjà examinée (à chaque seconde, pour chaque session) : les titres de l'index ne sont lus que pour une entrée nouvelle
 		const brute = JSON.stringify(derniere);
 		if (examinees.get(s.id) === brute) return;

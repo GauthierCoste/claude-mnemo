@@ -21,7 +21,7 @@ import type { DemandeAffinage } from '../../application/affiner.ts';
 import { traiterEvenement } from '../../application/evenements.ts';
 import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
-import { noteDuPorteur, porteursRecents, vecteurDuPorteur } from '../../application/porteurs-recents.ts';
+import { notesDuClassement, noteDuPorteur, porteursRecents, vecteurDuPorteur } from '../../application/porteurs-recents.ts';
 import { fenetreDeTranscription } from '../../infra/fenetre-transcription.ts';
 import type { EntreeHook } from '../../application/evenements.ts';
 import { filDuJour } from '../../application/fil.ts';
@@ -48,7 +48,7 @@ import type { EvenementHook, Session } from '../../domaine/session.ts';
 import { deposerFichier, ErreurEspaceInsuffisant, ErreurTropVolumineux, tropVolumineux, verifierDepot } from '../../infra/fichiers-dossier.ts';
 import { vueModeles } from './diffusion-modeles.ts';
 import { cheminDeVue, vueFiche, vueGraphe } from './memoire-vues.ts';
-import { titreDeFiche, titresDeLIndex as titresIndex, vueEcarte, vueEcarteeToujours, vueServie, vueSession, vueSessionTerminee } from './vues.ts';
+import { estTraceDeDebut, titreDeFiche, titresDeLIndex as titresIndex, vueEcarte, vueEcarteeToujours, vueServie, vueSession, vueSessionTerminee } from './vues.ts';
 
 /** Chemin d'un dépôt (`?vers=`) selon `cheminDeDepot` du domaine ; refus lisible (400). */
 function cheminDuDepot(vers: string | null): string {
@@ -395,6 +395,41 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	const avecRerankerMesure = (d: Dependances): Dependances => (ctx.dureeReranker === undefined ? d : { ...d, reranker: ctx.dureeReranker.envelopper(d.reranker) });
 	/** Dernier message porteur de chaque session (vecteur compris) : les gestes de l'interface le reprennent. */
 	const porteurs = porteursRecents();
+	/** L'affinage en cours de chaque session : une demande plus récente de la même session le coupe (caduc). */
+	const affinages = new Map<string, AbortController>();
+	/**
+	 * L'affinage du classement d'un message (spec § 3.6), après la diffusion de son entrée : le reranker s'il est en marche et
+	 * permis à la session (niveau Complets) ; sinon le sens seul, s'il manquait au hook. Ses appels au reranker ne retiennent pas
+	 * le hook ; chaque écriture de l'entrée est rediffusée (même horodatage) ; fait, la mémoire des porteurs reçoit le classement
+	 * affiné si c'est encore le dernier message porteur.
+	 */
+	const affinerLeMessage = async (s: Session, d: DemandeAffinage, controle: AbortController): Promise<void> => {
+		try {
+			const permis = modelesPermis(s.niveauModeles ?? 'complets');
+			const etatModeles = permis.reranker || (permis.sens && !d.sens) ? await ctx.modeles.etat() : null;
+			const reranker = permis.reranker && etatModeles?.reranker === 'pret';
+			const sens = !d.sens && permis.sens && etatModeles?.sens === 'pret';
+			if (!reranker && !sens) return;
+			const duree = ctx.dureeReranker;
+			const depAffinage = dependancesDeSession(duree === undefined ? dep : { ...dep, reranker: duree.envelopper(dep.reranker, { arrierePlan: true }) }, pil.etat, s.id);
+			const fait = await affiner(depAffinage, pil.etat, d, {
+				signal: controle.signal,
+				reranker,
+				...(duree === undefined ? {} : { estimer: (documents: number) => duree.estimer(documents) }),
+				diffuser: async () => {
+					// même horodatage : l'entrée du message, relue telle que l'affinage l'a laissée
+					const entree = (await pil.etat.servis(s.id, 5, 'message')).find((e) => e.horodatageMs === d.horodatageMs);
+					if (entree !== undefined) ctx.diffuser({ type: 'servi', entree: vueServie(entree, await titresDeLIndex()) });
+				},
+			});
+			const porteur = porteurs.lire(s.id);
+			if (fait !== null && porteur !== null && porteur.rang === d.rang) {
+				porteurs.noter(s.id, { ...porteur, classement: notesDuClassement(fait.classement), vecteur: fait.vecteur ?? porteur.vecteur });
+			}
+		} finally {
+			if (affinages.get(s.id) === controle) affinages.delete(s.id);
+		}
+	};
 	/** Fiches à injecter au prochain message de la session, rendues et diffusées après un changement. */
 	const aServirDiffuses = (id: string, chemins: string[]): Reponse => {
 		ctx.diffuser({ type: 'aServir', session: id, chemins });
@@ -505,7 +540,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				// le panneau n'affiche que le dernier classement : les autres entrées partent sans le leur, que la base ne lit même pas
 				const lues = await luesDe(r.id);
 				const titres = await titresDeLIndex();
-				return ok({ servis: (await pil.etat.servis(r.id, 200, undefined, { classement: 'dernier' })).map((e) => vueServie(e, titres)), lues });
+				return ok({ servis: (await pil.etat.servis(r.id, 200, undefined, { classement: 'dernier' })).filter((e) => !estTraceDeDebut(e)).map((e) => vueServie(e, titres)), lues });
 			},
 		},
 		{ methode: 'GET', chemin: ROUTES.modeles, action: async () => ok(vueModeles(await ctx.modeles.etat())) },
@@ -712,7 +747,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const depMesure = avecRerankerMesure(dep);
 				const depDuHook = entree.session === '' ? depMesure : dependancesDeSession(depMesure, pil.etat, entree.session);
 				// le classement du message, à affiner après la réponse (noté par le hook, lancé après la diffusion de son entrée)
-				const aAffiner: { demande: DemandeAffinage | null } = { demande: null };
+				const aAffiner: { demande: DemandeAffinage | null; controle: AbortController | null } = { demande: null, controle: null };
 				const reponse = await traiterEvenement(depDuHook, pil, entree, {
 					froid: 'permis',
 					...(echeance === undefined ? {} : { echeance }),
@@ -728,6 +763,10 @@ export function routes(ctx: ContexteRoutes): Route[] {
 					rattachee: (id) => pilote.reecrirePlugin(id),
 					affiner: (d) => {
 						aAffiner.demande = d;
+						// un message porteur plus récent : l'affinage du précédent est caduc, coupé avant son prochain morceau
+						affinages.get(d.session)?.abort();
+						aAffiner.controle = new AbortController();
+						affinages.set(d.session, aAffiner.controle);
 					},
 				});
 				if (entree.session !== '' && transcription !== undefined && (entree.evenement === 'message' || entree.evenement === 'apres_outil' || entree.evenement === 'arret' || entree.evenement === 'debut')) {
@@ -754,19 +793,12 @@ export function routes(ctx: ContexteRoutes): Route[] {
 						// un message porteur est journalisé même sans contexte rendu (son classement) : diffusé aussi (le WebSocket ne rediffuse pas une entrée déjà connue)
 						if (entree.evenement === 'message' || (reponse.contexte !== undefined && entree.evenement === 'debut')) {
 							// après la réponse : le hook n'attend ni la relecture du journal ni les titres de l'index
-							const demandeAffinage = aAffiner.demande;
+							const { demande: demandeAffinage, controle } = aAffiner;
 							ctx.enFond(
 								(async () => {
 									const [dernier] = await pil.etat.servis(s.id, 1);
 									if (dernier !== undefined) ctx.diffuser({ type: 'servi', entree: vueServie(dernier, await titresDeLIndex()) });
-									// puis l'affinage (spec § 3.6) : seulement si le reranker est en marche et permis à la session (niveau Complets)
-									if (demandeAffinage === null || !modelesPermis(s.niveauModeles ?? 'complets').reranker) return;
-									if ((await ctx.modeles.etat()).reranker !== 'pret') return;
-									await affiner(depDuHook, pil.etat, demandeAffinage, async () => {
-										// même horodatage : l'entrée du message, complétée
-										const [affinee] = await pil.etat.servis(s.id, 1, 'message');
-										if (affinee !== undefined && affinee.horodatageMs === demandeAffinage.horodatageMs) ctx.diffuser({ type: 'servi', entree: vueServie(affinee, await titresDeLIndex()) });
-									});
+									if (demandeAffinage !== null && controle !== null) await affinerLeMessage(s, demandeAffinage, controle);
 								})().catch(() => {}),
 							);
 						}

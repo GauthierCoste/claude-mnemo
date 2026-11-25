@@ -25,22 +25,29 @@ export type DureeDuReranker = {
 	 * null si aucun ne tient, si l'estimation n'est pas fiable, ou si un appel du reranker est en cours dans le service.
 	 */
 	documentsAuHook(restantMs: number, disponibles: number): number | null;
-	/** Appels du reranker en cours dans le service (toutes sortes : palette, hook, mesure, affinage). */
+	/**
+	 * Appels du reranker en cours dans le service qui retiennent le hook (palette, hook, mesure) ; jamais ceux de l'affinage en
+	 * arrière-plan : le hook passe avant lui, et n'attend au plus qu'un de ses morceaux (`MORCEAU_AFFINAGE`).
+	 */
 	enCours(): number;
 	/** Identité du serveur du reranker (modèle, lancement) ; une autre que la dernière vue oublie toutes les mesures. */
 	identifier(identite: string | null): void;
 	/**
-	 * Le reranker vu par le service : chaque appel est compté tant qu'il est en cours ; un appel « injection » est mesuré s'il
-	 * rend une note par document, ou noté coupé s'il ne rend rien après avoir pris tout son budget. Jamais une enveloppe
-	 * d'enveloppe : un reranker déjà enveloppé ici est rendu tel quel.
+	 * Le reranker vu par le service : chaque appel est compté tant qu'il est en cours ; un appel « injection » qu'aucun autre n'a
+	 * chevauché (il aurait attendu ou partagé le serveur) est mesuré s'il rend une note par document, ou noté coupé s'il ne rend
+	 * rien après avoir pris tout son budget. `arrierePlan` (l'affinage) : ses appels ne retiennent pas le hook (`enCours`) et ne
+	 * sont jamais notés coupés (leur budget est le reste de celui de l'affinage, pas une échéance du reranker). Jamais une
+	 * enveloppe d'enveloppe : un reranker déjà enveloppé ici est rendu tel quel.
 	 */
-	envelopper(reranker: Reranker): Reranker;
+	envelopper(reranker: Reranker, options?: { arrierePlan?: boolean }): Reranker;
 };
 
 export function dureeDuReranker(maintenant: () => number = Date.now): DureeDuReranker {
 	let mesures: MesureDuReranker[] = [];
 	let identite: string | null | undefined = undefined;
 	let enCours = 0;
+	// tous les appels en cours, de toute enveloppe : un appel qui en chevauche un autre ne mesure rien, ni l'autre
+	const actifs = new Set<{ chevauche: boolean }>();
 	const enveloppes = new WeakSet<Reranker>();
 	const valables = () => mesuresValables(mesures, maintenant());
 	const duree: DureeDuReranker = {
@@ -58,21 +65,28 @@ export function dureeDuReranker(maintenant: () => number = Date.now): DureeDuRer
 			if (identite !== undefined && nouvelle !== identite) mesures = [];
 			identite = nouvelle;
 		},
-		envelopper(reranker) {
+		envelopper(reranker, o) {
 			if (enveloppes.has(reranker)) return reranker;
+			const arrierePlan = o?.arrierePlan === true;
 			const enveloppe: Reranker = {
 				async noter(requete, textes, options) {
+					const appel = { chevauche: actifs.size > 0 };
+					for (const autre of actifs) autre.chevauche = true;
+					actifs.add(appel);
 					const mesuree = options.activite?.operation === 'injection' && textes.length > 0;
 					const debut = maintenant();
-					enCours++;
+					if (!arrierePlan) enCours++;
 					try {
 						const notes = await reranker.noter(requete, textes, options);
 						const ms = maintenant() - debut;
-						if (mesuree && notes !== null && notes.length === textes.length) duree.noter({ documents: textes.length, ms });
-						else if (mesuree && notes === null && ms >= options.budgetMs - TOLERANCE_COUPE_MS) duree.noter({ documents: textes.length, ms: Math.max(ms, options.budgetMs), censuree: true });
+						if (mesuree && !appel.chevauche && notes !== null && notes.length === textes.length) duree.noter({ documents: textes.length, ms });
+						else if (mesuree && !appel.chevauche && !arrierePlan && notes === null && ms >= options.budgetMs - TOLERANCE_COUPE_MS) {
+							duree.noter({ documents: textes.length, ms: Math.max(ms, options.budgetMs), censuree: true });
+						}
 						return notes;
 					} finally {
-						enCours--;
+						actifs.delete(appel);
+						if (!arrierePlan) enCours--;
 					}
 				},
 			};

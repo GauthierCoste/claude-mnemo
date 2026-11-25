@@ -198,11 +198,10 @@ describe('WebSocket : messages', () => {
 		await appeler(c.service.port, 'POST', ROUTES.hook, { jeton: c.service.jeton, corps: { evenement: 'message', prompt: 'Les tarifs du catalogue Alpha ?', session: UUID, horodatageMs: h, cwd: join(c.racine, 'alpha') } });
 		const servis = () => client.recus.flatMap((m) => (m.type === 'servi' ? [m.entree] : []));
 		expect(await jusqua(() => servis().some((e) => e.affinage === 'fait'), 3000)).toBe(true);
-		// le sondage peut aussi avoir vu l'état en cours entre les deux : toutes de la même entrée, la complétée en dernier
+		// l'entrée du hook, puis en cours, puis complétée : toujours la même entrée
 		await new Promise((r) => setTimeout(r, 300));
 		expect(servis().map((e) => e.horodatageMs)).toEqual(servis().map(() => h));
-		expect(servis()[0]!.affinage).not.toBe('fait');
-		expect(servis().at(-1)).toMatchObject({ horodatageMs: h, affinage: 'fait' });
+		expect(servis().map((e) => e.affinage ?? null)).toEqual([null, 'en_cours', 'fait']);
 	});
 
 	it('affinage : une entrée d’après un outil arrivée pendant le reranker ne le rend pas caduc ; l’entrée du message est écrite et diffusée', { timeout: 20_000 }, async () => {
@@ -232,6 +231,18 @@ describe('WebSocket : messages', () => {
 		expect(await jusqua(() => servis().some((e) => e.affinage === 'fait'), 3000)).toBe(true);
 		expect(servis().find((e) => e.affinage === 'fait')).toMatchObject({ horodatageMs: h });
 		expect((await c.etat.servis(UUID, 1, 'message'))[0]).toMatchObject({ horodatageMs: h, affinage: 'fait' });
+	});
+
+	it('la trace d’un /clear au journal n’est jamais diffusée ni rendue par GET servis', { timeout: 20_000 }, async () => {
+		const c = await serviceFaux({ sondageMs: 100 }, { avant: async (etat) => etat.creer(sessionFixe(UUID)) });
+		const client = await connecter(c);
+		await jusqua(() => client.recus.length > 0, 2000);
+		await appeler(c.service.port, 'POST', ROUTES.hook, { jeton: c.service.jeton, corps: { evenement: 'debut', source: 'clear', session: UUID, horodatageMs: Date.now(), cwd: join(c.racine, 'alpha') } });
+		expect((await c.etat.servis(UUID, 1))[0]).toMatchObject({ moment: 'debut' });
+		await new Promise((r) => setTimeout(r, 500));
+		expect(client.recus.filter((m) => m.type === 'servi')).toEqual([]);
+		const r = await appeler(c.service.port, 'GET', ROUTES.servis.replace(':id', UUID), { jeton: c.service.jeton });
+		expect((r.corps as { servis: unknown[] }).servis).toEqual([]);
 	});
 
 	it('sondage : une carte journalisée hors service porte le titre de l\'index (pas le nom du fichier)', { timeout: 20_000 }, async () => {

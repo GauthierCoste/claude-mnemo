@@ -614,7 +614,7 @@ describe('traiterEvenement : contexte sobre au message', () => {
 	});
 
 	it('requête jointe (réglage interne) : un message court reprend le message porteur d’avant, jamais un muet ; par défaut, le message seul', async () => {
-		const { dep, pil } = await memoire();
+		const { dep, etat, pil } = await memoire();
 		const vus: string[] = [];
 		dep.sens = { modele: () => 'espion@1', vecteurs: async (textes) => (vus.push(...textes), textes.map(() => Float32Array.from([1, 0]))) };
 		await traiterEvenement(dep, pil, message(10, 'les avoirs du catalogue de la refonte'), local);
@@ -625,8 +625,9 @@ describe('traiterEvenement : contexte sobre au message', () => {
 		vus.length = 0;
 		await traiterEvenement(dep, pil, message(13, 'et pour les factures annulées ?'), local);
 		expect(vus).toEqual(['et pour les factures annulées ?']);
-		// après un /clear, Claude ne voit plus l'échange d'avant : le message seul
+		// après un /clear, Claude ne voit plus l'échange d'avant : sa trace au journal (une entrée de début), puis le message seul
 		await traiterEvenement(dep, pil, entree('debut', 14, { source: 'clear' }), local);
+		expect((await etat.servis(ID, 1))[0]).toMatchObject({ moment: 'debut', horodatageMs: 14, ids: [], texte: '' });
 		vus.length = 0;
 		await traiterEvenement(dep, pil, message(15, 'et pour les factures annulées ?'), { ...local, varianteRequete: 'jointe' });
 		expect(vus).toEqual(['et pour les factures annulées ?']);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { affiner, BUDGET_AFFINAGE_MS, CANDIDATES_AFFINEES, candidatesAffinees, morceaux } from '../../src/application/affiner.ts';
+import { AFFINEES_MAX, affiner, BUDGET_AFFINAGE_MS, CANDIDATES_AFFINEES, candidatesAffinees, morceaux } from '../../src/application/affiner.ts';
 import type { DemandeAffinage } from '../../src/application/affiner.ts';
 import type { LigneDeClassement } from '../../src/application/classement-du-message.ts';
 import type { Affinage, Classe, Dependances, OptionsModele } from '../../src/application/ports.ts';
@@ -58,13 +58,13 @@ function dependances(options: { logitDe?: (texte: string) => number; delaiMs?: n
 
 /** L'état : l'entrée la plus récente de la session, à cet horodatage ; une entrée plus récente (`suivante`) rend caduc. */
 function etatFaux(horodatageMs: number) {
-	const ecritures: { classement: Classe[]; affinage: Affinage }[] = [];
+	const ecritures: { classement: Classe[]; affinage: Affinage | null; sens: boolean }[] = [];
 	const etat = {
 		suivante: false,
 		ecritures,
-		async completerClassement(session: string, h: number, classement: Classe[], affinage: Affinage) {
+		async completerClassement(session: string, h: number, classement: Classe[], affinage: Affinage | null, options?: { sens?: boolean }) {
 			if (etat.suivante || session !== 's1' || h !== horodatageMs) return false;
-			ecritures.push({ classement, affinage });
+			ecritures.push({ classement, affinage, sens: options?.sens === true });
 			return true;
 		},
 	};
@@ -74,6 +74,7 @@ function etatFaux(horodatageMs: number) {
 const demande = (surcharge: Partial<DemandeAffinage> = {}): DemandeAffinage => ({
 	session: 's1',
 	horodatageMs: 100,
+	rang: 3,
 	requete: 'le devis des vitraux',
 	classement: Array.from({ length: 40 }, (_, i) => ligne(i)),
 	sens: true,
@@ -81,103 +82,149 @@ const demande = (surcharge: Partial<DemandeAffinage> = {}): DemandeAffinage => (
 });
 
 describe('candidatesAffinees', () => {
-	it(`les ${CANDIDATES_AFFINEES} premières de l'ordre, plus les désignées par un signal plus loin`, () => {
-		const lignes = Array.from({ length: 40 }, (_, i) => ligne(i, i === 35 ? { signaux: { ...ligne(35).signaux, signalSession: 0.3 } } : {}));
-		const c = candidatesAffinees(lignes);
+	it(`les ${CANDIDATES_AFFINEES} premières de l'ordre, plus les désignées par un signal plus loin ; ${AFFINEES_MAX} au plus`, () => {
+		const designee = (i: number) => ligne(i, { signaux: { ...ligne(i).signaux, signalSession: 0.3 } });
+		const c = candidatesAffinees(Array.from({ length: 40 }, (_, i) => (i === 35 ? designee(i) : ligne(i))));
 		expect(c).toHaveLength(CANDIDATES_AFFINEES + 1);
 		expect(c.at(-1)).toBe('notes/f35.md');
+		expect(candidatesAffinees(Array.from({ length: 60 }, (_, i) => designee(i)))).toHaveLength(AFFINEES_MAX);
 	});
 });
 
 describe('morceaux', () => {
-	it('un appel ; ou trois morceaux, 8, 5 puis le reste, quand l’estimation est à faire', () => {
-		expect(morceaux(30, false)).toEqual([[0, 30]]);
-		expect(morceaux(30, true)).toEqual([[0, 8], [8, 5], [13, 17]]);
-		// moins de candidates : toujours trois appels (trois mesures), tant qu'il y en a trois
-		expect(morceaux(14, true)).toEqual([[0, 8], [8, 5], [13, 1]]);
-		expect(morceaux(10, true)).toEqual([[0, 8], [8, 1], [9, 1]]);
-		expect(morceaux(3, true)).toEqual([[0, 1], [1, 1], [2, 1]]);
-		expect(morceaux(2, true)).toEqual([[0, 1], [1, 1]]);
-		expect(morceaux(1, true)).toEqual([[0, 1]]);
+	it('un seul pour peu de candidates ; sinon des morceaux de 10 ; l’estimation à faire : d’abord 5 et 8 (tailles différentes)', () => {
 		expect(morceaux(0, true)).toEqual([]);
+		expect(morceaux(7, true)).toEqual([[0, 7]]);
+		expect(morceaux(10, false)).toEqual([[0, 10]]);
+		expect(morceaux(30, false)).toEqual([[0, 10], [10, 10], [20, 10]]);
+		expect(morceaux(30, true)).toEqual([[0, 5], [5, 8], [13, 10], [23, 7]]);
+		expect(morceaux(12, true)).toEqual([[0, 5], [5, 7]]);
 	});
 });
 
 describe('affiner', () => {
-	it('reclasse les 30 premières par le reranker : en cours, puis fait, même entrée ; diffusé une fois ; rien d’autre', async () => {
+	it('reclasse les 30 premières en trois morceaux de 10 : en cours puis fait, même entrée, diffusée à chaque écriture ; rang du hook gardé ; rien d’autre', async () => {
 		// le reranker préfère la fiche 20 (loin dans l'ordre du hook)
 		const { dep, appels, ecrits } = dependances({ logitDe: (t) => (t.includes('Fiche 20') ? 4 : -1) });
 		const etat = etatFaux(100);
 		let diffusions = 0;
-		const affine = await affiner(dep, etat, demande(), async () => {
-			diffusions++;
+		const r = await affiner(dep, etat, demande(), {
+			diffuser: async () => {
+				diffusions++;
+			},
 		});
 		expect(etat.ecritures.map((e) => e.affinage)).toEqual(['en_cours', 'fait']);
 		// en cours : le classement du hook tel quel
 		expect(etat.ecritures[0]!.classement[0]!.id).toBe('notes/f0.md');
-		expect(affine![0]).toMatchObject({ id: 'notes/f20.md', rang: 1, signaux: { logit: 4 } });
+		expect(r!.classement[0]).toMatchObject({ id: 'notes/f20.md', rang: 1, rangHook: 21, signaux: { logit: 4 } });
+		expect(r!.classement[1]).toMatchObject({ id: 'notes/f0.md', rang: 2, rangHook: 1 });
 		// les notées d'abord (30), puis les autres dans leur ordre
-		expect(affine!.filter((l) => l.signaux?.logit !== undefined)).toHaveLength(CANDIDATES_AFFINEES);
-		expect(affine![CANDIDATES_AFFINEES]!.id).toBe('notes/f30.md');
-		expect(appels).toHaveLength(1);
-		expect(appels[0]!.textes).toHaveLength(CANDIDATES_AFFINEES);
+		expect(r!.classement.filter((l) => l.signaux?.logit !== undefined)).toHaveLength(CANDIDATES_AFFINEES);
+		expect(r!.classement[CANDIDATES_AFFINEES]!.id).toBe('notes/f30.md');
+		expect(appels.map((a) => a.textes.length)).toEqual([10, 10, 10]);
 		expect(appels[0]!.options).toMatchObject({ demarrer: false, activite: { operation: 'injection' } });
 		expect(appels[0]!.options.budgetMs).toBeLessThanOrEqual(BUDGET_AFFINAGE_MS);
 		expect(appels[0]!.textes[0]).toContain('Fiche 0');
-		expect(diffusions).toBe(1);
+		expect(r!.vecteur).toBeNull();
+		expect(etat.ecritures[1]!.sens).toBe(false);
+		expect(diffusions).toBe(2);
 		expect(ecrits).toEqual([]);
 	});
 
-	it('estimation à faire : l’appel en morceaux de 8, 5 puis le reste, mêmes notes', async () => {
-		const { dep, appels } = dependances({ logitDe: (t) => (t.includes('Fiche 20') ? 4 : -1) });
-		const affine = await affiner(dep, etatFaux(100), demande({ mesurer: true }));
-		expect(appels.map((a) => a.textes.length)).toEqual([8, 5, 17]);
-		expect(affine![0]).toMatchObject({ id: 'notes/f20.md', signaux: { logit: 4 } });
+	it('les notes du hook sont gardées, jamais recalculées : seules les autres candidates sont soumises', async () => {
+		const lignes = Array.from({ length: 12 }, (_, i) => ligne(i, i < 3 ? { logit: 2 } : {}));
+		const { dep, appels } = dependances({ logitDe: () => -1 });
+		const r = await affiner(dep, etatFaux(100), demande({ classement: lignes }));
+		expect(appels.map((a) => a.textes.length)).toEqual([9]);
+		expect(appels[0]!.textes.some((t) => t.includes('Fiche 0'))).toBe(false);
+		expect(r!.classement.slice(0, 3).map((l) => [l.id, l.signaux?.logit])).toEqual([
+			['notes/f0.md', 2],
+			['notes/f1.md', 2],
+			['notes/f2.md', 2],
+		]);
 	});
 
-	it('caduc : une entrée plus récente dans la session → rien n’est écrit ni diffusé', async () => {
+	it('estimation à faire : les premiers morceaux de 5 puis 8, mêmes notes', async () => {
+		const { dep, appels } = dependances({ logitDe: (t) => (t.includes('Fiche 20') ? 4 : -1) });
+		const r = await affiner(dep, etatFaux(100), demande({ mesurer: true }));
+		expect(appels.map((a) => a.textes.length)).toEqual([5, 8, 10, 7]);
+		expect(r!.classement[0]).toMatchObject({ id: 'notes/f20.md', signaux: { logit: 4 } });
+	});
+
+	it('caduc avant de commencer : rien n’est écrit ni diffusé, aucun appel', async () => {
 		const { dep, appels } = dependances();
 		const etat = etatFaux(100);
 		etat.suivante = true;
 		let diffusions = 0;
-		expect(await affiner(dep, etat, demande(), async () => void diffusions++)).toBeNull();
+		expect(await affiner(dep, etat, demande(), { diffuser: async () => void diffusions++ })).toBeNull();
 		expect(etat.ecritures).toEqual([]);
 		expect(appels).toEqual([]);
 		expect(diffusions).toBe(0);
 	});
 
-	it('caduc pendant le reranker : en cours écrit, le résultat ni écrit ni diffusé', async () => {
+	it('coupé par une demande plus récente pendant un morceau : pas de morceau suivant, l’entrée revient sans état d’affinage', async () => {
+		const { dep, appels } = dependances({ delaiMs: 30, logitDe: () => 4 });
+		const etat = etatFaux(100);
+		const controle = new AbortController();
+		const enCours = affiner(dep, etat, demande(), { signal: controle.signal });
+		await new Promise((r) => setTimeout(r, 10));
+		controle.abort();
+		expect(await enCours).toBeNull();
+		expect(appels).toHaveLength(1);
+		expect(etat.ecritures.map((e) => e.affinage)).toEqual(['en_cours', null]);
+		expect(etat.ecritures[1]!.classement).toEqual(etat.ecritures[0]!.classement);
+	});
+
+	it('caduc à l’écriture finale (un message plus récent, journalisé hors service) : rien de plus n’est écrit', async () => {
 		const { dep } = dependances({ delaiMs: 20 });
 		const etat = etatFaux(100);
 		let diffusions = 0;
-		const enCours = affiner(dep, etat, demande(), async () => void diffusions++);
+		const enCours = affiner(dep, etat, demande(), { diffuser: async () => void diffusions++ });
 		await new Promise((r) => setTimeout(r, 5));
 		etat.suivante = true;
 		expect(await enCours).toBeNull();
 		expect(etat.ecritures.map((e) => e.affinage)).toEqual(['en_cours']);
-		expect(diffusions).toBe(0);
 	});
 
-	it('budget dépassé : sans notes du reranker, le classement du hook, fait', async () => {
+	it('budget dépassé : sans notes ajoutées, l’entrée garde le classement du hook, sans état d’affinage', async () => {
 		const { dep, appels } = dependances({ delaiMs: 200, logitDe: () => 4 });
 		const etat = etatFaux(100);
 		const debut = Date.now();
-		const affine = await affiner(dep, etat, demande({ budgetMs: 50 }));
+		expect(await affiner(dep, etat, demande({ budgetMs: 50 }))).toBeNull();
 		expect(Date.now() - debut).toBeLessThan(150);
+		expect(appels).toHaveLength(1);
 		expect(appels[0]!.options.budgetMs).toBeLessThanOrEqual(50);
-		expect(affine!.map((l) => l.id)).toEqual(demande().classement.map((l) => l.chemin));
-		expect(affine!.some((l) => l.signaux?.logit !== undefined)).toBe(false);
-		expect(etat.ecritures.map((e) => e.affinage)).toEqual(['en_cours', 'fait']);
+		expect(etat.ecritures.map((e) => e.affinage)).toEqual(['en_cours', null]);
+		expect(etat.ecritures[1]!.classement.map((l) => l.id)).toEqual(demande().classement.map((l) => l.chemin));
 	});
 
-	it('sens absent au hook : l’affinage calcule les cosinus (la plus proche monte), puis le reranker', async () => {
+	it('estimation plus longue que le budget restant : aucun appel, rien d’ajouté', async () => {
+		const { dep, appels } = dependances({ logitDe: () => 4 });
+		const etat = etatFaux(100);
+		expect(await affiner(dep, etat, demande(), { estimer: () => BUDGET_AFFINAGE_MS + 1 })).toBeNull();
+		expect(appels).toEqual([]);
+		expect(etat.ecritures.map((e) => e.affinage)).toEqual(['en_cours', null]);
+	});
+
+	it('sens absent au hook : l’affinage calcule les cosinus (la plus proche monte) et le vecteur, noté sens ; puis le reranker', async () => {
 		const lignes = Array.from({ length: 40 }, (_, i) => ligne(i, { note: null, signaux: { ...ligne(i).signaux, cosinus: null, cosinusRelatif: null, cosinusZ: null } }));
 		const { dep, appels, appelsSens } = dependances({ reranker: false });
-		const affine = await affiner(dep, etatFaux(100), demande({ sens: false, classement: lignes }));
+		const etat = etatFaux(100);
+		const r = await affiner(dep, etat, demande({ sens: false, classement: lignes }));
 		expect(appelsSens).toEqual([['le devis des vitraux']]);
-		expect(affine![0]).toMatchObject({ id: 'notes/f5.md', signaux: { cosinus: 0.95 } });
-		expect(affine![0]!.signaux!.cosinusZ).toBeGreaterThan(0);
-		// soumises au reranker dans le nouvel ordre
+		expect(r!.classement[0]).toMatchObject({ id: 'notes/f5.md', signaux: { cosinus: 0.95 } });
+		expect(r!.classement[0]!.signaux!.cosinusZ).toBeGreaterThan(0);
+		expect(r!.vecteur?.modele).toBe('faux@1');
+		expect(etat.ecritures.at(-1)).toMatchObject({ affinage: 'fait', sens: true });
+		// soumises au reranker dans le nouvel ordre (il ne répond pas ici)
 		expect(appels[0]!.textes[0]).toContain('Fiche 5');
+	});
+
+	it('le sens seul (reranker pas en marche) : aucun appel au reranker', async () => {
+		const lignes = Array.from({ length: 12 }, (_, i) => ligne(i, { note: null, signaux: { ...ligne(i).signaux, cosinus: null, cosinusRelatif: null, cosinusZ: null } }));
+		const { dep, appels } = dependances();
+		const r = await affiner(dep, etatFaux(100), demande({ sens: false, classement: lignes }), { reranker: false });
+		expect(appels).toEqual([]);
+		expect(r!.classement[0]!.id).toBe('notes/f5.md');
 	});
 });

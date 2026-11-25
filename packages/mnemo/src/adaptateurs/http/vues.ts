@@ -65,6 +65,11 @@ export async function titresDeLIndex(index: { titres(): Promise<{ chemin: string
 /** Lignes du classement envoyées au panneau Contexte : il en montre le haut ; le journal garde le reste (apprentissage). */
 export const CLASSEMENT_VU_MAX = 30;
 
+/** Trace d'un /clear ou /compact au journal (entrée de début sans rien servi) : pour le message d'avant, jamais montrée. */
+export function estTraceDeDebut(e: Pick<EntreeServie, 'moment' | 'ids' | 'texte'>): boolean {
+	return e.moment === 'debut' && e.ids.length === 0 && e.texte === '';
+}
+
 export function vueServie(e: EntreeServie, titres: ReadonlyMap<string, string> = new Map()): EntreeServieVue {
 	return {
 		session: e.session,

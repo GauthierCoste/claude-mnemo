@@ -233,10 +233,27 @@ describe('etat.sqlite', () => {
 		expect(dix!.classement).toEqual(avant);
 		expect((await etat.servis('s2', 1))[0]!.classement).toEqual(avant);
 		expect(await etat.completerClassement('s1', 99, apres, 'fait')).toBe(false);
-		// une entrée d'après un outil, plus récente : l'affinage du message reste écrit
+		// une entrée d'après un outil, un message muet, une trace de /clear, plus récents : l'affinage du message reste écrit
 		await etat.journaliser({ ...entree, moment: 'apres_outil', session: 's1', horodatageMs: 30, classement: [] });
-		expect(await etat.completerClassement('s1', 20, avant, 'fait')).toBe(true);
-		expect((await etat.servis('s1', 1, 'message'))[0]!.classement).toEqual(avant);
+		await etat.journaliser({ ...entree, session: 's1', horodatageMs: 31, classement: [], muet: 'sans_contenu' });
+		await etat.journaliser({ ...entree, moment: 'debut', session: 's1', horodatageMs: 32, classement: [], demande: null });
+		expect(await etat.completerClassement('s1', 20, avant, 'fait', { sens: true })).toBe(true);
+		expect((await etat.servis('s1', 5, 'message')).find((e) => e.horodatageMs === 20)).toMatchObject({ classement: avant, sens: true, affinage: 'fait' });
+		// le classement lu « dernier » : celui de la dernière entrée qui n'est pas une trace de début
+		await etat.journaliser({ ...entree, moment: 'debut', session: 's2', horodatageMs: 25, classement: [], demande: null });
+		const [debutS2, messageS2] = await etat.servis('s2', 2, undefined, { classement: 'dernier' });
+		expect(debutS2!.moment).toBe('debut');
+		expect(messageS2!.classement).toEqual(avant);
+		// rien d'ajouté : l'état d'affinage revient à null
+		expect(await etat.completerClassement('s1', 20, avant, null)).toBe(true);
+		expect((await etat.servis('s1', 5, 'message')).find((e) => e.horodatageMs === 20)).not.toHaveProperty('affinage');
+		// caduc (un message porteur plus récent) : rien n'est écrit, un affinage en cours revient à null
+		await etat.completerClassement('s1', 20, avant, 'en_cours');
+		await etat.journaliser({ ...entree, session: 's1', horodatageMs: 40, classement: [] });
+		expect(await etat.completerClassement('s1', 20, apres, 'fait')).toBe(false);
+		const vingtCaduc = (await etat.servis('s1', 10, 'message')).find((e) => e.horodatageMs === 20)!;
+		expect(vingtCaduc.classement).toEqual(avant);
+		expect(vingtCaduc).not.toHaveProperty('affinage');
 	});
 
 	it('journal : un même instant ne s’écrit qu’une fois par session et par moment (repli local du hook)', async () => {
@@ -609,11 +626,6 @@ describe('etat.sqlite', () => {
 		await etat.oublierInjections('s1');
 		expect(await etat.perimetrePropose('s1')).toBeNull();
 		expect(await etat.cartesProposees('s1')).toEqual(new Map());
-		// l'instant du /clear, s'il est donné, est gardé dans la session (jamais reculé)
-		expect((await etat.lire('s1'))?.dernierDebutMs).toBeUndefined();
-		await etat.oublierInjections('s1', 50);
-		await etat.oublierInjections('s1', 40);
-		expect((await etat.lire('s1'))?.dernierDebutMs).toBe(50);
 		await etat.noterCarteProposee('s1', { chemin: 'b.md', empreinte: 'e2', horodatageMs: 11 });
 		await etat.modifier('s1', { etat: 'terminee' });
 		expect(await etat.supprimer('s1')).toBe('supprimee');

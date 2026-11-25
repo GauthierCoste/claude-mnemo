@@ -76,22 +76,18 @@ describe('ouvrirJournalEnLecture', () => {
 		expect(versionDe(chemin).v).toBe(13);
 	});
 
-	it('le dernier /clear gardé dans la session borne le message d’avant ; une base sans lui : comme avant', async () => {
+	it('banc : la trace d’un /clear au journal (entrée de début) arrête le message d’avant, comme au hook', async () => {
 		const chemin = await etatEnVersion(13);
 		const etat = ouvrirEtat(chemin);
-		await etat.oublierInjections('s1', 11);
+		await etat.journaliser({ session: 's1', moment: 'debut', horodatageMs: 11, ids: [], texte: '', ms: 0, sens: false, demande: null, classement: [], muet: null, cartes: [], position: null });
 		etat.fermer();
 		const journal = ouvrirJournalEnLecture(chemin);
-		expect((await journal.session('s1'))?.dernierDebutMs).toBe(11);
 		const messages = await messagesDuJournal(journal);
 		journal.fermer();
-		// le message 12 vient après le /clear de 11 : le message 10 n'est plus son message d'avant ; le 10, rejoué, n'est pas borné
-		expect(messages.map((m) => m.precedent)).toEqual([null, null]);
-		const ancien = await etatEnVersion(11);
-		const journalAncien = ouvrirJournalEnLecture(ancien);
-		expect((await journalAncien.session('s1'))).not.toHaveProperty('dernierDebutMs');
-		expect((await messagesDuJournal(journalAncien)).map((m) => m.precedent)).toEqual([null, 'Comment cuire les grisailles du vitrail ?']);
-		journalAncien.fermer();
+		expect(messages.map((m) => [m.message, m.precedent])).toEqual([
+			['Comment cuire les grisailles du vitrail ?', null],
+			['Et les températures du four pour la cuisson ?', null],
+		]);
 	});
 
 	it('une version antérieure à 11 est refusée clairement, sans migration', async () => {

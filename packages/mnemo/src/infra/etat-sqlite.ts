@@ -184,8 +184,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 	perimetre_propose_ms INTEGER,
 	messages_porteurs INTEGER NOT NULL DEFAULT 0,
 	niveau_modeles TEXT,
-	dernier_message TEXT,
-	dernier_debut_ms INTEGER
+	dernier_message TEXT
 );
 CREATE TABLE IF NOT EXISTS servis (
 	rang INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -279,7 +278,6 @@ function ligneVersSession(l: Ligne): Session {
 		dossierNonRattache: l.dossier_non_rattache === 1,
 		// une valeur qui n'est pas un niveau est ignorée : la session suit le niveau de la machine
 		...(estNiveauModeles(l.niveau_modeles) ? { niveauModeles: l.niveau_modeles } : {}),
-		...(typeof l.dernier_debut_ms === 'number' ? { dernierDebutMs: l.dernier_debut_ms } : {}),
 	};
 }
 
@@ -440,17 +438,14 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				// 12 → 13 : le journal durable des gestes, le dernier message porteur des sessions, le rang du message des entrées servies
 				base.exec(SCHEMA_GESTES);
 				if (!colonnesSessions.includes('dernier_message')) base.exec('ALTER TABLE sessions ADD COLUMN dernier_message TEXT');
-				if (!colonnesSessions.includes('dernier_debut_ms')) base.exec('ALTER TABLE sessions ADD COLUMN dernier_debut_ms INTEGER');
 				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesServis.includes('rang_message')) base.exec('ALTER TABLE servis ADD COLUMN rang_message INTEGER');
 				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
 				if (!colonnesServis.includes('ms_service')) base.exec('ALTER TABLE servis ADD COLUMN ms_service INTEGER');
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
 			} else if (version === VERSION_ETAT) {
-				// 13 non publiée : un état déjà en 13 (développement) reçoit l'état d'affinage du classement, la durée vue du service,
-				// l'instant du dernier /clear et les écartées toujours
-				const colonnesSessions = (base.prepare('PRAGMA table_info(sessions)').all() as Ligne[]).map((c) => c.name);
-				if (!colonnesSessions.includes('dernier_debut_ms')) base.exec('ALTER TABLE sessions ADD COLUMN dernier_debut_ms INTEGER');
+				// 13 non publiée : un état déjà en 13 (développement) reçoit l'état d'affinage du classement, la durée vue du service
+				// et les écartées toujours
 				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
 				if (!colonnesServis.includes('ms_service')) base.exec('ALTER TABLE servis ADD COLUMN ms_service INTEGER');
@@ -734,27 +729,33 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 			});
 		},
 
-		async completerClassement(session, horodatageMs, classement, affinage) {
+		async completerClassement(session, horodatageMs, classement, affinage, options) {
 			return ecrire(() => {
-				// seulement l'entrée de message la plus récente de la session : un message plus récent rend l'affinage caduc (une
-				// entrée d'après un outil, non : Claude en enchaîne souvent un juste après le message)
+				// seulement l'entrée de message porteur la plus récente de la session : un message porteur plus récent rend l'affinage
+				// caduc (une entrée d'après un outil ou un message muet, non : Claude enchaîne souvent un outil juste après le message)
 				const { changes } = base
 					.prepare(
-						`UPDATE servis SET classement = ?, affinage = ?
-						WHERE rang = (SELECT MAX(rang) FROM servis WHERE session = ? AND moment = 'message') AND session = ? AND horodatage_ms = ? AND moment = 'message'`,
+						`UPDATE servis SET classement = ?, affinage = ?, sens = CASE WHEN ? THEN 1 ELSE sens END
+						WHERE rang = (SELECT MAX(rang) FROM servis WHERE session = ? AND moment = 'message' AND muet IS NULL) AND session = ? AND horodatage_ms = ? AND moment = 'message'`,
 					)
-					.run(JSON.stringify(classement), affinage, session, session, horodatageMs);
-				if (changes > 0) ecriture(session);
-				return changes > 0;
+					.run(JSON.stringify(classement), affinage, options?.sens === true ? 1 : 0, session, session, horodatageMs);
+				if (changes > 0) {
+					ecriture(session);
+					return true;
+				}
+				// caduc : l'entrée ne garde pas un affinage « en cours » qui ne finira jamais
+				const remise = base.prepare(`UPDATE servis SET affinage = NULL WHERE session = ? AND horodatage_ms = ? AND moment = 'message' AND affinage IS NOT NULL`).run(session, horodatageMs);
+				if (remise.changes > 0) ecriture(session);
+				return false;
 			});
 		},
 
 		async servis(session, limite, moment, options) {
-			// `dernier` : le JSON du classement n'est lu que pour l'entrée la plus récente rendue
+			// `dernier` : le JSON du classement n'est lu que pour l'entrée la plus récente rendue (hors trace d'un /clear, qui n'en a pas)
 			const colonnes =
 				options?.classement === 'dernier'
 					? `session, moment, horodatage_ms, ids, texte, ms, sens, demande, muet, cartes, position, rang_message, affinage, ms_service,
-						CASE WHEN rang = (SELECT MAX(rang) FROM servis WHERE session = ?1${moment === undefined ? '' : ' AND moment = ?2'}) THEN classement ELSE '[]' END AS classement`
+						CASE WHEN rang = (SELECT MAX(rang) FROM servis WHERE session = ?1 AND NOT (moment = 'debut' AND ids = '[]' AND texte = '')${moment === undefined ? '' : ' AND moment = ?2'}) THEN classement ELSE '[]' END AS classement`
 					: '*';
 			const filtre = moment === undefined ? 'session = ?1' : 'session = ?1 AND moment = ?2';
 			const parametres = moment === undefined ? [session, limite] : [session, moment, limite];
@@ -828,9 +829,8 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 			);
 		},
 
-		async oublierInjections(session, instantMs) {
+		async oublierInjections(session) {
 			ecrire(() => {
-				if (instantMs !== undefined) base.prepare('UPDATE sessions SET dernier_debut_ms = MAX(COALESCE(dernier_debut_ms, 0), ?) WHERE id = ?').run(instantMs, session);
 				base.prepare('UPDATE fiches_servies_lues_ecrites SET empreinte_injectee = NULL WHERE session = ?').run(session);
 				base.prepare('DELETE FROM cartes_proposees WHERE session = ?').run(session);
 				base.prepare('UPDATE sessions SET perimetre_propose_ms = NULL WHERE id = ?').run(session);

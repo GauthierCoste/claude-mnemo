@@ -52,8 +52,6 @@ export type Session = {
 	 * (`niveauEffectif`). Gardé à la reprise.
 	 */
 	niveauModeles?: NiveauModeles;
-	/** Instant du dernier `/clear` ou `/compact` : Claude ne voit plus rien d'avant (le message d'avant ne remonte pas plus loin). */
-	dernierDebutMs?: number | null;
 };
 
 /** Un dialogue de Claude Code (permission) attend peut-être l'utilisateur : la dernière chose vue est une `Notification`. */

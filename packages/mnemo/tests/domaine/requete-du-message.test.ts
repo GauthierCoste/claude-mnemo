@@ -61,14 +61,6 @@ describe('message porteur d’avant', () => {
 		expect(messagePrecedent(entrees, T)).toBeNull();
 	});
 
-	it('le dernier /clear gardé dans la session : on ne remonte pas avant lui ; venu après le message, il ne le borne pas', () => {
-		const entrees = [message(T - 3000, 'le devis des vitraux')];
-		expect(messagePrecedent(entrees, T, T - 2000)).toBeNull();
-		expect(messagePrecedent(entrees, T, T - 4000)).toBe('le devis des vitraux');
-		expect(messagePrecedent(entrees, T, T + 5000)).toBe('le devis des vitraux');
-		expect(messagePrecedent(entrees, T, null)).toBe('le devis des vitraux');
-	});
-
 	it('dans les dernières entrées seulement (la même fenêtre au hook et au banc)', () => {
 		const muets = Array.from({ length: ENTREES_DU_PRECEDENT }, (_, i) => message(T - 100 + i, 'ok merci'));
 		expect(messagePrecedent([message(T - 1000, 'le devis des vitraux'), ...muets], T)).toBeNull();

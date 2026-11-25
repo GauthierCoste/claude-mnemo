@@ -8,6 +8,8 @@ import { ENTETE_REMPLACEMENT, ROUTES } from '@mnemo/contrat';
 import type { FicheVue, ReponseProfils, SessionVue } from '@mnemo/contrat';
 import { PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
+import { vectoriser } from '../../src/application/vectoriser.ts';
+import type { GesteANoter } from '../../src/application/ports.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { texteDuRefus } from '../../src/domaine/refus-outil.ts';
 import { ecrirePlugin } from '../../src/infra/claude.ts';
@@ -460,9 +462,9 @@ describe('routes : hook', () => {
 		expect(appels.at(-1)).toMatchObject({ operation: 'injection', demarrer: false });
 		liberer();
 		expect(await jusqua(async () => (await c.etat.servis(UUID, 1))[0]!.affinage === 'fait', 2000)).toBe(true);
-		// estimation à faire : trois morceaux (une candidate chacun ici)
+		// peu de candidates : un seul morceau
 		const avant = appels.length;
-		expect(avant).toBe(3);
+		expect(avant).toBe(1);
 		const [affinee] = await c.etat.servis(UUID, 1);
 		expect(affinee!.horodatageMs).toBe(h);
 		expect(affinee!.classement[0]!.signaux).toMatchObject({ logit: 5 });
@@ -470,6 +472,75 @@ describe('routes : hook', () => {
 		await api(c).post(ROUTES.hook, { ...entree, evenement: 'apres_outil', horodatageMs: Date.now(), outil: { nom: 'Read', entree: {} } });
 		await new Promise((r) => setTimeout(r, 100));
 		expect(appels.length).toBe(avant);
+	});
+
+	it('POST hook message : un message porteur plus récent coupe l’affinage du précédent (caduc, sans état d’affinage) ; le sien est fait', async () => {
+		const c = await serviceFaux();
+		for (const nom of ['tarifs', 'remises', 'devis']) {
+			await c.dep.coffre.ecrire(`projets/alpha/${nom}.md`, `---\nid: 01${nom.toUpperCase()}\ntype: note\nupdated: 2026-11-01\n---\n# Catalogue ${nom}\n\nLes ${nom} du catalogue Alpha.\n`);
+		}
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		await c.etat.creer(sessionFixe(UUID, { objectif: null }));
+		c.modeles.vue = { ...c.modeles.vue, reranker: 'pret' };
+		const liberes: (() => void)[] = [];
+		let appels = 0;
+		c.dep.reranker = {
+			noter: async (_requete, textes) => {
+				appels++;
+				await new Promise<void>((r) => liberes.push(r));
+				return textes.map((_t, i) => (i === 0 ? -3 : 2));
+			},
+		};
+		const entree = { session: UUID, cwd: join(c.racine, 'alpha') };
+		const h1 = Date.now();
+		await api(c).post(ROUTES.hook, { ...entree, evenement: 'message', horodatageMs: h1, prompt: 'Où en est le catalogue Alpha ?' });
+		expect(await jusqua(() => appels === 1, 2000)).toBe(true);
+		const h2 = h1 + 1;
+		await api(c).post(ROUTES.hook, { ...entree, evenement: 'message', horodatageMs: h2, prompt: 'Et les remises du catalogue Alpha ?' });
+		expect(await jusqua(() => appels === 2, 2000)).toBe(true);
+		for (const l of liberes) l();
+		const message = async (h: number) => (await c.etat.servis(UUID, 5, 'message')).find((e) => e.horodatageMs === h)!;
+		expect(await jusqua(async () => (await message(h2)).affinage === 'fait', 2000)).toBe(true);
+		expect(await jusqua(async () => (await message(h1)).affinage === undefined, 2000)).toBe(true);
+		expect((await message(h1)).classement.some((l) => l.signaux?.logit !== undefined)).toBe(false);
+	});
+
+	it('POST hook message : sens absent au hook, reranker arrêté : l’arrière-plan calcule le sens seul', async () => {
+		const c = await serviceFaux();
+		for (const nom of ['tarifs', 'remises', 'devis']) {
+			await c.dep.coffre.ecrire(`projets/alpha/${nom}.md`, `---\nid: 01${nom.toUpperCase()}\ntype: note\nupdated: 2026-11-01\n---\n# Catalogue ${nom}\n\nLes ${nom} du catalogue Alpha.\n`);
+		}
+		const sens = fauxSens();
+		c.dep.sens = sens;
+		const gestes: GesteANoter[] = [];
+		const noterGeste = c.etat.noterGeste.bind(c.etat);
+		c.etat.noterGeste = async (g) => {
+			gestes.push(g);
+			return noterGeste(g);
+		};
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		await vectoriser(c.dep, { budgetMs: Infinity, demarrer: true });
+		await c.etat.creer(sessionFixe(UUID, { objectif: null }));
+		c.modeles.vue = { ...c.modeles.vue, sens: 'pret' };
+		let reranker = 0;
+		c.dep.reranker = { noter: async () => (reranker++, null) };
+		// le hook n'a pas le sens (son appel échoue) ; l'arrière-plan, si
+		const vecteurs = sens.vecteurs.bind(sens);
+		let appelsDuMessage = 0;
+		sens.vecteurs = async (textes, o) => (++appelsDuMessage === 1 ? null : vecteurs(textes, o));
+		const h = Date.now();
+		await api(c).post(ROUTES.hook, { session: UUID, cwd: join(c.racine, 'alpha'), evenement: 'message', horodatageMs: h, prompt: 'Les remises du catalogue Alpha ?' });
+		const message = async () => (await c.etat.servis(UUID, 1, 'message'))[0]!;
+		expect(await jusqua(async () => (await message()).affinage === 'fait', 2000)).toBe(true);
+		expect(await message()).toMatchObject({ horodatageMs: h, sens: true });
+		expect((await message()).classement[0]!.signaux?.cosinus).not.toBeNull();
+		expect(reranker).toBe(0);
+		// la mémoire des porteurs a reçu le classement affiné et le vecteur : un geste ✗ les reprend
+		const affinee = (await message()).classement;
+		expect((await api(c).post(chemin(ROUTES.ecartes, UUID), { id: affinee[0]!.id })).statut).toBe(200);
+		expect(gestes).toHaveLength(1);
+		expect(gestes[0]!.vecteur).not.toBeNull();
+		expect(gestes[0]!.note).toMatchObject({ rang: 1, rangHook: expect.any(Number) });
 	});
 
 	it('POST hook message : la durée du hook au journal, depuis le démarrage de son processus (l’horodatage) ; un horodatage trop ancien : depuis l’appel ; `msService` depuis l’appel', async () => {

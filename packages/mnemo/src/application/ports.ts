@@ -578,6 +578,8 @@ export type Classe = {
 	piste?: boolean;
 	raison?: RaisonCarte;
 	coupees?: number;
+	/** Classement affiné en arrière-plan : le rang de la fiche dans l'ordre du hook (le panneau en tire ▲/▼). */
+	rangHook?: number;
 };
 
 /** Ce que la session a déjà fait d'une fiche classée : injectée (à cette empreinte), lue, ou proposée en carte (à cette empreinte). */
@@ -733,10 +735,12 @@ export interface EtatSessions {
 	journaliser(entree: EntreeServie): Promise<void>;
 	/**
 	 * Remplace le classement et l'état d'affinage de l'entrée de message de la session à cet horodatage (affinage en arrière-plan :
-	 * mêmes candidates, notes complétées), seulement si c'est encore l'entrée de message la plus récente de la session (un
-	 * message plus récent rend l'affinage caduc ; une entrée d'après un outil, non). Rend vrai si l'entrée a été mise à jour.
+	 * mêmes candidates, notes complétées ; `affinage` null : rien n'a été ajouté), seulement si c'est encore l'entrée de message
+	 * porteur la plus récente de la session (un message porteur plus récent rend l'affinage caduc ; une entrée d'après un outil
+	 * ou un message muet, non). `options.sens` : le sens, absent au hook, a été calculé. Rend vrai si l'entrée a été mise à
+	 * jour ; caduc, l'état d'affinage de l'entrée revient à null.
 	 */
-	completerClassement(session: string, horodatageMs: number, classement: Classe[], affinage: Affinage): Promise<boolean>;
+	completerClassement(session: string, horodatageMs: number, classement: Classe[], affinage: Affinage | null, options?: { sens?: boolean }): Promise<boolean>;
 	/**
 	 * Les `limite` dernières entrées de la session, les plus récentes d'abord ; `moment` : celles de ce moment seulement ;
 	 * `options.classement` : `dernier` ne lit le classement que de la plus récente rendue.
@@ -758,9 +762,9 @@ export interface EtatSessions {
 	fichesServiesLuesOuEcrites(session: string): Promise<FicheServieLueOuEcrite[]>;
 	/**
 	 * Après /clear ou /compact, Claude n'a plus les fiches injectées : elles redeviennent à servir, et les fiches injectées à la main
-	 * ne pèsent plus sur leurs voisines. `instantMs` : celui du /clear ou /compact, gardé dans la session (`dernierDebutMs`).
+	 * ne pèsent plus sur leurs voisines.
 	 */
-	oublierInjections(session: string, instantMs?: number): Promise<void>;
+	oublierInjections(session: string): Promise<void>;
 	/**
 	 * Un message porteur (non muet) de la session : les fiches injectées à la main vieillissent d'un message ; son texte (coupé à
 	 * `DEMANDE_MAX`) et son rang sont gardés comme dernier message porteur (gestes). Rend son rang ; null pour une session inconnue.
