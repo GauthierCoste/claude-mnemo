@@ -828,13 +828,13 @@ export type EtatHooksVerifie = { etat: 'a_jour' | 'perime' | 'absent' | 'echec';
 /**
  * `mnemo verifier-poste --json` : ce dont Mnemo a besoin sur le poste, un bloc par moteur. `git.version` : « 2.50.1 » ;
  * `claude.chemin` : le `claude` que lanceront les sessions ; `codex.chemin` : le `codex` trouvé (facultatif : son absence
- * n'est pas un manque), `codex.mcp` : sa déclaration MCP, lue quand il est trouvé, `codex.hooks` : ses hooks de Mnemo ; `motif` : pourquoi ce n'est pas
+ * n'est pas un manque), `codex.version` : celle que donne `codex --version` (absente : illisible), `codex.mcp` : sa déclaration MCP, lue quand il est trouvé, `codex.hooks` : ses hooks de Mnemo ; `motif` : pourquoi ce n'est pas
  * utilisable ; `node.version` : celle qui exécute Mnemo.
  */
 export type PosteVerifie = {
 	git: { ok: boolean; version?: string; motif?: string };
 	claude: { ok: boolean; chemin?: string; motif?: string };
-	codex: { ok: boolean; chemin?: string; motif?: string; mcp?: EtatMcpVerifie; hooks?: EtatHooksVerifie };
+	codex: { ok: boolean; chemin?: string; version?: string; motif?: string; mcp?: EtatMcpVerifie; hooks?: EtatHooksVerifie };
 	node: { version: string };
 };
 

@@ -6,10 +6,13 @@ import { TOUCHES_CODEX } from '../../domaine/moteurs/codex/touches.ts';
 import { DECLARATION_MCP_CODEX } from './codex/declaration-mcp.ts';
 import { HOOKS_DU_POSTE_CODEX } from './codex/hooks-json.ts';
 import { modelesCodex } from './codex/modeles.ts';
+import { reglagesMcpCodex } from './codex/reglages-mcp.ts';
+import { versionCodex } from './codex/version.ts';
+import { refusDeVersionCodex } from '../../domaine/moteurs/codex/version.ts';
 import { trouverCodex } from './codex/trouver-codex.ts';
 
-/** Marque d'une session dans la ligne de commande de `codex` : l'argument `-c mnemo_session="<uuid>"`. */
-export const marqueCodex = (uuid: string): string => `mnemo_session="${uuid}"`;
+/** Marque d'une session dans la ligne de commande de `codex` : l'argument `-c mnemo_session='<uuid>'` (chaîne littérale TOML). */
+export const marqueCodex = (uuid: string): string => `mnemo_session='${uuid}'`;
 
 /**
  * Codex : `codex` (`MNEMO_CODEX`, le PATH, puis ChatGPT.app), une consigne par session (`developer_instructions`, skills
@@ -26,6 +29,9 @@ export const MOTEUR_CODEX: Moteur = {
 	trouver: (env, plateforme) => trouverCodex(env, plateforme as NodeJS.Platform),
 	declarationMcp: DECLARATION_MCP_CODEX,
 	hooksDuPoste: HOOKS_DU_POSTE_CODEX,
+	reglagesMcp: reglagesMcpCodex,
+	version: versionCodex(),
+	refusDeVersion: refusDeVersionCodex,
 	marqueDeSession: marqueCodex,
 	motifSansReprise: motifSansRepriseCodex,
 	fichiersDeSession: fichiersDeSessionCodex,

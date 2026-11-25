@@ -24,9 +24,10 @@ export type OutilsDuMoteur = {
 /**
  * Touches que le pilote envoie au terminal du moteur : `echap` ferme un dialogue (permission), suivi de `pauseApresEchapMs`
  * avant toute autre touche ; `attenteApresEchapMs` : attente, au plus, de l'arrêt qui suit ; `arret` (puis `entree`) termine
- * la session.
+ * la session ; `pauseAvantEntreeMs` : pause entre une ligne tapée et son Entrée (0 : écrites ensemble ; Codex prend une
+ * rafale de caractères pour un collage, et l'Entrée qui la suit aussitôt n'envoie pas la ligne).
  */
-export type TouchesDuMoteur = { echap: string; pauseApresEchapMs: number; attenteApresEchapMs: number; arret: string; entree: string };
+export type TouchesDuMoteur = { echap: string; pauseApresEchapMs: number; attenteApresEchapMs: number; arret: string; entree: string; pauseAvantEntreeMs: number };
 
 /**
  * Remplissage de la fenêtre de contexte d'une session, lu par le moteur (télémétrie) : tokens occupés et maximum ;

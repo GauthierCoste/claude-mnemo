@@ -72,13 +72,13 @@ function terminalPty(proc: ProcessusPty, delaiParDefaut: number, plateforme: Nod
 	};
 
 	let arret: Promise<void> | null = null;
-	const arreter = async (delaiMs: number, echap: boolean): Promise<void> => {
-		if (fin === null && echap) {
+	const arreter = async (delaiMs: number, echap: boolean, sansTouche: boolean): Promise<void> => {
+		if (fin === null && echap && !sansTouche) {
 			// un dialogue de permission est peut-être ouvert : Échap le ferme (sinon la commande d'arrêt y serait tapée)
 			ecrire(touches.echap);
 			await pause(touches.pauseApresEchapMs);
 		}
-		if (fin === null) {
+		if (fin === null && !sansTouche) {
 			// Claude Code : Ctrl-U efface ce que l'utilisateur avait commencé à taper, puis `/exit`
 			ecrire(touches.arret);
 			await pause(Math.min(PAUSE_ENTREE_MS, delaiMs));
@@ -128,7 +128,7 @@ function terminalPty(proc: ProcessusPty, delaiParDefaut: number, plateforme: Nod
 			else fins.push(f);
 		},
 		arreter(delaiMs = delaiParDefaut, options = {}) {
-			arret ??= arreter(Math.max(0, delaiMs), options.echap === true);
+			arret ??= arreter(Math.max(0, delaiMs), options.echap === true, options.sansTouche === true);
 			return arret;
 		},
 	};

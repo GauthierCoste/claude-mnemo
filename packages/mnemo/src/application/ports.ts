@@ -733,9 +733,10 @@ export interface Terminal {
 	/**
 	 * Touche d'arrêt du moteur (`touches.arret` du lancement, puis `entree`), puis SIGTERM au groupe après `delaiMs`, puis
 	 * SIGKILL 3 s plus tard ; résout quand le processus est mort. `echap` (un dialogue de permission est peut-être ouvert) :
-	 * Échap d'abord, puis `touches.pauseApresEchapMs`.
+	 * Échap d'abord, puis `touches.pauseApresEchapMs`. `sansTouche` : aucune touche (l'écran du moteur pose peut-être une
+	 * question à l'utilisateur, à laquelle une Entrée répondrait) : SIGTERM au groupe aussitôt, puis SIGKILL.
 	 */
-	arreter(delaiMs?: number, options?: { echap?: boolean }): Promise<void>;
+	arreter(delaiMs?: number, options?: { echap?: boolean; sansTouche?: boolean }): Promise<void>;
 }
 
 export interface Terminaux {
@@ -927,6 +928,10 @@ export type MoteurDuPoste = {
 	declarationMcp: DeclarationMcp;
 	/** Hooks installés pour tout le poste (Codex) ; absent : le moteur les prend des fichiers de chaque session (Claude Code). */
 	hooksDuPoste?: HooksDuPoste;
+	/** Version du moteur (`--version`, en cache ; `executer` : tests) ; null : illisible. Absent : non lue. */
+	version?(commande: CommandeMoteur, env: Record<string, string | undefined>, executer?: Executer): Promise<string | null>;
+	/** Motif de refus d'une version trop ancienne pour lancer des sessions ; null : elle convient, ou elle est illisible. */
+	refusDeVersion?(version: string | null): string | null;
 };
 
 /** Ce que reçoit la liste des modèles : l'exécuteur, la commande du moteur (null : introuvable) et l'environnement de l'utilisateur. */
@@ -943,6 +948,11 @@ export type Moteur = MoteurDuPoste & {
 	sansCommande: 'manuel' | 'refus';
 	/** Ce que la ligne de commande d'un processus lancé pour la session `uuid` contient : de quoi le reconnaître vivant. */
 	marqueDeSession(uuid: string): string;
+	/**
+	 * Réglages de la déclaration MCP `mnemo` de l'utilisateur chez ce moteur, en plus de la commande (Codex : clés de
+	 * `[mcp_servers.mnemo]` dans `config.toml`, lu seulement) ; absent : le moteur n'en garde pas qui comptent pour une session.
+	 */
+	reglagesMcp?(env: Record<string, string | undefined>): Promise<string[]>;
 	/** Pourquoi la session ne peut pas être reprise par ce moteur (Codex : son `fil` encore inconnu) ; null : elle le peut. */
 	motifSansReprise(session: Session): string | null;
 	fichiersDeSession(dep: Dependances, session: Session, profil: Profil, appel: AppelPlugin): Promise<FichierPlugin[]>;

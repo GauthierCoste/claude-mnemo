@@ -1,6 +1,6 @@
 import { estModele } from '@mnemo/commun';
 import { separerFrontmatter } from '../../../domaine/fiche.ts';
-import { chaineToml, listeToml } from '../../../domaine/moteurs/codex/toml.ts';
+import { listeValeursToml, valeurToml } from '../../../domaine/moteurs/codex/toml.ts';
 import { texteDesHooks } from '../../../domaine/moteurs/hooks-du-profil.ts';
 import { OUTILS_MNEMO_PERMIS } from '../../../domaine/moteurs/outils-permis.ts';
 import type { Profil } from '../../../domaine/profil.ts';
@@ -10,8 +10,19 @@ import type { AppelPlugin, ContextePreparation, Dependances, FichierPlugin, Lanc
 import { skillsDeSession } from '../skills-de-session.ts';
 import type { SkillDeSession } from '../skills-de-session.ts';
 
-/** Variables que `codex` ne reçoit jamais : seul l'abonnement de l'utilisateur sert, jamais une clé d'API ni un autre point d'accès. */
-export const VARIABLES_INTERDITES_CODEX: readonly string[] = ['OPENAI_API_KEY', 'CODEX_API_KEY', 'OPENAI_BASE_URL'];
+/**
+ * Variables que `codex` ne reçoit jamais : `CODEX_API_KEY`, la clé d'API propre à Codex, qui prendrait le pas sur l'abonnement.
+ * `OPENAI_API_KEY` et `OPENAI_BASE_URL` restent : elles servent aux passerelles et aux autres fournisseurs que l'utilisateur
+ * règle, et Codex connecté par l'abonnement ne s'en sert pas.
+ */
+export const VARIABLES_INTERDITES_CODEX: readonly string[] = ['CODEX_API_KEY'];
+
+/**
+ * Longueur au plus de la consigne de session (`developer_instructions`, citée) : elle passe en argument de la ligne de
+ * commande, que Windows borne à 32 767 caractères en tout. Codex n'a pas de clé qui lise des instructions ajoutées depuis un
+ * fichier (`model_instructions_file` remplace les siennes : mesuré au lot 5).
+ */
+export const CONSIGNE_MAX = 24_000;
 
 /**
  * Variables de la session que le serveur MCP `mnemo` lancé par Codex reçoit (`env_vars`) : Codex ne transmet à un serveur
@@ -93,8 +104,9 @@ export type AppelArgumentsCodex = {
  * tourne dans ce processus, avec l'environnement de Mnemo que ses hooks héritent), sans écran alternatif (`--no-alt-screen` :
  * l'historique reste dans le terminal de la session, avertissement de Mnemo compris), mémoire native coupée, modèle de la session
  * (`-m`, s'il n'est pas vide), racine du dossier Mnemo par `--add-dir` (`lancement: memoire`), consigne
- * (`developer_instructions`), serveur MCP `mnemo` (ce Node, ce `main.ts`, les variables de la session) et ses outils de
- * lecture et `proposer` approuvés d'avance. Chaque valeur `-c` est du TOML (`chaineToml`). Reprise : `codex resume`, les mêmes
+ * (`developer_instructions`, `CONSIGNE_MAX` au plus), serveur MCP `mnemo` allumé (ce Node, ce `main.ts`, les variables de la
+ * session) et ses outils de lecture et `proposer` approuvés d'avance. Chaque valeur `-c` est du TOML (`valeurToml` : littérale
+ * quand c'est possible, sans guillemet double). Reprise : `codex resume`, les mêmes
  * options, puis le `fil`. Le premier message (objectif, ou consigne tapée d'emblée à la reprise) suit `--`.
  */
 export function argumentsCodex(a: AppelArgumentsCodex): string[] {
@@ -104,19 +116,31 @@ export function argumentsCodex(a: AppelArgumentsCodex): string[] {
 	if (!estModele(modele)) throw new Error(`Modèle de session refusé : « ${modele} ».`);
 	const motif = a.mode === 'reprise' ? motifSansRepriseCodex(session) : null;
 	if (motif !== null) throw new Error(`Reprise impossible : ${motif}.`);
-	const options = ['-c', `mnemo_session=${chaineToml(session.id)}`, '--no-daemon', '--no-alt-screen', '--disable', 'memories'];
+	const consigne = valeurToml(a.consigne);
+	if (consigne.length > CONSIGNE_MAX) {
+		throw new Error(`Consigne de session trop longue pour la ligne de commande de Codex (${consigne.length} caractères, ${CONSIGNE_MAX} au plus) : raccourcis la consigne du profil ou retiens moins de skills.`);
+	}
+	const options = ['-c', `mnemo_session=${valeurToml(session.id)}`, '--no-daemon', '--no-alt-screen', '--disable', 'memories'];
 	if (modele !== '') options.push('-m', modele);
 	if (a.profil.lancement === 'memoire') options.push('--add-dir', a.racine);
-	options.push('-c', `developer_instructions=${chaineToml(a.consigne)}`);
-	options.push('-c', `mcp_servers.mnemo.command=${chaineToml(a.appel.node)}`, '-c', `mcp_servers.mnemo.args=${listeToml([a.appel.main, 'mcp'])}`);
-	options.push('-c', `mcp_servers.mnemo.env_vars=${listeToml(VARIABLES_DU_SERVEUR_MCP)}`);
-	for (const outil of OUTILS_MNEMO_PERMIS) options.push('-c', `mcp_servers.mnemo.tools.${outil}.approval_mode="approve"`);
+	options.push('-c', `developer_instructions=${consigne}`);
+	// le serveur `mnemo` est allumé pour la session, même éteint chez l'utilisateur : une session Mnemo a besoin de Mnemo
+	options.push('-c', `mcp_servers.mnemo.command=${valeurToml(a.appel.node)}`, '-c', `mcp_servers.mnemo.args=${listeValeursToml([a.appel.main, 'mcp'])}`, '-c', 'mcp_servers.mnemo.enabled=true');
+	options.push('-c', `mcp_servers.mnemo.env_vars=${listeValeursToml(VARIABLES_DU_SERVEUR_MCP)}`);
+	for (const outil of OUTILS_MNEMO_PERMIS) options.push('-c', `mcp_servers.mnemo.tools.${outil}.approval_mode='approve'`);
 	const message = a.objectif === undefined || a.objectif.trim() === '' ? [] : [a.objectif];
 	if (a.mode === 'nouvelle') return [...options, ...(message.length === 0 ? [] : ['--', ...message])];
 	return ['resume', ...options, '--', session.fil!, ...message];
 }
 
 const estInterditeCodex = (majuscules: string): boolean => VARIABLES_INTERDITES_CODEX.includes(majuscules);
+
+/** Environnement de l'utilisateur sans les variables interdites à Codex (comparées sans la casse), pour tout `codex` lancé par Mnemo. */
+export function environnementPermisCodex(env: Record<string, string | undefined>): Record<string, string> {
+	const resultat: Record<string, string> = {};
+	for (const [cle, valeur] of Object.entries(env)) if (valeur !== undefined && !estInterditeCodex(cle.toUpperCase())) resultat[cle] = valeur;
+	return resultat;
+}
 
 /**
  * Environnement de `codex` : celui de l'utilisateur, sans les variables interdites (comparées sans la casse, comme sous
@@ -126,12 +150,8 @@ const estInterditeCodex = (majuscules: string): boolean => VARIABLES_INTERDITES_
  */
 export function environnementCodex(env: Record<string, string | undefined>, session: Session, profil: Pick<Profil, 'hooks'>, racine: string): Record<string, string> {
 	const ajouts: Record<string, string> = { MNEMO_SESSION: session.id, MNEMO_MOTEUR: 'codex', MNEMO_PROJET: session.projet, MNEMO_RACINE: racine, MNEMO_HOOKS: texteDesHooks(profil.hooks) };
-	const resultat: Record<string, string> = {};
-	for (const [cle, valeur] of Object.entries(env)) {
-		const majuscules = cle.toUpperCase();
-		if (valeur === undefined || estInterditeCodex(majuscules) || majuscules in ajouts) continue;
-		resultat[cle] = valeur;
-	}
+	const resultat = environnementPermisCodex(env);
+	for (const cle of Object.keys(resultat)) if (cle.toUpperCase() in ajouts) delete resultat[cle];
 	return { ...resultat, ...ajouts };
 }
 

@@ -8,7 +8,7 @@ import { ecrireEpisodeMinimal, episodesDuProjet, texteDuBilan, trouverEpisode } 
 import { estIdMoteur, MOTEUR_PAR_DEFAUT } from '../domaine/moteurs/moteur.ts';
 import type { IdMoteur } from '../domaine/moteurs/moteur.ts';
 import type { CommandeMoteur, Dependances, ModeLancement, Moteur, MoteurDuService, Pilotage, Terminal } from './ports.ts';
-import { avertissementDesHooks, lignesDAvertissement } from './moteurs/avertissement-hooks.ts';
+import { avertissementDesHooks, avertissementDesReglagesMcp, lignesDAvertissement } from './moteurs/avertissements-de-session.ts';
 import { projetDeSession } from './portees.ts';
 import { positionNotee } from './dossiers-non-rattaches.ts';
 import type { PositionDuProjet } from './position.ts';
@@ -26,7 +26,8 @@ export type Pilote = {
 	pause(id: string): Promise<Session | null>;
 	/**
 	 * Rejette `ErreurMoteurIndisponible` si le moteur de la session n'a pas d'implémentation ici, `ErreurRepriseImpossible` s'il
-	 * ne sait pas la reprendre (de même bilan, `confier` et `ligneDeReprise`).
+	 * ne sait pas la reprendre (de même bilan, `confier`, `ligneDeReprise`, et `pause` d'une session qui tourne) ; bilan et
+	 * `confier` rejettent `ErreurSessionNonCommencee` pour une session qui tourne sans avoir commencé chez son moteur.
 	 */
 	reprendre(id: string): Promise<Session | null>;
 	entree(id: string, d: string): void;
@@ -91,6 +92,21 @@ export class ErreurRepriseImpossible extends Error {
 	}
 }
 
+/**
+ * Une session qui tourne mais n'a pas encore commencé chez son moteur (Codex : aucun `debut` reçu, son `fil` inconnu) : son
+ * écran pose peut-être une question à l'utilisateur (approbation du dossier, « Trust and continue » choisi par défaut), à
+ * laquelle une ligne tapée répondrait. Rien n'y est tapé.
+ */
+export class ErreurSessionNonCommencee extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'ErreurSessionNonCommencee';
+	}
+}
+
+const NON_COMMENCEE =
+	'la session n\'a pas encore commencé chez son moteur (aucun hook `debut` reçu : une question attend peut-être l\'utilisateur dans son terminal, comme l\'approbation du dossier par Codex, ou aucun message n\'a encore été envoyé) ; rien n\'y est tapé';
+
 /** Raison pour laquelle la session ne peut pas tourner avec son moteur dans ce service. */
 const moteurIndisponible = (moteur: string): string => `Moteur « ${moteur} » sans implémentation dans ce service : la session ne peut pas être relancée.`;
 const repriseImpossible = (motif: string): string => `Reprise impossible : ${motif}.`;
@@ -106,6 +122,8 @@ export const BATTEMENT_MS = 10_000;
 const ATTENTE_DEBUT_BILAN_MS = 30_000;
 /** Bilan : filet — sans bilan lu puis `arret` dans ce délai après la demande, la session est arrêtée (épisode minimal). */
 const ATTENTE_ARRET_BILAN_MS = 10 * 60_000;
+/** Lecture des avertissements d'une session (hooks, déclaration MCP) avant son lancement, au plus. */
+const DELAI_AVERTISSEMENTS_MS = 1000;
 /** Intervalle de lecture de l'état pendant un bilan (les hooks l'écrivent, parfois sans passer par le service). */
 const SONDAGE_BILAN_MS = 200;
 
@@ -130,7 +148,8 @@ const NOM_DE_VARIABLE = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 /**
  * Ligne de commande à coller dans son propre terminal (mode dégradé) : se placer dans `dossier`, retirer les variables
  * interdites présentes, poser celles de la session, lancer la commande trouvée du moteur (introuvable : `parDefaut`) avec ses
- * arguments. Chaque valeur entre apostrophes (POSIX ou PowerShell, comme la déclaration MCP du jalon 3).
+ * arguments. Chaque valeur entre apostrophes (POSIX ou PowerShell, comme la déclaration MCP du jalon 3) ; sous PowerShell, un
+ * argument qui porte un guillemet double demande le passage « Standard » des arguments (PowerShell 7.3 ou plus).
  */
 export function ligneManuelle(
 	lanceur: CommandeMoteur | null,
@@ -148,8 +167,11 @@ export function ligneManuelle(
 		const morceaux = [`Set-Location -LiteralPath ${citerPowerShell(dossier)}`];
 		for (const cle of sans) morceaux.push(`Remove-Item -ErrorAction SilentlyContinue Env:${cle}`);
 		for (const [cle, valeur] of variables) morceaux.push(`$env:${cle} = ${citerPowerShell(valeur)}`);
-		morceaux.push(`& ${commande} ${[...(lanceur?.avant ?? []), ...args].map(citerPowerShell).join(' ')}`);
-		return morceaux.join('; ');
+		const tous = [...(lanceur?.avant ?? []), ...args];
+		morceaux.push(`& ${commande} ${tous.map(citerPowerShell).join(' ')}`);
+		// un guillemet double dans un argument n'arrive intact au programme qu'en mode « Standard » (PowerShell 7.3 ou plus)
+		if (!tous.some((a) => a.includes('"'))) return morceaux.join('; ');
+		return `$PSNativeCommandArgumentPassing = 'Standard'; ${morceaux.join('; ')}  # PowerShell 7.3 ou plus`;
 	}
 	const commande = lanceur === null ? parDefaut : citerPosix(lanceur.commande);
 	const env = sans.length > 0 ? `env ${sans.map((cle) => `-u ${cle}`).join(' ')} ` : '';
@@ -374,13 +396,25 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	};
 
 	/**
-	 * Avertissement à écrire en tête du terminal d'une session dont le moteur prend les hooks de Mnemo installés pour tout le
-	 * poste (Codex) et qui ne les exécutera pas (absents, d'une autre installation, non approuvés) ; null : rien à dire.
+	 * Avertissements à écrire en tête du terminal d'une session : hooks de Mnemo installés pour tout le poste (Codex) qu'elle
+	 * n'exécutera pas (absents, d'une autre installation, non approuvés) ; réglages de la déclaration MCP de l'utilisateur qui
+	 * s'appliquent aussi à elle. Lus sans bloquer : au-delà de `DELAI_AVERTISSEMENTS_MS`, rien n'est dit.
 	 */
-	const avertissementHooks = async (moteur: Moteur): Promise<string | null> => {
-		if (moteur.hooksDuPoste === undefined) return null;
-		const lu = await moteur.hooksDuPoste.lire({ node: pil.plugin.appel.node, main: pil.plugin.appel.main, env: pil.hote.env }).catch((erreur: unknown) => ({ echec: (erreur as Error).message }));
-		return avertissementDesHooks(moteur.nom, moteur.id, lu);
+	const avertissementsDuMoteur = async (moteur: Moteur): Promise<string[]> => {
+		const hooks = async (): Promise<string | null> => {
+			if (moteur.hooksDuPoste === undefined) return null;
+			const lu = await moteur.hooksDuPoste.lire({ node: pil.plugin.appel.node, main: pil.plugin.appel.main, env: pil.hote.env }).catch((erreur: unknown) => ({ echec: (erreur as Error).message }));
+			return avertissementDesHooks(moteur.nom, moteur.id, lu);
+		};
+		const mcp = async (): Promise<string | null> => (moteur.reglagesMcp === undefined ? null : avertissementDesReglagesMcp(moteur.nom, await moteur.reglagesMcp(pil.hote.env)));
+		const borne = (p: Promise<string | null>): Promise<string | null> => {
+			let minuteur: ReturnType<typeof setTimeout> | undefined;
+			const delai = new Promise<null>((r) => {
+				minuteur = setTimeout(() => r(null), DELAI_AVERTISSEMENTS_MS);
+			});
+			return Promise.race([p.catch(() => null), delai]).finally(() => clearTimeout(minuteur));
+		};
+		return (await Promise.all([borne(hooks()), borne(mcp())])).filter((a): a is string => a !== null);
 	};
 
 	/**
@@ -391,7 +425,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	const demarrer = async (session: Session, mode: ModeLancement, objectif?: string): Promise<{ manuel: string } | { terminal: Terminal }> => {
 		const { moteur, commande, args, env, dossier, manuel } = await preparer(session, mode, objectif);
 		if (commande === null || !pil.terminaux.disponibles().ok) return manuel();
-		const avertissement = await avertissementHooks(moteur);
+		const avertissements = await avertissementsDuMoteur(moteur);
 		let terminal: Terminal;
 		const lanceMs = Date.now();
 		try {
@@ -401,7 +435,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		}
 		const vivant: Vivant = { terminal, moteur, tampon: tamponCirculaire(CAPACITE_TAMPON), abonnes: new Set(), fini: Promise.resolve(), ecritMajMs: null, arret: false };
 		// avant toute sortie du moteur : le terminal n'a encore aucun abonné, la relecture la montrera d'abord
-		if (avertissement !== null) vivant.tampon.ajouter(lignesDAvertissement(avertissement));
+		for (const avertissement of avertissements) vivant.tampon.ajouter(lignesDAvertissement(avertissement));
 		terminal.surSortie((d) => {
 			vivant.tampon.ajouter(d);
 			for (const f of vivant.abonnes) {
@@ -438,8 +472,15 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	};
 
 	/**
+	 * La session tenue n'a pas encore commencé chez son moteur : il ne sait pas encore la reprendre (Codex : `fil` inconnu tant
+	 * qu'aucun `debut` n'est reçu). État illisible : tenue pour commencée.
+	 */
+	const nonCommencee = (v: Vivant, s: Session | null): boolean => s !== null && v.moteur.motifSansReprise(s) !== null;
+
+	/**
 	 * Arrête le terminal tenu, à son tour dans la file de la session ; un dialogue de permission peut être ouvert (dernier arrêt
-	 * `Notification`, pas encore traité par une écriture du pilote) : Échap avant `/exit`.
+	 * `Notification`, pas encore traité par une écriture du pilote) : Échap avant `/exit`. Session pas encore commencée chez son
+	 * moteur : aucune touche, le processus est terminé par signaux.
 	 */
 	const arreterSession = async (id: string): Promise<void> => {
 		const v = vivants.get(id);
@@ -447,6 +488,11 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		await enFile(id, async () => {
 			v.arret = true;
 			const s = await pil.etat.lire(id).catch(() => null);
+			// pas encore commencée : aucune touche (une Entrée répondrait à sa place à la question de l'écran), signaux seulement
+			if (nonCommencee(v, s)) {
+				await v.terminal.arreter(undefined, { sansTouche: true });
+				return;
+			}
 			const echap = echapNecessaire(v, s);
 			if (echap) v.ecritMajMs = s.majMs;
 			await v.terminal.arreter(undefined, { echap });
@@ -520,8 +566,14 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		// sauf pour un moteur dont la ligne ne lancerait rien (Codex) : refusé
 		const duService = moteurDe(profil);
 		if (duService === null) return { refus: `Le profil « ${profil.nom} » utilise le moteur « ${profil.moteur} », pas encore pris en charge par ce service.` };
-		if (duService.commande === null && duService.moteur.sansCommande === 'refus') {
-			return { refus: `Le profil « ${profil.nom} » utilise ${duService.moteur.nom}, introuvable sur ce poste (commande « ${duService.moteur.commandeParDefaut} ») : installe-le, puis relance le service.` };
+		const { moteur: duProfil, commande } = duService;
+		if (commande === null && duProfil.sansCommande === 'refus') {
+			return { refus: `Le profil « ${profil.nom} » utilise ${duProfil.nom}, introuvable sur ce poste (commande « ${duProfil.commandeParDefaut} ») : installe-le, puis relance le service.` };
+		}
+		// une version trop ancienne du moteur est refusée ; illisible, elle n'empêche rien
+		if (commande !== null && duProfil.version !== undefined && duProfil.refusDeVersion !== undefined) {
+			const tropAncien = duProfil.refusDeVersion(await duProfil.version(commande, pil.hote.env));
+			if (tropAncien !== null) return { refus: `Le profil « ${profil.nom} » ne peut pas être lancé : ${tropAncien}.` };
 		}
 		const memoire = profil.lancement === 'memoire';
 		// une session lancée dans la mémoire est à sa racine
@@ -614,6 +666,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		return enFile(id, async () => {
 			if (!toujours(id, v)) return;
 			let s = await pil.etat.lire(id).catch(() => null);
+			if (nonCommencee(v, s)) return;
 			if (echapNecessaire(v, s)) {
 				const { echap, pauseApresEchapMs, attenteApresEchapMs } = v.moteur.touches;
 				v.ecritMajMs = s.majMs;
@@ -625,8 +678,26 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			}
 			// la ligne n'est vue par l'état qu'à son hook `message` : d'ici là, le dialogue qu'il montre encore est périmé
 			if (s !== null) v.ecritMajMs = s.majMs;
-			v.terminal.ecrire(`${ligne}${v.moteur.touches.entree}`);
+			const { entree, pauseAvantEntreeMs } = v.moteur.touches;
+			if (pauseAvantEntreeMs <= 0) {
+				v.terminal.ecrire(`${ligne}${entree}`);
+				return;
+			}
+			// l'Entrée à part : collée à la ligne, Codex la prend dans le collage et n'envoie rien
+			v.terminal.ecrire(ligne);
+			await new Promise((r) => setTimeout(r, pauseAvantEntreeMs));
+			if (toujours(id, v)) v.terminal.ecrire(entree);
 		});
+	};
+
+	/**
+	 * Lève `ErreurSessionNonCommencee` si la session tenue n'a pas encore commencé chez son moteur : le bilan ou la consigne
+	 * seraient tapés dans une question de l'écran.
+	 */
+	const pasAvantDebut = async (id: string, quoi: string): Promise<void> => {
+		const v = vivants.get(id);
+		if (v === undefined) return;
+		if (nonCommencee(v, await pil.etat.lire(id).catch(() => null))) throw new ErreurSessionNonCommencee(`${quoi} : ${NON_COMMENCEE}.`);
 	};
 
 	/** Une session qui ne tourne pas est reprise, et son `debut` attendu (30 s au plus) ; vrai si elle tourne ici ensuite. */
@@ -646,6 +717,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		const s = await pil.etat.lire(id);
 		if (s === null || s.etat === 'terminee') return s;
 		if (!(await assurerVivante(id))) return pil.etat.lire(id);
+		await pasAvantDebut(id, 'Bilan impossible');
 		const bilanDemandeMs = Date.now();
 		const demandee = await modifier(id, { arretAttendu: 'bilan', bilanDemandeMs, bilanLuMs: null });
 		if (demandee === null) return null;
@@ -658,7 +730,10 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		await enLancement.get(id);
 		const s = await pil.etat.lire(id);
 		if (s === null || s.etat === 'terminee') return s;
-		if (await assurerVivante(id)) await taper(id, ligne);
+		if (await assurerVivante(id)) {
+			await pasAvantDebut(id, 'Consigne non transmise');
+			await taper(id, ligne);
+		}
 		return pil.etat.lire(id);
 	};
 
@@ -712,6 +787,9 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 				if (s.pid !== null && (await pil.hote.processus(s.pid, marqueDe(s))) === 'session') return s;
 				return modifier(id, { etat: 'en_pause' });
 			}
+			// une pause qu'aucune reprise ne suivrait : refusée, l'abandon reste possible
+			const sansReprise = vivants.get(id)!.moteur.motifSansReprise(s);
+			if (sansReprise !== null) throw new ErreurRepriseImpossible(`Pause impossible : ${sansReprise} ; abandonne-la à la place.`);
 			await modifier(id, { arretAttendu: 'pause' });
 			await arreterSession(id);
 			return pil.etat.lire(id);
@@ -772,11 +850,14 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 				const refaireBilan = (s.arretAttendu === 'service' || s.arretAttendu === 'bilan') && s.bilanDemandeMs !== null;
 				if (relancees.length > 0) await new Promise((r) => setTimeout(r, ESPACEMENT_RELANCES_MS));
 				const repriseMs = Date.now();
-				// moteur sans implémentation ici, ou qui ne sait pas la reprendre : la session reste en l'état, jamais relancée
-				// par un autre moteur
-				const apres = await reprendre(s.id).catch((erreur: unknown) => {
-					if (erreur instanceof ErreurMoteurIndisponible || erreur instanceof ErreurRepriseImpossible) return null;
-					throw erreur;
+				// moteur sans implémentation ici : la session reste en l'état, jamais relancée par un autre moteur ; moteur qui ne
+				// sait pas la reprendre (Codex sans `fil`) : à relire, avec son épisode minimal
+				const apres = await reprendre(s.id).catch(async (erreur: unknown) => {
+					if (erreur instanceof ErreurMoteurIndisponible) return null;
+					if (!(erreur instanceof ErreurRepriseImpossible)) throw erreur;
+					const aRelire = await modifier(s.id, { etat: 'a_relire', arretAttendu: null, pid: null });
+					if (aRelire !== null) await assurerEpisode(aRelire);
+					return null;
 				});
 				if (apres !== null && vivants.has(s.id)) {
 					relancees.push(s.id);

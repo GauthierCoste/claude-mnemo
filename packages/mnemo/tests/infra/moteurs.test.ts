@@ -17,9 +17,9 @@ describe('moteurs : un seul registre de vérité', () => {
 		expect(claude.marqueDeSession('11111111-2222-4333-8444-555555555555')).toBe('11111111-2222-4333-8444-555555555555');
 	});
 
-	it('Codex : sa marque de session est l’argument `mnemo_session="<uuid>"` de `-c`, tel que `preparer` le passe', () => {
+	it('Codex : sa marque de session est l’argument `mnemo_session=\'<uuid>\'` de `-c`, tel que `preparer` le passe', () => {
 		const codex = MOTEURS.find((m) => m.id === 'codex')!;
 		const uuid = '11111111-2222-4333-8444-555555555555';
-		expect(codex.marqueDeSession(uuid)).toBe(`mnemo_session="${uuid}"`);
+		expect(codex.marqueDeSession(uuid)).toBe(`mnemo_session='${uuid}'`);
 	});
 });

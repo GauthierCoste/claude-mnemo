@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HOOKS_CODEX } from '../../src/application/moteurs/codex/hooks.ts';
-import { argumentsCodex, consigneCodex, environnementCodex, fichiersDeSessionCodex, motifSansRepriseCodex, preparerCodex } from '../../src/application/moteurs/codex/session.ts';
+import { argumentsCodex, CONSIGNE_MAX, consigneCodex, environnementCodex, fichiersDeSessionCodex, motifSansRepriseCodex, preparerCodex } from '../../src/application/moteurs/codex/session.ts';
 import type { AppelHook, ContextePreparation } from '../../src/application/ports.ts';
 import { CONSIGNE_TRAVAIL_PAR_DEFAUT, SKILLS_PAR_DEFAUT } from '../../src/application/profil.ts';
 import { PROFILS_PAR_DEFAUT } from '../../src/domaine/profil.ts';
@@ -45,17 +45,19 @@ function configs(args: string[]): Map<string, string> {
 describe('arguments de codex', () => {
 	it('nouvelle session : marque, sans serveur partagé, mémoire coupée, consigne, serveur MCP et outils approuvés, objectif après --', () => {
 		const args = argumentsCodex({ session: session(), profil: PROFIL, mode: 'nouvelle', consigne: 'Dis "bonjour".\nPuis C:\\fin', racine: RACINE, appel: APPEL, objectif: '-v fais le point' });
-		expect(args.slice(0, 6)).toEqual(['-c', `mnemo_session="${ID}"`, '--no-daemon', '--no-alt-screen', '--disable', 'memories']);
+		expect(args.slice(0, 6)).toEqual(['-c', `mnemo_session='${ID}'`, '--no-daemon', '--no-alt-screen', '--disable', 'memories']);
 		expect(args.slice(-2)).toEqual(['--', '-v fais le point']);
 		expect(args).not.toContain('-m');
 		expect(args).not.toContain('--add-dir');
 		const c = configs(args);
-		expect(c.get('developer_instructions')).toBe('"Dis \\"bonjour\\".\\nPuis C:\\\\fin"');
-		expect(c.get('mcp_servers.mnemo.command')).toBe('"/opt/node \\"26\\"/bin/node"');
-		expect(c.get('mcp_servers.mnemo.args')).toBe('["C:\\\\mnemo\\\\src\\\\adaptateurs\\\\cli\\\\main.ts", "mcp"]');
-		expect(c.get('mcp_servers.mnemo.env_vars')).toBe('["MNEMO_SESSION", "MNEMO_MOTEUR", "MNEMO_PROJET", "MNEMO_RACINE"]');
+		// littérales quand c'est possible (aucun guillemet double, ni échappement) : sur plusieurs lignes pour la consigne
+		expect(c.get('developer_instructions')).toBe("'''Dis \"bonjour\".\nPuis C:\\fin'''");
+		expect(c.get('mcp_servers.mnemo.command')).toBe('\'/opt/node "26"/bin/node\'');
+		expect(c.get('mcp_servers.mnemo.args')).toBe("['C:\\mnemo\\src\\adaptateurs\\cli\\main.ts', 'mcp']");
+		expect(c.get('mcp_servers.mnemo.enabled')).toBe('true');
+		expect(c.get('mcp_servers.mnemo.env_vars')).toBe("['MNEMO_SESSION', 'MNEMO_MOTEUR', 'MNEMO_PROJET', 'MNEMO_RACINE']");
 		for (const outil of ['proposer', 'chercher', 'lire', 'lister', 'voisins', 'chronologie', 'contexte', 'diagnostiquer']) {
-			expect(c.get(`mcp_servers.mnemo.tools.${outil}.approval_mode`), outil).toBe('"approve"');
+			expect(c.get(`mcp_servers.mnemo.tools.${outil}.approval_mode`), outil).toBe("'approve'");
 		}
 		expect(c.has('mcp_servers.mnemo.tools.entretenir.approval_mode')).toBe(false);
 	});
@@ -69,7 +71,7 @@ describe('arguments de codex', () => {
 	it('reprise : codex resume, les mêmes options, puis -- <fil> et la consigne tapée d’emblée', () => {
 		const args = argumentsCodex({ session: session({ fil: FIL, modele: 'gpt-6.2-sol' }), profil: PROFIL, mode: 'reprise', consigne: 'C', racine: RACINE, appel: APPEL, objectif: 'Fais le bilan.' });
 		expect(args[0]).toBe('resume');
-		expect(args.slice(1, 9)).toEqual(['-c', `mnemo_session="${ID}"`, '--no-daemon', '--no-alt-screen', '--disable', 'memories', '-m', 'gpt-6.2-sol']);
+		expect(args.slice(1, 9)).toEqual(['-c', `mnemo_session='${ID}'`, '--no-daemon', '--no-alt-screen', '--disable', 'memories', '-m', 'gpt-6.2-sol']);
 		expect(args.slice(-3)).toEqual(['--', FIL, 'Fais le bilan.']);
 	});
 
@@ -79,13 +81,16 @@ describe('arguments de codex', () => {
 		expect(() => argumentsCodex({ session: session(), profil: PROFIL, mode: 'reprise', consigne: 'C', racine: RACINE, appel: APPEL })).toThrow(/Reprise impossible : session Codex/u);
 		expect(() => argumentsCodex({ session: session({ id: 'pas-un-uuid' }), profil: PROFIL, mode: 'nouvelle', consigne: 'C', racine: RACINE, appel: APPEL })).toThrow(/uuid attendu/u);
 		expect(() => argumentsCodex({ session: session({ modele: 'a b' }), profil: PROFIL, mode: 'nouvelle', consigne: 'C', racine: RACINE, appel: APPEL })).toThrow(/Modèle de session refusé/u);
+		// consigne trop longue pour la ligne de commande : refusée avec la longueur et la limite
+		expect(() => argumentsCodex({ session: session(), profil: PROFIL, mode: 'nouvelle', consigne: 'x'.repeat(CONSIGNE_MAX), racine: RACINE, appel: APPEL })).toThrow(/Consigne de session trop longue .*\(24002 caractères, 24000 au plus\)/u);
+		expect(() => argumentsCodex({ session: session(), profil: PROFIL, mode: 'nouvelle', consigne: 'x'.repeat(CONSIGNE_MAX - 2), racine: RACINE, appel: APPEL })).not.toThrow();
 	});
 });
 
 describe('environnement de codex', () => {
-	it('session, moteur codex, projet, racine et hooks du profil posés ; clés d’API retirées sans la casse ; le reste gardé', () => {
-		const env = environnementCodex({ PATH: '/bin', openai_api_key: 'sk', CODEX_API_KEY: 'k', OPENAI_BASE_URL: 'http://x', MNEMO_MOTEUR: 'claude-code', CODEX_HOME: '/h/c', VIDE: undefined }, session(), { hooks: ['debut', 'arret', 'fin'] }, RACINE);
-		expect(env).toEqual({ PATH: '/bin', CODEX_HOME: '/h/c', MNEMO_SESSION: ID, MNEMO_MOTEUR: 'codex', MNEMO_PROJET: 'alpha', MNEMO_RACINE: RACINE, MNEMO_HOOKS: 'debut,arret,fin' });
+	it('session, moteur codex, projet, racine et hooks du profil posés ; CODEX_API_KEY retirée sans la casse ; OPENAI_API_KEY, OPENAI_BASE_URL et le reste gardés', () => {
+		const env = environnementCodex({ PATH: '/bin', openai_api_key: 'sk', codex_api_key: 'k', OPENAI_BASE_URL: 'http://x', MNEMO_MOTEUR: 'claude-code', CODEX_HOME: '/h/c', VIDE: undefined }, session(), { hooks: ['debut', 'arret', 'fin'] }, RACINE);
+		expect(env).toEqual({ PATH: '/bin', openai_api_key: 'sk', OPENAI_BASE_URL: 'http://x', CODEX_HOME: '/h/c', MNEMO_SESSION: ID, MNEMO_MOTEUR: 'codex', MNEMO_PROJET: 'alpha', MNEMO_RACINE: RACINE, MNEMO_HOOKS: 'debut,arret,fin' });
 	});
 });
 
@@ -129,15 +134,16 @@ describe('consigne et fichiers de session de Codex', () => {
 			fichiers: [{ chemin: 'consigne.md', texte: 'Consigne avec skills.\n' }],
 			racine: RACINE,
 			appel: APPEL,
-			env: { PATH: '/bin', OPENAI_API_KEY: 'sk' },
+			env: { PATH: '/bin', OPENAI_API_KEY: 'sk', CODEX_API_KEY: 'k' },
 		};
 		const l = preparerCodex(c);
-		expect(configs(l.args).get('developer_instructions')).toBe('"Consigne avec skills.\\n"');
+		expect(configs(l.args).get('developer_instructions')).toBe("'''Consigne avec skills.\n'''");
 		expect(l.args.slice(-2)).toEqual(['--', 'Commence.']);
 		expect(l.env).toMatchObject({ PATH: '/bin', MNEMO_MOTEUR: 'codex', MNEMO_SESSION: ID });
-		expect(l.env).not.toHaveProperty('OPENAI_API_KEY');
+		expect(l.env).not.toHaveProperty('CODEX_API_KEY');
+		expect(l.env).toHaveProperty('OPENAI_API_KEY', 'sk');
 		expect(l.ajouts).toEqual({ MNEMO_SESSION: ID, MNEMO_MOTEUR: 'codex', MNEMO_PROJET: 'alpha', MNEMO_RACINE: RACINE, MNEMO_HOOKS: PROFIL.hooks.join(',') });
-		expect(l.retirees).toEqual(['OPENAI_API_KEY']);
+		expect(l.retirees).toEqual(['CODEX_API_KEY']);
 	});
 });
 

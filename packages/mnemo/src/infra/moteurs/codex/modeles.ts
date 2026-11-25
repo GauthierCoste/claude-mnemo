@@ -1,3 +1,4 @@
+import { environnementPermisCodex } from '../../../application/moteurs/codex/session.ts';
 import type { AppelModeles } from '../../../application/ports.ts';
 import { modelesDuCatalogue } from '../../../domaine/moteurs/codex/modeles.ts';
 
@@ -22,7 +23,8 @@ export function modelesCodex(maintenant: () => number = Date.now): (a: AppelMode
 		const cle = JSON.stringify([commande.commande, commande.avant, a.env.CODEX_HOME ?? '']);
 		const garde = cache.get(cle);
 		if (garde !== undefined && garde.jusquaMs > maintenant()) return garde.modeles;
-		const env = Object.fromEntries(Object.entries(a.env).filter((e): e is [string, string] => e[1] !== undefined));
+		// le même environnement que les sessions : sans les variables interdites à Codex
+		const env = environnementPermisCodex(a.env);
 		const entree: EnCache = { jusquaMs: maintenant() + GARDE_MS, modeles: Promise.resolve([]) };
 		entree.modeles = a
 			.executer(commande.commande, [...commande.avant, 'debug', 'models'], { env, delaiMs: DELAI_MODELES_MS })

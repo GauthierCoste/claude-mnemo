@@ -16,5 +16,18 @@ export function avertissementDesHooks(nom: string, id: string, lu: LectureHooksD
 	return null;
 }
 
+/** Réglages de la déclaration MCP de l'utilisateur qui changent ce qu'une session reçoit de Mnemo (variables, outils). */
+const REGLAGES_QUI_COMPTENT = /^(?:env|enabled_tools|disabled_tools)(?:\.|$)/u;
+
+/**
+ * Avertissement d'une session dont le moteur garde, dans la déclaration MCP `mnemo` de l'utilisateur, des variables (`env`)
+ * ou une liste d'outils permis ou retirés : ils s'appliquent aussi à la session ; null s'il n'y en a pas.
+ */
+export function avertissementDesReglagesMcp(nom: string, reglages: readonly string[]): string | null {
+	const cles = [...new Set(reglages.filter((c) => REGLAGES_QUI_COMPTENT.test(c)).map((c) => c.split('.')[0]!))];
+	if (cles.length === 0) return null;
+	return `La déclaration du serveur MCP « mnemo » chez ${nom} porte ${cles.join(', ')} : ces réglages valent aussi pour cette session (variables, outils de Mnemo permis ou retirés).`;
+}
+
 /** L'avertissement, en lignes du terminal de la session (avant ce que le moteur y écrit). */
 export const lignesDAvertissement = (texte: string): string => `\r\n[Mnemo] ${texte.replace(/\r?\n/gu, '\r\n')}\r\n\r\n`;

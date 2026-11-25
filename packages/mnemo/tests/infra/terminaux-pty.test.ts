@@ -191,7 +191,7 @@ describe.skipIf(sauter)('terminaux-pty : faux-claude sous un vrai pseudo-termina
 		await t.arreter();
 	});
 
-	it('arreter : octets envoyés — Ctrl-U, /exit, Entrée ; avec echap, Échap seul d’abord puis 150 ms au moins', async () => {
+	it('arreter : octets envoyés — Ctrl-U, /exit, Entrée ; avec echap, Échap seul d’abord puis 150 ms au moins ; sansTouche : aucun', async () => {
 		// un processus en mode brut qui affiche chaque morceau reçu (hexadécimal, instant) et sort à `/exit` + Entrée
 		const code = [
 			'process.stdin.setRawMode(true);',
@@ -203,13 +203,13 @@ describe.skipIf(sauter)('terminaux-pty : faux-claude sous un vrai pseudo-termina
 			'});',
 			"process.stdout.write('pret\\r\\n');",
 		].join('\n');
-		const recus = async (echap: boolean): Promise<{ instant: number; octets: string }[]> => {
+		const recus = async (echap: boolean, sansTouche = false): Promise<{ instant: number; octets: string }[]> => {
 			const dossier = await dossierTemporaire();
 			const t = terminaux.lancer({ commande: process.execPath, args: ['-e', code], dossier, env: { ...(process.env as Record<string, string>) }, colonnes: 80, lignes: 24 });
 			pids.add(t.pid);
 			const s = suivre(t);
 			await s.attendre(/pret/u);
-			await t.arreter(2000, { echap });
+			await t.arreter(2000, { echap, sansTouche });
 			return [...s.texte().matchAll(/recu (\d+) ([0-9a-f]+)/gu)].map((m) => ({ instant: Number(m[1]), octets: m[2]! }));
 		};
 		const sans = await recus(false);
@@ -219,6 +219,8 @@ describe.skipIf(sauter)('terminaux-pty : faux-claude sous un vrai pseudo-termina
 		expect(avec[0]!.octets).toBe('1b');
 		expect(avec.slice(1).map((r) => r.octets).join('')).toBe(Buffer.from('\x15/exit\r', 'latin1').toString('hex'));
 		expect(avec[1]!.instant - avec[0]!.instant).toBeGreaterThanOrEqual(140);
+		// sans touche (une question attend peut-être l'utilisateur) : rien d'écrit, le processus terminé par signal
+		expect(await recus(true, true)).toEqual([]);
 	});
 
 	it('--tetu ignore /exit et SIGTERM : tué au SIGKILL 3 s après, lui et son enfant', async () => {

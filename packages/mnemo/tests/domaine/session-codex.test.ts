@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { modelesDuCatalogue } from '../../src/domaine/moteurs/codex/modeles.ts';
 import { TOUCHES_CODEX } from '../../src/domaine/moteurs/codex/touches.ts';
-import { chaineToml, listeToml } from '../../src/domaine/moteurs/codex/toml.ts';
+import { chaineToml, listeToml, listeValeursToml, valeurToml } from '../../src/domaine/moteurs/codex/toml.ts';
+import { refusDeVersionCodex, versionDeCodex } from '../../src/domaine/moteurs/codex/version.ts';
 import { effetDuHook, hooksDuTexte, texteDesHooks } from '../../src/domaine/moteurs/hooks-du-profil.ts';
 
 describe('chaînes TOML des -c de Codex', () => {
@@ -71,5 +72,46 @@ describe('hooks demandés par le profil (MNEMO_HOOKS)', () => {
 describe('touches de Codex', () => {
 	it('arrêt : Ctrl-U, /quit, Entrée ; Échap pour un dialogue', () => {
 		expect(TOUCHES_CODEX).toMatchObject({ echap: '\x1b', arret: '\x15/quit', entree: '\r' });
+	});
+});
+
+describe('valeurs TOML sans guillemet double (PowerShell 5.1)', () => {
+	it('littérale sans apostrophe ni contrôle ; littérale multiligne pour des sauts de ligne ou une apostrophe ; sinon chaîne de base', () => {
+		expect(valeurToml('11111111-2222-4333-8444-555555555555')).toBe("'11111111-2222-4333-8444-555555555555'");
+		expect(valeurToml('C:\\Program Files\\nodejs\\node.exe')).toBe("'C:\\Program Files\\nodejs\\node.exe'");
+		expect(valeurToml('dit "oui"\tet « non »')).toBe('\'dit "oui"\tet « non »\'');
+		expect(valeurToml('')).toBe("''");
+		expect(valeurToml("l'agent\nrelit.\n")).toBe("'''l'agent\nrelit.\n'''");
+		expect(valeurToml("l'agent")).toBe("'''l'agent'''");
+		// `'''`, saut de ligne en tête, apostrophe finale, \r, autre contrôle, texte mal formé : chaîne de base
+		expect(valeurToml("l'agent'")).toBe('"l\'agent\'"');
+		expect(valeurToml("a\n'''b")).toBe('"a\\n\'\'\'b"');
+		expect(valeurToml('\na')).toBe('"\\na"');
+		expect(valeurToml("a\nb'")).toBe('"a\\nb\'"');
+		expect(valeurToml('a\r\nb')).toBe('"a\\r\\nb"');
+		expect(valeurToml('a\u001bb')).toBe('"a\\u001Bb"');
+		expect(valeurToml('a\uD800b')).toBe('"a\uFFFDb"');
+		expect(listeValeursToml(['/opt/a b/main.ts', 'mcp'])).toBe("['/opt/a b/main.ts', 'mcp']");
+	});
+});
+
+describe('version de Codex', () => {
+	it('lue dans la sortie de codex --version ; illisible : null', () => {
+		expect(versionDeCodex('codex-cli 0.171.0-alpha.13\n')).toBe('0.171.0-alpha.13');
+		expect(versionDeCodex('codex-cli 0.172.1')).toBe('0.172.1');
+		expect(versionDeCodex('v1.2.3')).toBe('1.2.3');
+		expect(versionDeCodex('codex-cli dev')).toBeNull();
+		expect(versionDeCodex('')).toBeNull();
+	});
+
+	it('refusée sous 0.171.0 (une préversion compte comme sa version) ; illisible ou inconnue : rien n’est refusé', () => {
+		expect(refusDeVersionCodex('0.170.9')).toBe('Codex 0.170.9 trop ancien, 0.171 ou plus requis');
+		expect(refusDeVersionCodex('0.99.0')).toBe('Codex 0.99.0 trop ancien, 0.171 ou plus requis');
+		expect(refusDeVersionCodex('0.171.0-alpha.1')).toBeNull();
+		expect(refusDeVersionCodex('0.171.0')).toBeNull();
+		expect(refusDeVersionCodex('0.200.0')).toBeNull();
+		expect(refusDeVersionCodex('1.0.0')).toBeNull();
+		expect(refusDeVersionCodex(null)).toBeNull();
+		expect(refusDeVersionCodex('dev')).toBeNull();
 	});
 });

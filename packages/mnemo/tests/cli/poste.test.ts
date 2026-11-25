@@ -72,9 +72,15 @@ describe('mnemo verifier-poste', () => {
 describe('verifier-poste : Codex', () => {
 	const MAIN = '/chemin/absolu/main.ts';
 	const CODEX = { commande: '/opt/outils/codex', avant: [] };
-	/** `git --version` répond ; `codex mcp get mnemo --json` rend `get`. */
-	const repond = (get: { code: number; sortie: string; erreur: string }): Executer => async (commande, args, options) => {
+	/** `git --version` répond ; `codex --version` rend `version` ; `codex mcp get mnemo --json` rend `get`. */
+	const repond = (get: { code: number; sortie: string; erreur: string }, version = 'codex-cli 0.171.0-alpha.13\n'): Executer => async (commande, args, options) => {
 		if (commande === 'git') return { code: 0, sortie: 'git version 2.50.1', erreur: '' };
+		if (args[0] === '--version') {
+			expect(commande).toBe('/opt/outils/codex');
+			// délai court, environnement des sessions (sans CODEX_API_KEY)
+			expect(options).toEqual({ delaiMs: 5000, env: { CODEX_HOME: expect.any(String) } });
+			return { code: 0, sortie: version, erreur: '' };
+		}
 		expect([commande, ...args]).toEqual(['/opt/outils/codex', 'mcp', 'get', 'mnemo', '--json']);
 		// délai court dédié, comme `git --version`
 		expect(options).toEqual({ delaiMs: 10_000 });
@@ -83,7 +89,7 @@ describe('verifier-poste : Codex', () => {
 	const declaration = (command: string, args: string[]) => ({ code: 0, sortie: JSON.stringify({ name: 'mnemo', enabled: true, transport: { type: 'stdio', command, args } }), erreur: '' });
 	/** `CODEX_HOME` jetable, jamais le vrai `~/.codex` ; vide par défaut : aucun hook. */
 	const MAISON = join('/nulle-part', 'codex-home-absent');
-	const deps = (executer: Executer, maison = MAISON) => ({ executer, claude, codex: () => CODEX, versionNode: '26.13.1', main: MAIN, plateforme: 'darwin', env: { CODEX_HOME: maison } });
+	const deps = (executer: Executer, maison = MAISON) => ({ executer, claude, codex: () => CODEX, versionNode: '26.13.1', main: MAIN, plateforme: 'darwin', env: { CODEX_HOME: maison, CODEX_API_KEY: 'sk-secret' } });
 
 	it('trouvé : son chemin et l’état de sa déclaration MCP, lue sans rien changer', async () => {
 		const cas: [{ code: number; sortie: string; erreur: string }, string][] = [
@@ -92,7 +98,7 @@ describe('verifier-poste : Codex', () => {
 			[declaration('/vieux/node', ['/autre/packages/mnemo/src/adaptateurs/cli/main.ts', 'mcp']), 'perime'],
 			[declaration('/usr/bin/python3', ['/opt/serveur.py']), 'autre'],
 		];
-		for (const [get, etat] of cas) expect((await verifierPoste(deps(repond(get)))).codex, etat).toEqual({ ok: true, chemin: '/opt/outils/codex', mcp: { etat }, hooks: { etat: 'absent' } });
+		for (const [get, etat] of cas) expect((await verifierPoste(deps(repond(get)))).codex, etat).toEqual({ ok: true, chemin: '/opt/outils/codex', version: '0.171.0-alpha.13', mcp: { etat }, hooks: { etat: 'absent' } });
 		const desactivee = JSON.stringify({ name: 'mnemo', enabled: false, transport: { type: 'stdio', command: process.execPath, args: [MAIN, 'mcp'] } });
 		expect((await verifierPoste(deps(repond({ code: 0, sortie: desactivee, erreur: '' })))).codex.mcp).toEqual({ etat: 'desactive', motif: expect.stringContaining('enabled = false') });
 		const illisible = await verifierPoste(deps(repond({ code: 0, sortie: 'pas du JSON', erreur: '' })));
@@ -102,7 +108,14 @@ describe('verifier-poste : Codex', () => {
 	it('texte : une ligne Codex ; Codex absent n’est pas un manque (code 0)', async () => {
 		const lignes: string[] = [];
 		await commandeVerifierPoste([], deps(repond({ code: 1, sortie: '', erreur: "Error: No MCP server named 'mnemo' found." })), (l) => lignes.push(l));
-		expect(lignes[2]).toBe('Codex : /opt/outils/codex — serveur MCP non déclaré (mnemo init --codex) — hooks non installés (mnemo init --codex)');
+		expect(lignes[2]).toBe('Codex : /opt/outils/codex (0.171.0-alpha.13) — serveur MCP non déclaré (mnemo init --codex) — hooks non installés (mnemo init --codex)');
+		// trop ancien : dit ; illisible : absente, sans autre conséquence
+		const ancien: string[] = [];
+		await commandeVerifierPoste([], deps(repond(declaration(process.execPath, [MAIN, 'mcp']), 'codex-cli 0.150.0')), (l) => ancien.push(l));
+		expect(ancien[2]).toMatch(/^Codex : \/opt\/outils\/codex \(0\.150\.0, trop ancien : 0\.171 ou plus requis\) — serveur MCP déclaré/u);
+		const illisible = await verifierPoste(deps(repond(declaration(process.execPath, [MAIN, 'mcp']), 'codex dev')));
+		expect(illisible.codex).not.toHaveProperty('version');
+		expect(illisible.codex.ok).toBe(true);
 		const sans: string[] = [];
 		await commandeVerifierPoste([], { ...deps(repond(declaration('x', []))), codex: () => null }, (l) => sans.push(l));
 		expect(sans[2]).toMatch(/^Codex : absent \(facultatif\)/u);
@@ -123,7 +136,7 @@ describe('verifier-poste : Codex', () => {
 		expect(approuves).toEqual({ etat: 'a_jour', approbation: { etat: 'approuves', motif: expect.stringContaining('recalculer') } });
 		const lignes: string[] = [];
 		await commandeVerifierPoste([], avec(repond(get)), (l) => lignes.push(l));
-		expect(lignes[2]).toMatch(/^Codex : \/opt\/outils\/codex — .* — hooks installés, approuvés \(approbation enregistrée/u);
+		expect(lignes[2]).toMatch(/^Codex : \/opt\/outils\/codex \(0\.171\.0-alpha\.13\) — .* — hooks installés, approuvés \(approbation enregistrée/u);
 		await writeFile(fichier, texteHooksJson(remplacerHooks({}, hooksAttendus('/vieux/node', MAIN_MNEMO))));
 		expect((await verifierPoste(avec(repond(get)))).codex.hooks).toEqual({ etat: 'perime' });
 		await writeFile(fichier, '{');

@@ -6,4 +6,4 @@ import type { TouchesDuMoteur } from '../moteur.ts';
  * lance pas `Stop` quand l'utilisateur interrompt (doc des hooks) : passé 1 s, le dialogue est tenu pour fermé. Arrêt :
  * Ctrl-U (efface ce que l'utilisateur avait commencé à taper), `/exit`, puis Entrée.
  */
-export const TOUCHES_CLAUDE_CODE: TouchesDuMoteur = { echap: '\x1b', pauseApresEchapMs: 150, attenteApresEchapMs: 1000, arret: '\x15/exit', entree: '\r' };
+export const TOUCHES_CLAUDE_CODE: TouchesDuMoteur = { echap: '\x1b', pauseApresEchapMs: 150, attenteApresEchapMs: 1000, arret: '\x15/exit', entree: '\r', pauseAvantEntreeMs: 0 };

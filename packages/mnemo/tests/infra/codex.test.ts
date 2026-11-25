@@ -9,6 +9,8 @@ import { commandeManuelleCodex, lireDeclarationCodex } from '../../src/domaine/m
 import { DECLARATION_MCP_CODEX } from '../../src/infra/moteurs/codex/declaration-mcp.ts';
 import { trouverCodex } from '../../src/infra/moteurs/codex/trouver-codex.ts';
 import { DELAI_MODELES_MS, modelesCodex } from '../../src/infra/moteurs/codex/modeles.ts';
+import { reglagesMcpCodex } from '../../src/infra/moteurs/codex/reglages-mcp.ts';
+import { DELAI_VERSION_MS, versionCodex } from '../../src/infra/moteurs/codex/version.ts';
 import { executeurReel } from '../../src/adaptateurs/cli/executeur.ts';
 import { MOTEURS, MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
@@ -394,9 +396,10 @@ describe('modèles de Codex (codex debug models)', () => {
 	it('lue par le faux codex (Node courant), sous un délai court, avec l’environnement donné', async () => {
 		const d = await dossierTemporaire();
 		const faux = join(d, 'faux-codex.mjs');
-		await writeFile(faux, `if (process.argv.slice(2).join(' ') !== 'debug models' || process.env.CODEX_HOME !== '/h/c') process.exit(3);\nprocess.stdout.write(${JSON.stringify(CATALOGUE)});\n`);
+		// l'environnement des sessions : CODEX_API_KEY retirée (sans la casse), OPENAI_API_KEY gardée
+		await writeFile(faux, `if (process.argv.slice(2).join(' ') !== 'debug models' || process.env.CODEX_HOME !== '/h/c' || 'Codex_Api_Key' in process.env || process.env.OPENAI_API_KEY !== 'sk-o') process.exit(3);\nprocess.stdout.write(${JSON.stringify(CATALOGUE)});\n`);
 		const commande = trouverCodex({ MNEMO_CODEX: faux }, 'darwin', '/nulle/part');
-		expect(await modelesCodex()({ executer: executeurReel(), commande, env: { CODEX_HOME: '/h/c', VIDE: undefined } })).toEqual(['gpt-a', 'gpt-b']);
+		expect(await modelesCodex()({ executer: executeurReel(), commande, env: { CODEX_HOME: '/h/c', Codex_Api_Key: 'k', OPENAI_API_KEY: 'sk-o', VIDE: undefined } })).toEqual(['gpt-a', 'gpt-b']);
 	});
 
 	it('en cache par commande et CODEX_HOME ; échec, sortie illisible ou introuvable : aucun modèle, réessayé plus tôt', async () => {
@@ -431,5 +434,50 @@ describe('modèles de Codex (codex debug models)', () => {
 		expect(await modeles({ executer, commande, env: {} })).toEqual([]);
 		expect(await modeles({ executer, commande: null, env: {} })).toEqual([]);
 		expect(appels).toHaveLength(4);
+	});
+});
+
+describe('version de Codex (codex --version)', () => {
+	it('lue par le faux codex (Node courant), sans CODEX_API_KEY ; illisible, en échec ou introuvable : null', async () => {
+		const d = await dossierTemporaire();
+		const faux = join(d, 'faux-codex.mjs');
+		await writeFile(faux, `if (process.argv.slice(2).join(' ') !== '--version' || 'CODEX_API_KEY' in process.env) process.exit(3);\nprocess.stdout.write('codex-cli 0.171.0-alpha.13\\n');\n`);
+		const commande = trouverCodex({ MNEMO_CODEX: faux }, 'darwin', '/nulle/part')!;
+		expect(await versionCodex()(commande, { CODEX_API_KEY: 'k' })).toBe('0.171.0-alpha.13');
+		await writeFile(faux, "process.stdout.write('codex dev');\n");
+		expect(await versionCodex()(commande, {})).toBeNull();
+		await writeFile(faux, 'process.exit(2);\n');
+		expect(await versionCodex()(commande, {})).toBeNull();
+		expect(await versionCodex()({ commande: join(d, 'absent'), avant: [] }, {})).toBeNull();
+	});
+
+	it('en cache par commande, sous un délai court', async () => {
+		let maintenant = 0;
+		const appels: unknown[] = [];
+		const executer: Executer = async (commande, args, options) => {
+			appels.push([commande, args, options?.delaiMs]);
+			return { code: 0, sortie: 'codex-cli 0.172.0', erreur: '' };
+		};
+		const version = versionCodex(() => maintenant);
+		const commande = { commande: '/bin/codex', avant: [] };
+		expect(await version(commande, {}, executer)).toBe('0.172.0');
+		expect(await version(commande, {}, executer)).toBe('0.172.0');
+		expect(appels).toEqual([['/bin/codex', ['--version'], DELAI_VERSION_MS]]);
+		expect(DELAI_VERSION_MS).toBeLessThanOrEqual(5000);
+		maintenant += 11 * 60_000;
+		await version(commande, {}, executer);
+		expect(appels).toHaveLength(2);
+	});
+});
+
+describe('réglages de la déclaration MCP « mnemo » dans config.toml de Codex', () => {
+	it('clés autres que command et args, lues sans rien changer ; fichier absent : aucune', async () => {
+		const maison = await dossierTemporaire();
+		expect(await reglagesMcpCodex({ CODEX_HOME: maison })).toEqual([]);
+		const texte = '[mcp_servers.mnemo]\ncommand = "node"\nargs = ["m", "mcp"]\nenabled_tools = ["lire"]\n\n[mcp_servers.mnemo.env]\nCLE = "v"\n';
+		await writeFile(join(maison, 'config.toml'), texte);
+		expect((await reglagesMcpCodex({ CODEX_HOME: maison })).sort()).toEqual(expect.arrayContaining(['enabled_tools']));
+		expect((await reglagesMcpCodex({ CODEX_HOME: maison })).some((c) => c.startsWith('env'))).toBe(true);
+		expect(await readFile(join(maison, 'config.toml'), 'utf8')).toBe(texte);
 	});
 });
