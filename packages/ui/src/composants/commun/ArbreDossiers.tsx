@@ -117,7 +117,7 @@ function LigneDossier(p: {
 					)}
 					<span className={s.points}>
 						{p.sessions.map((x) => (
-							<Point key={x.id} etat={x.etat} petit />
+							<Point key={x.id} session={x} petit />
 						))}
 					</span>
 					<span className={s.espace} />

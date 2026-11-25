@@ -132,7 +132,7 @@ export function GrilleSessions(p: Props): ReactNode {
 									<span className={s.pastilles}>
 										{g.sessions.map((x) => (
 											<button key={x.id} type="button" className={s.pastille} onClick={() => p.surPastille(x.id)} tabIndex={mini ? 0 : -1}>
-												<Point etat={x.etat} />
+												<Point session={x} />
 												{x.objectif ?? 'Sans objectif'}
 											</button>
 										))}
