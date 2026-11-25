@@ -6,7 +6,6 @@ import { estIdMoteur, IDS_MOTEURS, MOTEUR_PAR_DEFAUT } from '../../domaine/moteu
 import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
 import { MOTEURS_DU_POSTE } from '../../infra/moteurs/moteurs.ts';
 import { nodeDurable } from '../../infra/node-durable.ts';
-import { REMEDES } from '../moteurs-du-poste.ts';
 import { ErreurCli } from './erreurs.ts';
 import { executeurReel } from '../../infra/executeur.ts';
 
@@ -18,18 +17,16 @@ const USAGE = `Usage : mnemo declarer (--remplacer | --retirer) [--moteur <${IDS
 
 const MAIN = fileURLToPath(new URL('./main.ts', import.meta.url));
 
-/** Ce que lit la commande ; remplaçable (tests : aucun vrai `claude`, `codex` ni `vibe`). */
+/**
+ * Ce que lit la commande ; remplaçable (tests : aucun vrai moteur). `trouver` : la commande d'un moteur (par défaut, celle que
+ * son `trouver` cherche).
+ */
 export type DependancesDeclarer = {
 	executer: Executer;
-	claude: () => CommandeMoteur | null;
-	codex: () => CommandeMoteur | null;
-	vibe: () => CommandeMoteur | null;
+	trouver: Partial<Record<IdMoteur, () => CommandeMoteur | null>>;
 	main: string;
 	env: Record<string, string | undefined>;
 };
-
-/** La commande du moteur donnée par les dépendances, s'il y en a une. */
-const TROUVEURS: Record<IdMoteur, 'claude' | 'codex' | 'vibe'> = { 'claude-code': 'claude', codex: 'codex', 'mistral-vibe': 'vibe' };
 
 const MESSAGES: Record<Exclude<SortieDeclarer['resultat'], 'echec'>, string> = {
 	absent: 'Aucune déclaration MCP « mnemo » : rien à faire.',
@@ -41,7 +38,8 @@ const MESSAGES: Record<Exclude<SortieDeclarer['resultat'], 'echec'>, string> = {
 
 /** Messages des hooks de Mnemo installés pour tout le poste chez ce moteur (`fichier` : leur fichier). */
 function messagesHooks(moteur: MoteurDuPoste, fichier: string): Record<'absent' | 'deja' | 'remplace' | 'autre' | 'retire', string> {
-	const approuver = REMEDES[moteur.id].approbation === null ? '' : ` ; approuvez-les de nouveau dans ${moteur.nom} (/hooks)`;
+	const { approbation } = moteur.installation;
+	const approuver = approbation === null ? '' : ` ; approuvez-les de nouveau dans ${moteur.nom} (${approbation.commande})`;
 	return {
 		absent: `Aucun hook de Mnemo dans ${fichier} : rien à faire.`,
 		deja: 'Hooks de Mnemo déjà à jour.',
@@ -84,11 +82,11 @@ export async function commandeDeclarer(args: string[], partiel: Partial<Dependan
 	const remplacer = reste.includes('--remplacer');
 	if (remplacer === reste.includes('--retirer')) throw new ErreurCli(USAGE, 2);
 	const moteur = MOTEURS_DU_POSTE[id];
-	const trouver = partiel[TROUVEURS[id]];
+	const trouver = partiel.trouver?.[id] ?? (() => moteur.trouver(process.env, process.platform));
 	const appel = {
 		executer: partiel.executer ?? executeurReel(),
 		main: partiel.main ?? MAIN,
-		commande: (trouver ?? (() => moteur.trouver(process.env, process.platform)))(),
+		commande: trouver(),
 		plateforme: process.platform,
 		env: partiel.env ?? process.env,
 	};

@@ -13,9 +13,9 @@ import type { ResultatDeclaration, ResultatInstallationHooks } from '../../appli
 import { citerPosix, citerPowerShell } from '../../domaine/citer.ts';
 import { commandeManuelle, declarerServeurMcp } from '../../infra/moteurs/claude-code/declaration-mcp.ts';
 import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
-import { MOTEURS_DU_POSTE } from '../../infra/moteurs/moteurs.ts';
-import { MOTEURS_FACULTATIFS, REMEDES } from '../moteurs-du-poste.ts';
-import type { MoteurFacultatif } from '../moteurs-du-poste.ts';
+import { MOTEURS_DU_POSTE, MOTEURS_FACULTATIFS } from '../../infra/moteurs/moteurs.ts';
+import { remedesDuMoteur } from '../../application/moteurs/remedes.ts';
+import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
 import { commandeAJour, dossierDeCommande } from '../../infra/commande-mnemo.ts';
 import type { Piece } from '../../infra/modeles/catalogue.ts';
 import { dependancesReelles } from '../../infra/systeme.ts';
@@ -45,11 +45,11 @@ export type SuiviModeles = {
 export type ActionsInit = {
 	declarerMcp(): Promise<ResultatDeclaration>;
 	/** Déclaration du serveur MCP chez un moteur facultatif (sur son option : `--codex`, `--mistral`). */
-	declarerAuMoteur(id: MoteurFacultatif['id']): Promise<ResultatDeclaration>;
+	declarerAuMoteur(id: IdMoteur): Promise<ResultatDeclaration>;
 	/** Hooks de Mnemo pour tout le poste chez ce moteur (`~/.codex/hooks.json`, `~/.vibe/hooks.toml`). */
-	installerHooks(id: MoteurFacultatif['id']): Promise<ResultatInstallationHooks>;
+	installerHooks(id: IdMoteur): Promise<ResultatInstallationHooks>;
 	/** Le fichier de hooks visé chez ce moteur, pour les messages. */
-	cheminHooks(id: MoteurFacultatif['id']): string;
+	cheminHooks(id: IdMoteur): string;
 	installerModeles(racine: string, suivi?: SuiviModeles): Promise<void>;
 	creerLanceur(racine: string, ecrire?: (ligne: string) => void): Promise<void>;
 	installerCommande(ecrire?: (ligne: string) => void): Promise<void>;
@@ -239,9 +239,11 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 
 		// moteurs facultatifs : seulement sur leur option (jamais par défaut ni sur question) : serveur MCP puis hooks ;
 		// MNEMO_SANS_MCP=1 l'emporte (ni l'un ni l'autre)
-		for (const f of MOTEURS_FACULTATIFS) {
-			if (!choix.moteurs.includes(f.id)) continue;
-			const nom = MOTEURS_DU_POSTE[f.id].nom;
+		for (const m of MOTEURS_FACULTATIFS) {
+			if (!choix.moteurs.includes(m.id)) continue;
+			const { nom } = m;
+			// étapes du contrat (`EtapeInit`), portées par l'installation du moteur
+			const f = { id: m.id, etape: m.installation.facultatif.etape as EtapeInit, etapeHooks: m.installation.facultatif.etapeHooks as EtapeInit };
 			if (sansMcpEnv) {
 				j.evenement(f.etape, 'saute', `Serveur MCP non déclaré à ${nom} (MNEMO_SANS_MCP=1).`);
 				j.evenement(f.etapeHooks, 'saute', `Hooks non installés chez ${nom} (MNEMO_SANS_MCP=1).`);
@@ -407,27 +409,27 @@ export function messagesInit(racine: string, resultat: ResultatInitialisation, d
 }
 
 /** Une ligne pour la déclaration MCP chez un moteur facultatif. */
-export function messageDeclarationMoteur(id: MoteurFacultatif['id'], declaration: ResultatDeclaration): string {
-	const { nom } = MOTEURS_DU_POSTE[id];
-	const r = REMEDES[id];
+export function messageDeclarationMoteur(id: IdMoteur, declaration: ResultatDeclaration): string {
+	const moteur = MOTEURS_DU_POSTE[id];
+	const { nom, installation } = moteur;
 	if (declaration === 'declare') return `Serveur MCP déclaré pour toutes les sessions ${nom}.`;
 	if (declaration === 'deja') return `Serveur MCP déjà déclaré à ${nom}.`;
-	if (declaration === 'desactive') return `Serveur MCP : déclaration désactivée dans ${nom} (${r.desactivation}), laissée telle quelle.`;
+	if (declaration === 'desactive') return `Serveur MCP : déclaration désactivée dans ${nom} (${installation.desactivation}), laissée telle quelle.`;
 	if ('perime' in declaration)
 		return declaration.remplacable === true
-			? `Serveur MCP déclaré à ${nom} pour un autre Node ou un autre Mnemo : lancez « ${r.remplacer} ».`
-			: `Une déclaration MCP « mnemo » qui ne lance pas Mnemo existe chez ${nom} : retirez-la (${r.retrait}) puis : ${declaration.manuel}`;
+			? `Serveur MCP déclaré à ${nom} pour un autre Node ou un autre Mnemo : lancez « ${remedesDuMoteur(moteur).remplacer} ».`
+			: `Une déclaration MCP « mnemo » qui ne lance pas Mnemo existe chez ${nom} : retirez-la (${installation.retraitManuel}) puis : ${declaration.manuel}`;
 	if (declaration.introuvable) return `${nom} introuvable : lancez vous-même : ${declaration.manuel}`;
 	return `Déclaration automatique à ${nom} impossible (${declaration.raison}) : lancez vous-même : ${declaration.manuel}`;
 }
 
 /** Une ligne pour les hooks installés chez un moteur facultatif ; s'il demande de les approuver (Codex), comment. */
-export function messageHooksMoteur(id: MoteurFacultatif['id'], r: Exclude<ResultatInstallationHooks, { echec: string }>, chemin: string): string {
-	const { nom } = MOTEURS_DU_POSTE[id];
-	const { approbation } = REMEDES[id];
-	if (r === 'deja') return `Hooks de Mnemo déjà installés chez ${nom} (${chemin})${approbation === null ? '.' : ` ; s’ils ne sont pas encore approuvés, approuvez-les dans ${nom} (/hooks).`}`;
+export function messageHooksMoteur(id: IdMoteur, r: Exclude<ResultatInstallationHooks, { echec: string }>, chemin: string): string {
+	const { nom, installation } = MOTEURS_DU_POSTE[id];
+	const { approbation } = installation;
+	if (r === 'deja') return `Hooks de Mnemo déjà installés chez ${nom} (${chemin})${approbation === null ? '.' : ` ; s’ils ne sont pas encore approuvés, approuvez-les dans ${nom} (${approbation.commande}).`}`;
 	const fait = r === 'installe' ? 'installés' : 'mis à jour';
-	return `Hooks de Mnemo ${fait} chez ${nom} (${chemin})${approbation === null ? '.' : ` ; ${approbation}`}`;
+	return `Hooks de Mnemo ${fait} chez ${nom} (${chemin})${approbation === null ? '.' : ` ; ${approbation.consigne}`}`;
 }
 
 /** Ligne de démarrage à copier-coller sans la commande `mnemo` : PowerShell (`& 'node.exe' …`) sous Windows, POSIX ailleurs. */

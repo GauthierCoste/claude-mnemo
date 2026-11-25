@@ -3,7 +3,7 @@ import { agentDeSession, fichiersDeSessionMistralVibe, motifSansRepriseMistralVi
 import type { Moteur } from '../../application/ports.ts';
 import { OUTILS_MISTRAL_VIBE } from '../../domaine/moteurs/mistral-vibe/outils.ts';
 import { TOUCHES_MISTRAL_VIBE } from '../../domaine/moteurs/mistral-vibe/touches.ts';
-import { refusDeVersionMistralVibe, VERSION_MIN_MISTRAL_VIBE } from '../../domaine/moteurs/mistral-vibe/version.ts';
+import { refusDeVersionMistralVibe } from '../../domaine/moteurs/mistral-vibe/version.ts';
 import { DECLARATION_MCP_MISTRAL_VIBE } from './mistral-vibe/declaration-mcp.ts';
 import { HOOKS_DU_POSTE_MISTRAL_VIBE } from './mistral-vibe/hooks-toml.ts';
 import { modelesMistralVibe } from './mistral-vibe/modeles.ts';
@@ -25,6 +25,14 @@ export const MOTEUR_MISTRAL_VIBE: Moteur = {
 	id: 'mistral-vibe',
 	nom: 'Mistral Vibe',
 	commandeParDefaut: 'vibe',
+	installation: {
+		optionInit: '--mistral',
+		facultatif: { bloc: 'mistral', etape: 'mistral', etapeHooks: 'mistral_hooks' },
+		recherche: 'commande vibe absente du PATH et de ~/.local/bin, ou MNEMO_VIBE invalide',
+		desactivation: 'disabled = true',
+		retraitManuel: 'le bloc [[mcp_servers]] name = "mnemo" de config.toml',
+		approbation: null,
+	},
 	modeles: modelesMistralVibe,
 	sansCommande: 'refus',
 	trouver: (env, plateforme) => trouverVibe(env, plateforme as NodeJS.Platform),
@@ -32,7 +40,6 @@ export const MOTEUR_MISTRAL_VIBE: Moteur = {
 	hooksDuPoste: HOOKS_DU_POSTE_MISTRAL_VIBE,
 	version: versionParCommande(definies),
 	refusDeVersion: refusDeVersionMistralVibe,
-	versionMinimale: VERSION_MIN_MISTRAL_VIBE,
 	marqueDeSession: agentDeSession,
 	motifSansReprise: motifSansRepriseMistralVibe,
 	fichiersDeSession: fichiersDeSessionMistralVibe,

@@ -210,9 +210,9 @@ describe('redeclarerServeurMcp et retirerServeurMcp (mnemo declarer)', () => {
 	it('mnemo declarer : une ligne JSON ; usage refusé sans action ou avec les deux', async () => {
 		const lignes: string[] = [];
 		const { executer } = simule([1]);
-		await commandeDeclarer(['--remplacer', '--json'], { executer, claude: () => CLAUDE, main: MAIN }, (l) => lignes.push(l));
+		await commandeDeclarer(['--remplacer', '--json'], { executer, trouver: { 'claude-code': () => CLAUDE }, main: MAIN }, (l) => lignes.push(l));
 		expect(JSON.parse(lignes[0]!)).toMatchObject({ resultat: 'absent' });
-		await expect(commandeDeclarer(['--json'], { executer, claude: () => CLAUDE })).rejects.toMatchObject({ code: 2 });
-		await expect(commandeDeclarer(['--remplacer', '--retirer'], { executer, claude: () => CLAUDE })).rejects.toMatchObject({ code: 2 });
+		await expect(commandeDeclarer(['--json'], { executer, trouver: { 'claude-code': () => CLAUDE } })).rejects.toMatchObject({ code: 2 });
+		await expect(commandeDeclarer(['--remplacer', '--retirer'], { executer, trouver: { 'claude-code': () => CLAUDE } })).rejects.toMatchObject({ code: 2 });
 	});
 });

@@ -7,7 +7,7 @@
 import { ROUTES } from '@mnemo/contrat';
 import type { MoteurVue, PointMoteurVue, ReponseMoteurs } from '@mnemo/contrat';
 import type { CommandeMoteur, Executer, Moteur, MoteurDuService, Pilotage } from '../../application/ports.ts';
-import { REMEDES } from '../moteurs-du-poste.ts';
+import { remedesDuMoteur } from '../../application/moteurs/remedes.ts';
 import type { Route } from './routes.ts';
 
 /** Délai de chaque commande du moteur lue pour le poste (`claude mcp get`, `codex mcp get`), comme `verifier-poste`. */
@@ -27,10 +27,10 @@ type Remede = NonNullable<PointMoteurVue['remede']>;
 const terminal = (texte: string): Remede => ({ texte, dans: 'terminal' });
 
 /** Commandes qui déclarent (ou refont) le serveur MCP et les hooks de Mnemo chez chaque moteur, et ce que dit son absence. */
-function commandesDe(moteur: Moteur): { declarer: string; remplacer: string; introuvable: string; desactivation: string } {
-	const r = REMEDES[moteur.id];
+function commandesDe(moteur: Moteur): { declarer: string; remplacer: string; retirer: string; introuvable: string; desactivation: string } {
+	const { recherche, desactivation } = moteur.installation;
 	const sessions = moteur.sansCommande === 'manuel' ? 'les sessions se lancent par une ligne à coller' : 'ses sessions sont refusées';
-	return { ...r, introuvable: `${r.recherche} : ${sessions}` };
+	return { ...remedesDuMoteur(moteur), introuvable: `${recherche} : ${sessions}`, desactivation };
 }
 
 /** Version lue (en cache, sauf `relire`) ; null : le moteur ne la donne pas, ou elle est illisible. */
@@ -86,10 +86,10 @@ async function pointsDuPoste(duService: MoteurDuService, p: PosteDesMoteurs): Pr
 	const approbation = hooks.approbation;
 	if (approbation !== undefined) {
 		const a = { cle: 'approbation', libelle: 'Approbation des hooks', detail: approbation.motif } as const;
-		const remede: Remede = { texte: '/hooks', dans: 'moteur' };
+		const remede: Remede | undefined = moteur.installation.approbation === null ? undefined : { texte: moteur.installation.approbation.commande, dans: 'moteur' };
 		if (approbation.etat === 'approuves') points.push({ ...a, ok: true, etat: 'approuvés' });
-		else if (approbation.etat === 'a_approuver') points.push({ ...a, ok: false, etat: 'à approuver', remede });
-		else points.push({ ...a, ok: null, etat: 'inconnue', remede });
+		else if (approbation.etat === 'a_approuver') points.push({ ...a, ok: false, etat: 'à approuver', ...(remede === undefined ? {} : { remede }) });
+		else points.push({ ...a, ok: null, etat: 'inconnue', ...(remede === undefined ? {} : { remede }) });
 	}
 	return points;
 }

@@ -417,7 +417,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		const hooks = async (): Promise<string | null> => {
 			if (moteur.hooksDuPoste === undefined) return null;
 			const lu = await moteur.hooksDuPoste.lire({ node: pil.plugin.appel.node, main: pil.plugin.appel.main, env: pil.hote.env }).catch((erreur: unknown) => ({ echec: (erreur as Error).message }));
-			return avertissementDesHooks(moteur.nom, moteur.id, lu);
+			return avertissementDesHooks(moteur, lu);
 		};
 		const mcp = async (): Promise<string | null> => (moteur.reglagesMcp === undefined ? null : avertissementDesReglagesMcp(moteur.nom, await moteur.reglagesMcp(pil.hote.env)));
 		const borne = (p: Promise<string | null>): Promise<string | null> => {

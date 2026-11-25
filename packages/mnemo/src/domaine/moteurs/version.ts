@@ -10,7 +10,7 @@ function nombres(version: string): [number, number, number] | null {
 }
 
 /** La version minimale telle qu'on l'écrit : sans « .0 » final (« 0.171 », « 3.1.5 »). */
-export const versionMinimaleLisible = (minimale: string): string => minimale.replace(/\.0$/u, '');
+const versionMinimaleLisible = (minimale: string): string => minimale.replace(/\.0$/u, '');
 
 /**
  * Motif de refus d'un moteur (`nom`) trop ancien, sous `minimale` ; null s'il est assez récent, ou si sa version est inconnue

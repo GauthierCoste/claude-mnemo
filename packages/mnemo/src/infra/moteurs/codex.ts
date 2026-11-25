@@ -8,7 +8,7 @@ import { HOOKS_DU_POSTE_CODEX } from './codex/hooks-json.ts';
 import { modelesCodex } from './codex/modeles.ts';
 import { reglagesMcpCodex } from './codex/reglages-mcp.ts';
 import { versionCodex } from './codex/version.ts';
-import { refusDeVersionCodex, VERSION_MIN_CODEX } from '../../domaine/moteurs/codex/version.ts';
+import { refusDeVersionCodex } from '../../domaine/moteurs/codex/version.ts';
 import { lectureTranscriptionCodex } from './codex/transcription.ts';
 import { trouverCodex } from './codex/trouver-codex.ts';
 
@@ -26,6 +26,14 @@ export const MOTEUR_CODEX: Moteur = {
 	id: 'codex',
 	nom: 'Codex',
 	commandeParDefaut: 'codex',
+	installation: {
+		optionInit: '--codex',
+		facultatif: { bloc: 'codex', etape: 'codex', etapeHooks: 'codex_hooks' },
+		recherche: 'commande codex absente du PATH et de ChatGPT.app, ou MNEMO_CODEX invalide',
+		desactivation: 'enabled = false',
+		retraitManuel: '`codex mcp remove mnemo`',
+		approbation: { commande: '/hooks', consigne: 'approuvez-les une fois dans Codex (/hooks) : sans approbation, Codex ne les lance pas.' },
+	},
 	modeles: modelesCodex(),
 	sansCommande: 'refus',
 	trouver: (env, plateforme) => trouverCodex(env, plateforme as NodeJS.Platform),
@@ -34,7 +42,6 @@ export const MOTEUR_CODEX: Moteur = {
 	reglagesMcp: reglagesMcpCodex,
 	version: versionCodex(),
 	refusDeVersion: refusDeVersionCodex,
-	versionMinimale: VERSION_MIN_CODEX,
 	marqueDeSession: marqueCodex,
 	motifSansReprise: motifSansRepriseCodex,
 	fichiersDeSession: fichiersDeSessionCodex,

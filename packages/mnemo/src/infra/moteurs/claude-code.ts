@@ -30,6 +30,13 @@ export const MOTEUR_CLAUDE_CODE: Moteur = {
 	id: 'claude-code',
 	nom: 'Claude Code',
 	commandeParDefaut: 'claude',
+	installation: {
+		optionInit: '--mcp',
+		recherche: 'commande claude absente du PATH, ou MNEMO_CLAUDE invalide',
+		desactivation: 'désactivé',
+		retraitManuel: '`claude mcp remove mnemo --scope user`',
+		approbation: null,
+	},
 	// les alias de `--model`, sans commande à lancer
 	modeles: async () => ALIAS_CLAUDE_CODE,
 	// introuvable : la ligne à coller, avec `claude`

@@ -1106,10 +1106,30 @@ export type TelemetrieDuMoteur = {
  * Un agent de code sur le poste, hors des sessions : `commandeParDefaut`, le nom écrit dans une ligne à coller quand il est
  * introuvable ; `trouver` : sa commande (null : introuvable) ; `declarationMcp` : le serveur `mnemo` déclaré chez lui.
  */
+/**
+ * Ce que Mnemo dit d'un moteur sur le poste (`mnemo init`, `verifier-poste`, `declarer`, Réglages › Système, avertissements de
+ * session) ; les commandes `mnemo` qui y remédient en sont tirées (`remedesDuMoteur`). `optionInit` : l'option de `mnemo init`
+ * qui déclare le serveur MCP (et installe les hooks du poste) ; `facultatif` : moteur que `init` ne touche que sur cette
+ * option, avec son bloc dans `PosteVerifie` et ses étapes d'`init` (`EtapeInit`) ; absent : Claude Code, toujours vérifié.
+ * `recherche` : où sa commande est cherchée (dit quand elle est introuvable) ; `desactivation` : le réglage qui éteint sa
+ * déclaration MCP ; `retraitManuel` : comment retirer une déclaration « mnemo » qui ne lance pas Mnemo ; `approbation` : ce
+ * qu'il faut faire pour qu'il lance des hooks installés (`commande` à taper dans le moteur, `consigne` à dire) ; null : il
+ * les lance sans approbation.
+ */
+export type InstallationDuMoteur = {
+	optionInit: string;
+	facultatif?: { bloc: string; etape: string; etapeHooks: string };
+	recherche: string;
+	desactivation: string;
+	retraitManuel: string;
+	approbation: { commande: string; consigne: string } | null;
+};
+
 export type MoteurDuPoste = {
 	id: IdMoteur;
 	nom: string;
 	commandeParDefaut: string;
+	installation: InstallationDuMoteur;
 	trouver(env: Record<string, string | undefined>, plateforme: string): CommandeMoteur | null;
 	declarationMcp: DeclarationMcp;
 	/** Hooks installés pour tout le poste (Codex, Mistral Vibe) ; absent : le moteur les prend des fichiers de chaque session (Claude Code). */
@@ -1118,8 +1138,6 @@ export type MoteurDuPoste = {
 	version?(commande: CommandeMoteur, env: Record<string, string | undefined>, executer?: Executer, options?: { relire?: boolean }): Promise<string | null>;
 	/** Motif de refus d'une version trop ancienne pour lancer des sessions ; null : elle convient, ou elle est illisible. */
 	refusDeVersion?(version: string | null): string | null;
-	/** Plus ancienne version mesurée avec Mnemo, celle sous laquelle `refusDeVersion` refuse (« 0.171.0 »). */
-	versionMinimale?: string;
 };
 
 /** Ce que reçoit la liste des modèles : l'exécuteur, la commande du moteur (null : introuvable) et l'environnement de l'utilisateur. */
