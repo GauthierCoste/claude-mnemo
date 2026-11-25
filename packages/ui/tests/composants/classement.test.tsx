@@ -121,6 +121,7 @@ function monter(o: Options = {}) {
 
 const liste = () => screen.getByRole('list', { name: 'Injecté dans la session' });
 const lignes = () => within(liste()).getAllByRole('listitem');
+const separateurs = () => [...liste().querySelectorAll<HTMLElement>('[data-genre]')];
 const titres = () => lignes().map((l) => l.getAttribute('data-id'));
 const note = (l: HTMLElement) => l.firstElementChild?.textContent;
 
@@ -162,13 +163,15 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(bouton.getAttribute('title')).toMatch(/\nOrdre seul : aucune note apprise et validée/u);
 		await act(async () => bouton.click());
 		expect(screen.getByText(/^Ordre seul : aucune note apprise et validée/u)).toBeTruthy();
-		// ni repère du seuil, ni trait : l'espacement seul
+		// ni seuil d'injection : le séparateur reste, en filet gris sans texte
 		expect(screen.queryByText(/seuil d’injection/u)).toBeNull();
+		expect(separateurs().map((x) => x.getAttribute('data-genre'))).toEqual(['filet']);
+		expect(separateurs()[0]!.textContent).toBe('');
 		cleanup();
 		// entrée d'avant le classement vivant : une note du reranker, sans `calibree`
 		monter({ entrees: [{ session: 's1', moment: 'message', horodatageMs: 1, ids: [], texte: '', ms: 1, sens: true, classement: [{ id: 'b.md', titre: 'Bêta', note: 0.8, servi: false, rang: 1 }], muet: null, cartes: [] }] });
 		await act(async () => {});
-		expect(lignes().map(note)).toEqual(['80\u00a0%']);
+		expect(lignes().map(note)).toEqual(['≈\u00a080\u00a0%']);
 		expect(lignes()[0]!.firstElementChild!.getAttribute('title')).toBe("Note non calibrée : celle d'une entrée d'avant le classement vivant");
 		expect(await screen.findByRole('button', { name: /– ordre seul$/u })).toBeTruthy();
 	});
@@ -181,7 +184,7 @@ describe('ClassementEnDirect : classement vivant', () => {
 		});
 		expect(await screen.findByRole('button', { name: /– ordre seul$/u })).toBeTruthy();
 		const [beta, delta, epsilon, phi] = lignes() as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
-		expect([beta, delta, epsilon, phi].map(note)).toEqual(['95\u00a0%', '40\u00a0%', '62\u00a0%', '◇']);
+		expect([beta, delta, epsilon, phi].map(note)).toEqual(['≈\u00a095\u00a0%', '≈\u00a040\u00a0%', '≈\u00a062\u00a0%', '◇']);
 		const pct = beta.firstElementChild!;
 		expect(pct.getAttribute('title')).toBe("Note non calibrée : le modèle appris n'a pas passé les critères d'acceptation");
 		expect(pct.className).toMatch(/nonCalibree/u);
@@ -197,31 +200,33 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(screen.getByText('ordre seul').getAttribute('title')).toMatch(/^Ordre seul : /u);
 	});
 
-	it('repère du seuil : aucune fiche au-dessus, il ouvre le classement (juste après l’espacement des injectées)', async () => {
-		monter({ entrees: [entree(A(14, 34), [v('d.md', 'Delta', 1, 0.5), v('e.md', 'Epsilon', 2, 0.3)], { ids: [POSITION] })] });
-		await act(async () => {});
-		const items = [...liste().children];
-		const jonction = items.findIndex((li) => li.getAttribute('data-ecart') === 'true');
-		expect(jonction).toBe(1);
-		expect(items[jonction + 1]!.textContent).toBe('seuil d’injection 90\u00a0%');
-		expect(items[jonction + 2]!.getAttribute('data-id')).toBe('d.md');
-	});
-
-	it('repère du seuil : deux fiches au-dessus (non injectées), il les sépare des autres', async () => {
+	it('séparateur, injection active : le seuil d’injection, juste sous les injectées ; au-dessus du seuil sans être injectée, une fiche reste dessous (pas vue)', async () => {
 		monter({ entrees: [entree(A(14, 34), [v('b.md', 'Bêta', 1, 0.95), v('c.md', 'Gamma', 2, 0.92), v('d.md', 'Delta', 3, 0.5)], { ids: [POSITION] })] });
 		await act(async () => {});
 		const items = [...liste().children].map((li) => li.getAttribute('data-id') ?? li.textContent);
-		expect(items.slice(2)).toEqual(['b.md', 'c.md', 'seuil d’injection 90\u00a0%', 'd.md']);
+		expect(items).toEqual([POSITION, 'seuil d’injection 90\u00a0%', 'b.md', 'c.md', 'd.md']);
+		expect(separateurs().map((x) => x.getAttribute('data-genre'))).toEqual(['seuil']);
+		expect(within(lignes()[1]!).getByRole('button', { name: 'Bêta' }).getAttribute('title')).toMatch(/Au-dessus du seuil sans être injectée/u);
 	});
 
-	it('repère du seuil d’injection : avant la première note sous le seuil ; une fiche au-dessus non injectée le dit au survol', async () => {
-		monter();
+	it('dernier message porteur d’avant le classement vivant (ni classement ni calibration), suivi de messages muets : le panneau dit que le classement viendra au prochain message', async () => {
+		const ancien = { session: 's1', moment: 'message' as const, horodatageMs: 1, ids: [], texte: '', ms: 1, sens: false, classement: [], muet: null, cartes: [] };
+		monter({ entrees: [ancien, { ...ancien, horodatageMs: 2, muet: 'balise' as const }] });
+		await act(async () => {});
+		expect(screen.getByText(/le classement viendra au prochain message/u)).toBeTruthy();
+		cleanup();
+		monter({ entrees: [{ ...ancien, calibree: false }] });
+		await act(async () => {});
+		expect(screen.queryByText(/le classement viendra au prochain message/u)).toBeNull();
+	});
+
+	it('séparateur : sans fiche injectée, il ouvre la liste ; un seul, jamais deux traits', async () => {
+		monter({ entrees: [entree(A(14, 34), [v('d.md', 'Delta', 1, 0.5), v('e.md', 'Epsilon', 2, 0.3)])] });
 		await act(async () => {});
 		const items = [...liste().children];
-		const seuil = items.findIndex((li) => li.textContent === 'seuil d’injection 90 %');
-		expect(items[seuil - 1]!.getAttribute('data-id')).toBe('b.md');
-		expect(items[seuil + 1]!.getAttribute('data-id')).toBe('d.md');
-		expect(within(lignes()[2]!).getByRole('button', { name: 'Bêta' }).getAttribute('title')).toMatch(/Au-dessus du seuil sans être injectée/u);
+		expect(items[0]!.textContent).toBe('seuil d’injection 90\u00a0%');
+		expect(items[1]!.getAttribute('data-id')).toBe('d.md');
+		expect(separateurs()).toHaveLength(1);
 	});
 
 	it('pas de ligne qui rappelle le message ; « affinage… » dans le bouton des modèles pendant l’affinage, puis l’icône seule', async () => {
@@ -275,6 +280,37 @@ describe('ClassementEnDirect : classement vivant', () => {
 			expect(ligne('d.md').dataset['glisse']).toBe('descend');
 			await act(async () => vi.advanceTimersByTime(300));
 			expect(ligne('e.md').dataset['glisse']).toBeUndefined();
+		} finally {
+			if (descripteur) Object.defineProperty(HTMLElement.prototype, 'offsetTop', descripteur);
+			HTMLElement.prototype.animate = animer;
+		}
+	});
+
+	it('une fiche classée puis injectée (◆) ne glisse pas depuis le bas de la liste sous le séparateur : elle apparaît en tête, en fondu', async () => {
+		vi.useFakeTimers();
+		// la place réelle d'une ligne : son rang dans la liste (20 px par ligne)
+		const descripteur = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetTop');
+		Object.defineProperty(HTMLElement.prototype, 'offsetTop', {
+			configurable: true,
+			get(this: HTMLElement) {
+				return this.parentElement === null ? 0 : [...this.parentElement.children].indexOf(this) * 20;
+			},
+		});
+		const animations: { id: string; image: string }[] = [];
+		const animer = HTMLElement.prototype.animate;
+		HTMLElement.prototype.animate = function (this: HTMLElement, images: Keyframe[]) {
+			animations.push({ id: this.dataset['id'] ?? '', image: JSON.stringify(images[0]) });
+			return {} as Animation;
+		} as typeof HTMLElement.prototype.animate;
+		try {
+			const { remplacer } = monter();
+			await act(async () => {});
+			// message suivant : Epsilon, dernière du classement, injectée à la main (➤)
+			remplacer([CALIBRE, entree(A(14, 40), [v('b.md', 'Bêta', 1, 0.92), v('d.md', 'Delta', 2, 0.5)], { ids: ['e.md'] })]);
+			expect(titres().slice(0, 3)).toEqual([POSITION, 'g.md', 'e.md']);
+			const deE = animations.filter((x) => x.id === 'e.md');
+			expect(deE.map((x) => x.image)).toEqual([JSON.stringify({ opacity: 0 })]);
+			expect(lignes().find((l) => l.getAttribute('data-id') === 'e.md')!.dataset['glisse']).toBeUndefined();
 		} finally {
 			if (descripteur) Object.defineProperty(HTMLElement.prototype, 'offsetTop', descripteur);
 			HTMLElement.prototype.animate = animer;
@@ -353,7 +389,8 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(etat.textContent).toContain('Injection automatique coupée (modèles complets) : justesse récente insuffisante.');
 		expect(etat.textContent).toContain('31 des 100 dernières fiches injectées par Mnemo ont été écartées.');
 		expect(note(lignes()[2]!)).toBe('92 %');
-		expect([...liste().children].some((li) => li.textContent === 'seuil 90\u00a0% – coupé')).toBe(true);
+		// coupée : le même séparateur, gris plein, « coupé »
+		expect(separateurs().map((x) => [x.getAttribute('data-genre'), x.textContent])).toEqual([['coupe', 'seuil 90\u00a0% – coupé']]);
 		expect(within(lignes()[2]!).getByRole('button', { name: 'Bêta' }).getAttribute('title')).toMatch(/l'injection automatique est coupée : ➤/u);
 		await act(async () => within(etat).getByRole('button', { name: 'Réactiver' }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/injection-automatique', { session: 's1' });

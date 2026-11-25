@@ -512,8 +512,8 @@ model files it was learned with. Three cases:
 
 - **Accepted**: the score is a calibrated percentage. It orders the ranking, chooses the leads and may inject a note.
 - **Learned but refused** (criteria not met, or other model files installed since): its score still orders the ranking
-  and chooses the leads at each message, but no percentage is shown and nothing is injected by Mnemo: « ordre seul »
-  (order only).
+  and chooses the leads at each message, but nothing is injected by Mnemo: « ordre seul » (order only). Its score is
+  shown in grey with the sign « about », « ≈ 42 % », never as a calibrated percentage.
 - **Nothing learned** (a new installation): a provisional rule, also « ordre seul ». The ranking follows the meaning and
   the words; the first new notes go out as leads only at the first message and at the message that carries a note you
   inject by hand, at most `contexte.pistesParMessage`. Without the meaning model, a lead must match the words of the
@@ -597,11 +597,18 @@ aside a note Mnemo injected counts as an error for the watch above.
 - At the top, ◆ the notes injected whole, oldest first, with on the right how: « du dossier » (the note of the position),
   « à la main » (➤), or « auto 94 % » (injected by Mnemo, with its score at that message; the tooltip gives the threshold
   and the time).
-- Below a gap, when automatic injection is cut, the notice and « Réactiver ».
-- The ranking of the last meaningful message: on the left the calibrated score in %, or ◇ in « ordre seul »; the type dot
-  and the title, with the reason under it and « piste » when the note was sent as a lead. A line marks the threshold of
-  automatic injection. At each ranking, then at the refinement, the lines slide to their new place, ▲/▼ shows a change of
-  rank for a few seconds, and a newcomer fades in.
+- One separator, always there, between what the session has seen (◆) and what it has not: a plain grey line; when
+  automatic injection is active (accepted score, not cut), the same line becomes the dashed threshold of injection,
+  « seuil d’injection 90 % »; when it is cut, grey again, « seuil 90 % – coupé ». Under it, when cut, the notice and
+  « Réactiver ». A note above the threshold that was not injected (refined later, or the cap per message reached) stays
+  under the line: the session has not seen it.
+- The ranking of the last meaningful message: on the left the calibrated score in %; in « ordre seul », the uncalibrated
+  score in grey (« ≈ 42 % »: the refused model, the provisional rule, or an entry from before the live ranking), or ◇
+  when there is none; the type dot and the title, with the reason under it and « piste » when the note was sent as a
+  lead. At each ranking, then at the refinement, the lines slide to their new place, ▲/▼ shows a change of rank for a
+  few seconds, and a newcomer fades in; a note that becomes injected appears at the top in a fade rather than sliding up
+  through the list. When the last meaningful message predates the live ranking, the panel says the ranking comes at the
+  next message.
 - « Plus tôt dans la session » (earlier in the session): the leads of earlier messages and the notes the session read (◈,
   tools `lire` and `voisins`) that are not in the ranking, most recent first, without %. A note read that is already in
   the list keeps its line, and its tooltip adds « lue aussi à HH:MM ».

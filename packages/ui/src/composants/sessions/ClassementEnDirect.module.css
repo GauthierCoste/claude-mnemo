@@ -1,6 +1,6 @@
-/* « Injecté dans la session » (panneau Contexte), le classement vivant : ◆ injectées (et comment), un filet et l'état du
-   classement, puis le classement du message (% ou ◇ en ordre seul, raison et « piste » dessous), le repère du seuil
-   d'injection, « Plus tôt dans la session » ; au survol, ➤ et ✗ (menu d'écart). Puis la suggestion des 3 sessions,
+/* « Injecté dans la session » (panneau Contexte), le classement vivant : ◆ injectées (et comment), un seul séparateur (filet,
+   ou seuil d'injection quand elle est active), puis le classement du message (%, ≈ % gris ou ◇ en ordre seul, raison et
+   « piste » dessous), « Plus tôt dans la session » ; au survol, ➤ et ✗ (menu d'écart). Puis la suggestion des 3 sessions,
    « Sous le seuil (N) », « Écartées (N) ». */
 .classement {
 	margin-top: 18px;
@@ -81,7 +81,8 @@
 }
 
 .note {
-	width: 34px;
+	/* la place de « ≈ 100 % » : la colonne reste alignée, calibrée ou non */
+	width: 44px;
 	flex: none;
 	padding-top: 5px;
 	text-align: right;
@@ -216,15 +217,36 @@
 	white-space: nowrap;
 }
 
-/* La jonction : un filet sous les fiches injectées, et l'état du classement à droite s'il sort de l'ordinaire. */
-/* Entre les fiches injectées et le classement : un espacement, pas de trait (le repère du seuil est le seul trait du panneau). */
+/* La jonction : le seul séparateur entre le vu (◆) et le pas vu, jamais retiré. */
 .jonction {
 	margin: 0;
 	padding: 0 4px;
 }
 
-.jonction[data-ecart='true'] {
-	margin-top: 12px;
+/* Filet gris plein par défaut (ordre seul, injection coupée) ; seuil d'injection : vert pointillé, sa valeur à droite. */
+.separateur {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 13px;
+	margin: 4px 0;
+	font: 500 9.5px var(--mono);
+	color: var(--dim);
+	cursor: help;
+}
+
+.separateur::before {
+	content: '';
+	flex: 1;
+	border-top: 1px solid var(--bd2);
+}
+
+.separateur[data-genre='seuil'] {
+	color: color-mix(in srgb, var(--ac) 70%, var(--dim));
+}
+
+.separateur[data-genre='seuil']::before {
+	border-top: 1px dashed color-mix(in srgb, var(--ac) 55%, var(--bd2));
 }
 
 /* « ordre seul » d'une session terminée (sans bouton des modèles) : à droite du titre, encadré comme un état. */
@@ -264,23 +286,6 @@
 
 .coupure button {
 	margin-top: 6px;
-}
-
-/* Repère du seuil d'injection : un trait pointillé, sa valeur à droite. */
-.seuil {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	margin: 2px 4px;
-	font: 500 9.5px var(--mono);
-	color: var(--dim);
-	cursor: help;
-}
-
-.seuil::before {
-	content: '';
-	flex: 1;
-	border-top: 1px dashed color-mix(in srgb, var(--ac) 35%, var(--bd2));
 }
 
 .intertitre {

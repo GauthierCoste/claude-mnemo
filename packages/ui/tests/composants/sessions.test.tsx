@@ -340,7 +340,7 @@ describe('vue Sessions', () => {
 		expect(lignes.map((l) => l.getAttribute('data-id'))).toEqual(['projets/erp-saas/Module stocks.md', 'consignes/Tests.md', 'projets/erp-saas/Lots.md']);
 		expect(lignes[1]!.firstElementChild?.textContent).toBe('◆');
 		// entrée ancienne : sa note, non calibrée, en gris
-		expect(lignes[2]!.firstElementChild?.textContent).toBe('40\u00a0%');
+		expect(lignes[2]!.firstElementChild?.textContent).toBe('≈\u00a040\u00a0%');
 		expect(within(contexte).getByText('ordre seul').getAttribute('title')).toMatch(/^Ordre seul : /u);
 		expect(within(lignes[1]!).getByRole('img', { name: 'Injectée dans la session' })).toBeTruthy();
 		expect(within(lignes[2]!).queryByRole('img', { name: 'Injectée dans la session' })).toBeNull();

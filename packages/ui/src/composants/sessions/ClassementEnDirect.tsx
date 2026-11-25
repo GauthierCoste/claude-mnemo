@@ -2,11 +2,12 @@
  * « Injecté dans la session » (panneau Contexte), le classement vivant. Une seule liste :
  * - ◆ en haut, les fiches injectées entières, de la plus ancienne à la plus récente ; à droite, comment : « du dossier » (fiche
  *   de position), « à la main » (➤), ou « auto 94 % » (injectée par Mnemo, sa note au message ; l'info-bulle le dit) ;
- * - la jonction : un espacement, sans trait (le repère du seuil est le seul trait du panneau) ; dessous, l'injection
+ * - la jonction : un seul séparateur entre le vu (◆) et le pas vu, jamais retiré : filet gris, ou le seuil d'injection
+ *   (vert pointillé) quand l'injection automatique est active, gris « coupé » si elle l'est ; dessous, l'injection
  *   automatique coupée par le suivi, avec son motif et « Réactiver ». L'état du classement qui sort de l'ordinaire (« affinage… », « ordre seul » et sa raison) est dit dans le bouton des
  *   modèles de la session, à droite du titre. Le message classé n'est pas rappelé ;
- * - le classement du dernier message porteur : la note en % (calibrée), ou ◇ en ordre seul ; le titre et, dessous, la raison
- *   et « piste » (envoyée en piste dans la session) ; un repère au seuil d'injection automatique ;
+ * - le classement du dernier message porteur : la note en % (calibrée) ; en ordre seul, « ≈ 42 % » en gris (note non
+ *   calibrée) ou ◇ sans aucune note ; le titre et, dessous, la raison et « piste » (envoyée en piste dans la session) ;
  * - « Plus tôt dans la session » : les pistes plus anciennes et les fiches lues (◈) absentes du classement, plus récentes
  *   d'abord, sans % ;
  * - puis la suggestion des 3 sessions (« écartée dans 3 sessions : ne plus la suggérer ? »), « Sous le seuil (N) » et
@@ -16,7 +17,7 @@
  * depuis la fiche, page Mémoire). Une fiche injectée par Mnemo a aussi ✗ : l'écarter compte comme une erreur au suivi.
  * À chaque classement (hook) puis à l'affinage (même entrée, rangs changés), les lignes glissent (FLIP, sauf mouvement réduit),
  * un ▲/▼ dit le changement de rang quelques secondes, une nouvelle venue apparaît en fondu. La liste défile seule et s'ancre
- * à la jonction. Pas de % hors calibration : une entrée ancienne, ou un modèle de note non accepté, donne l'ordre seul.
+ * à la jonction. Pas de % calibré hors calibration : une entrée ancienne, ou un modèle de note non accepté, donne l'ordre seul.
  */
 import { libelleRaison, niveauEffectif, type NiveauModeles } from '@mnemo/commun';
 import type { ClassementVue, CoupureInjectionVue, EntreeServieVue, InjectionVue, LueVue, RaisonCarteVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
@@ -216,6 +217,9 @@ export function ClassementEnDirect(p: {
 	// notes absentes faute de sens : on dit pourquoi (niveau, chargement, modèles arrêtés ou non installés) ; un message muet n'est pas noté
 	const sansSens = derniere !== null && derniere.classement.length > 0 && !derniere.sens && derniere.muet === null;
 	const avis = sansSens ? avisModeles(modeles.etat, niveauPropre) : null;
+	// dernier message porteur journalisé avant le classement vivant (sans classement ni calibration) : rien à classer ici,
+	// le classement viendra au prochain message porteur
+	const avantLeClassement = derniere !== null && derniere.classement.length === 0 && derniere.calibree === undefined;
 	const [demarrage, setDemarrage] = useState<{ pour: string } | null>(null);
 	const [jamaisIci, setJamaisIci] = useState<string[]>([]);
 	const [, rafraichir] = useState(0);
@@ -226,7 +230,7 @@ export function ClassementEnDirect(p: {
 	const focusApres = useRef<string | null>(null);
 
 	const elements = useRef(new Map<string, HTMLLIElement>());
-	const positions = useRef(new Map<string, number>());
+	const positions = useRef(new Map<string, { haut: number; servie: boolean }>());
 	const precedent = useRef<{ cle: string; ids: string[] } | null>(null);
 	const minuteur = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const [marques, setMarques] = useState<Marques>(SANS_MARQUES);
@@ -240,10 +244,17 @@ export function ClassementEnDirect(p: {
 	useLayoutEffect(() => {
 		// FLIP : chaque ligne déjà là part de son ancienne place et glisse vers la nouvelle. Pendant le glissement, une ligne a un
 		// fond opaque et celle qui monte passe au-dessus de celle qui descend : les textes ne se mêlent jamais.
+		// Une ligne qui change de côté (classée puis injectée ◆) ne glisse pas : traversant tout le classement, elle passerait
+		// sous le séparateur, parfois depuis le bas de la liste ; elle apparaît à sa place, en fondu.
 		const reduit = mouvementReduit();
 		for (const [id, el] of elements.current) {
 			const avant = positions.current.get(id);
-			const delta = avant === undefined ? 0 : avant - el.offsetTop;
+			const servie = el.dataset['servie'] === 'true';
+			if (avant !== undefined && avant.servie !== servie) {
+				if (!reduit && typeof el.animate === 'function') el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: GLISSEMENT_MS, easing: 'ease-out' });
+				continue;
+			}
+			const delta = avant === undefined ? 0 : avant.haut - el.offsetTop;
 			if (delta !== 0 && !reduit && typeof el.animate === 'function') {
 				el.dataset['glisse'] = delta > 0 ? 'monte' : 'descend';
 				const animation = el.animate([{ transform: `translateY(${delta}px)` }, { transform: 'none' }], { duration: GLISSEMENT_MS, easing: 'ease-out' }) as Animation | undefined;
@@ -273,7 +284,7 @@ export function ClassementEnDirect(p: {
 	// Places relevées après chaque rendu : l'apparition ou la fin des ▲/▼, un titre qui passe sur deux lignes, déplacent les
 	// lignes ; le prochain glissement part de leur place réelle.
 	useLayoutEffect(() => {
-		positions.current = new Map([...elements.current].map(([id, el]) => [id, el.offsetTop]));
+		positions.current = new Map([...elements.current].map(([id, el]) => [id, { haut: el.offsetTop, servie: el.dataset['servie'] === 'true' }]));
 	});
 
 	// le focus ne retombe pas sur la page quand la ligne écartée disparaît
@@ -322,10 +333,9 @@ export function ClassementEnDirect(p: {
 		else focusApres.current = null;
 	};
 	const demarrer = () => void agir(modeles.demarrer).then((ok) => ok && setDemarrage({ pour: cle }));
-	const refFiche = (id: string, ancre?: { current: HTMLLIElement | null }) => (el: HTMLLIElement | null) => {
+	const refFiche = (id: string) => (el: HTMLLIElement | null) => {
 		if (el) elements.current.set(id, el);
 		else elements.current.delete(id);
-		if (ancre) ancre.current = el;
 	};
 	const delta = (id: string): ReactNode => {
 		const d = marques.deltas.get(id);
@@ -430,13 +440,13 @@ export function ClassementEnDirect(p: {
 		);
 	};
 
-	const ligneClassee = (l: Ligne, ancre?: { current: HTMLLIElement | null }): ReactNode => {
+	const ligneClassee = (l: Ligne): ReactNode => {
 		const k = l.classee!;
 		const c = chemin(l.id);
 		const attend = aServir.chemins.includes(c);
 		const note = pourcentage(k.p);
 		// ordre seul : la note qui existe, non calibrée, en gris (jamais la couleur d'accent ni le seuil)
-		const grise = k.nonCalibree === undefined ? null : pourcentage(k.nonCalibree.valeur);
+		const grise = k.nonCalibree === undefined ? null : `≈\u00a0${pourcentage(k.nonCalibree.valeur)!}`;
 		const auDessus = k.p !== null && k.p >= seuil;
 		const raison = l.raison === undefined ? null : libelleRaison(l.raison, l.depuis);
 		const pourquoiPasInjectee = !auDessus
@@ -449,7 +459,7 @@ export function ClassementEnDirect(p: {
 			note !== null ? `${note} : chance que la fiche soit utile à ce message (note apprise sur tes jugements)` : k.nonCalibree !== undefined ? BULLES_NON_CALIBREES[k.nonCalibree.origine] : `Rang ${k.rang} : ordre seul, sans note calibrée`;
 		const resume = `${note ?? grise ?? `rang ${k.rang}`}${raison === null ? '' : ` – ${raison}`}${k.piste ? ' – piste' : ''}`;
 		return (
-			<li key={l.id} ref={refFiche(l.id, ancre)} className={s.ligne} data-id={l.id} data-servie="false" data-nouvelle={marques.nouvelles.has(l.id) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
+			<li key={l.id} ref={refFiche(l.id)} className={s.ligne} data-id={l.id} data-servie="false" data-nouvelle={marques.nouvelles.has(l.id) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
 				<span className={`${s.note} ${auDessus ? s.haute : ''} ${grise !== null ? s.nonCalibree : ''}`} title={noteBulle}>
 					{note ?? grise ?? '◇'}
 				</span>
@@ -477,14 +487,14 @@ export function ClassementEnDirect(p: {
 		);
 	};
 
-	const lignePlusTot = (l: Ligne, ancre?: { current: HTMLLIElement | null }): ReactNode => {
+	const lignePlusTot = (l: Ligne): ReactNode => {
 		const t = l.plusTot!;
 		const lue = t.genre === 'lue';
 		const c = chemin(l.id);
 		const attend = aServir.chemins.includes(c);
 		const quoi = lue ? `lue par la session à ${heure(t.heureMs)}` : `piste du message de ${heure(t.heureMs)}`;
 		return (
-			<li key={l.id} ref={refFiche(l.id, ancre)} className={s.ligne} data-id={l.id} data-servie="false" data-nouvelle={marques.nouvelles.has(l.id) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
+			<li key={l.id} ref={refFiche(l.id)} className={s.ligne} data-id={l.id} data-servie="false" data-nouvelle={marques.nouvelles.has(l.id) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
 				<span
 					className={`${s.note} ${lue ? s.lue : ''}`}
 					role={lue ? 'img' : undefined}
@@ -513,25 +523,20 @@ export function ClassementEnDirect(p: {
 		);
 	};
 
-	// repère du seuil d'injection : avant la première note sous le seuil (ou après la dernière, toutes au-dessus)
-	const indexSeuil = calibre ? classees.findIndex((l) => (l.classee!.p ?? 0) < seuil) : -1;
-	const repereSeuil = (
-		<li
-			key="seuil"
-			className={s.seuil}
-			role="presentation"
-			title={coupures.length > 0 ? `Seuil d'injection automatique : ${pourcentage(seuil)}. Injection coupée : rien n'est injecté au-dessus.` : `Au-dessus de ${pourcentage(seuil)}, Mnemo injecte la fiche entière au message même. Réglages › Système › Contexte injecté.`}
-		>
-			<span>{coupures.length > 0 ? `seuil ${pourcentage(seuil)} – coupé` : `seuil d’injection ${pourcentage(seuil)}`}</span>
-		</li>
-	);
-	const lignesClassees = classees.flatMap((l, i) => {
-		const ligne = ligneClassee(l, ordreServies.length > 0 || i > 0 ? undefined : jonction);
-		return i === indexSeuil ? [repereSeuil, ligne] : [ligne];
-	});
-	if (calibre && indexSeuil === -1 && classees.length > 0) lignesClassees.push(repereSeuil);
+	// Un seul séparateur entre ce que la session a vu (◆, en tête) et ce qu'elle n'a pas vu (le classement, puis plus tôt) : jamais
+	// retiré. Filet gris par défaut ; injection automatique active (note calibrée, ni coupée ni modèles coupés) : le seuil
+	// d'injection, vert pointillé ; coupée : de nouveau gris, avec « coupé ».
+	const injectionActive = calibre && coupures.length === 0 && !coupes;
+	const genreSeparateur = injectionActive ? 'seuil' : coupures.length > 0 && calibre ? 'coupe' : 'filet';
+	const bulleSeparateur =
+		genreSeparateur === 'seuil'
+			? `Au-dessus : vu par la session. Mnemo injecte au message même, entière, une fiche notée au-dessus de ${pourcentage(seuil)}. Réglages › Système › Contexte injecté.`
+			: genreSeparateur === 'coupe'
+				? `Seuil d'injection automatique : ${pourcentage(seuil)}. Injection coupée : rien n'est injecté au-dessus.`
+				: 'Au-dessus : vu par la session ; dessous : pas encore vu.';
+	const lignesClassees = classees.map((l) => ligneClassee(l));
 
-	const jonctionVisible = (ordreServies.length > 0 && enLice.length > 0) || coupures.length > 0;
+	const jonctionVisible = ordreServies.length + enLice.length > 0 || coupures.length > 0;
 	const etatClassement = { affinage, ordreSeul: ordreSeul ? raisonOrdreSeul(coupes) : null };
 	const niveaux = [...new Set(coupures.map((x) => x.niveau))];
 	const libelleNiveau = (n: CoupureInjectionVue['niveau']) => (n === 'complets' ? 'modèles complets' : 'sens seul');
@@ -560,7 +565,10 @@ export function ClassementEnDirect(p: {
 				<ol className={s.liste} aria-label="Injecté dans la session" ref={liste}>
 					{ordreServies.map(ligneInjectee)}
 					{jonctionVisible && (
-						<li key="jonction" ref={ordreServies.length > 0 ? jonction : undefined} className={s.jonction} data-ecart={ordreServies.length > 0 ? 'true' : undefined} role="presentation">
+						<li key="jonction" ref={jonction} className={s.jonction} role="presentation">
+							<div className={s.separateur} data-genre={genreSeparateur} title={bulleSeparateur}>
+								{genreSeparateur !== 'filet' && <span>{genreSeparateur === 'seuil' ? `seuil d’injection ${pourcentage(seuil)}` : `seuil ${pourcentage(seuil)} – coupé`}</span>}
+							</div>
 							{coupures.length > 0 && (
 								<div className={s.coupure} role="status">
 									<p>
@@ -589,7 +597,7 @@ export function ClassementEnDirect(p: {
 							Plus tôt dans la session
 						</li>
 					)}
-					{plusTot.map((l, i) => lignePlusTot(l, ordreServies.length > 0 || classees.length > 0 || i > 0 ? undefined : jonction))}
+					{plusTot.map((l) => lignePlusTot(l))}
 				</ol>
 			)}
 			{suggestion !== null && p.modifiable && (
@@ -620,6 +628,7 @@ export function ClassementEnDirect(p: {
 				</p>
 			)}
 			{muetSeul !== null && <p className={s.avis}>{LIBELLES_MUET[muetSeul]}</p>}
+			{avantLeClassement && <p className={s.avis}>Dernier message classé avant cette version de Mnemo : le classement viendra au prochain message.</p>}
 			{sansSens && demarrage?.pour === cle ? (
 				<p className={s.avis}>Modèles démarrés : les notes viendront au prochain message.</p>
 			) : avis?.motif === 'arretes' ? (
