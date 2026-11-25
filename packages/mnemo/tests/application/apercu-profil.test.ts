@@ -37,6 +37,6 @@ describe('aperçu du profil selon son moteur', () => {
 		expect(blocs[0]?.texte).toContain('- devis : Rédiger un devis. (`skills/devis/SKILL.md`)');
 		expect(blocs.find((b) => b.origine === 'memoire')?.titre).toBe('Skills de la mémoire (listées dans la consigne, lues par l\'outil lire)');
 		expect(blocs.some((b) => b.origine === 'plugin')).toBe(false);
-		expect(blocs.find((b) => b.origine === 'hors_mnemo')?.elements?.map((e) => e.nom)).toEqual(['AGENTS.md', '.agents/skills']);
+		expect(blocs.find((b) => b.origine === 'hors_mnemo')?.elements?.map((e) => e.nom)).toEqual(['AGENTS.md', 'Skills de Codex']);
 	});
 });

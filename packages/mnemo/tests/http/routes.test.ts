@@ -19,7 +19,7 @@ import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import type { ContexteService } from '../aides/service-faux.ts';
 
 const chemin = (route: string, id: string) => route.replace(':id', id);
-const CLES_VUE = ['bilanDemandeMs', 'branche', 'commitDebut', 'creeeMs', 'dialogueOuvert', 'dossier', 'dossierNonRattache', 'etat', 'id', 'majMs', 'niveauModeles', 'objectif', 'position', 'profil', 'projet', 'terminal'];
+const CLES_VUE = ['bilanDemandeMs', 'branche', 'commitDebut', 'creeeMs', 'dialogueOuvert', 'dossier', 'dossierNonRattache', 'etat', 'id', 'majMs', 'moteur', 'niveauModeles', 'objectif', 'position', 'profil', 'projet', 'terminal'];
 
 function api(c: ContexteService) {
 	const { port, jeton } = c.service;

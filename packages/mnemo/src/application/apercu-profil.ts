@@ -87,7 +87,7 @@ export async function apercuProfil(dep: Dependances, nom: string, projet?: strin
 	const horsMnemo: ElementApercu[] = codex
 		? [
 				{ nom: 'AGENTS.md', detail: 'instructions de l\'utilisateur et du projet, lues par Codex', actif: true },
-				{ nom: '.agents/skills', detail: 'skills du dépôt et de l\'utilisateur (~/.agents/skills/), lues par Codex', actif: true },
+				{ nom: 'Skills de Codex', detail: 'skills du dépôt et de l\'utilisateur (~/.agents/skills/), lues par Codex', actif: true },
 			]
 		: [
 				...(await dep.pluginsClaude.skillsPersonnelles()).map((s) => ({ nom: s, detail: 'skill personnelle de Claude Code (~/.claude/skills/)', actif: true })),
