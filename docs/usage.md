@@ -149,18 +149,65 @@ platform there is no search by meaning, and search works by words.
   `~/.cache/mnemo` on Linux. The pieces: the llama.cpp engine b11671 (12 MB), the meaning model bge-m3 (635 MB), the
   reranker bge-reranker-v2-m3 (636 MB). Each piece has a fixed address and SHA-256 hash, checked before installing.
   `--depuis` copies a piece already present on the machine instead of downloading it, if its hash matches.
-- `mnemo modeles etat`: installed pieces and running servers for this folder.
-- `mnemo modeles arreter`: stops the servers of this folder. While the service of the folder runs, they stay started and
-  stop with it; without the service, they stop by themselves after 15 minutes without a request (setting
-  `modeles.inactiviteMinutes`).
+- `mnemo modeles etat`: installed pieces and running servers of the machine.
+- `mnemo modeles arreter`: stops the servers of the machine. Run from a Mnemo folder, it also stops the servers that an
+  older version started for that folder.
 - `mnemo index` computes the vectors of the whole memory. `mnemo cherche` and the `chercher` tool compute the missing
   ones, within their budget.
 
-The `llama-server` processes listen on `127.0.0.1`, with a random key. The first search of a tool or of the command line
-starts them when needed (the interface never starts them on its own); a hook never starts them and only uses meaning
-and the reranker if the servers are already running. The reranker
-sets the order of the first 40 merged candidates without changing the scale of their scores, so the recall threshold
-keeps its meaning.
+The `llama-server` processes listen on `127.0.0.1`, with a random key. One guardian process watches them for the whole
+machine: every Mnemo folder and every session share the same servers. Their state lives in the models cache
+(`serveurs/`), not in the Mnemo folder. When the service starts, it stops the servers an older version started for its
+folder.
+
+- **Start.** The first search of a tool or of the command line starts the servers and waits for them, within its budget.
+  A hook, or a search of the interface, that finds them stopped answers by words that time and starts them in the
+  background, so the next one has them.
+- **Stop.** The servers stop by themselves after 15 minutes without a request, whether the service runs or not
+  (setting `modeles.inactiviteMinutes`). They keep the delay of the folder that started them.
+
+The reranker sets the order of the first 40 merged candidates without changing the scale of their scores, so the recall
+threshold keeps its meaning.
+
+### Levels of the models
+
+Three levels set which models run. The bench counts the questions whose right source is in the first 5 results.
+
+| Level | Words | Meaning | Reranker | RAM | Bench |
+| --- | --- | --- | --- | --- | --- |
+| « Complets » (default) | yes | yes | yes | about 1.6 GB | 30 of 42, the best search |
+| « Sens seul » (meaning only) | yes | yes | no | about 0.8 GB | 27 of 42 |
+| « Coupés » (off) | yes | no | no | none | 20 of 42: no answer worded differently |
+
+- **Everywhere.** The level of the machine is kept in the models cache (`serveurs/niveau.json`) and applies to every
+  folder. A model it excludes is never started nor called. A change that removes a model stops the servers at once; a
+  change that adds one starts nothing: the next use starts the servers with the right models.
+- **For one session.** A session can have its own level. It is kept when the session is resumed. The more restrictive of
+  the two levels applies: a session cannot use a model the machine excludes. Its tools and hooks then neither call nor
+  start the excluded models. This frees no memory: the servers are shared and keep running for the other sessions.
+- **Vectors.** At « Coupés », new notes are not vectorised. When meaning comes back, the missing vectors are computed
+  again (`mnemo index`, or a search, within its budget).
+
+### The Modèles button
+
+The **Modèles** button sits in the title bar, between the quotas and the Archiviste button. It is absent while the
+models are not installed. Its text follows the state live: « Modèles en veille » (stopped), « Chargement… » (loading),
+« Modèles prêts » (ready; « Sens seul prêt » at that level), « Vectorisation n/N », « Recherche… », « Injection… »
+(work in progress, the latest one, « +1 » if there are others), « Modèles coupés » (off) or « Modèles en échec »
+(failed).
+
+A click opens a menu and changes nothing by itself. It shows:
+
+- each piece with its state: the meaning model bge-m3 and the reranker bge-reranker-v2-m3, both from BAAI in Q8_0, with
+  their size and the start of their SHA-256 hash; the engine llama.cpp b11671, local on `127.0.0.1`;
+- the work in progress, with its session (or « autre dossier » for another folder);
+- the level under « Partout » (everywhere): « Complets », « Sens seul », « Coupés »;
+- « Démarrer maintenant » (start now) or « Arrêter maintenant » (stop now), which keeps the level;
+- the shutdown delay after inactivity.
+
+In the Contexte panel, a small button at the right of « Injecté dans la session » shows the level of the selected
+session. Its menu offers « Comme partout » (follow the level of the machine), « Complets », « Sens seul » and
+« Coupés ». A level wider than the level of the machine is greyed out.
 
 ### How a result is ranked
 
@@ -257,7 +304,8 @@ The interface is built once, at the root of the repository: `pnpm construire` (i
 service; to redo after an update). To work on the interface: `MNEMO_DOSSIER=<Mnemo folder> pnpm --filter @mnemo/ui dev`
 (service running in that folder), then the printed address.
 
-The title bar shows, left of the Archiviste button, the **quotas of the Claude account** (5-hour window and week),
+The title bar shows, left of the Archiviste button, the **Modèles** button (the local models: see
+[The Modèles button](#the-modèles-button)) and, left of it, the **quotas of the Claude account** (5-hour window and week),
 common to all sessions: a small circle with two rings (inner: 5 hours; outer: week), green, amber from 50 %, red from
 80 %. A click unfolds them into bars with the reset time; another click folds them. They come from Claude Code's
 status line in the sessions launched by Mnemo (`mnemo ligne-etat`, which shows nothing there), so they appear after a

@@ -41,12 +41,28 @@ Details:
 - **Service**: about 130 MB of RAM when idle on a fresh memory (measured on macOS); a larger memory and open sessions add
   to it (estimate: under 250 MB for the service itself). Each Claude Code session is a separate `claude` process with its
   own memory use.
-- **Local models while running**: about 1.8 GB of RAM for both servers together once loaded (measured on macOS, about
-  0.9 GB each); estimate 2 to 3 GB under load. They start on demand (first search from a tool or the command line). While
-  the service runs, they stay started and stop with it; without the service, they stop by themselves after 15 minutes
-  without a request (setting `modeles.inactiviteMinutes`). They are available for macOS on Apple silicon (Metal) and on
-  Intel (processor only, slower), Windows x64 and arm64 and Linux x64 (all three untested); elsewhere there is no search by meaning. Without the models, search works by words only, with no
-  error.
+- **Local models while running**: about 1.6 GB of RAM for both servers together once loaded (measured on macOS, about
+  0.8 GB each, even when idle); about 1.7 GB measured under load. One set of servers serves the whole machine, however
+  many Mnemo folders and sessions use it. They start on demand (first search from a tool, the command line or the
+  interface) and stop by themselves after 15 minutes without a request, whether the service runs or not (setting
+  `modeles.inactiviteMinutes`). They are available for macOS on Apple silicon (Metal) and on Intel (processor only,
+  slower), Windows x64 and arm64 and Linux x64 (all three untested); elsewhere there is no search by meaning. Without the
+  models, search works by words only, with no error.
+
+### On a small machine
+
+The level of the models sets how much memory they take. Choose it in the interface: the **Modèles** button in the title
+bar, then the level under « Partout » (everywhere). It applies to the whole machine.
+
+| Level | Models loaded | RAM | Bench (right source in the top 5) |
+| --- | --- | --- | --- |
+| « Complets » (default) | meaning and reranker | about 1.6 GB | 30 of 42 |
+| « Sens seul » (meaning only) | meaning | about 0.8 GB | 27 of 42 |
+| « Coupés » (off) | none | none | 20 of 42 |
+
+With 8 GB of RAM or less, choose « Sens seul »: it keeps search by meaning for half the memory. If memory is still
+short, choose « Coupés »: search works by words only and no longer finds an answer worded differently. You can also skip
+the models at install time (the default).
 
 ## Install from the sources
 
@@ -152,7 +168,7 @@ falls back to its default with a warning, never a crash.
 | Weight taken from a search result for what its confidence lacks, 0 to 0.5 (`recherche.poidsConfiance`) | 0.05 | immediately |
 | Weight added to a search result that belongs to the memory rather than an imported source, 0 to 0.5 (`recherche.poidsMemoire`) | 0.05 | immediately |
 | Weight added to a recent search result, halved after a year, 0 to 0.5 (`recherche.poidsFraicheur`) | 0.05 | immediately |
-| Model shutdown after inactivity when the service is not running, 1 to 240 (`modeles.inactiviteMinutes`) | 15 minutes | next start of the models |
+| Model shutdown after inactivity, with or without the service, 1 to 240 (`modeles.inactiviteMinutes`). The servers are shared by the machine: they keep the delay of the folder that started them | 15 minutes | next start of the models |
 | Note types whose proposed information needs confirmation (`archiviste.typesAConfirmer`) | none | immediately |
 | Service port (`service.port`) | 4747 | **service restart** |
 | Launcher browser (`service.navigateur`) | automatic (Chrome, then Edge, then the default browser) | next opening |
@@ -176,13 +192,14 @@ version) are kept, and so are invalid entries you did not touch (they stay liste
 
 1. If the memory is connected to the Claude app, click « Débrancher » in **Settings › App Claude**, then restart the
    Claude app.
-2. Stop what runs: `mnemo arreter` (service) and `mnemo modeles arreter` (model servers), from the Mnemo folder.
+2. Stop what runs: `mnemo arreter` (service), from the Mnemo folder, and `mnemo modeles arreter` (model servers of the
+   machine).
 3. Remove the launcher and the command: `mnemo lanceur --retirer` and `mnemo commande --retirer` (each removes only
    what Mnemo created).
 4. Remove the installed web app, if any: in its window menu, "Uninstall Mnemo".
 5. Remove the MCP declaration: `claude mcp remove mnemo --scope user`.
-6. Delete the models cache: `~/Library/Caches/mnemo` on macOS, `~/.cache/mnemo` (or `$XDG_CACHE_HOME/mnemo`) on Linux,
-   or the folder named by `MNEMO_MODELES`.
+6. Delete the models cache (models, engine, and the state and level of the servers): `~/Library/Caches/mnemo` on macOS,
+   `~/.cache/mnemo` (or `$XDG_CACHE_HOME/mnemo`) on Linux, or the folder named by `MNEMO_MODELES`.
 7. Delete the local state of each Mnemo folder: its `.mnemo/` folder (index, settings, token, logs).
 8. Delete the clone of the sources.
 

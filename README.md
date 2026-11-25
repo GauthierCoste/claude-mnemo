@@ -53,7 +53,9 @@ wall of text: Claude stays focused and reads what it needs.
   [docs/format-coffre.md](docs/format-coffre.md).
 - **Search** uses a local SQLite full-text index with French stemming, and can also run two small local models with
   llama.cpp: bge-m3 finds a fact worded differently from the question, bge-reranker-v2-m3 reorders the best results.
-  Without them, search by words works just fine. Each result gets `score = base + weights`: the base (0 to 1) is the
+  One set of servers serves the whole machine (about 1.6 GB of RAM), and stops after 15 minutes without a request. The
+  **Modèles** button of the title bar shows what they do live, and sets their level: both models, meaning only (about
+  0.8 GB), or off. Without them, search by words works just fine. Each result gets `score = base + weights`: the base (0 to 1) is the
   match, the weights reward the neighbourhood of the current project, confidence, belonging to the memory and freshness;
   each weight is a setting. Budgets are short (3.5 s for a tool, 400 ms for a hook): a slow model is skipped, never
   waited for.
