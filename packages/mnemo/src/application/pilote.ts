@@ -14,6 +14,7 @@ import type { PositionDuProjet } from './position.ts';
 import { chargerProfil } from './profil.ts';
 import { refusDuMoteur } from '../domaine/profil.ts';
 import { DOSSIER_MEMOIRE } from '../domaine/dossier-memoire.ts';
+import { citerPosix, citerPowerShell } from '../domaine/citer.ts';
 
 export type Pilote = {
 	/**
@@ -111,9 +112,6 @@ type Vivant = {
 	arret: boolean;
 };
 
-const citerPosix = (texte: string): string => `'${texte.replaceAll("'", "'\\''")}'`;
-// PowerShell lit aussi les apostrophes typographiques ’ ‘ ‚ ‛ comme `'` : chacune est doublée
-const citerPowerShell = (texte: string): string => `'${texte.replace(/['‘’‚‛]/gu, '$&$&')}'`;
 const NOM_DE_VARIABLE = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 
 /**

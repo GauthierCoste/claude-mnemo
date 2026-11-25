@@ -3,7 +3,7 @@ export function citerPosix(chemin: string): string {
 	return `'${chemin.replaceAll("'", "'\\''")}'`;
 }
 
-/** Un argument entre apostrophes pour PowerShell, apostrophes doublées. */
+/** Un argument entre apostrophes pour PowerShell : PowerShell lit aussi ’ ‘ ‚ ‛ comme `'`, chacune est doublée. */
 export function citerPowerShell(chemin: string): string {
-	return `'${chemin.replaceAll("'", "''")}'`;
+	return `'${chemin.replace(/['‘’‚‛]/gu, '$&$&')}'`;
 }
