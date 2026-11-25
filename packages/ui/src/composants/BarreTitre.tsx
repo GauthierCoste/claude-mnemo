@@ -1,11 +1,12 @@
 import type { ReactNode, RefObject } from 'react';
 import { toucheCommande } from '../raccourcis.ts';
 import { Quotas } from './Quotas.tsx';
+import { BoutonModeles } from './modeles/BoutonModeles.tsx';
 import s from './BarreTitre.module.css';
 
 /**
  * Barre de titre (`.title`) : logo de Mnemo, racine du dossier Mnemo, champ de la palette (aligné à gauche, après la racine ; la
- * palette s'y pose, `champPalette`) ; à droite, les quotas du compte Claude puis le bouton de l'archiviste.
+ * palette s'y pose, `champPalette`) ; à droite, les quotas du compte Claude, le bouton des modèles locaux, puis celui de l'archiviste.
  */
 export function BarreTitre(p: {
 	racine: string | null;
@@ -29,6 +30,7 @@ export function BarreTitre(p: {
 			</button>
 			<div className={s.droite}>
 				<Quotas />
+				<BoutonModeles />
 				<button type="button" className={s.archiviste} onClick={p.surArchiviste} aria-keyshortcuts="Alt+A" aria-expanded={p.tiroirOuvert}>
 					<span className={s.pouls} aria-hidden="true" />
 					Archiviste

@@ -15,15 +15,19 @@
  * changement de rang quelques secondes, une nouvelle venue apparaît en fondu.
  * Quand le dernier calcul qui a proposé des cartes s'est fait sans le sens (modèle arrêté, sans réponse à temps, fiches pas encore
  * indexées), un repère discret le dit à côté du titre de la section (« sans note de sens ») : les « — » ne restent pas muets. Pas
- * de repère pour un message muet : son texte n'est pas noté, le modèle n'y est pour rien.
+ * de repère pour un message muet : son texte n'est pas noté, le modèle n'y est pour rien. À droite du titre, le niveau des
+ * modèles de la session (`ModelesSession`) ; sans notes, une ligne sous la liste en dit la raison selon ce niveau (coupés, sens
+ * seul, arrêtés : avec « Démarrer », non installés).
  */
-import { libelleRaison } from '@mnemo/commun';
+import { libelleRaison, niveauEffectif, type NiveauModeles } from '@mnemo/commun';
 import type { ClassementVue, EntreeServieVue, LueVue, RaisonCarteVue } from '@mnemo/contrat';
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
 import { useAServir, useEcartes, useModeles } from '../../client/hooks.ts';
 import { dernierClassement, derniereEntree, estEcarte, pourcentage, sousLeSeuil } from '../../sessions/classement.ts';
 import { cartesProposees, cartesRecentes, fichesServies, LIBELLES_MUET, titreFiche, titresConnus } from '../../sessions/servis.ts';
+import { avisModeles } from '../modeles/avis-modeles.ts';
+import { ModelesSession } from '../modeles/ModelesSession.tsx';
 import { useToast } from '../Toast.tsx';
 import s from './ClassementEnDirect.module.css';
 
@@ -86,8 +90,10 @@ function bulle(l: Ligne, chemin: string): string {
 export function ClassementEnDirect(p: {
 	session: string;
 	entrees: readonly EntreeServieVue[];
-	/** Faux pour une session terminée : rien à écarter. */
+	/** Faux pour une session terminée : rien à écarter, ni niveau des modèles à changer. */
 	modifiable: boolean;
+	/** Niveau des modèles propre à la session (`SessionVue.niveauModeles`) ; null ou absent : comme partout. */
+	niveauModeles?: NiveauModeles | null;
 	/** Fiches injectées dans la session, sans doublon, plus récentes d'abord (défaut : celles du journal `entrees`). */
 	servies?: readonly string[];
 	/** Fiches lues par la session, avec l'heure de leur dernière lecture. */
@@ -154,6 +160,10 @@ export function ClassementEnDirect(p: {
 	// notes absentes : on dit pourquoi (modèles arrêtés ou non installés), et le démarrage reste un geste explicite
 	const sansNotes = lignes.length > 0 && lignes.every((l) => l.note === null);
 	const modeles = useModeles(sansNotes);
+	const niveauPropre = p.niveauModeles ?? null;
+	const avis = sansNotes ? avisModeles(modeles.etat, niveauPropre) : null;
+	// coupés pour la session : le bouton de niveau le dit déjà sur la même ligne, le repère « sans note de sens » serait de trop
+	const coupee = modeles.etat !== undefined && niveauEffectif(modeles.etat.niveau, niveauPropre) === 'coupes';
 	const [demarrage, setDemarrage] = useState<{ pour: string } | null>(null);
 	const titreSection = useRef<HTMLSpanElement>(null);
 	/** Après un ✗ : la ligne qui prend le focus ('' : le titre de la section). */
@@ -320,14 +330,21 @@ export function ClassementEnDirect(p: {
 	};
 	return (
 		<div className={s.classement}>
-			<span className={s.lbl} id={`classement-${p.session}`} ref={titreSection} tabIndex={-1}>
-				Injecté dans la session
-			</span>
-			{sansSens && (
-				<span className={s.sansSens} title={EXPLICATION_SANS_SENS}>
-					{SANS_NOTE_DE_SENS}
+			<div className={s.enteteClassement}>
+				<span className={s.lbl} id={`classement-${p.session}`} ref={titreSection} tabIndex={-1}>
+					Injecté dans la session
 				</span>
-			)}
+				{sansSens && !coupee && (
+					<span className={s.sansSens} title={EXPLICATION_SANS_SENS}>
+						{SANS_NOTE_DE_SENS}
+					</span>
+				)}
+				{p.modifiable && (
+					<span className={s.aDroite}>
+						<ModelesSession session={p.session} niveau={niveauPropre} />
+					</span>
+				)}
+			</div>
 			{serviesLues.length + enLice.length === 0 ? (
 				<p className={s.mu}>Aucune fiche pour l’instant.</p>
 			) : (
@@ -337,19 +354,22 @@ export function ClassementEnDirect(p: {
 				</ol>
 			)}
 			{derniere?.muet != null && <p className={s.avis}>{LIBELLES_MUET[derniere.muet]}</p>}
-			{sansNotes &&
-				(demarrage?.pour === cle ? (
-					<p className={s.avis}>Modèles démarrés : les notes viendront au prochain message.</p>
-				) : modeles.etat?.reranker === 'arrete' ? (
-					<p className={s.avis}>
-						Notes indisponibles : modèles arrêtés
-						<button type="button" className={s.demarrer} onClick={demarrer}>
-							Démarrer
-						</button>
-					</p>
-				) : modeles.etat?.reranker === 'absent' ? (
-					<p className={s.avis}>Notes indisponibles : modèles non installés</p>
-				) : null)}
+			{sansNotes && demarrage?.pour === cle ? (
+				<p className={s.avis}>Modèles démarrés : les notes viendront au prochain message.</p>
+			) : avis?.motif === 'arretes' ? (
+				<p className={s.avis}>
+					Notes indisponibles : modèles arrêtés
+					<button type="button" className={s.demarrer} onClick={demarrer}>
+						Démarrer
+					</button>
+				</p>
+			) : avis?.motif === 'absents' ? (
+				<p className={s.avis}>Notes indisponibles : modèles non installés</p>
+			) : avis?.motif === 'coupes' || avis?.motif === 'sens' ? (
+				<p className={s.avis}>
+					{`Notes indisponibles : ${avis.motif === 'coupes' ? 'modèles coupés' : 'sens seul'}${avis.pourLaSession ? ' pour cette session' : ''}`}
+				</p>
+			) : null}
 			{masquees.length > 0 && (
 				<details className={s.ecartees} role="group" aria-label={`Sous le seuil (${masquees.length})`}>
 					<summary>Sous le seuil ({masquees.length})</summary>

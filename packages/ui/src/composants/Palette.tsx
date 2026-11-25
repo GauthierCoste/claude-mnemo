@@ -19,6 +19,7 @@ import { useRechercheMoteur } from '../palette/useRechercheMoteur.ts';
 import { pourcentage } from '../sessions/classement.ts';
 import { cx } from './commun/classes.ts';
 import { DePlus, useToutPour } from './commun/DePlus.tsx';
+import { avisModeles } from './modeles/avis-modeles.ts';
 import s from './Palette.module.css';
 import { useOuvrirSession } from './sessions/ouvrir-session.ts';
 import { Point } from './sessions/Point.tsx';
@@ -46,9 +47,11 @@ function PaletteOuverte(p: { texteInitial: string; surOuverture(): void; ancre: 
 	const projetDisponible = nav.projetPremierPlan;
 	const projet = ceProjet && projetUtilisable(filtre) ? projetDisponible : null;
 	const moteur = useRechercheMoteur(q, { ...demandeAuMoteur(filtre, projet), actif: filtre !== 'sessions' });
-	// réponse complète sans aucune note : les modèles ne tournent pas (la palette ne les démarre pas d'elle-même)
+	// réponse complète sans aucune note : les modèles ne tournent pas, ou le niveau les exclut (la palette ne les démarre pas d'elle-même)
 	const sansNotes = moteur.complet && (moteur.trouves?.length ?? 0) > 0 && moteur.trouves!.every((t) => t.note === null);
 	const modeles = useModeles(sansNotes);
+	// la palette n'a pas de session : le niveau de la machine seul
+	const avis = sansNotes ? avisModeles(modeles.etat, null) : null;
 	const [demarrage, setDemarrage] = useState<'demarres' | 'echec' | null>(null);
 	const [choisie, setChoisie] = useState<string | null>(null);
 	const champ = useRef<HTMLInputElement>(null);
@@ -202,7 +205,7 @@ function PaletteOuverte(p: { texteInitial: string; surOuverture(): void; ancre: 
 					{sansNotes &&
 						(demarrage === 'demarres' ? (
 							<p className={s.modeles}>Modèles démarrés : les notes viendront à la prochaine recherche.</p>
-						) : modeles.etat?.reranker === 'arrete' ? (
+						) : avis?.motif === 'arretes' ? (
 							<p className={s.modeles}>
 								Mots seulement : modèles arrêtés.
 								<button
@@ -219,8 +222,12 @@ function PaletteOuverte(p: { texteInitial: string; surOuverture(): void; ancre: 
 								</button>
 								{demarrage === 'echec' && ' Démarrage impossible.'}
 							</p>
-						) : modeles.etat?.reranker === 'absent' ? (
+						) : avis?.motif === 'absents' ? (
 							<p className={s.modeles}>Mots seulement : modèles non installés.</p>
+						) : avis?.motif === 'coupes' ? (
+							<p className={s.modeles}>Mots seulement : modèles coupés.</p>
+						) : avis?.motif === 'sens' ? (
+							<p className={s.modeles}>Sans notes : sens seul, pas de reclassement.</p>
 						) : null)}
 				</div>
 			</div>

@@ -85,7 +85,7 @@ export function PanneauContexte(p: {
 					</>
 				)}
 			</div>
-			<ClassementEnDirect key={x.id} session={x.id} entrees={p.entrees} modifiable={x.etat !== 'terminee'} servies={p.fiches} lues={p.lues ?? []} surOuvrirFiche={p.surOuvrirFiche} couleur={couleur} />
+			<ClassementEnDirect key={x.id} session={x.id} entrees={p.entrees} modifiable={x.etat !== 'terminee'} niveauModeles={x.niveauModeles} servies={p.fiches} lues={p.lues ?? []} surOuvrirFiche={p.surOuvrirFiche} couleur={couleur} />
 			<div className={s.actions}>
 				{actif && (
 					<Bouton petit disabled={enCours} onClick={() => void agir('pause')}>

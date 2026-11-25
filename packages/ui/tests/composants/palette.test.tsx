@@ -2,10 +2,11 @@
 import type { SessionVue } from '@mnemo/contrat';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { DonneesGraphe, FicheGraphe, FicheVue, TrouveRechercheVue } from '@mnemo/contrat';
+import type { DonneesGraphe, EtatModelesVue, FicheGraphe, FicheVue, TrouveRechercheVue } from '@mnemo/contrat';
 import { Application } from '../../src/composants/Application.tsx';
 import { dossiersFaux } from '../aides/dossiers-faux.ts';
 import { creerFauxClient } from '../aides/faux-client.tsx';
+import { vueModeles, vueSelonReranker } from '../aides/modeles.ts';
 
 vi.mock('../../src/terminal/Terminal.tsx', () => ({
 	Terminal: (p: { session: string }) => <textarea className="xterm-helper-textarea" aria-label={`terminal ${p.session}`} readOnly />,
@@ -66,7 +67,7 @@ const FICHE_STOCKS: TrouveRechercheVue = {
 type Appel = { params: Record<string, string>; signal: AbortSignal | undefined; repondre(trouves: TrouveRechercheVue[]): void };
 
 /** `recherche` : réponse du moteur selon les paramètres ; `differee` : chaque appel attend que le test y réponde. */
-function monter(o: { recherche?: (p: Record<string, string>) => TrouveRechercheVue[]; differee?: boolean; modeles?: 'absent' | 'arrete' | 'pret'; fiche?: () => unknown } = {}) {
+function monter(o: { recherche?: (p: Record<string, string>) => TrouveRechercheVue[]; differee?: boolean; modeles?: 'absent' | 'arrete' | 'pret'; vueModeles?: EtatModelesVue; fiche?: () => unknown } = {}) {
 	let modeles = o.modeles ?? 'pret';
 	const appels: Appel[] = [];
 	const recherche = o.recherche ?? ((p) => (p['q'] === 'stocks' ? [{ ...TROUVE, note: p['rapide'] === '1' ? null : 0.87 }] : []));
@@ -77,10 +78,10 @@ function monter(o: { recherche?: (p: Record<string, string>) => TrouveRechercheV
 		'/api/memoire/graphe': GRAPHE,
 		'/api/memoire/fiche': o.fiche ?? (() => new Promise(() => {})),
 		'/api/dossiers': dossiersFaux([]),
-		'/api/modeles': () => ({ reranker: modeles }),
+		'/api/modeles': () => o.vueModeles ?? vueSelonReranker(modeles),
 		'/api/modeles/demarrer': () => {
 			modeles = 'pret';
-			return { reranker: modeles };
+			return vueSelonReranker(modeles);
 		},
 		'/api/fil': { commits: [], tronque: false, aConfirmer: [], montees: [], modifications: [] },
 		'/api/recherche': (p: Record<string, string> | undefined) => {
@@ -354,6 +355,18 @@ describe('palette ⌘K', () => {
 		await act(async () => fireEvent.click(demarrer));
 		expect(demarrages()).toHaveLength(1);
 		await screen.findByText(/Modèles démarrés/);
+	});
+
+	it('modèles coupés partout : « mots seulement : modèles coupés », sans bouton ; sens seul : dit, sans bouton', async () => {
+		monter({ vueModeles: vueModeles({ niveau: 'coupes', gardien: 'arrete', sens: 'exclu', reranker: 'exclu' }), recherche: () => [{ ...TROUVE, note: null }] });
+		await ouvrirEtTaper('stocks');
+		expect(await screen.findByText('Mots seulement : modèles coupés.')).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'Démarrer les modèles' })).toBeNull();
+		cleanup();
+		monter({ vueModeles: vueModeles({ niveau: 'sens', reranker: 'exclu' }), recherche: () => [{ ...TROUVE, note: null }] });
+		await ouvrirEtTaper('stocks');
+		expect(await screen.findByText('Sans notes : sens seul, pas de reclassement.')).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'Démarrer les modèles' })).toBeNull();
 	});
 
 	it('modèles prêts, ou réponse notée : pas de mention « mots seulement »', async () => {

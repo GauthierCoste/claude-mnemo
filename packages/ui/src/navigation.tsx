@@ -57,6 +57,9 @@ export type Navigation = {
 	/** Projet au premier plan (filtre « Ce projet » de la palette) : de la session choisie dans Sessions, de la fiche ouverte dans Mémoire › Fichiers ; null sans projet. */
 	projetPremierPlan: Projet | null;
 	definirProjetPremierPlan(p: Projet | null): void;
+	/** Session choisie dans Sessions, tant que la vue est affichée (« cette session » du menu des modèles) ; null sinon. */
+	sessionPremierPlan: string | null;
+	definirSessionPremierPlan(id: string | null): void;
 };
 
 const ContexteNavigation = createContext<Navigation | null>(null);
@@ -80,6 +83,7 @@ export function FournisseurNavigation(p: {
 		(p: Projet | null) => setProjetPremierPlan((avant) => (avant?.projet === p?.projet && avant?.position === p?.position ? avant : p)),
 		[],
 	);
+	const [sessionPremierPlan, definirSessionPremierPlan] = useState<string | null>(null);
 	const abonnes = useRef(new Set<(a: Action) => void>());
 	const garde = useRef<(() => boolean) | null>(null);
 	const [sortie, setSortie] = useState<{ effet: () => void } | null>(null);
@@ -188,6 +192,8 @@ export function FournisseurNavigation(p: {
 			ouvrirSession,
 			projetPremierPlan,
 			definirProjetPremierPlan,
+			sessionPremierPlan,
+			definirSessionPremierPlan,
 		}),
 		[
 			vue,
@@ -212,6 +218,8 @@ export function FournisseurNavigation(p: {
 			ouvrirSession,
 			projetPremierPlan,
 			definirProjetPremierPlan,
+			sessionPremierPlan,
+			definirSessionPremierPlan,
 		],
 	);
 	return <ContexteNavigation.Provider value={valeur}>{p.children}</ContexteNavigation.Provider>;

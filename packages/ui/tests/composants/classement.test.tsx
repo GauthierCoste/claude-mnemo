@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClassementEnDirect, SANS_NOTE_DE_SENS } from '../../src/composants/sessions/ClassementEnDirect.tsx';
 import { creerFauxClient, rendreAvecClient } from '../aides/faux-client.tsx';
+import { vueSelonReranker } from '../aides/modeles.ts';
 
 afterEach(() => {
 	cleanup();
@@ -30,10 +31,10 @@ function monter(o: { ecartes?: EcarteVue[]; entrees?: EntreeServieVue[]; modeles
 	let modeles = o.modeles ?? 'arrete';
 	let aServir: string[] = [];
 	const faux = creerFauxClient({
-		'/api/modeles': () => ({ reranker: modeles }),
+		'/api/modeles': () => vueSelonReranker(modeles),
 		'/api/modeles/demarrer': () => {
 			modeles = 'pret';
-			return { reranker: modeles };
+			return vueSelonReranker(modeles);
 		},
 		'/api/sessions/s1/ecartes': (_params: unknown, corps: { id?: string } | undefined) => {
 			if (corps?.id) ecartes = [...ecartes, { id: corps.id, titre: corps.id === 'c.md' ? 'Gamma' : corps.id, horodatageMs: 5 }];
@@ -354,10 +355,9 @@ describe('ClassementEnDirect', () => {
 		expect(await screen.findByText('Notes indisponibles : modèles non installés')).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'Démarrer' })).toBeNull();
 		cleanup();
-		const avecNotes = monter();
+		monter();
 		await act(async () => {});
 		expect(screen.queryByText(/Notes indisponibles/u)).toBeNull();
-		expect(avecNotes.faux.api.lire).not.toHaveBeenCalledWith('/api/modeles', undefined);
 	});
 
 	it('message `ecartes` du service (autre fenêtre ou fin de session) : pris en compte', async () => {

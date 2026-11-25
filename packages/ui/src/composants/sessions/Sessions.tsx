@@ -93,6 +93,11 @@ export function Sessions(p: { visible: boolean; /** Mode démo : rang de la sess
 	useEffect(() => {
 		if (p.visible) definirProjetPremierPlan(projetChoisi === null ? null : { projet: projetChoisi, position: positionChoisie });
 	}, [p.visible, projetChoisi, positionChoisie, definirProjetPremierPlan]);
+	const { definirSessionPremierPlan } = nav;
+	const idChoisi = selection?.id ?? null;
+	useEffect(() => {
+		definirSessionPremierPlan(p.visible ? idChoisi : null);
+	}, [p.visible, idChoisi, definirSessionPremierPlan]);
 	const zoom = zoomDemande !== null && rangs.has(zoomDemande) ? zoomDemande : null;
 	const zoomCourant = useRef(zoom);
 	zoomCourant.current = zoom;

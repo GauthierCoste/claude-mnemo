@@ -142,6 +142,32 @@ describe('mode démo', () => {
 		expect(sessions.at(-1)).toMatchObject({ id, niveauModeles: 'coupes' });
 	});
 
+	it('modèles : `&modeles=` fixe chaque état de départ ; `anime` fait défiler le scénario, arrêté par le premier geste', async () => {
+		const etat = (modeles: string) => creerClientDemo({ modeles }).api.lire<EtatModelesVue>(ROUTES.modeles);
+		expect(await etat('veille')).toMatchObject({ gardien: 'arrete', sens: 'arrete', activites: [] });
+		expect(await etat('chargement')).toMatchObject({ gardien: 'demarrage' });
+		expect(await etat('prets')).toMatchObject({ gardien: 'pret', niveau: 'complets', activites: [] });
+		expect((await etat('vectorisation')).activites).toMatchObject([{ operation: 'vectorisation', avancement: { faits: 120, total: 800 } }]);
+		expect((await etat('recherche')).activites).toMatchObject([{ operation: 'recherche', session: expect.any(String) }]);
+		expect(await etat('sens')).toMatchObject({ niveau: 'sens', reranker: 'exclu' });
+		expect(await etat('coupes')).toMatchObject({ niveau: 'coupes', sens: 'exclu', reranker: 'exclu' });
+		expect(await etat('echec')).toMatchObject({ gardien: 'echec' });
+		expect(await etat('inconnu')).toMatchObject({ gardien: 'pret' });
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		const { api, connexion } = creerClientDemo({ modeles: 'anime' });
+		const recus: EtatModelesVue[] = [];
+		connexion.surMessage((m) => {
+			if (m.type === 'modeles') recus.push(m.modeles);
+		});
+		await vi.advanceTimersByTimeAsync(8000);
+		expect(recus.map((e) => e.gardien)).toEqual(expect.arrayContaining(['demarrage', 'pret']));
+		expect(recus.some((e) => e.activites[0]?.operation === 'vectorisation')).toBe(true);
+		await api.remplacer(ROUTES.modelesNiveau, { niveau: 'coupes' });
+		const apres = recus.length;
+		await vi.advanceTimersByTimeAsync(30_000);
+		expect(recus).toHaveLength(apres);
+	});
+
 	it('terminal : relecture à l’abonnement, écho de la saisie', async () => {
 		const { connexion } = creerClientDemo();
 		const recu: string[] = [];

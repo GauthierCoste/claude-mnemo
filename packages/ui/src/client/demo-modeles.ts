@@ -1,13 +1,55 @@
 /**
  * Modèles locaux de la démonstration (`?demo`) : installés (bge-m3 et bge-reranker-v2-m3 de BAAI, llama.cpp b11671), prêts ;
  * démarrer, arrêter et changer de niveau les font évoluer comme le service, et chaque changement est diffusé (`modeles`).
+ * `&modeles=` fixe un autre état de départ, pour les captures (`DEPARTS_MODELES`), ou `anime` : un scénario qui boucle
+ * (veille, chargement, prêts, vectorisation, recherche et injection de la première session), arrêté par le premier geste.
  */
 import { estNiveauModeles, modelesPermis } from '@mnemo/commun';
-import type { EtatModelesVue, MessageServeur, ReponseArretModeles } from '@mnemo/contrat';
+import type { ActiviteModeleVue, EtatModelesVue, MessageServeur, ReponseArretModeles } from '@mnemo/contrat';
 import { ErreurApi } from './api.ts';
 
 /** Délai du faux chargement après « Démarrer ». */
 const CHARGEMENT_MS = 1500;
+
+/** Une activité de la démonstration, de ce dossier. */
+const activite = (operation: ActiviteModeleVue['operation'], session: string | null, avancement: ActiviteModeleVue['avancement'] = null): ActiviteModeleVue => ({
+	operation,
+	session,
+	ceDossier: true,
+	depuisMs: Date.now(),
+	avancement,
+});
+
+const VEILLE = { gardien: 'arrete', sens: 'arrete', reranker: 'arrete' } as const;
+
+/** États de départ de `&modeles=` ; `session` : celle à qui sont attribuées la recherche et l'injection. */
+export const DEPARTS_MODELES: Record<string, (session: string | null) => Partial<EtatModelesVue>> = {
+	veille: () => VEILLE,
+	chargement: () => ({ ...VEILLE, gardien: 'demarrage' }),
+	prets: () => ({}),
+	vectorisation: () => ({ activites: [activite('vectorisation', null, { faits: 120, total: 800 })] }),
+	recherche: (session) => ({ activites: [activite('recherche', session)] }),
+	sens: () => ({ niveau: 'sens', reranker: 'exclu' }),
+	coupes: () => ({ niveau: 'coupes', gardien: 'arrete', sens: 'exclu', reranker: 'exclu' }),
+	echec: () => ({ ...VEILLE, gardien: 'echec' }),
+};
+
+/** Le scénario de `anime` : durée de chaque étape, et ce qu'elle change. */
+function etapesAnimees(session: string | null): [number, Partial<EtatModelesVue>][] {
+	const vecteurs = Array.from({ length: 16 }, (_, i): [number, Partial<EtatModelesVue>] => [350, { activites: [activite('vectorisation', null, { faits: Math.min(800, 50 * (i + 1)), total: 800 })] }]);
+	return [
+		[2500, { ...VEILLE, activites: [] }],
+		[2500, { gardien: 'demarrage' }],
+		[1500, { gardien: 'pret', sens: 'pret', reranker: 'pret' }],
+		[350, { activites: [activite('vectorisation', null, { faits: 0, total: null })] }],
+		...vecteurs,
+		[1500, { activites: [] }],
+		[1800, { activites: [activite('recherche', session)] }],
+		[1500, { activites: [] }],
+		[1800, { activites: [activite('injection', session)] }],
+		[2500, { activites: [] }],
+	];
+}
 
 function etatInitial(): EtatModelesVue {
 	return {
@@ -25,9 +67,12 @@ function etatInitial(): EtatModelesVue {
 	};
 }
 
-export function creerModelesDemo(diffuser: (m: MessageServeur) => void) {
-	let etat = etatInitial();
+export function creerModelesDemo(diffuser: (m: MessageServeur) => void, o: { depart?: string | null; session?: string | null } = {}) {
+	const session = o.session ?? null;
+	const depart = o.depart == null ? undefined : DEPARTS_MODELES[o.depart];
+	let etat = { ...etatInitial(), ...depart?.(session) };
 	let chargement: ReturnType<typeof setTimeout> | undefined;
+	let scenario: ReturnType<typeof setTimeout> | undefined;
 	const publier = (changement: Partial<EtatModelesVue>): EtatModelesVue => {
 		etat = { ...etat, ...changement };
 		diffuser({ type: 'modeles', modeles: structuredClone(etat) });
@@ -41,15 +86,29 @@ export function creerModelesDemo(diffuser: (m: MessageServeur) => void) {
 	};
 	const arreter = (): EtatModelesVue => {
 		clearTimeout(chargement);
+		clearTimeout(scenario);
 		return publier({ gardien: 'arrete', activites: [], ...modelesSelon(etat.niveau, false) });
 	};
 	const arreterSurDemande = (): ReponseArretModeles => {
 		const enMarche = etat.gardien !== 'arrete';
 		return { ...arreter(), arret: enMarche ? 'arrete' : 'rien' };
 	};
+	// scénario animé : arrêté par le premier geste (démarrer, arrêter, niveau)
+	if (o.depart === 'anime') {
+		const etapes = etapesAnimees(session);
+		let i = 0;
+		const suivante = () => {
+			const [duree, changement] = etapes[i % etapes.length]!;
+			publier(changement);
+			i++;
+			scenario = setTimeout(suivante, duree);
+		};
+		suivante();
+	}
 	return {
 		etat: (): EtatModelesVue => structuredClone(etat),
 		demarrer(): EtatModelesVue {
+			clearTimeout(scenario);
 			if (etat.niveau === 'coupes' || etat.gardien === 'pret') return structuredClone(etat);
 			clearTimeout(chargement);
 			chargement = setTimeout(() => publier({ gardien: 'pret', ...modelesSelon(etat.niveau, true) }), CHARGEMENT_MS);
@@ -59,6 +118,7 @@ export function creerModelesDemo(diffuser: (m: MessageServeur) => void) {
 		niveau(corps: unknown): EtatModelesVue {
 			const niveau = (corps as { niveau?: unknown } | null)?.niveau;
 			if (!estNiveauModeles(niveau)) throw new ErreurApi('Champ « niveau » invalide.', 400);
+			clearTimeout(scenario);
 			const avant = modelesPermis(etat.niveau);
 			const apres = modelesPermis(niveau);
 			etat = { ...etat, niveau };

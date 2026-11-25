@@ -34,7 +34,8 @@ async function creerClient(): Promise<{ client: Client | null; depart?: Depart; 
 		const palette = parametres.get('palette');
 		const enPlus = { ...(archiviste ? { archiviste } : {}), ...(palette !== null ? { palette } : {}) };
 		const avecEnPlus = depart ? { ...depart, ...enPlus } : Object.keys(enPlus).length ? { vue: 'sessions' as const, ...enPlus } : undefined;
-		return { client: creerClientDemo(conflit), ...(avecEnPlus ? { depart: avecEnPlus } : {}) };
+		const modeles = parametres.get('modeles');
+		return { client: creerClientDemo({ ...conflit, ...(modeles !== null ? { modeles } : {}) }), ...(avecEnPlus ? { depart: avecEnPlus } : {}) };
 	}
 	// le jeton de la première ouverture : rangé dans le stockage de cette origine ; la session demandée (`#session=<id>`,
 	// seule ou avec le jeton) : ouverte une fois la liste reçue ; le fragment est retiré de l'adresse tout de suite
@@ -52,7 +53,8 @@ const FICHE_DEMO = 'projets/erp-saas/Module stocks.md';
  * Mode démo : `&vue=graphe` (ou `fichiers`, `archiviste`, `sessions`, `memoire`, `reglages`) ouvre directement une vue ou un onglet, `&zoom=n` la n-ième session en
  * grand ; `&fiche=<chemin>` ouvre une fiche dans Mémoire › Fichiers, `&edition=1` en édition, `&conflit=1` fait écrire la
  * fiche par une « autre fenêtre » 2,5 s après le départ (avis de conflit, 409 à l'enregistrement) ; `&archiviste=1` ouvre
- * le tiroir de l'archiviste, `&palette=<texte>` la palette avec ce texte ; pour les captures.
+ * le tiroir de l'archiviste, `&palette=<texte>` la palette avec ce texte ; `&modeles=<état>` l'état des modèles locaux
+ * (`veille`, `chargement`, `prets`, `vectorisation`, `recherche`, `sens`, `coupes`, `echec`, ou `anime`) ; pour les captures.
  */
 function departDemo(vue: string | null, zoom: number, fiche: string | null, edition: boolean): { depart?: Depart } {
 	const enGrand = zoom > 0 ? { zoom } : {};

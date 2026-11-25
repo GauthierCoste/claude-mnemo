@@ -386,6 +386,20 @@ export function useModeles(utile: boolean): {
 }
 
 /**
+ * Niveau des modèles propre à une session (null : suivre celui de la machine) ; la session à jour revient par le message
+ * `session`.
+ */
+export function useNiveauModelesSession(): (session: string, niveau: NiveauModeles | null) => Promise<void> {
+	const { api } = useClient();
+	return useCallback(
+		async (session, niveau) => {
+			await api.remplacer<{ session: SessionVue }>(avecId(ROUTES.sessionModeles, session), { niveau });
+		},
+		[api],
+	);
+}
+
+/**
  * Niveaux de l'arbre des dossiers : `suivre` reçoit les niveaux visibles ; chacun est relu quand il le devient (montage,
  * dépliage, nouvel essai après un échec), l'ancienne lecture restant affichée en attendant.
  */

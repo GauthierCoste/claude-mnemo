@@ -4,6 +4,21 @@
 	margin-top: 18px;
 }
 
+.enteteClassement {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.enteteClassement .lbl {
+	white-space: nowrap;
+}
+
+.aDroite {
+	margin-left: auto;
+	min-width: 0;
+}
+
 .lbl:focus-visible {
 	outline: 1px solid var(--ac);
 	outline-offset: 2px;

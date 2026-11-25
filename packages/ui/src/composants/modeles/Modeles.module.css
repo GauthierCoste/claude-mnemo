@@ -1,0 +1,271 @@
+/* Modèles locaux : bouton à état de la barre de titre (même forme que l'Archiviste), bouton de session, et leur menu. */
+.ancre {
+	position: relative;
+	flex: none;
+}
+
+.bouton {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	/* le texte change en direct : une largeur minimale évite que la barre saute à chaque état */
+	min-width: 12.5rem;
+	background: var(--s2);
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-2);
+	padding: 5px 10px;
+	cursor: pointer;
+	font-weight: 500;
+	color: var(--tx);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.bouton:hover,
+.bouton[aria-expanded='true'],
+.boutonSession:hover,
+.boutonSession[aria-expanded='true'] {
+	border-color: var(--ac);
+}
+
+.eteint {
+	color: var(--mu);
+}
+
+.texte {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.icone {
+	position: relative;
+	display: inline-flex;
+	color: var(--ac);
+}
+
+.eteint .icone {
+	color: var(--dim);
+}
+
+/* Point d'état, posé en bas à droite de l'icône. */
+.icone .point {
+	position: absolute;
+	right: -3px;
+	bottom: -2px;
+	box-shadow: 0 0 0 2px var(--s2);
+}
+
+.point {
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	flex: none;
+}
+
+.actif {
+	background: var(--ac);
+	animation: mnemo-pouls 1.4s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.actif {
+		animation: none;
+	}
+}
+
+.pret {
+	background: var(--ac);
+}
+
+.veille {
+	background: var(--dim);
+}
+
+.alerte {
+	background: var(--amber);
+}
+
+/* Bouton de session : discret, à droite de « Injecté dans la session ». */
+.boutonSession {
+	display: inline-flex;
+	max-width: 100%;
+	overflow: hidden;
+	align-items: center;
+	gap: 6px;
+	border: 1px solid transparent;
+	border-radius: var(--r-1);
+	background: none;
+	padding: 1px 6px;
+	font: 500 10.5px var(--mono);
+	letter-spacing: 0.04em;
+	color: var(--mu);
+	cursor: pointer;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.boutonSession .icone .point {
+	box-shadow: 0 0 0 2px var(--fond-panneau);
+}
+
+/* Un niveau propre à la session se voit (il diffère de celui de partout). */
+.propre {
+	color: var(--tx);
+	border-color: var(--bd2);
+}
+
+.menu {
+	position: fixed;
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	width: 370px;
+	max-width: calc(100vw - 32px);
+	padding: 6px;
+	background: var(--s2);
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-2);
+	box-shadow: var(--ombre);
+	font: 12.5px var(--sans);
+	text-transform: none;
+	letter-spacing: normal;
+	color: var(--tx);
+}
+
+.entete {
+	padding: 4px 10px 2px;
+	font-weight: 600;
+}
+
+.sousTitre {
+	padding: 6px 10px 2px;
+	font: 500 10.5px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--dim);
+}
+
+.etats {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 2px 12px;
+	margin: 4px 0;
+	padding: 0 10px;
+}
+
+.etats dt {
+	color: var(--mu);
+}
+
+.etats dd {
+	margin: 0;
+	text-align: right;
+}
+
+.pieces {
+	list-style: none;
+	margin: 4px 0;
+	padding: 0 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.pieces li {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	column-gap: 12px;
+}
+
+.role {
+	color: var(--mu);
+}
+
+.etatPiece {
+	text-align: right;
+}
+
+.modele {
+	font-family: var(--mono);
+	font-size: 11.5px;
+}
+
+.pieces .detail {
+	grid-column: 1 / -1;
+	font-variant-numeric: tabular-nums;
+}
+
+.activites {
+	list-style: none;
+	margin: 2px 0 4px;
+	padding: 0 10px;
+	font-variant-numeric: tabular-nums;
+}
+
+.activites li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.separateur {
+	height: 1px;
+	margin: 6px 4px;
+	background: var(--bd);
+}
+
+.item {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	border: 0;
+	background: none;
+	text-align: left;
+	padding: 6px 10px;
+	border-radius: var(--r-1);
+	font: inherit;
+	color: var(--tx);
+	cursor: pointer;
+}
+
+.item:hover:not(:disabled),
+.item:focus-visible {
+	background: var(--s3);
+	outline: none;
+}
+
+.item:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.coche {
+	width: 12px;
+	flex: none;
+	color: var(--ac);
+	font-size: 10px;
+	line-height: 18px;
+}
+
+.texteItem {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.detail {
+	color: var(--mu);
+	font-size: 11.5px;
+}
+
+.note {
+	margin: 4px 10px 2px;
+	color: var(--dim);
+	font-size: 11.5px;
+}
+
+:global([data-coquille='app']) .menu {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}

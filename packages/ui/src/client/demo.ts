@@ -572,6 +572,8 @@ function changementExterne(brut: string): string {
 export type OptionsDemo = {
 	/** Chemin d'une fiche qu'une « autre fenêtre » modifie 2,5 s après le départ (`&conflit=1`). */
 	changementExterne?: string;
+	/** État de départ des modèles locaux (`&modeles=` : voir `DEPARTS_MODELES`, ou `anime`) ; absent : prêts. */
+	modeles?: string;
 };
 
 function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo): Api {
@@ -1056,7 +1058,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 
 	// Réglages de la démo : en mémoire ; comme le service, le port changé attend un redémarrage
 	const profilsDemo = creerProfilsDemo();
-	const modelesDemo = creerModelesDemo(connexion.diffuser);
+	const modelesDemo = creerModelesDemo(connexion.diffuser, { depart: o.modeles ?? null, session: monde.sessions.find((x) => x.etat !== 'terminee')?.id ?? null });
 	/** Niveau des modèles propre à une session (null : comme partout), diffusé comme le fait le service. */
 	const niveauDeSession = (id: string, corps: unknown): { session: SessionVue } => {
 		const niveau = (corps as { niveau?: unknown } | null)?.niveau;
