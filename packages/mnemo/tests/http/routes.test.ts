@@ -457,10 +457,12 @@ describe('routes : hook', () => {
 		// la réponse part pendant que le reranker de l'affinage attend
 		expect((await api(c).post(ROUTES.hook, { ...entree, evenement: 'message', horodatageMs: h, prompt: 'Où en est le catalogue Alpha ?' })).statut).toBe(200);
 		expect(await jusqua(async () => (await c.etat.servis(UUID, 1))[0]!.affinage === 'en_cours', 2000)).toBe(true);
-		const avant = appels.length;
 		expect(appels.at(-1)).toMatchObject({ operation: 'injection', demarrer: false });
 		liberer();
 		expect(await jusqua(async () => (await c.etat.servis(UUID, 1))[0]!.affinage === 'fait', 2000)).toBe(true);
+		// estimation à faire : trois morceaux (une candidate chacun ici)
+		const avant = appels.length;
+		expect(avant).toBe(3);
 		const [affinee] = await c.etat.servis(UUID, 1);
 		expect(affinee!.horodatageMs).toBe(h);
 		expect(affinee!.classement[0]!.signaux).toMatchObject({ logit: 5 });

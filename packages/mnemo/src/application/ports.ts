@@ -733,8 +733,8 @@ export interface EtatSessions {
 	journaliser(entree: EntreeServie): Promise<void>;
 	/**
 	 * Remplace le classement et l'état d'affinage de l'entrée de message de la session à cet horodatage (affinage en arrière-plan :
-	 * mêmes candidates, notes complétées), seulement si c'est encore l'entrée la plus récente de la session (un message plus
-	 * récent rend l'affinage caduc). Rend vrai si l'entrée a été mise à jour.
+	 * mêmes candidates, notes complétées), seulement si c'est encore l'entrée de message la plus récente de la session (un
+	 * message plus récent rend l'affinage caduc ; une entrée d'après un outil, non). Rend vrai si l'entrée a été mise à jour.
 	 */
 	completerClassement(session: string, horodatageMs: number, classement: Classe[], affinage: Affinage): Promise<boolean>;
 	/**

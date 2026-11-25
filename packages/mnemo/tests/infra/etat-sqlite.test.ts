@@ -233,6 +233,10 @@ describe('etat.sqlite', () => {
 		expect(dix!.classement).toEqual(avant);
 		expect((await etat.servis('s2', 1))[0]!.classement).toEqual(avant);
 		expect(await etat.completerClassement('s1', 99, apres, 'fait')).toBe(false);
+		// une entrée d'après un outil, plus récente : l'affinage du message reste écrit
+		await etat.journaliser({ ...entree, moment: 'apres_outil', session: 's1', horodatageMs: 30, classement: [] });
+		expect(await etat.completerClassement('s1', 20, avant, 'fait')).toBe(true);
+		expect((await etat.servis('s1', 1, 'message'))[0]!.classement).toEqual(avant);
 	});
 
 	it('journal : un même instant ne s’écrit qu’une fois par session et par moment (repli local du hook)', async () => {

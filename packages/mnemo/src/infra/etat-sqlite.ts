@@ -736,11 +736,12 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 
 		async completerClassement(session, horodatageMs, classement, affinage) {
 			return ecrire(() => {
-				// seulement l'entrée la plus récente de la session : un message plus récent rend l'affinage caduc
+				// seulement l'entrée de message la plus récente de la session : un message plus récent rend l'affinage caduc (une
+				// entrée d'après un outil, non : Claude en enchaîne souvent un juste après le message)
 				const { changes } = base
 					.prepare(
 						`UPDATE servis SET classement = ?, affinage = ?
-						WHERE rang = (SELECT MAX(rang) FROM servis WHERE session = ?) AND session = ? AND horodatage_ms = ? AND moment = 'message'`,
+						WHERE rang = (SELECT MAX(rang) FROM servis WHERE session = ? AND moment = 'message') AND session = ? AND horodatage_ms = ? AND moment = 'message'`,
 					)
 					.run(JSON.stringify(classement), affinage, session, session, horodatageMs);
 				if (changes > 0) ecriture(session);

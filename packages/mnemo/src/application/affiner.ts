@@ -3,7 +3,7 @@
  * noter par le reranker les 30 premières candidates de l'ordre du hook, plus les fiches désignées par un signal ; si le sens
  * n'avait pas répondu au hook, il calcule aussi les cosinus. L'entrée du journal est complétée (même horodatage, `affinage`
  * `en_cours` puis `fait`) et rediffusée. **Rien d'autre** : ni injection, ni piste, ni file (rien en différé, décision du 24/11).
- * Une entrée plus récente de la session rend l'affinage caduc : rien n'est écrit ni diffusé.
+ * Un message plus récent de la session rend l'affinage caduc : rien n'est écrit ni diffusé (une entrée d'après un outil, non).
  */
 import { baseDuReranker } from '../domaine/note-des-pistes.ts';
 import { normaliser } from '../domaine/sens.ts';
@@ -109,7 +109,7 @@ async function avecLeSens(dep: Dependances, d: DemandeAffinage, fin: number): Pr
 
 /**
  * Affine le classement d'une entrée de message et le complète au journal ; rend le classement écrit, ou null si l'affinage est
- * caduc (une entrée plus récente dans la session) ou si l'écriture échoue. `diffuser` : appelé une fois l'entrée complétée.
+ * caduc (un message plus récent dans la session) ou si l'écriture échoue. `diffuser` : appelé une fois l'entrée complétée.
  */
 export async function affiner(dep: Dependances, etat: Pick<EtatSessions, 'completerClassement'>, d: DemandeAffinage, diffuser?: () => Promise<void>): Promise<Classe[] | null> {
 	const fin = Date.now() + (d.budgetMs ?? BUDGET_AFFINAGE_MS);

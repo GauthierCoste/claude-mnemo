@@ -205,6 +205,35 @@ describe('WebSocket : messages', () => {
 		expect(servis().at(-1)).toMatchObject({ horodatageMs: h, affinage: 'fait' });
 	});
 
+	it('affinage : une entrée d’après un outil arrivée pendant le reranker ne le rend pas caduc ; l’entrée du message est écrite et diffusée', { timeout: 20_000 }, async () => {
+		const c = await serviceFaux({}, { avant: async (etat) => etat.creer(sessionFixe(UUID)) });
+		await c.dep.coffre.ecrire('projets/alpha/tarifs.md', `---\nid: 01TARIFS\ntype: note\nupdated: 2026-11-01\n---\n# Tarifs\n\nLes tarifs du catalogue Alpha.\n`);
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		c.modeles.vue = { ...c.modeles.vue, reranker: 'pret' };
+		let liberer = (): void => {};
+		const bloque = new Promise<void>((r) => (liberer = r));
+		let appele = false;
+		c.dep.reranker = {
+			noter: async (_r, textes) => {
+				appele = true;
+				await bloque;
+				return textes.map(() => 3);
+			},
+		};
+		const client = await connecter(c);
+		await jusqua(() => client.recus.length > 0, 2000);
+		const h = Date.now();
+		await appeler(c.service.port, 'POST', ROUTES.hook, { jeton: c.service.jeton, corps: { evenement: 'message', prompt: 'Les tarifs du catalogue Alpha ?', session: UUID, horodatageMs: h, cwd: join(c.racine, 'alpha') } });
+		expect(await jusqua(() => appele, 2000)).toBe(true);
+		// Claude enchaîne un outil : une entrée d'après l'outil, plus récente, est journalisée pendant le reranker
+		await c.etat.journaliser({ session: UUID, moment: 'apres_outil', horodatageMs: h + 1, ids: ['projets/alpha/alpha.md'], texte: 'Après outil.', ms: 1, sens: false, demande: null, classement: [], muet: null, cartes: [], position: null });
+		liberer();
+		const servis = () => client.recus.flatMap((m) => (m.type === 'servi' ? [m.entree] : []));
+		expect(await jusqua(() => servis().some((e) => e.affinage === 'fait'), 3000)).toBe(true);
+		expect(servis().find((e) => e.affinage === 'fait')).toMatchObject({ horodatageMs: h });
+		expect((await c.etat.servis(UUID, 1, 'message'))[0]).toMatchObject({ horodatageMs: h, affinage: 'fait' });
+	});
+
 	it('sondage : une carte journalisée hors service porte le titre de l\'index (pas le nom du fichier)', { timeout: 20_000 }, async () => {
 		const c = await serviceFaux({ sondageMs: 100 }, { avant: async (etat) => etat.creer(sessionFixe(UUID)) });
 		c.dep.index.titres = async () => [{ chemin: 'projets/alpha/alpha.md', titre: 'Projet Alpha complet', alias: [] }];

@@ -764,7 +764,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 									if ((await ctx.modeles.etat()).reranker !== 'pret') return;
 									await affiner(depDuHook, pil.etat, demandeAffinage, async () => {
 										// même horodatage : l'entrée du message, complétée
-										const [affinee] = await pil.etat.servis(s.id, 1);
+										const [affinee] = await pil.etat.servis(s.id, 1, 'message');
 										if (affinee !== undefined && affinee.horodatageMs === demandeAffinage.horodatageMs) ctx.diffuser({ type: 'servi', entree: vueServie(affinee, await titresDeLIndex()) });
 									});
 								})().catch(() => {}),
