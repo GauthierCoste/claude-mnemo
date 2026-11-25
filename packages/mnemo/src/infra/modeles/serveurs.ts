@@ -101,7 +101,7 @@ export async function lireEtatServeurs(dossier: string): Promise<EtatServeurs | 
 }
 
 /** Écrit un fichier JSON d'un coup (temporaire puis renommage), droits 0600. Ne crée pas le dossier (`preparerDossierServeurs`). */
-async function ecrireJson(fichier: string, valeur: unknown): Promise<void> {
+export async function ecrireJson(fichier: string, valeur: unknown): Promise<void> {
 	const temporaire = `${fichier}.tmp-${randomBytes(6).toString('hex')}`;
 	try {
 		await writeFile(temporaire, `${JSON.stringify(valeur, null, '\t')}\n`, { mode: 0o600 });

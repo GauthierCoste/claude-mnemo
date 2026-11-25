@@ -10,6 +10,7 @@ export * from './encodage.ts';
 export * from './formats.ts';
 export * from './limites.ts';
 export * from './memoire.ts';
+export * from './niveau-modeles.ts';
 export * from './parametres.ts';
 export * from './raisons-carte.ts';
 export * from './reglages.ts';

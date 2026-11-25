@@ -5,6 +5,7 @@ import { chmod, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
+import { modelesPermis } from '@mnemo/commun';
 import { messageDErreur } from '../../domaine/texte.ts';
 import { piecesPourPlateforme } from './catalogue.ts';
 import { dossierModeles, dossierServeurs } from './dossier.ts';
@@ -12,6 +13,7 @@ import { requeteLocale } from './http-local.ts';
 import { inactiviteTransmise } from './inactivite.ts';
 import { etatDesPieces } from './installer.ts';
 import { journaliser } from './journal.ts';
+import { lireNiveau } from './niveau.ts';
 import { variable } from '../environnement.ts';
 import {
 	AGE_MAX_DEMARRAGE_MS,
@@ -84,9 +86,10 @@ type Serveur = { type: TypeServeur; gguf: string; enfant: ChildProcess; entree: 
 
 /**
  * Processus détaché (`mnemo modeles garde`), un seul pour toute la machine (par utilisateur) : lance un `llama-server` par
- * modèle installé (sens, reranker), écrit `serveurs/modeles.json` (`dossierServeurs`, seul dossier qu'il crée), les arrête
- * tous après l'inactivité reçue à son lancement (`inactiviteTransmise`) sans requête, si l'un meurt, si un autre gardien le
- * remplace, si `modeles.json` disparaît, ou sur signal ; retire alors `modeles.json` s'il le nomme encore. Un modèle qui ne
+ * modèle installé (sens, reranker) et permis par le niveau de la machine lu à son démarrage (`serveurs/niveau.json`), écrit
+ * `serveurs/modeles.json` (`dossierServeurs`, seul dossier qu'il crée), les arrête tous après l'inactivité reçue à son
+ * lancement (`inactiviteTransmise`) sans requête, si l'un meurt, si un autre gardien le remplace, si `modeles.json`
+ * disparaît, ou sur signal ; retire alors `modeles.json` s'il le nomme encore. Un modèle qui ne
  * démarre pas n'empêche pas l'autre de servir. `MNEMO_LLAMA_SERVEUR` (tests seulement) remplace le moteur : un script
  * `.mjs`/`.js` est lancé par Node.
  */
@@ -178,9 +181,14 @@ export async function garder(env: NodeJS.ProcessEnv = process.env): Promise<void
 		const remplacant = env['MNEMO_LLAMA_SERVEUR'];
 		const moteurInstalle = etats.find((e) => e.piece.nom === 'moteur' && e.installee)?.chemin;
 		const moteur = remplacant !== undefined && remplacant !== '' ? remplacant : moteurInstalle;
-		const modeles = etats.filter((e) => e.piece.nom !== 'moteur' && e.installee).map((e) => ({ type: e.piece.nom as TypeServeur, gguf: e.chemin }));
+		const installes = etats.filter((e) => e.piece.nom !== 'moteur' && e.installee).map((e) => ({ type: e.piece.nom as TypeServeur, gguf: e.chemin }));
 		if (moteur === undefined) return arreter('moteur llama.cpp absent', true);
-		if (modeles.length === 0) return arreter('aucun modèle installé', true);
+		if (installes.length === 0) return arreter('aucun modèle installé', true);
+		// seuls les modèles permis par le niveau de la machine, lu maintenant : un changement qui en retire un arrête ce gardien
+		const niveau = await lireNiveau(dossier);
+		const permis = modelesPermis(niveau);
+		const modeles = installes.filter((m) => permis[m.type]);
+		if (modeles.length === 0) return arreter(`aucun modèle permis par le niveau « ${niveau} »`);
 
 		// Un seul gardien pour la machine : sous le verrou, laisser la place à un autre qui démarre ou qui sert déjà.
 		await preparerDossierServeurs(dossier);

@@ -2,6 +2,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { utimes, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { modelesPermis } from '@mnemo/commun';
 import { messageDErreur } from '../../domaine/texte.ts';
 import type { Modeles, OptionsModele, Reranker, Sens } from '../../application/ports.ts';
 import { piecesPourPlateforme } from './catalogue.ts';
@@ -12,6 +13,7 @@ import type { ReponseLocale } from './http-local.ts';
 import { inactiviteDuDossier } from './inactivite.ts';
 import { dossierPiece } from './installer.ts';
 import { journaliser } from './journal.ts';
+import { lireNiveau } from './niveau.ts';
 import { cheminsModeles, oublierServeur, serveurPret } from './serveurs.ts';
 import type { OptionsServeur } from './serveurs.ts';
 import type { EntreeServeur, TypeServeur } from './serveurs.ts';
@@ -127,11 +129,14 @@ type Appel<T> = (serveur: EntreeServeur, finMs: number) => Promise<T | string>;
 /**
  * Trouve (ou démarre) le serveur, puis fait l'appel ; tout ce qui ne va pas rend null, avec une ligne de journal. Un appel rend
  * une valeur ou le motif de son échec. `demarrer` faux (hooks) : sans serveur prêt, le gardien est lancé sans être attendu,
- * l'appel rend null aussitôt et les suivants trouveront les modèles.
+ * l'appel rend null aussitôt et les suivants trouveront les modèles. Un modèle exclu par le niveau de la machine rend null
+ * tout de suite, sans rien lancer ni appeler : le niveau est relu à chaque appel (un petit fichier, bien moins coûteux que
+ * l'appel lui-même), si bien qu'un changement vaut dès l'appel suivant.
  */
 async function appeler<T>(lieu: ReturnType<typeof lieuDesServeurs>, type: TypeServeur, options: OptionsModele, appel: Appel<T>): Promise<T | null> {
 	const finMs = Date.now() + options.budgetMs;
 	const dossier = lieu.dossier();
+	if (!modelesPermis(await lireNiveau(dossier))[type]) return null;
 	try {
 		const serveur = await serveurPret(dossier, type, { finMs, demarrage: options.demarrer ? 'attendre' : 'sans-attendre', ...lieu.serveur });
 		if (serveur === null) return null;
@@ -224,7 +229,11 @@ export function modelesLocaux(racine: string, options: OptionsClient = {}): Mode
 			return (await serveurPret(lieu.dossier(), 'reranker', { finMs: Date.now() + LECTURE_ETAT_MS, demarrage: 'jamais', ...lieu.serveur })) === null ? 'arrete' : 'pret';
 		},
 		async demarrer() {
-			if (installes()) await serveurPret(lieu.dossier(), 'reranker', { finMs: Date.now() + ATTENTE_DEMARRAGE_MS, demarrage: 'attendre', ...lieu.serveur });
+			// le gardien lance tous les modèles permis : il suffit d'en demander un, permis et installé ; aucun (`coupes`) : rien
+			const d = disponibles();
+			const permis = modelesPermis(await lireNiveau(lieu.dossier()));
+			const type = (['reranker', 'sens'] as const).find((t) => permis[t] && d[t] !== null);
+			if (d.moteur && type !== undefined) await serveurPret(lieu.dossier(), type, { finMs: Date.now() + ATTENTE_DEMARRAGE_MS, demarrage: 'attendre', ...lieu.serveur });
 		},
 	};
 }
