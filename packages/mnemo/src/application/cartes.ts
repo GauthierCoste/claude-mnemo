@@ -16,13 +16,12 @@ import { deverrouiller, perimetreDe, TYPES_NON_PROPOSABLES } from '../domaine/pe
 import type { Arete, FicheDuGraphe } from '../domaine/perimetre.ts';
 import { signalInjection } from '../domaine/signal-injection.ts';
 import type { InjectionManuelle } from '../domaine/signal-injection.ts';
-import { estExpire } from '../domaine/elements.ts';
 import type { ElementIndexe } from '../domaine/elements.ts';
 import { estDocument } from '../domaine/regles.ts';
 import { expressionFts } from '../domaine/requete.ts';
 import { sansFaitsInactifs } from '../domaine/sans-faits-inactifs.ts';
 import { normaliser } from '../domaine/sens.ts';
-import { candidatesDuMessage, classerLeMessage } from './classement-du-message.ts';
+import { candidatesDuMessage, classerLeMessage, ficheProposable } from './classement-du-message.ts';
 import type { LigneDeClassement } from './classement-du-message.ts';
 import { ficheDePosition } from './chercher.ts';
 import { aujourdhui } from './commun.ts';
@@ -234,10 +233,8 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 	// position, ni demandée à ce message, ni écartée (dans la session, ou toujours). Le classement la garde même déjà injectée,
 	// lue ou proposée.
 	const candidate = (chemin: string): boolean =>
-		elementDe.has(chemin) &&
+		ficheProposable(elementDe.get(chemin), jour) &&
 		(permises === null || permises.has(chemin)) &&
-		!TYPES_NON_PROPOSABLES.has(type(chemin)) &&
-		!estExpire(elementDe.get(chemin)!, jour) &&
 		chemin !== positionFiche &&
 		!demandees.has(chemin) &&
 		!ecartees.has(chemin);

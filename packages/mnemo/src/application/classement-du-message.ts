@@ -5,7 +5,9 @@
  */
 import { classer } from '../domaine/note-des-pistes.ts';
 import type { Note } from '../domaine/note-des-pistes.ts';
-import { neutres } from '../domaine/perimetre.ts';
+import { estExpire } from '../domaine/elements.ts';
+import type { ElementIndexe } from '../domaine/elements.ts';
+import { neutres, TYPES_NON_PROPOSABLES } from '../domaine/perimetre.ts';
 import type { FicheDuGraphe, Perimetre } from '../domaine/perimetre.ts';
 import { expressionFts } from '../domaine/requete.ts';
 import { bm25RelatifsDesListes, cosinusDesFiches, cosinusRelatif } from '../domaine/signaux-de-note.ts';
@@ -30,6 +32,15 @@ export type LigneDeClassement = {
 
 /** Lignes du classement gardées au journal par message (les 50 dernières entrées d'une session) : les mieux classées ; au-delà, coupées et comptées. */
 export const CLASSEMENT_MAX = 500;
+
+/**
+ * Une fiche indexée proposable comme candidate (spec § 3.3) : d'un type proposable (ni `source`, `dossier`, `consigne`,
+ * `profil`, `episode`) et non périmée (`perime_le` passé). Ce qui dépend du message (fiche de position, demandées, écartées)
+ * reste à l'appelant. Le hook et le banc du contexte l'appliquent tous deux.
+ */
+export function ficheProposable(e: ElementIndexe | undefined, jour: string): e is ElementIndexe {
+	return e !== undefined && !TYPES_NON_PROPOSABLES.has(e.typeFiche) && !estExpire(e, jour);
+}
 
 /** D'où vient une candidate : le périmètre de la position, une fiche neutre ou déverrouillée (`proche`), ou un signal seul (null). */
 export type OrigineCandidate = 'perimetre' | 'proche' | null;
@@ -71,9 +82,10 @@ async function cosinusDeLaMemoire(dep: Dependances, vecteur: Float32Array | null
 
 /**
  * bm25 relatif de chaque candidate (règle de `bm25Relatif`) : deux recherches plein texte sur les seules candidates, tous les mots
- * puis l'un d'eux ; 0 pour une candidate que les mots ne trouvent pas. Null : le message n'a aucun mot cherchable.
+ * puis l'un d'eux ; 0 pour une candidate que les mots ne trouvent pas ; `ordre` : les candidates trouvées, dans l'ordre des mots.
+ * Null : le message n'a aucun mot cherchable.
  */
-async function bm25DesCandidates(dep: Dependances, message: string, candidates: readonly string[]): Promise<Map<string, number> | null> {
+async function bm25DesCandidates(dep: Dependances, message: string, candidates: readonly string[]): Promise<{ relatifs: Map<string, number>; ordre: string[] } | null> {
 	if (candidates.length === 0 || message.trim() === '') return null;
 	const expression = expressionFts(message, await dep.index.alias());
 	if (expression === null) return null;
@@ -82,16 +94,18 @@ async function bm25DesCandidates(dep: Dependances, message: string, candidates: 
 	const expressions = expression.toutes === expression.une ? [expression.une] : [expression.toutes, expression.une];
 	const listes = [];
 	for (const e of expressions) listes.push(await dep.index.chercher(e, filtre, candidates.length));
-	return bm25RelatifsDesListes(listes).relatifs;
+	return bm25RelatifsDesListes(listes);
 }
 
 /**
  * Un message classé : `sens` (le sens a noté), `ordre` (les candidates, de la mieux notée à la moins bien notée), `base` (le
- * cosinus ramené à 0, base de la note de toute fiche, classée ou non), `bm25` (0 : les mots ne la trouvent pas), `signaux` bruts.
+ * cosinus ramené à 0, base de la note de toute fiche, classée ou non), `bm25` (0 : les mots ne la trouvent pas), `signaux` bruts,
+ * `ordreDesMots` (les candidates que les mots trouvent, dans l'ordre du plein texte : une tête de liste du banc).
  */
 export type MessageClasse = {
 	sens: boolean;
 	ordre: Note[];
+	ordreDesMots: readonly string[];
 	base(chemin: string): number;
 	bm25(chemin: string): number;
 	signaux(note: Note): SignauxBruts;
@@ -119,12 +133,13 @@ export async function classerLeMessage(
 	const cosinus = (chemin: string): number | null => cos?.parFiche.get(chemin) ?? null;
 	const base = (chemin: string): number => Math.max(0, cosinus(chemin) ?? 0);
 	const mots = await bm25DesCandidates(dep, e.message, e.candidates);
-	const bm25 = (chemin: string): number => mots?.get(chemin) ?? 0;
+	const bm25 = (chemin: string): number => mots?.relatifs.get(chemin) ?? 0;
 	const notes = e.candidates.map((c) => e.noter(c, base(c)));
 	const ordre = classer(notes, (a, b) => bm25(b.chemin) - bm25(a.chemin) || e.date(b.chemin).localeCompare(e.date(a.chemin)) || a.chemin.localeCompare(b.chemin));
 	return {
 		sens: cos !== null,
 		ordre,
+		ordreDesMots: mots?.ordre ?? [],
 		base,
 		bm25,
 		signaux: (n) => ({

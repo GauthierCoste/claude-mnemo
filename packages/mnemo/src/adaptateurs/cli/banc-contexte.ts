@@ -8,7 +8,7 @@ import { progression } from '../../application/banc-juger.ts';
 import { rejouerJugements } from '../../application/banc-rejeu.ts';
 import type { MesuresNiveau, RejeuJugements } from '../../application/banc-rejeu.ts';
 import { LISTES_DU_BANC } from '../../application/banc-signaux.ts';
-import type { Signaux } from '../../application/banc-signaux.ts';
+import type { GestesDuBanc, Signaux } from '../../application/banc-signaux.ts';
 import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
 import { compterGestes, GESTES } from '../../domaine/gestes.ts';
 import type { ComptesDesGestes } from '../../domaine/gestes.ts';
@@ -46,9 +46,20 @@ const textes = (v: unknown, nom: string, i: number): string[] => {
 };
 const nombreOuNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
+/** Signaux d'une candidate ; `signalSession` et `apriori`, venus après les premières extractions, sont facultatifs. */
 function lireSignaux(v: unknown): Signaux | undefined {
 	if (!estObjet(v)) return undefined;
-	return { logit: nombreOuNull(v['logit']), cosinus: nombreOuNull(v['cosinus']), cosinusRelatif: nombreOuNull(v['cosinusRelatif']), bm25Relatif: nombreOuNull(v['bm25Relatif']) ?? 0 };
+	const signalSession = nombreOuNull(v['signalSession']);
+	const apriori = nombreOuNull(v['apriori']);
+	return {
+		logit: nombreOuNull(v['logit']),
+		cosinus: nombreOuNull(v['cosinus']),
+		cosinusRelatif: nombreOuNull(v['cosinusRelatif']),
+		// null : le message n'a pas de mots cherchables ; absent (ou illisible) : 0, comme aux premières extractions
+		bm25Relatif: v['bm25Relatif'] === null ? null : (nombreOuNull(v['bm25Relatif']) ?? 0),
+		...(signalSession === null ? {} : { signalSession }),
+		...(apriori === null ? {} : { apriori }),
+	};
 }
 
 function lireCandidates(v: unknown, i: number): CandidateAJuger[] {
@@ -255,6 +266,23 @@ const dependancesEnLecture = (racine: string) => dependancesReelles(racine, { in
 const enErreurCli = (e: unknown) => new ErreurCli(e instanceof Error ? e.message : String(e));
 const SUITE = 'Ensuite : la même commande avec --juger (au lieu de --extraire ou --completer)';
 
+/**
+ * Les gestes de l'état (a priori, écartées toujours), lus sans migration ni écriture ; undefined (a priori 0) : l'état n'a pas de
+ * journal des gestes (version 12 ou moins) ou ne se lit pas.
+ */
+async function gestesEnLecture(racine: string): Promise<GestesDuBanc | undefined> {
+	try {
+		const lecture = ouvrirJournalEnLecture(join(racine, DOSSIER_LOCAL, 'etat.sqlite'));
+		try {
+			return (await lecture.gestes()) ?? undefined;
+		} finally {
+			lecture.fermer();
+		}
+	} catch {
+		return undefined;
+	}
+}
+
 /** Pourquoi il y a moins de messages que demandé. */
 function raisonDuManque(demandes: number, choisis: number, nouveaux: number, parSession: number): string {
 	if (choisis >= demandes) return '';
@@ -299,9 +327,10 @@ async function extraire(racine: string, fichier: string, o: Options): Promise<vo
 				lecture.fermer();
 			}
 		}
+		const gestes = await gestesEnLecture(racine);
 		const dep = dependancesEnLecture(racine);
 		try {
-			const bilan = await extraireJugements(dep, choisis, { requeteJointe: REQUETE_JOINTE, avancement: avancement('Messages') }).catch((e: unknown) => {
+			const bilan = await extraireJugements(dep, choisis, { requeteJointe: REQUETE_JOINTE, avancement: avancement('Messages'), ...(gestes === undefined ? {} : { gestes }) }).catch((e: unknown) => {
 				throw enErreurCli(e);
 			});
 			// relu sous le verrou : rien n'a pu l'écrire entre-temps
@@ -379,6 +408,7 @@ export async function commandeContexte(args: string[]): Promise<void> {
 	const avecCandidates = existants.filter((c) => c.candidates !== undefined);
 	if (existants.length === 0) throw new ErreurCli(`Aucun cas dans ${fichier}. Ajoutez-en avec --extraire.`);
 	// index en lecture seule et jamais synchronisé : le rejeu n'écrit rien dans `.mnemo`
+	const gestes = o.recalculer && avecCandidates.length > 0 ? await gestesEnLecture(racine) : undefined;
 	const dep = dependancesEnLecture(racine);
 	try {
 		const etiquetage = etiquetes.length === 0 ? null : await rejouerCas(dep, etiquetes, { synchroniser: false }).catch((e: unknown) => {
@@ -392,6 +422,7 @@ export async function commandeContexte(args: string[]): Promise<void> {
 						empreintes: o.empreintes,
 						requeteJointe: REQUETE_JOINTE,
 						...(o.recalculer ? { avancement: avancement('Rejeu') } : {}),
+						...(gestes === undefined ? {} : { gestes }),
 					}).catch((e: unknown) => {
 						throw enErreurCli(e);
 					});

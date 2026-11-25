@@ -12,8 +12,8 @@ import { raisonDeMutisme } from '../domaine/message-muet.ts';
 import type { InjectionManuelle } from '../domaine/signal-injection.ts';
 import { designe } from './banc-contexte.ts';
 import type { CandidateAJuger, CasContexte, Jugement, VarianteRequete } from './banc-contexte.ts';
-import { candidatesDuBanc, chargerMemoireDuBanc, LISTES_DU_BANC, modelesDisponibles, presentationDe, signauxDuMessage } from './banc-signaux.ts';
-import type { ListeDuBanc, MemoireDuBanc, Signaux } from './banc-signaux.ts';
+import { aprioriDuMessage, candidatesDuBanc, chargerMemoireDuBanc, LISTES_DU_BANC, modelesDisponibles, presentationDe, signauxDuMessage } from './banc-signaux.ts';
+import type { GestesDuBanc, ListeDuBanc, MemoireDuBanc, Signaux } from './banc-signaux.ts';
 import { ficheDePosition } from './chercher.ts';
 import type { Dependances, EntreeServie } from './ports.ts';
 
@@ -118,6 +118,8 @@ export type OptionsExtraction = {
 	disponibles?: { sens: boolean; reranker: boolean };
 	/** Après chaque message : messages traités, total. */
 	avancement?: (faits: number, total: number) => void;
+	/** Gestes lus dans l'état (a priori, écartées toujours) ; absent : a priori 0, aucune écartée toujours. */
+	gestes?: GestesDuBanc;
 };
 /**
  * `sansCandidate` : messages sans aucune fiche candidate ; `sansModele` : messages laissés parce qu'un modèle disponible n'a pas
@@ -159,7 +161,8 @@ export async function extraireJugements(dep: Dependances, messages: readonly Mes
 	for (const [i, m] of messages.entries()) {
 		options.avancement?.(i + 1, messages.length);
 		const injectees = await injecteesDe(dep, m);
-		const pool = await candidatesDuBanc(dep, memoire, m.position, m.message, injectees);
+		const pool = await candidatesDuBanc(dep, memoire, m.position, m.message, injectees, options.gestes?.ecarteesToujours);
+		const aprioris = aprioriDuMessage(options.gestes, m, dep.sens.modele());
 		const requetes: [VarianteRequete, string][] = [['seule', m.message]];
 		const jointe = options.requeteJointe?.(m.message, m.precedent) ?? null;
 		if (jointe !== null && jointe !== m.message) requetes.push(['jointe', jointe]);
@@ -167,7 +170,12 @@ export async function extraireJugements(dep: Dependances, messages: readonly Mes
 		const signauxDe = new Map<string, Partial<Record<VarianteRequete, Signaux>>>();
 		const repondu = { sens: true, reranker: true };
 		for (const [variante, requete] of requetes) {
-			const s = await signauxDuMessage(dep, memoire, requete, pool, { ...(options.premieres === undefined ? {} : { premieres: options.premieres }), demarrer });
+			const s = await signauxDuMessage(dep, memoire, requete, pool, {
+				...(options.premieres === undefined ? {} : { premieres: options.premieres }),
+				demarrer,
+				injectees,
+				...(aprioris === undefined ? {} : { aprioris }),
+			});
 			repondu.sens &&= s.modeles.sens;
 			repondu.reranker &&= s.modeles.reranker;
 			for (const liste of LISTES_DU_BANC) for (const c of s.tetes[liste]) listesDe.set(c, (listesDe.get(c) ?? new Set()).add(liste));

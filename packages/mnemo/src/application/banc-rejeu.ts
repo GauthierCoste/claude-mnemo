@@ -15,8 +15,8 @@ import { ece, intervalleWilson, tableDeFiabilite } from '../domaine/mesures-banc
 import type { TrancheFiabilite } from '../domaine/mesures-banc.ts';
 import type { CasContexte, VarianteRequete } from './banc-contexte.ts';
 import type { RequeteJointe } from './banc-extraire.ts';
-import { candidatesDuBanc, chargerMemoireDuBanc, signauxDuMessage } from './banc-signaux.ts';
-import type { Signaux } from './banc-signaux.ts';
+import { aprioriDuMessage, candidatesDuBanc, chargerMemoireDuBanc, signauxDuMessage } from './banc-signaux.ts';
+import type { GestesDuBanc, Signaux } from './banc-signaux.ts';
 import type { Dependances } from './ports.ts';
 
 export type NiveauBanc = 'complets' | 'sens' | 'ordre';
@@ -133,6 +133,8 @@ export type OptionsRejeu = {
 	injectionsParMessage?: number;
 	pistesParMessage?: number;
 	avancement?: (faits: number, total: number) => void;
+	/** Au recalcul : gestes lus dans l'état (a priori, écartées toujours) ; absent : a priori 0, aucune écartée toujours. */
+	gestes?: GestesDuBanc;
 };
 
 /**
@@ -357,12 +359,14 @@ export async function rejouerJugements(dep: Dependances, cas: readonly CasContex
 		const memoire = await chargerMemoireDuBanc(dep);
 		modeles = { sens: false, reranker: false };
 		for (const [i, c] of retenus.entries()) {
-			const pool = await candidatesDuBanc(dep, memoire, c.position, c.message, c.injectionsManuelles ?? []);
+			const injectees = c.injectionsManuelles ?? [];
+			const pool = await candidatesDuBanc(dep, memoire, c.position, c.message, injectees, options.gestes?.ecarteesToujours);
+			const aprioris = aprioriDuMessage(options.gestes, c, dep.sens.modele());
 			const signaux: MessageRejoue['signaux'] = {};
 			const jointe = options.requeteJointe?.(c.message, c.precedent ?? null) ?? null;
 			const requetes: [VarianteRequete, string][] = [['seule', c.message], ...(jointe === null || jointe === c.message ? [] : [['jointe', jointe] as [VarianteRequete, string]])];
 			for (const [variante, requete] of requetes) {
-				const s = await signauxDuMessage(dep, memoire, requete, pool, { demarrer: options.demarrer ?? true });
+				const s = await signauxDuMessage(dep, memoire, requete, pool, { demarrer: options.demarrer ?? true, injectees, ...(aprioris === undefined ? {} : { aprioris }) });
 				modeles.sens ||= s.modeles.sens;
 				modeles.reranker ||= s.modeles.reranker;
 				signaux[variante] = s.signaux;

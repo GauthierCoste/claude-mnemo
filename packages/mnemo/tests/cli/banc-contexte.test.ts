@@ -52,6 +52,14 @@ describe('banc-contexte.json', () => {
 		expect(lireCasContexte(JSON.stringify([complet]))).toEqual([complet]);
 	});
 
+	it('signaux : signal de session et a priori relus s’ils sont là, bm25 relatif null relu null ; absents : rien d’ajouté', () => {
+		const signaux = { seule: { logit: null, cosinus: 0.7, cosinusRelatif: 0.1, bm25Relatif: null, signalSession: 0.25, apriori: -0.3 } };
+		const avec = { ...JUGE, candidates: [{ ...JUGE.candidates![0]!, signaux }] };
+		expect(lireCasContexte(JSON.stringify([avec]))).toEqual([avec]);
+		// un fichier d'avant : ni signal de session ni a priori, bm25 relatif toujours un nombre
+		expect(lireCasContexte(JSON.stringify([JUGE]))[0]!.candidates![0]!.signaux.seule).toEqual({ logit: 2.5, cosinus: 0.71, cosinusRelatif: 0.12, bm25Relatif: 1 });
+	});
+
 	it('un ancien cas étiqueté reste lisible, sans champ ajouté', () => {
 		const ancien = { nom: 'n', position: 'p', message: 'm', premier: true, attendues: ['A.md'], interdites: [], silence: false };
 		expect(lireCasContexte(JSON.stringify([ancien]))).toEqual([ancien]);

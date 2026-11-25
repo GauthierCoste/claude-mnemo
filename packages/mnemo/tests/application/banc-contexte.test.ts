@@ -3,9 +3,12 @@ import { rejouerCas } from '../../src/application/banc-contexte.ts';
 import type { CasContexte } from '../../src/application/banc-contexte.ts';
 import { extraireJugements, fusionnerCas, messagesDesCas, messagesDuJournal } from '../../src/application/banc-extraire.ts';
 import { rejouerJugements } from '../../src/application/banc-rejeu.ts';
-import type { Signaux } from '../../src/application/banc-signaux.ts';
+import { aprioriDuMessage, candidatesDuBanc, chargerMemoireDuBanc, signauxDuMessage } from '../../src/application/banc-signaux.ts';
+import type { GestesDuBanc, Signaux } from '../../src/application/banc-signaux.ts';
+import { aprioriDesGestes } from '../../src/application/apriori.ts';
+import { calculerCartes } from '../../src/application/cartes.ts';
 import type { LectureDuJournal } from '../../src/application/banc-extraire.ts';
-import type { EntreeServie, Reranker, Sens } from '../../src/application/ports.ts';
+import type { EntreeServie, GesteNote, Reranker, Sens } from '../../src/application/ports.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
 import type { MessageDuJournal } from '../../src/domaine/echantillon-banc.ts';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
@@ -478,5 +481,82 @@ describe('rejouerJugements', () => {
 		expect(new Set(r.paires.map((p) => p.variante))).toEqual(new Set(['seule', 'jointe']));
 		expect(r.mesures.filter((m) => m.variante === 'jointe')).toHaveLength(3);
 		expect(r.aBrancher.join('\n')).toMatch(/au lieu de la règle provisoire/u);
+	});
+});
+
+describe('banc et hook : mêmes candidates, mêmes signaux', () => {
+	const NEUTRE = 'notes/Maquette web.md';
+	const AUTRE = 'session-autre';
+	/** Gestes d'une autre session (lus en lecture seule par le banc, tenus en mémoire par le service). */
+	const gestesNotes: GesteNote[] = [
+		{ rang: 1, geste: 'injectee_main', origine: 'utilisateur', session: AUTRE, dossier: 'sve', position: POSITION, fiche: OUTIL, empreinte: null, message: null, rangMessage: 1, note: null, horodatageMs: 1_000, vecteur: null },
+		{ rang: 2, geste: 'ecartee_ici', origine: 'utilisateur', session: AUTRE, dossier: 'sve', position: POSITION, fiche: NEUTRE, empreinte: null, message: null, rangMessage: 1, note: null, horodatageMs: 2_000, vecteur: null },
+		// après le message : jamais compté pour lui
+		{ rang: 3, geste: 'injectee_main', origine: 'utilisateur', session: AUTRE, dossier: 'sve', position: POSITION, fiche: SOUS, empreinte: null, message: null, rangMessage: 2, note: null, horodatageMs: 9_000, vecteur: null },
+	];
+
+	async function avecNeutre() {
+		const { dep } = await memoireAvecModeles();
+		await dep.coffre.ecrire(NEUTRE, fiche('pratique', 'Maquette web', 'Règles des maquettes et des sites.', '', '', '2026-10-01'));
+		await synchroniser(dep, SANS_EXTRACTION);
+		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
+		return dep;
+	}
+
+	it('message qui nomme un lieu d’ailleurs, fiche injectée à la main, écartée toujours, a priori : le banc classe comme le hook', async () => {
+		const dep = await avecNeutre();
+		const message = 'la maquette des sites, et Corvel ?';
+		const injectees = [{ chemin: YSALINE, messages: 1 }];
+		const ecarteesToujours = new Set([GIT]);
+		const horodatageMs = 5_000;
+		const gestes: GestesDuBanc = { gestes: gestesNotes, ecarteesToujours, dossierDe: new Map([['session-1', 'sve']]) };
+		// le banc lit tout le journal (il ne garde que les gestes d'avant le message) ; le service, au moment du message, n'a que ceux d'avant
+		const service = aprioriDesGestes({ gestes: async () => gestesNotes.filter((g) => g.horodatageMs < horodatageMs), ecarteesToujours: async () => [{ fiche: GIT, session: null, horodatageMs: 1, retablieMs: null }] }, { horloge: () => horodatageMs });
+		await service.actualiser();
+		const hook = await calculerCartes(dep, {
+			position: POSITION,
+			message,
+			classer: true,
+			pistes: false,
+			servirPosition: true,
+			question: false,
+			dejaServies: new Map(),
+			dejaLues: new Map(),
+			proposees: new Map(),
+			ecartes: [],
+			fin: Date.now() + 5000,
+			injectees,
+			exclusDefinitivement: (c) => service.exclusDefinitivement(c),
+			aprioris: (v) => service.aprioris({ maintenantMs: horodatageMs, sessionCourante: 'session-1', dossier: 'sve', position: POSITION, vecteur: v }),
+		});
+
+		const memoireDuBanc = await chargerMemoireDuBanc(dep);
+		const pool = await candidatesDuBanc(dep, memoireDuBanc, POSITION, message, injectees, gestes.ecarteesToujours);
+		const aprioris = aprioriDuMessage(gestes, { session: 'session-1', horodatageMs, position: POSITION }, dep.sens.modele());
+		const banc = await signauxDuMessage(dep, memoireDuBanc, message, pool, { injectees, ...(aprioris === undefined ? {} : { aprioris }) });
+
+		const duHook = new Map(hook.classement.map((l) => [l.chemin, l.signaux]));
+		expect(pool).toEqual([...duHook.keys()].sort());
+		// le cas est riche : fiche d'ailleurs ouverte (Corvel nommé), voisine d'une injection à la main, neutre ; l'écartée toujours n'y est pas
+		expect(pool).toEqual(expect.arrayContaining([CORVEL, ERP, NEUTRE, OUTIL]));
+		expect(pool).not.toContain(GIT);
+		for (const chemin of pool) {
+			const { logit: _logit, ...signaux } = banc.signaux.get(chemin)!;
+			expect(signaux, chemin).toEqual(duHook.get(chemin));
+		}
+		expect(duHook.get(ERP)!.signalSession).toBeGreaterThan(0);
+		expect(duHook.get(OUTIL)!.apriori).toBeGreaterThan(0);
+		expect(duHook.get(NEUTRE)!.apriori).toBeLessThan(0);
+		expect(duHook.get(SOUS)!.apriori).toBe(0);
+	});
+
+	it('sans gestes lus (état sans journal des gestes) : a priori 0, aucune écartée toujours', async () => {
+		const dep = await avecNeutre();
+		expect(aprioriDuMessage(undefined, { session: 's', horodatageMs: 1, position: POSITION }, 'mots@1')).toBeUndefined();
+		const memoireDuBanc = await chargerMemoireDuBanc(dep);
+		const pool = await candidatesDuBanc(dep, memoireDuBanc, POSITION, 'la maquette', []);
+		expect(pool).toContain(GIT);
+		const s = await signauxDuMessage(dep, memoireDuBanc, 'la maquette', pool);
+		expect([...s.signaux.values()].every((x) => x.apriori === 0 && x.signalSession === 0)).toBe(true);
 	});
 });

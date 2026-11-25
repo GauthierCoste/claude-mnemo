@@ -82,6 +82,40 @@ describe('ouvrirJournalEnLecture', () => {
 		expect(versionDe(chemin).v).toBe(10);
 	});
 
+	it('gestes (version 13) : journal des gestes, vecteurs, écartées toujours actives et dossiers, sans un octet changé', async () => {
+		const chemin = join(await dossierTemporaire(), 'etat.sqlite');
+		const etat = ouvrirEtat(chemin);
+		await etat.creer(session('s1'));
+		await etat.noterMessagePorteur('s1', 'les grisailles');
+		const vecteur = { rang: 1, vecteur: { modele: 'sens@1', valeurs: Float32Array.from([0.5, -0.25]) } };
+		await etat.noterGeste({ geste: 'injectee_main', session: 's1', fiche: 'pratiques/four.md', empreinte: null, horodatageMs: 20, vecteur });
+		await etat.ecarterToujours({ fiche: 'notes/a.md', session: 's1', horodatageMs: 30 });
+		await etat.ecarterToujours({ fiche: 'notes/b.md', session: 's1', horodatageMs: 31 });
+		await etat.retablirToujours('notes/b.md', 32);
+		etat.fermer();
+		const avant = readFileSync(chemin);
+		const journal = ouvrirJournalEnLecture(chemin);
+		const gestes = await journal.gestes();
+		journal.fermer();
+		expect(gestes?.gestes).toEqual([
+			{ geste: 'injectee_main', session: 's1', rangMessage: 1, horodatageMs: 20, dossier: 'atelier', position: 'projets/atelier-vitrail', fiche: 'pratiques/four.md', vecteur: { modele: 'sens@1', valeurs: Float32Array.from([0.5, -0.25]) } },
+		]);
+		expect(gestes?.ecarteesToujours).toEqual(new Set(['notes/a.md']));
+		expect(gestes?.dossierDe).toEqual(new Map([['s1', 'atelier']]));
+		expect(readFileSync(chemin).equals(avant)).toBe(true);
+	});
+
+	it('sans journal des gestes (version 12) : null, l’a priori du banc vaut 0', async () => {
+		const chemin = await etatEnVersion(12);
+		const base = new DatabaseSync(chemin);
+		base.exec('DROP TABLE gestes');
+		base.exec('DROP TABLE ecartees_toujours');
+		base.close();
+		const journal = ouvrirJournalEnLecture(chemin);
+		expect(await journal.gestes()).toBeNull();
+		journal.fermer();
+	});
+
 	it('base absente : erreur, rien n’est créé', async () => {
 		const chemin = join(await dossierTemporaire(), 'etat.sqlite');
 		expect(() => ouvrirJournalEnLecture(chemin)).toThrow('absent');

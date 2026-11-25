@@ -6,6 +6,9 @@
 import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import type { EntreeDuJournal, LectureDuJournal, SessionDuJournal } from '../application/banc-extraire.ts';
+import type { GestesDuBanc } from '../application/banc-signaux.ts';
+import type { GesteDApriori } from '../domaine/apriori-gestes.ts';
+import type { Geste } from '../domaine/gestes.ts';
 import type { RaisonMuet } from '../domaine/message-muet.ts';
 
 /** Première version de l'état dont le journal porte la demande, le mutisme et la position de chaque entrée. */
@@ -25,7 +28,20 @@ function idsDe(v: unknown): string[] {
 	}
 }
 
-export function ouvrirJournalEnLecture(chemin: string): LectureDuJournal & { version: number; fermer(): void } {
+/** Vecteur d'un geste (Float32 petit-boutiste, comme `etat-sqlite.ts`) ; illisible : null. */
+function vecteurDe(octets: Uint8Array | null, modele: string | null): GesteDApriori['vecteur'] {
+	if (octets === null || modele === null || octets.byteLength % 4 !== 0) return null;
+	const vue = new DataView(octets.buffer, octets.byteOffset, octets.byteLength);
+	return { modele, valeurs: Float32Array.from({ length: octets.byteLength / 4 }, (_, i) => vue.getFloat32(i * 4, true)) };
+}
+
+/**
+ * Lecture seule de l'état pour le banc : le journal (`LectureDuJournal`) et, si l'état en a (version 13), les gestes
+ * (`gestes` : null sans journal des gestes).
+ */
+export type JournalEnLecture = LectureDuJournal & { version: number; gestes(): Promise<GestesDuBanc | null>; fermer(): void };
+
+export function ouvrirJournalEnLecture(chemin: string): JournalEnLecture {
 	if (!existsSync(chemin)) throw new Error(`État des sessions absent : ${chemin}`);
 	const base = new DatabaseSync(chemin, { readOnly: true });
 	try {
@@ -63,6 +79,29 @@ export function ouvrirJournalEnLecture(chemin: string): LectureDuJournal & { ver
 						ids: idsDe(l.ids),
 					}),
 				);
+			},
+			async gestes() {
+				const tables = new Set((base.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Ligne[]).map((l) => String(l.name)));
+				if (!tables.has('gestes')) return null;
+				const gestes = (
+					base.prepare('SELECT geste, session, rang_message, horodatage_ms, dossier, position, fiche, modele_vecteur, vecteur FROM gestes ORDER BY rang').all() as Ligne[]
+				).map(
+					(l): GesteDApriori => ({
+						geste: l.geste as Geste,
+						session: String(l.session),
+						rangMessage: Number(l.rang_message),
+						horodatageMs: Number(l.horodatage_ms),
+						dossier: String(l.dossier),
+						position: (l.position as string | null) ?? null,
+						fiche: String(l.fiche),
+						vecteur: vecteurDe((l.vecteur as Uint8Array | null) ?? null, (l.modele_vecteur as string | null) ?? null),
+					}),
+				);
+				const ecartees = tables.has('ecartees_toujours') && colonnes('ecartees_toujours').has('retablie_ms')
+					? (base.prepare('SELECT fiche FROM ecartees_toujours WHERE retablie_ms IS NULL').all() as Ligne[]).map((l) => String(l.fiche))
+					: [];
+				const dossiers = (base.prepare('SELECT id, dossier FROM sessions').all() as Ligne[]).map((l) => [String(l.id), String(l.dossier)] as const);
+				return { gestes, ecarteesToujours: new Set(ecartees), dossierDe: new Map(dossiers) };
 			},
 			fermer() {
 				base.close();

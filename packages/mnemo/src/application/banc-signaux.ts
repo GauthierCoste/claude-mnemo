@@ -1,33 +1,64 @@
 /**
  * Banc du contexte, jugement par mise en commun (spec classement vivant § 6.1) : candidates d'un message et leurs signaux
- * bruts (logit du reranker, cosinus, cosinus relatif, bm25 relatif), et les têtes de liste selon le sens, les mots et le
- * reranker, dont l'union est ce que l'on juge.
+ * bruts (logit du reranker, et ceux du classement du hook : cosinus, cosinus relatif, bm25 relatif, signal de session, a priori
+ * des gestes), et les têtes de liste selon le sens, les mots et le reranker, dont l'union est ce que l'on juge.
  *
- * À brancher après T3/T4 :
- * - les candidates (`candidatesDuBanc`) reprennent la règle de la spec § 3.3 (périmètre, neutres, fiches d'ailleurs dont le lieu
- *   est nommé, voisines des fiches injectées à la main) ; T3 la porte dans `cartes.ts` (et `neutres` dans `domaine/perimetre.ts`) : le banc prendra alors la sienne ;
- * - le bm25 relatif suit la règle de `bm25Relatifs` (`domaine/classement.ts`), que T4 exporte ; le banc l'appellera alors.
+ * Candidates et signaux sont ceux du classement du hook (`classement-du-message.ts` : `candidatesDuMessage`, `ficheProposable`,
+ * `classerLeMessage`), pas une copie de ses règles. Ce que le banc ne peut pas reconstituer d'un message passé : les fiches
+ * écartées de la session (✗ ; effacées à sa fin) ne sont pas retirées ; les écartées toujours sont celles d'aujourd'hui.
  */
+import { aprioris, voixParFiche } from '../domaine/apriori-gestes.ts';
+import type { GesteDApriori } from '../domaine/apriori-gestes.ts';
 import { fichesNommees } from '../domaine/fiches-nommees.ts';
 import type { Nommable } from '../domaine/fiches-nommees.ts';
-import { estExpire } from '../domaine/elements.ts';
 import type { ElementIndexe } from '../domaine/elements.ts';
-import { deverrouiller, lieuDeclare, perimetreDe, TYPES_NON_PROPOSABLES } from '../domaine/perimetre.ts';
+import { designees, noter } from '../domaine/note-des-pistes.ts';
+import { deverrouiller, perimetreDe, TYPES_NON_PROPOSABLES } from '../domaine/perimetre.ts';
 import type { Arete, FicheDuGraphe } from '../domaine/perimetre.ts';
 import { signalInjection } from '../domaine/signal-injection.ts';
 import type { InjectionManuelle } from '../domaine/signal-injection.ts';
-import { expressionFts } from '../domaine/requete.ts';
+import type { SignauxBruts } from '../domaine/signaux-de-note.ts';
 import { normaliser } from '../domaine/sens.ts';
 import { ligneDeCarte } from './cartes.ts';
 import { ficheDePosition } from './chercher.ts';
+import { candidatesDuMessage, classerLeMessage, ficheProposable } from './classement-du-message.ts';
 import { aujourdhui } from './commun.ts';
 import { resolveurDeLiens } from './liens.ts';
-import type { Dependances } from './ports.ts';
+import type { Dependances, VecteurDuMessage } from './ports.ts';
 
-/** Signaux bruts d'une candidate pour une requête ; null : le modèle n'a pas répondu (ou, pour le logit, la fiche n'a pas été soumise au reranker). */
-export type Signaux = { logit: number | null; cosinus: number | null; cosinusRelatif: number | null; bm25Relatif: number };
+/**
+ * Signaux bruts d'une candidate pour une requête : ceux du classement du hook (`SignauxBruts`) et le logit du reranker (null :
+ * le modèle n'a pas répondu, ou la fiche ne lui a pas été soumise). `signalSession` et `apriori` sont absents des cas extraits
+ * avant qu'ils existent (lus comme 0) ; `bm25Relatif` y vaut 0 quand le message n'avait pas de mots cherchables (null depuis).
+ */
+export type Signaux = Omit<SignauxBruts, 'signalSession' | 'apriori'> & { logit: number | null; signalSession?: number; apriori?: number };
 export type ListeDuBanc = 'sens' | 'mots' | 'reranker';
 export const LISTES_DU_BANC: readonly ListeDuBanc[] = ['sens', 'mots', 'reranker'];
+
+/**
+ * Ce que le banc lit des gestes, en lecture seule dans l'état des sessions : le journal des gestes, les fiches écartées toujours
+ * (non rétablies) et le dossier de chaque session (le lieu d'un geste). Absent : l'état n'a pas encore de journal des gestes
+ * (version 12 ou moins) ; l'a priori vaut alors 0 et aucune fiche n'est écartée toujours.
+ */
+export type GestesDuBanc = { gestes: readonly GesteDApriori[]; ecarteesToujours: ReadonlySet<string>; dossierDe: ReadonlyMap<string, string> };
+
+/**
+ * L'a priori des gestes pour un message passé, comme le hook l'aurait calculé à cet instant : les seuls gestes faits avant lui,
+ * hors de sa session, au lieu de sa session (position, dossier). Undefined (a priori 0) : sans gestes, ou sans la session ou
+ * l'heure du message (cas étiquetés à la main).
+ */
+export function aprioriDuMessage(
+	g: GestesDuBanc | undefined,
+	m: { session?: string; horodatageMs?: number; position: string },
+	modele: string | null,
+): ((vecteur: Float32Array | null) => ReadonlyMap<string, number>) | undefined {
+	if (g === undefined || m.session === undefined || m.horodatageMs === undefined) return undefined;
+	const avant = m.horodatageMs;
+	const voix = voixParFiche(g.gestes.filter((x) => x.horodatageMs < avant));
+	if (voix.size === 0) return undefined;
+	const contexte = { maintenantMs: avant, sessionCourante: m.session, dossier: g.dossierDe.get(m.session) ?? null, position: m.position };
+	return (vecteur) => aprioris(voix, { ...contexte, vecteur: vecteur === null || modele === null ? null : ({ modele, valeurs: vecteur } satisfies VecteurDuMessage) });
+}
 
 /** Ce que le banc lit une fois de la mémoire, pour tous les messages. */
 export type MemoireDuBanc = {
@@ -52,7 +83,6 @@ const SOUMISES_AU_RERANKER = 30;
 const BUDGET_SENS_MS = 10_000;
 const BUDGET_RERANKER_MS = 15_000;
 
-const ficheDe = (id: string): string => id.split('#')[0]!;
 const declareUnLieu = (e: ElementIndexe): boolean => e.dossierProjet !== null || /^(projet|client):/u.test(e.portee ?? '');
 
 /** Synthèse d'une fiche indexée : son texte est le titre, une ligne vide, puis la synthèse (comme `cartes.ts`). */
@@ -98,29 +128,37 @@ export function presentationDe(memoire: MemoireDuBanc, chemin: string): { titre:
 }
 
 /**
- * Candidates d'un message (spec § 3.3) : fiches proposables (ni `source`, `dossier`, `consigne`, `profil`, `episode`, ni
- * périmées, ni la fiche de position, ni une fiche injectée à la main à ce message même) parmi le périmètre de la position, les
- * fiches neutres (sans lieu déclaré, ni du périmètre ni d'ailleurs), les fiches d'ailleurs dont le lieu est nommé dans le
- * message et les voisines des fiches injectées à la main dans la session (signal de session, `injectees` avec leur âge). À la
- * racine : les neutres et ces voisines. À remplacer par les candidates de T3 (`cartes.ts`) une fois livrées.
+ * Candidates d'un message, par les règles du hook (`candidatesDuMessage` de `classement-du-message.ts`, spec § 3.3) : fiches
+ * proposables (`ficheProposable`), ni la fiche de position, ni une fiche injectée à la main à ce message même, ni écartée
+ * toujours, parmi le périmètre de la position, les fiches neutres, les fiches d'ailleurs dont le lieu est nommé et les
+ * voisines des fiches injectées à la main dans la session (`injectees`, avec leur âge). Rangées par chemin.
  */
-export async function candidatesDuBanc(dep: Dependances, memoire: MemoireDuBanc, position: string, message: string, injectees: readonly InjectionManuelle[] = []): Promise<string[]> {
+export async function candidatesDuBanc(
+	dep: Dependances,
+	memoire: MemoireDuBanc,
+	position: string,
+	message: string,
+	injectees: readonly InjectionManuelle[] = [],
+	ecarteesToujours: ReadonlySet<string> = new Set(),
+): Promise<string[]> {
 	const ficheDePos = position.trim() === '' ? null : await ficheDePosition(dep, position);
 	const positionFiche = ficheDePos !== null && memoire.elementDe.has(ficheDePos) ? ficheDePos : null;
-	const { dans, ailleurs } = perimetreDe(positionFiche, memoire.fiches, memoire.aretes);
-	const neutres = memoire.fiches.filter((f) => !dans.has(f.chemin) && !ailleurs.has(f.chemin) && lieuDeclare(f.chemin, memoire.declarants) === null).map((f) => f.chemin);
-	const nommees = positionFiche === null ? [] : fichesNommees(message, memoire.nommables);
-	const lieuxNommes = nommees.filter((c) => memoire.declarants.has(c) && ailleurs.has(c));
-	const ouvertes = [...deverrouiller(lieuxNommes, memoire.fiches, memoire.declarants)].filter((c) => ailleurs.has(c));
-	const reglages = dep.reglages().contexte;
-	const designees = signalInjection(injectees, memoire.aretes, { poids: reglages.poidsInjection, demiVie: reglages.demiVieInjection }).designees;
+	const perimetre = perimetreDe(positionFiche, memoire.fiches, memoire.aretes);
+	const nommees = fichesNommees(message, memoire.nommables);
+	const lieuxNommes = nommees.filter((c) => memoire.declarants.has(c) && perimetre.ailleurs.has(c));
+	const ouvertes = deverrouiller(lieuxNommes, memoire.fiches, memoire.declarants);
+	const designeesParSignal = designees([signalDeSession(dep, memoire, injectees)]);
 	const demandees = new Set(injectees.filter((i) => i.messages === 0).map((i) => i.chemin));
 	const jour = aujourdhui(dep);
-	const proposable = (chemin: string): boolean => {
-		const e = memoire.elementDe.get(chemin);
-		return e !== undefined && !TYPES_NON_PROPOSABLES.has(e.typeFiche) && !estExpire(e, jour) && chemin !== positionFiche && !demandees.has(chemin);
-	};
-	return [...new Set([...dans, ...neutres, ...ouvertes, ...designees])].filter(proposable).sort();
+	const candidate = (chemin: string): boolean =>
+		ficheProposable(memoire.elementDe.get(chemin), jour) && !ecarteesToujours.has(chemin) && chemin !== positionFiche && !demandees.has(chemin);
+	return candidatesDuMessage(perimetre, memoire.fiches, memoire.declarants, ouvertes, designeesParSignal, candidate).candidates.sort();
+}
+
+/** Le signal de session du hook (voisines des fiches injectées à la main, avec leur âge), aux réglages de la mémoire. */
+function signalDeSession(dep: Dependances, memoire: MemoireDuBanc, injectees: readonly InjectionManuelle[]) {
+	const reglages = dep.reglages().contexte;
+	return signalInjection(injectees, memoire.aretes, { poids: reglages.poidsInjection, demiVie: reglages.demiVieInjection });
 }
 
 /**
@@ -153,46 +191,6 @@ async function vecteurDe(dep: Dependances, requete: string, demarrer: boolean): 
 	}
 }
 
-const mediane = (valeurs: readonly number[]): number => {
-	const triees = [...valeurs].sort((a, b) => a - b);
-	const m = Math.floor(triees.length / 2);
-	return triees.length % 2 === 1 ? triees[m]! : (triees[m - 1]! + triees[m]!) / 2;
-};
-
-/** Cosinus de chaque fiche de la mémoire avec la requête, et leur médiane ; null sans modèle ou sans vecteur. */
-async function cosinus(dep: Dependances, memoire: MemoireDuBanc, vecteur: Float32Array | null): Promise<{ parFiche: Map<string, number>; mediane: number } | null> {
-	const modele = dep.sens.modele();
-	if (vecteur === null || modele === null || memoire.nombreDeFiches === 0) return null;
-	const proches = await dep.index.plusProches(modele, vecteur, { genres: ['fiche'] }, memoire.nombreDeFiches);
-	if (proches.length === 0) return null;
-	const parFiche = new Map<string, number>();
-	for (const p of proches) if (!parFiche.has(ficheDe(p.id))) parFiche.set(ficheDe(p.id), p.similarite);
-	return { parFiche, mediane: mediane([...parFiche.values()]) };
-}
-
-/**
- * bm25 relatif de chaque candidate (règle de `bm25Relatifs`, `domaine/classement.ts`) : son bm25 rapporté au meilleur de la
- * liste de mots où elle paraît d'abord (tous les mots, sinon l'un d'eux) ; 1 si la liste n'a aucun bm25 négatif ; 0 pour une
- * fiche que les mots ne trouvent pas. `ordre` : les fiches trouvées, dans l'ordre des mots.
- */
-async function mots(dep: Dependances, memoire: MemoireDuBanc, requete: string, candidates: readonly string[]): Promise<{ relatifs: Map<string, number>; ordre: string[] }> {
-	const relatifs = new Map<string, number>();
-	const ordre: string[] = [];
-	const expression = expressionFts(requete, memoire.alias);
-	if (expression === null || candidates.length === 0) return { relatifs, ordre };
-	for (const liste of [expression.toutes, expression.une]) {
-		const trouvees = await dep.index.chercher(liste, { genres: ['fiche'], statuts: ['servi'], chemins: [...candidates] }, candidates.length);
-		const meilleur = Math.min(0, ...trouvees.map((e) => (e.bm25 !== undefined && Number.isFinite(e.bm25) ? e.bm25 : 0)));
-		for (const e of trouvees) {
-			if (relatifs.has(e.chemin)) continue;
-			const bm25 = e.bm25;
-			relatifs.set(e.chemin, meilleur === 0 || bm25 === undefined || !Number.isFinite(bm25) ? 1 : bm25 < 0 ? Math.min(1, bm25 / meilleur) : 0);
-			ordre.push(e.chemin);
-		}
-	}
-	return { relatifs, ordre };
-}
-
 async function logits(dep: Dependances, memoire: MemoireDuBanc, requete: string, chemins: readonly string[], demarrer: boolean): Promise<Map<string, number> | null> {
 	if (chemins.length === 0) return new Map();
 	const textes = chemins.map((c) => `${memoire.titreDe.get(c) ?? c}\n${syntheseDe(memoire.elementDe.get(c))}`);
@@ -206,39 +204,53 @@ async function logits(dep: Dependances, memoire: MemoireDuBanc, requete: string,
 }
 
 /**
- * Signaux bruts de chaque candidate pour `requete`, et les `premieres` têtes selon le sens (cosinus), les mots (ordre du
- * plein texte) et le reranker (logit, sur les premières du sens et des mots). `demarrer` : lancer les modèles s'ils ne
- * tournent pas (le banc, hors du hook, le peut).
+ * Signaux bruts de chaque candidate pour `requete`, calculés par le classement du hook (`classerLeMessage` : cosinus de toute
+ * la mémoire, médiane, bm25 relatif, signal de session, a priori), plus le logit du reranker ; et les `premieres` têtes selon
+ * le sens (cosinus), les mots (ordre du plein texte) et le reranker (logit, sur les premières du sens et des mots).
+ * `demarrer` : lancer les modèles s'ils ne tournent pas (le banc, hors du hook, le peut) ; `injectees` : fiches injectées à
+ * la main dans la session (signal de session) ; `aprioris` : l'a priori des gestes selon le vecteur de la requête (absent : 0).
  */
 export async function signauxDuMessage(
 	dep: Dependances,
 	memoire: MemoireDuBanc,
 	requete: string,
 	candidates: readonly string[],
-	options: { premieres?: number; demarrer?: boolean } = {},
+	options: {
+		premieres?: number;
+		demarrer?: boolean;
+		injectees?: readonly InjectionManuelle[];
+		aprioris?: (vecteur: Float32Array | null) => ReadonlyMap<string, number>;
+	} = {},
 ): Promise<SignauxDuMessage> {
 	const premieres = options.premieres ?? PREMIERES_PAR_LISTE;
 	const demarrer = options.demarrer ?? true;
-	const cos = await cosinus(dep, memoire, await vecteurDe(dep, requete, demarrer));
-	const { relatifs, ordre: ordreDesMots } = await mots(dep, memoire, requete, candidates);
-	const ordreDuSens =
-		cos === null ? [] : candidates.filter((c) => cos.parFiche.has(c)).sort((a, b) => cos.parFiche.get(b)! - cos.parFiche.get(a)! || (a < b ? -1 : 1));
+	const vecteur = await vecteurDe(dep, requete, demarrer);
+	const signal = signalDeSession(dep, memoire, options.injectees ?? []);
+	const aprioris = candidates.length === 0 ? undefined : options.aprioris?.(vecteur);
+	const m = await classerLeMessage(dep, {
+		candidates,
+		message: requete,
+		vecteur,
+		nombreDeFiches: memoire.nombreDeFiches,
+		noter: (chemin, base) => noter(chemin, base, [signal]),
+		date: (chemin) => memoire.elementDe.get(chemin)?.date ?? '',
+		...(aprioris === undefined ? {} : { aprioris }),
+	});
+	const bruts = new Map(m.ordre.map((n) => [n.chemin, m.signaux(n)]));
+	const cosinusDe = (c: string): number | null => bruts.get(c)?.cosinus ?? null;
+	const ordreDuSens = candidates.filter((c) => cosinusDe(c) !== null).sort((a, b) => cosinusDe(b)! - cosinusDe(a)! || (a < b ? -1 : 1));
+	const ordreDesMots = m.ordreDesMots;
 	const soumises = [...new Set([...ordreDuSens.slice(0, SOUMISES_AU_RERANKER), ...ordreDesMots.slice(0, SOUMISES_AU_RERANKER)])];
 	const logit = await logits(dep, memoire, requete, soumises, demarrer);
 	const ordreDuReranker = logit === null ? [] : [...logit].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).map(([c]) => c);
 	const signaux = new Map<string, Signaux>();
 	for (const c of candidates) {
-		const cosinusDe = cos?.parFiche.get(c) ?? null;
-		signaux.set(c, {
-			logit: logit?.get(c) ?? null,
-			cosinus: cosinusDe,
-			cosinusRelatif: cosinusDe === null || cos === null ? null : cosinusDe - cos.mediane,
-			bm25Relatif: relatifs.get(c) ?? 0,
-		});
+		const b = bruts.get(c)!;
+		signaux.set(c, { logit: logit?.get(c) ?? null, ...b });
 	}
 	return {
 		signaux,
 		tetes: { sens: ordreDuSens.slice(0, premieres), mots: ordreDesMots.slice(0, premieres), reranker: ordreDuReranker.slice(0, premieres) },
-		modeles: { sens: cos !== null, reranker: logit !== null },
+		modeles: { sens: m.sens, reranker: logit !== null },
 	};
 }
