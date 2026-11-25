@@ -239,8 +239,14 @@ function vueSession(s: SessionDemo, maintenant: number): SessionVue {
 		niveauModeles: null,
 		...(s.moteur === undefined ? {} : { moteur: s.moteur }),
 		...(s.modele === undefined ? {} : { modele: s.modele }),
-		...(s.sansReprise === undefined ? {} : { sansReprise: s.sansReprise }),
+		...(s.sansReprise === undefined || s.etat === 'terminee' ? {} : { sansReprise: s.sansReprise }),
 	};
+}
+
+/** La session dans son nouvel état ; terminée, sans motif d'impossible reprise (comme la vue du service). */
+function avecEtat(s: SessionVue, etat: SessionVue['etat']): SessionVue {
+	const { sansReprise, ...reste } = s;
+	return { ...reste, etat, majMs: Date.now(), ...(sansReprise === undefined || etat === 'terminee' ? {} : { sansReprise }) };
 }
 
 function texteServi(memoire: Memoire, ids: string[]): string {
@@ -456,10 +462,11 @@ function creerConnexionDemo(monde: Monde): FausseConnexion {
 		if (s && s.etat !== 'travaille') changerEtat(s.id, 'travaille');
 		const [reflexion, reponseCommune] = REPONSES_TERMINAL_DEMO;
 		const reponseFinale = (s?.profil === PROFIL_ARCHIVISTE ? REPONSES_ARCHIVISTE_DEMO[texte.trim()] : undefined) ?? reponseCommune;
-		sortie(session, `${effacerInvite(indicateurs.delete(session))}${messageUtilisateur(texte)}${NL}${NL}${indicateur(reflexion)}`);
-		setTimeout(() => sortie(session, `${EFFACER_LIGNE}${outil('memoire_chercher', `« ${texte.slice(0, 40)} »`, '2 fiches injectées')}${NL}${NL}${indicateur(reflexion)}`), 600);
+		const moteur = s?.moteur === 'codex' ? 'codex' : 'claude-code';
+		sortie(session, `${effacerInvite(indicateurs.delete(session))}${messageUtilisateur(texte, moteur)}${NL}${NL}${indicateur(reflexion, moteur)}`);
+		setTimeout(() => sortie(session, `${EFFACER_LIGNE}${outil('memoire_chercher', `« ${texte.slice(0, 40)} »`, '2 fiches injectées', moteur)}${NL}${NL}${indicateur(reflexion, moteur)}`), 600);
 		setTimeout(() => {
-			sortie(session, `${EFFACER_LIGNE}${reponse(reponseFinale)}${NL}${NL}${invite(colonnes.get(session) ?? COLONNES_PAR_DEFAUT)}`);
+			sortie(session, `${EFFACER_LIGNE}${reponse(reponseFinale, moteur)}${NL}${NL}${invite(colonnes.get(session) ?? COLONNES_PAR_DEFAUT, moteur)}`);
 			occupees.delete(session);
 			changerEtat(session, 'attend');
 		}, 1600);
@@ -490,7 +497,7 @@ function creerConnexionDemo(monde: Monde): FausseConnexion {
 	function changerEtat(id: string, e: SessionVue['etat']): void {
 		const i = monde.sessions.findIndex((s) => s.id === id);
 		if (i < 0) return;
-		const s = { ...monde.sessions[i]!, etat: e, majMs: Date.now() };
+		const s = avecEtat(monde.sessions[i]!, e);
 		monde.sessions[i] = s;
 		diffuser({ type: 'session', session: s });
 	}
@@ -526,7 +533,7 @@ function creerConnexionDemo(monde: Monde): FausseConnexion {
 		setInterval(() => {
 			if (progression >= 23 || !indicateurs.has(bavarde.id) || occupees.has(bavarde.id)) return;
 			progression = Math.min(progression + 3, 23);
-			sortie(bavarde.id, majIndicateur(`Tests : ${progression} sur 23`));
+			sortie(bavarde.id, majIndicateur(`Tests : ${progression} sur 23`, bavarde.moteur));
 		}, 4000);
 
 	return {
@@ -944,9 +951,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			// comme le service : une session que son moteur ne peut pas reprendre n'a ni pause, ni reprise, ni bilan
 			if (action !== 'abandon' && avant.sansReprise !== undefined) throw new ErreurApi(`${action === 'bilan' ? 'Bilan' : action === 'pause' ? 'Pause' : 'Reprise'} impossible : ${avant.sansReprise} ; abandonne-la à la place.`, 409);
 			const s = {
-				...avant,
-				etat,
-				majMs: Date.now(),
+				...avecEtat(avant, etat),
 				bilanDemandeMs: action === 'bilan' ? Date.now() : avant.bilanDemandeMs,
 				terminal: action === 'reprise' ? true : avant.terminal,
 			};

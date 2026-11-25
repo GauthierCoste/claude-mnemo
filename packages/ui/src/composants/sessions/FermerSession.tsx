@@ -47,8 +47,17 @@ export function FermerSession(p: { session: SessionVue }): ReactNode {
 		fermer(true);
 		void action.agir(x.id, a);
 	};
-	const item = (libelle: string, surClic: () => void, o: { danger?: boolean; disabled?: boolean; title?: string; detail?: string } = {}) => (
-		<button type="button" role="menuitem" className={cx(s.item, o.danger && s.danger)} disabled={action.enCours || o.disabled} title={o.title} onClick={surClic}>
+	// `indisponible` : aria-disabled, l'item reste atteignable aux flèches et dit sa raison ; le clic ne fait rien
+	const item = (libelle: string, surClic: () => void, o: { danger?: boolean; disabled?: boolean; indisponible?: boolean; title?: string; detail?: string } = {}) => (
+		<button
+			type="button"
+			role="menuitem"
+			className={cx(s.item, o.danger && s.danger)}
+			disabled={action.enCours || o.disabled}
+			aria-disabled={o.indisponible || undefined}
+			title={o.title}
+			onClick={o.indisponible ? undefined : surClic}
+		>
 			{libelle}
 			{o.detail !== undefined && <span className={s.detail}>{o.detail}</span>}
 		</button>
@@ -103,8 +112,8 @@ export function FermerSession(p: { session: SessionVue }): ReactNode {
 					) : (
 						<>
 							{bilanPermis(x.etat) &&
-								item('Terminer avec bilan', () => agir('bilan'), x.bilanDemandeMs !== null ? { disabled: true, title: 'Bilan demandé' } : sansBilan === undefined ? {} : { disabled: true, title: sansBilan, detail: IMPOSSIBLE })}
-							{x.etat === 'a_relire' && item('Faire le bilan', () => agir('bilan'), sansBilan === undefined ? {} : { disabled: true, title: sansBilan, detail: IMPOSSIBLE })}
+								item('Terminer avec bilan', () => agir('bilan'), x.bilanDemandeMs !== null ? { disabled: true, title: 'Bilan demandé' } : sansBilan === undefined ? {} : { indisponible: true, title: sansBilan, detail: IMPOSSIBLE })}
+							{x.etat === 'a_relire' && item('Faire le bilan', () => agir('bilan'), sansBilan === undefined ? {} : { indisponible: true, title: sansBilan, detail: IMPOSSIBLE })}
 							{item('Abandonner', () => setConfirmer(true))}
 						</>
 					)}

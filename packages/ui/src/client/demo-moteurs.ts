@@ -25,7 +25,7 @@ const CODEX: MoteurVue = {
 	version: '0.171.0-alpha.13',
 	modeles: ['gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-terra'],
 	poste: [
-		{ cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée', detail: '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex' },
+		{ cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée', detail: '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex' },
 		{ cle: 'version', libelle: 'Version', ok: true, etat: '0.171.0-alpha.13' },
 		{ cle: 'mcp', libelle: 'Serveur MCP mnemo', ok: true, etat: 'déclaré' },
 		{ cle: 'hooks', libelle: 'Hooks de Mnemo', ok: true, etat: 'installés' },
@@ -34,7 +34,7 @@ const CODEX: MoteurVue = {
 			libelle: 'Approbation des hooks',
 			ok: false,
 			etat: 'à approuver',
-			detail: 'aucune approbation enregistrée dans config.toml pour les hooks de Mnemo',
+			detail: '7 hook(s) de Mnemo sur 7 sans approbation : à approuver dans Codex (/hooks).',
 			remede: { texte: '/hooks', dans: 'moteur' },
 		},
 	],

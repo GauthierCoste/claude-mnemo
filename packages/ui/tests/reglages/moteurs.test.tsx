@@ -1,14 +1,19 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ROUTES, type ReponseMoteurs } from '@mnemo/contrat';
+import type { Client } from '../../src/client/contexte.tsx';
 import { creerClientDemo } from '../../src/client/demo.ts';
 import { Application } from '../../src/composants/Application.tsx';
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	vi.restoreAllMocks();
+});
 
 /** Réglages de la démo ouverts (onglet Profils d'abord). */
-async function ouvrirReglages() {
-	render(<Application client={creerClientDemo()} />);
+async function ouvrirReglages(client: Client = creerClientDemo()) {
+	render(<Application client={client} />);
 	const nav = screen.getByRole('navigation');
 	await act(async () => within(nav).getByRole('button', { name: /Réglages/ }).click());
 	return screen.findByRole('navigation', { name: 'Profils' });
@@ -35,6 +40,41 @@ describe('Réglages › Profils : moteur et modèle', () => {
 		expect(within(editeur).queryByText('Plugins Claude Code')).toBeNull();
 		expect(await within(editeur).findByText('Consigne du profil (personnalisée), avec la liste des skills')).toBeTruthy();
 		expect(within(editeur).getByText('Skills de la mémoire (listées dans la consigne, lues par l’outil lire)')).toBeTruthy();
+	});
+
+	it('chaque choix : son nom seul comme libellé, sa ligne d’état et d’effet comme description (lue une fois)', async () => {
+		const editeur = await choisirProfil('revue-code');
+		const codex = within(moteur(editeur)).getByRole('radio', { name: 'Codex' });
+		const description = document.getElementById(codex.getAttribute('aria-describedby')!)!;
+		expect(description.closest('label')).toBeNull();
+		expect(description.textContent).toMatch(/^version 0\.171\.0-alpha\.13 — skills listées/u);
+	});
+
+	it('aller-retour de moteur : le modèle saisi pour chacun est gardé pendant l’édition', async () => {
+		const editeur = await choisirProfil('revue-code');
+		fireEvent.change(modele(editeur), { target: { value: 'gpt-6.2-astra' } });
+		await act(async () => within(moteur(editeur)).getByRole('radio', { name: 'Claude Code' }).click());
+		fireEvent.change(modele(editeur), { target: { value: 'sonnet' } });
+		await act(async () => within(moteur(editeur)).getByRole('radio', { name: 'Codex' }).click());
+		expect(modele(editeur).value).toBe('gpt-6.2-astra');
+		await act(async () => within(moteur(editeur)).getByRole('radio', { name: 'Claude Code' }).click());
+		expect(modele(editeur).value).toBe('sonnet');
+	});
+
+	it('modèle refusé : Enregistrer indisponible avec la raison, rien n’est envoyé', async () => {
+		const client = creerClientDemo();
+		const remplacer = vi.spyOn(client.api, 'remplacer');
+		const liste = await ouvrirReglages(client);
+		await act(async () => (await within(liste).findByRole('button', { name: /^revue-code/u })).click());
+		const editeur = await screen.findByRole('form', { name: 'Profil revue-code' });
+		fireEvent.change(modele(editeur), { target: { value: '-x' } });
+		const enregistrer = within(editeur).getByRole('button', { name: 'Enregistrer' });
+		expect(enregistrer.getAttribute('aria-disabled')).toBe('true');
+		expect(document.getElementById(enregistrer.getAttribute('aria-describedby')!)?.textContent).toMatch(/^Enregistrement impossible : le nom du modèle est refusé/u);
+		await act(async () => enregistrer.click());
+		expect(remplacer).not.toHaveBeenCalled();
+		fireEvent.change(modele(editeur), { target: { value: 'gpt-6.2-astra' } });
+		expect(within(editeur).getByRole('button', { name: 'Enregistrer' }).getAttribute('aria-disabled')).toBeNull();
 	});
 
 	it('passer à Claude Code : modèle par défaut, alias proposés, plugins affichés ; revenir à Codex rend le modèle enregistré', async () => {
@@ -80,5 +120,50 @@ describe('Réglages › Système › Moteurs', () => {
 		expect(within(point).getByText('/hooks').tagName).toBe('CODE');
 		expect(within(point).getByRole('button', { name: 'Copier « /hooks »' })).toBeTruthy();
 		expect(within(point).getByRole('img', { name: 'à régler' })).toBeTruthy();
+		// groupe en lecture seule : pas de pied Enregistrer / Annuler
+		expect(within(page).queryByRole('button', { name: 'Enregistrer' })).toBeNull();
+		expect(within(page).queryByRole('button', { name: 'Annuler les modifications' })).toBeNull();
+	});
+
+	it('« Relire » : désactivé, section occupée et « Vérification… » pendant chaque lecture ; redémarrage proposé en deux commandes', async () => {
+		const client = creerClientDemo();
+		const lire = client.api.lire.bind(client.api);
+		let liberer: () => void = () => {};
+		let lectures = 0;
+		vi.spyOn(client.api, 'lire').mockImplementation(async (chemin, params, options) => {
+			if (chemin !== ROUTES.moteurs || params?.['poste'] !== '1') return lire(chemin, params, options);
+			const r = await lire<ReponseMoteurs>(chemin, params, options);
+			// compté une fois la lecture suspendue : `liberer` la fait aboutir
+			await new Promise<void>((f) => {
+				liberer = f;
+				lectures++;
+			});
+			const codex = r.moteurs.find((m) => m.id === 'codex')!;
+			codex.poste![0] = { cle: 'commande', libelle: 'Commande', ok: false, etat: 'changée', detail: 'autre chemin', remede: { texte: 'mnemo arreter', dans: 'terminal', puis: 'mnemo ouvrir' } };
+			return r as never;
+		});
+		await ouvrirReglages(client);
+		await act(async () => screen.getByRole('tab', { name: 'Système' }).click());
+		const page = await screen.findByRole('form', { name: 'Réglages système' });
+		await act(async () => within(within(page).getByRole('navigation', { name: 'Groupes de réglages' })).getByRole('button', { name: /^Moteurs/u }).click());
+		const section = within(page).getByRole('region', { name: 'Moteurs' });
+		const relire = within(section).getByRole('button', { name: 'Relire' }) as HTMLButtonElement;
+		await waitFor(() => expect(lectures).toBe(1));
+		expect(relire.disabled).toBe(true);
+		expect(section.getAttribute('aria-busy')).toBe('true');
+		expect(within(section).getByRole('status').textContent).toBe('Vérification des moteurs… (quelques secondes)');
+		await act(async () => liberer());
+		await waitFor(() => expect(relire.disabled).toBe(false));
+		const point = within(within(section).getByRole('group', { name: 'Codex' })).getByText('Commande', { selector: 'span' }).closest('li')!;
+		expect(within(point).getByRole('button', { name: 'Copier « mnemo arreter »' })).toBeTruthy();
+		expect(within(point).getByText('puis')).toBeTruthy();
+		expect(within(point).getByRole('button', { name: 'Copier « mnemo ouvrir »' })).toBeTruthy();
+		await act(async () => relire.click());
+		await waitFor(() => expect(lectures).toBe(2));
+		expect(relire.disabled).toBe(true);
+		expect(section.getAttribute('aria-busy')).toBe('true');
+		expect(within(section).getByRole('status').textContent).toBe('Vérification…');
+		await act(async () => liberer());
+		await waitFor(() => expect(relire.disabled).toBe(false));
 	});
 });

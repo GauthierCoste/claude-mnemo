@@ -5,11 +5,11 @@
  * faite ailleurs entre-temps est signalée (empreinte) : l'enregistrement est alors refusé jusqu'au rechargement.
  * Dupliquer et supprimer se font ici ; la suppression demande une confirmation dans la page.
  */
-import { DOSSIERS_FIXES, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
+import { DOSSIERS_FIXES, estModele, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { ROUTES } from '@mnemo/contrat';
 import type { IdMoteur } from '@mnemo/commun';
 import type { EvenementHookVue, ProfilDetailVue, ProfilEditableVue, ReponseEcritureProfil } from '@mnemo/contrat';
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ErreurApi } from '../../../client/api.ts';
 import { useClient } from '../../../client/contexte.tsx';
 import { avecId } from '../../../client/hooks.ts';
@@ -65,12 +65,18 @@ export function EditeurProfil(p: {
 	const [copie, setCopie] = useState<string | null>(null);
 	const [confirmerSuppression, setConfirmerSuppression] = useState(false);
 	const modifie = !egaux(brouillon, base.editable);
+	// un modèle refusé (forme) n'est pas envoyé : Enregistrer reste indisponible, avec la raison
+	const modeleRefuse = !estModele(brouillon.modele);
+	const idModeleRefuse = useId();
+	/** Modèle et plugins saisis pour chaque moteur pendant l'édition : un aller-retour de moteur les rend. */
+	const [saisiesParMoteur, setSaisiesParMoteur] = useState<Partial<Record<IdMoteur, Pick<ProfilEditableVue, 'modele' | 'plugins'>>>>({});
 
 	// détail relu (écriture ici ou ailleurs) : la saisie repart du disque, sauf modifications en cours (signalées)
 	if (base !== d) {
 		if (!modifie || d.nom !== base.nom) {
 			setBrouillon(structuredClone(d.editable));
 			setChangeAilleurs(false);
+			setSaisiesParMoteur({});
 		} else if (d.empreinte !== base.empreinte) setChangeAilleurs(true);
 		setBase(d);
 	}
@@ -93,6 +99,7 @@ export function EditeurProfil(p: {
 	};
 
 	const enregistrer = async (): Promise<boolean> => {
+		if (modeleRefuse) return false;
 		setEnvoi(true);
 		setErreur(null);
 		try {
@@ -146,18 +153,21 @@ export function EditeurProfil(p: {
 	};
 
 	/**
-	 * Autre moteur : le modèle repart du défaut (un modèle d'un moteur ne vaut pas pour l'autre) et les plugins, propres à
-	 * Claude Code, sont décochés ; revenir au moteur enregistré rend son modèle et ses plugins.
+	 * Autre moteur : un modèle d'un moteur ne vaut pas pour l'autre, et les plugins sont propres à Claude Code. Le modèle et
+	 * les plugins saisis pour le moteur quitté sont gardés ; revenir à un moteur rend ceux saisis pour lui, sinon ceux
+	 * enregistrés (son moteur enregistré), sinon le modèle par défaut et aucun plugin.
 	 */
 	const changerMoteur = (moteur: IdMoteur) => {
 		const enregistre = base.editable;
-		if (moteur === enregistre.moteur) changer({ moteur, modele: enregistre.modele, plugins: [...enregistre.plugins] });
-		else changer({ moteur, modele: '', plugins: moteur === 'claude-code' ? brouillon.plugins : [] });
+		setSaisiesParMoteur((x) => ({ ...x, [brouillon.moteur]: { modele: brouillon.modele, plugins: [...brouillon.plugins] } }));
+		const saisie = saisiesParMoteur[moteur] ?? (moteur === enregistre.moteur ? { modele: enregistre.modele, plugins: enregistre.plugins } : { modele: '', plugins: [] });
+		changer({ moteur, modele: saisie.modele, plugins: moteur === 'claude-code' ? [...saisie.plugins] : [] });
 	};
 
 	const recharger = () => {
 		setBrouillon(structuredClone(d.editable));
 		setChangeAilleurs(false);
+		setSaisiesParMoteur({});
 		setErreur(null);
 		p.recharger();
 	};
@@ -409,7 +419,7 @@ export function EditeurProfil(p: {
 					<div className={s.avis} role="alert">
 						<p>Modifications du profil non enregistrées : les enregistrer avant de quitter les Réglages ?</p>
 						<div className={s.actions}>
-							<Bouton genre="primaire" disabled={envoi} onClick={() => void enregistrerPuisPartir()}>
+							<Bouton genre="primaire" disabled={envoi} indisponible={modeleRefuse && { raison: idModeleRefuse }} onClick={() => void enregistrerPuisPartir()}>
 								Enregistrer
 							</Bouton>
 							<Bouton disabled={envoi} onClick={nav.poursuivreSortie}>
@@ -431,14 +441,20 @@ export function EditeurProfil(p: {
 						{erreur}
 					</p>
 				)}
+				{modeleRefuse && (
+					<p id={idModeleRefuse} className={s.erreur}>
+						Enregistrement impossible : le nom du modèle est refusé (section Moteur) ; corrige-le ou reviens au modèle par défaut.
+					</p>
+				)}
 				<div className={s.actions}>
-					<Bouton genre="primaire" disabled={!modifie || envoi || changeAilleurs} onClick={() => void enregistrer()}>
+					<Bouton genre="primaire" disabled={!modifie || envoi || changeAilleurs} indisponible={modifie && modeleRefuse && { raison: idModeleRefuse }} onClick={() => void enregistrer()}>
 						Enregistrer
 					</Bouton>
 					<Bouton
 						disabled={!modifie || envoi}
 						onClick={() => {
 							setBrouillon(structuredClone(base.editable));
+							setSaisiesParMoteur({});
 							setErreur(null);
 						}}
 					>

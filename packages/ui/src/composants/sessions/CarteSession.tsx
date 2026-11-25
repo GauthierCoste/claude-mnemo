@@ -6,7 +6,7 @@
  */
 import type { SessionVue } from '@mnemo/contrat';
 import type { ReactNode } from 'react';
-import { moteurEtModele, moteurParticulier, nomDuMoteur } from '../../moteurs/noms.ts';
+import { moteurEtModele, moteurParticulier } from '../../moteurs/noms.ts';
 import { Terminal } from '../../terminal/Terminal.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
 import { cx } from '../commun/classes.ts';
@@ -40,7 +40,7 @@ export function CarteSession(p: PropsCarte): ReactNode {
 				<span className={s.objectif}>{session.objectif ?? 'Sans objectif'}</span>
 				{moteurParticulier(session) !== null && (
 					<span className={s.moteur} title={`Moteur : ${moteurEtModele(session)}`}>
-						{nomDuMoteur(session.moteur)}
+						{moteurParticulier(session)}
 					</span>
 				)}
 				<span>{p.duree}</span>
@@ -73,7 +73,7 @@ export function CarteSession(p: PropsCarte): ReactNode {
 							</Bouton>
 						) : (
 							<>
-								<Bouton petit disabled aria-describedby={`reprise-${session.id}`}>
+								<Bouton petit indisponible={{ raison: `reprise-${session.id}` }}>
 									Reprendre ici
 								</Bouton>
 								<p id={`reprise-${session.id}`}>Reprise impossible : {session.sansReprise}.</p>

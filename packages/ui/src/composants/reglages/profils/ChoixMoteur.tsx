@@ -46,15 +46,18 @@ export function ChoixMoteur(p: { profil: string; moteur: IdMoteur; modele: strin
 					);
 					const reserve = archiviste && m !== 'claude-code';
 					return (
-						<label key={m} className={s.case} data-desactive={reserve || undefined}>
-							<input type="radio" name={`${id}-moteur`} checked={p.moteur === m} disabled={reserve} aria-describedby={`${id}-${m}`} onChange={() => p.surMoteur(m)} />
-							<span>
-								{NOMS_MOTEURS[m]} {etat.manque && <span className={s.inactif}>indisponible</span>}
-								<span id={`${id}-${m}`} className={s.detailChoix}>
-									{reserve ? 'Réservé : l’archiviste reste sur Claude Code.' : `${etat.texte} — ${EFFETS[m]}`}
+						// la description hors du libellé : lue une fois, comme description (aria-describedby), pas aussi dans le nom
+						<div key={m} className={s.choix} data-desactive={reserve || undefined}>
+							<label className={s.case}>
+								<input type="radio" name={`${id}-moteur`} checked={p.moteur === m} disabled={reserve} aria-describedby={`${id}-${m}`} onChange={() => p.surMoteur(m)} />
+								<span>
+									{NOMS_MOTEURS[m]} {etat.manque && <span className={s.inactif}>indisponible</span>}
 								</span>
+							</label>
+							<span id={`${id}-${m}`} className={s.detailChoix}>
+								{reserve ? 'Réservé : l’archiviste reste sur Claude Code.' : `${etat.texte} — ${EFFETS[m]}`}
 							</span>
-						</label>
+						</div>
 					);
 				})}
 			</div>

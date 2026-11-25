@@ -64,7 +64,8 @@ export function PanneauContexte(p: {
 	// ni pause, ni reprise, ni bilan : le moteur ne saurait pas reprendre la session (l'abandon reste possible)
 	const sansReprise = x.sansReprise ?? null;
 	const idRaison = `sans-reprise-${x.id}`;
-	const bloque = sansReprise === null ? {} : { 'aria-describedby': idRaison, title: 'Impossible pour l’instant : voir la raison sous les boutons' };
+	// indisponibles avec leur raison (sous les boutons) : ils gardent le focus et l'annoncent au clavier
+	const bloque = { indisponible: sansReprise !== null && { raison: idRaison } };
 	return (
 		<aside className={s.panneau} aria-label="Contexte" style={p.largeur === undefined ? undefined : { width: p.largeur }}>
 			<EnteteSession session={x} />
@@ -96,19 +97,19 @@ export function PanneauContexte(p: {
 			<ClassementEnDirect key={x.id} session={x.id} entrees={p.entrees} modifiable={x.etat !== 'terminee'} niveauModeles={x.niveauModeles} servies={p.fiches} lues={p.lues ?? []} surOuvrirFiche={p.surOuvrirFiche} couleur={couleur} />
 			<div className={s.actions}>
 				{actif && (
-					<Bouton petit disabled={enCours || sansReprise !== null} onClick={() => void agir('pause')} {...bloque}>
+					<Bouton petit disabled={enCours} onClick={() => void agir('pause')} {...bloque}>
 						Mettre en pause
 					</Bouton>
 				)}
 				{x.etat === 'en_pause' && (
-					<Bouton petit disabled={enCours || sansReprise !== null} onClick={() => void agir('reprise')} {...bloque}>
+					<Bouton petit disabled={enCours} onClick={() => void agir('reprise')} {...bloque}>
 						Reprendre
 					</Bouton>
 				)}
 				{bilanPossible && (
 					<Bouton
 						petit
-						disabled={enCours || x.bilanDemandeMs !== null || sansReprise !== null}
+						disabled={enCours || x.bilanDemandeMs !== null}
 						onClick={() => void agir('bilan')}
 						{...(x.bilanDemandeMs !== null ? { title: 'Bilan demandé' } : bloque)}
 					>
@@ -116,7 +117,7 @@ export function PanneauContexte(p: {
 					</Bouton>
 				)}
 				{x.etat === 'a_relire' && (
-					<Bouton petit genre="primaire" disabled={enCours || sansReprise !== null} onClick={() => void agir('bilan')} {...bloque}>
+					<Bouton petit genre="primaire" disabled={enCours} onClick={() => void agir('bilan')} {...bloque}>
 						Faire le bilan
 					</Bouton>
 				)}

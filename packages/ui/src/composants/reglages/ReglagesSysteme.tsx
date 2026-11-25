@@ -177,42 +177,47 @@ function Formulaire(p: { vue: ReglagesVue; enregistree: boolean; surEnregistree(
 						))}
 					</fieldset>
 				)}
-				<footer className={d.pied}>
-					{nav.sortieRetenue && (
-						<div className={d.avis} role="alert">
-							<p>Modifications non enregistrées : les enregistrer avant de quitter les Réglages ?</p>
+				{/* Moteurs, en lecture seule : sans pied, sauf pour l'avertissement de sortie ou une erreur d'enregistrement */}
+				{(!voirMoteurs || nav.sortieRetenue || erreur !== null) && (
+					<footer className={d.pied}>
+						{nav.sortieRetenue && (
+							<div className={d.avis} role="alert">
+								<p>Modifications non enregistrées : les enregistrer avant de quitter les Réglages ?</p>
+								<div className={d.actions}>
+									<Bouton genre="primaire" disabled={envoi} onClick={() => void enregistrerPuisPartir()}>
+										Enregistrer
+									</Bouton>
+									<Bouton disabled={envoi} onClick={nav.poursuivreSortie}>
+										Abandonner
+									</Bouton>
+									<Bouton disabled={envoi} onClick={nav.annulerSortie}>
+										Rester
+									</Bouton>
+								</div>
+							</div>
+						)}
+						{!voirMoteurs && p.enregistree && !modifie && (
+							<p className={d.statut} role="status">
+								Enregistré.
+							</p>
+						)}
+						{erreur !== null && (
+							<p className={d.erreur} role="alert">
+								{erreur}
+							</p>
+						)}
+						{!voirMoteurs && (
 							<div className={d.actions}>
-								<Bouton genre="primaire" disabled={envoi} onClick={() => void enregistrerPuisPartir()}>
+								<Bouton genre="primaire" disabled={!modifie || envoi} onClick={() => void enregistrer()}>
 									Enregistrer
 								</Bouton>
-								<Bouton disabled={envoi} onClick={nav.poursuivreSortie}>
-									Abandonner
-								</Bouton>
-								<Bouton disabled={envoi} onClick={nav.annulerSortie}>
-									Rester
+								<Bouton disabled={!modifie || envoi} onClick={() => setSaisies(saisiesDe(p.vue))}>
+									Annuler les modifications
 								</Bouton>
 							</div>
-						</div>
-					)}
-					{p.enregistree && !modifie && (
-						<p className={d.statut} role="status">
-							Enregistré.
-						</p>
-					)}
-					{erreur !== null && (
-						<p className={d.erreur} role="alert">
-							{erreur}
-						</p>
-					)}
-					<div className={d.actions}>
-						<Bouton genre="primaire" disabled={!modifie || envoi} onClick={() => void enregistrer()}>
-							Enregistrer
-						</Bouton>
-						<Bouton disabled={!modifie || envoi} onClick={() => setSaisies(saisiesDe(p.vue))}>
-							Annuler les modifications
-						</Bouton>
-					</div>
-				</footer>
+						)}
+					</footer>
+				)}
 			</div>
 		</form>
 	);

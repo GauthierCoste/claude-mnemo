@@ -21,24 +21,28 @@ const SYMBOLES: Record<string, { signe: string; libelle: string }> = {
 export function EtatMoteurs(): ReactNode {
 	const ressource = useMoteurs(true);
 	const moteurs = ressource.donnees?.moteurs;
+	// à chaque lecture (la première, puis chaque « Relire ») : bouton désactivé, section occupée, statut visible
+	const lecture = ressource.chargement;
 	return (
-		<section className={s.moteurs} aria-labelledby="titre-moteurs" aria-busy={moteurs === undefined && ressource.erreur === null}>
+		<section className={s.moteurs} aria-labelledby="titre-moteurs" aria-busy={lecture}>
 			<div className={d.ligne}>
 				<h3 id="titre-moteurs" className={d.titreSection}>
 					Moteurs
 				</h3>
-				<Bouton petit disabled={moteurs === undefined && ressource.erreur === null} onClick={ressource.recharger}>
+				<Bouton petit disabled={lecture} onClick={ressource.recharger}>
 					Relire
 				</Bouton>
+				<span className={d.discret} role="status">
+					{lecture ? (moteurs === undefined ? 'Vérification des moteurs… (quelques secondes)' : 'Vérification…') : ''}
+				</span>
 			</div>
 			<p className={d.discret}>Les agents de code qui font tourner les sessions, vus sur ce poste. Après une commande lancée, « Relire ».</p>
-			{moteurs === undefined ? (
-				<p className={d.discret} role="status">
-					{ressource.erreur ?? 'Vérification des moteurs… (quelques secondes)'}
+			{ressource.erreur !== null && (
+				<p className={d.erreur} role="alert">
+					État des moteurs illisible : {ressource.erreur}
 				</p>
-			) : (
-				moteurs.map((m) => <Moteur key={m.id} moteur={m} />)
 			)}
+			{moteurs?.map((m) => <Moteur key={m.id} moteur={m} />)}
 		</section>
 	);
 }
@@ -65,7 +69,6 @@ function Moteur(p: { moteur: MoteurVue }): ReactNode {
 
 function Point(p: { point: PointMoteurVue; moteur: string }): ReactNode {
 	const x = p.point;
-	const toast = useToast();
 	const symbole = SYMBOLES[String(x.ok)]!;
 	return (
 		<li className={s.point} data-ok={String(x.ok)}>
@@ -80,13 +83,29 @@ function Point(p: { point: PointMoteurVue; moteur: string }): ReactNode {
 				{x.remede !== undefined && (
 					<span className={s.remede}>
 						<span className={d.discret}>{x.remede.dans === 'terminal' ? 'À lancer dans un terminal :' : `À taper dans ${p.moteur} :`}</span>
-						<code>{x.remede.texte}</code>
-						<Bouton petit aria-label={`Copier « ${x.remede.texte} »`} onClick={() => copierTexte(x.remede!.texte, toast, 'Commande copiée.')}>
-							Copier
-						</Bouton>
+						<Commande texte={x.remede.texte} />
+						{x.remede.puis !== undefined && (
+							<>
+								<span className={d.discret}>puis</span>
+								<Commande texte={x.remede.puis} />
+							</>
+						)}
 					</span>
 				)}
 			</span>
 		</li>
+	);
+}
+
+/** Une commande à lancer, et son bouton pour la copier. */
+function Commande(p: { texte: string }): ReactNode {
+	const toast = useToast();
+	return (
+		<>
+			<code>{p.texte}</code>
+			<Bouton petit aria-label={`Copier « ${p.texte} »`} onClick={() => copierTexte(p.texte, toast, 'Commande copiée.')}>
+				Copier
+			</Bouton>
+		</>
 	);
 }

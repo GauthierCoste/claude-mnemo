@@ -53,9 +53,11 @@
    quand la carte est étroite (la durée et les boutons restent entiers) */
 .barre > .moteur {
 	flex: 0 1 auto;
-	min-width: 0;
+	/* le nom du moteur reste lisible : seul le modèle se coupe */
+	min-width: 9ch;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	white-space: nowrap;
 	padding: 0 6px;
 	border: 1px solid var(--bd2);
 	border-radius: var(--r-pastille);

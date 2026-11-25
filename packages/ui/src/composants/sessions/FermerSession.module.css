@@ -48,12 +48,14 @@
 	white-space: nowrap;
 }
 
-.item:hover:not(:disabled),
+.item:hover:not(:disabled, [aria-disabled='true']),
 .item:focus-visible {
 	background: var(--s3);
 }
 
-.item:disabled {
+/* indisponible avec sa raison (aria-disabled) : atteignable au clavier, mais grisé comme un item désactivé */
+.item:disabled,
+.item[aria-disabled='true'] {
 	opacity: 0.5;
 	cursor: default;
 }
