@@ -7,10 +7,12 @@ import type { Passage, PassageCompact } from '../domaine/passages.ts';
 import type { Reglages } from '../domaine/reglages.ts';
 import type { InjectionManuelle } from '../domaine/signal-injection.ts';
 import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
-import type { EtatIndicateur } from '../domaine/refus-outil.ts';
+import type { CauseNonVerifiee, EtatIndicateur } from '../domaine/refus-outil.ts';
 import type { TypeSource } from '../domaine/regles.ts';
-import type { FichierPlugin } from './plugin.ts';
-import type { AppelPlugin } from './plugin.ts';
+import type { FenetreDeContexte, IdMoteur, OutilsDuMoteur, TouchesDuMoteur } from '../domaine/moteurs/moteur.ts';
+import type { Profil } from '../domaine/profil.ts';
+import type { Quotas } from '../domaine/quotas.ts';
+import type { EntreeHook, ReponseHook } from './evenements.ts';
 
 export interface Coffre {
 	/** Contenu du fichier, ou null s'il n'existe pas. */
@@ -712,8 +714,11 @@ export interface Depot {
 	statuts(dossier: string, limite: number): Promise<{ fichiers: { chemin: string; statut: 'M' | 'A' | 'D' }[]; total: number } | null>;
 }
 
-/** Lancement d'un processus dans un pseudo-terminal : jamais par un shell. `dossier` : absolu. */
-export type OptionsTerminal = { commande: string; args: string[]; dossier: string; env: Record<string, string>; colonnes: number; lignes: number };
+/**
+ * Lancement d'un processus dans un pseudo-terminal : jamais par un shell. `dossier` : absolu. `touches` : celles du moteur
+ * lancé (arrêt, Échap) ; absentes : celles de Claude Code.
+ */
+export type OptionsTerminal = { commande: string; args: string[]; dossier: string; env: Record<string, string>; colonnes: number; lignes: number; touches?: TouchesDuMoteur };
 
 /** Un processus dans un pseudo-terminal (il mène son groupe de processus sous POSIX). */
 export interface Terminal {
@@ -725,17 +730,12 @@ export interface Terminal {
 	/** `code` : null si le processus a été tué par un signal. Appelée aussitôt s'il est déjà fini. */
 	surFin(f: (code: number | null) => void): void;
 	/**
-	 * Ctrl-U puis `/exit`, puis SIGTERM au groupe après `delaiMs`, puis SIGKILL 3 s plus tard ; résout quand le processus est
-	 * mort. `echap` (un dialogue de permission est peut-être ouvert) : Échap d'abord, puis `PAUSE_APRES_ECHAP_MS`.
+	 * Touche d'arrêt du moteur (`touches.arret` du lancement, puis `entree`), puis SIGTERM au groupe après `delaiMs`, puis
+	 * SIGKILL 3 s plus tard ; résout quand le processus est mort. `echap` (un dialogue de permission est peut-être ouvert) :
+	 * Échap d'abord, puis `touches.pauseApresEchapMs`.
 	 */
 	arreter(delaiMs?: number, options?: { echap?: boolean }): Promise<void>;
 }
-
-/**
- * Après un Échap envoyé pour fermer un dialogue de Claude Code (permission), avant toute autre touche. Un seul Échap, et
- * seulement quand le dernier arrêt est une `Notification` : deux Échap de suite ouvrent le retour arrière de Claude Code.
- */
-export const PAUSE_APRES_ECHAP_MS = 150;
 
 export interface Terminaux {
 	/** `ok: false` : mode dégradé (node-pty absent ou illoadable), avec le motif lisible. */
@@ -743,10 +743,96 @@ export interface Terminaux {
 	lancer(o: OptionsTerminal): Terminal;
 }
 
+/** Commande qui lance un moteur, jamais par un shell : `commande`, puis `avant`, puis les arguments de la session. */
+export type CommandeMoteur = { commande: string; avant: string[] };
+
+/** Un fichier de session du moteur (plugin de Claude Code) ; `chemin` relatif à son dossier, séparé par « / ». */
+export type FichierPlugin = { chemin: string; texte: string };
+
+/** Comment les fichiers de session appellent Mnemo (`node`, `main`) et la version de Mnemo écrite dans leur manifeste. */
+export type AppelPlugin = { node: string; main: string; version: string };
+
+/** Nouvelle session, ou reprise d'une session existante. */
+export type ModeLancement = 'nouvelle' | 'reprise';
+
 /**
- * Ce que le service pilote. `plugin` : écriture du plugin d'une session (rend son dossier absolu), son retrait (session
- * retirée de l'historique ; absent : rien à faire), appel des hooks
- * (`<node> <main.ts> hook …`), commande de `claude` (null : introuvable), racine absolue du dossier Mnemo. `hote` : ce que
+ * Ce que le pilote donne au moteur pour lancer une session : son profil, le mode, l'objectif (premier message ; à la reprise,
+ * la consigne tapée d'emblée), le dossier absolu où ses fichiers de session sont écrits, la racine absolue du dossier Mnemo
+ * et l'environnement de l'utilisateur.
+ */
+export type ContextePreparation = {
+	session: Session;
+	profil: Profil;
+	mode: ModeLancement;
+	objectif?: string;
+	dossierFichiers: string;
+	racine: string;
+	env: Record<string, string | undefined>;
+};
+
+/**
+ * Lancement préparé par le moteur : `args` (après `CommandeMoteur.avant`), `env` complet du processus ; pour la ligne de
+ * commande à coller, `ajouts` (variables posées) et `retirees` (variables de l'utilisateur à retirer).
+ */
+export type Lancement = { args: string[]; env: Record<string, string>; ajouts: Record<string, string>; retirees: string[] };
+
+/** Entrée d'un hook sur stdin : son texte, ou la cause qui l'a empêchée d'être lue. */
+export type LectureHook = { texte: string } | { nonLue: CauseNonVerifiee };
+
+/** Hooks d'un moteur : arguments de `mnemo hook`, entrée du moteur traduite en événement Mnemo, réponse traduite en sortie. */
+export type HooksDuMoteur = {
+	/** `<événement> [options]` (nom Mnemo ou nom du moteur), options permises une fois chacune ; null sinon. */
+	lireArguments(args: string[]): { evenement: EvenementHook; options: Set<string> } | null;
+	/**
+	 * Entrée traduite (et le chemin de la transcription, hors de l'entrée) ; null si elle est à ignorer. `reel` : chemin réel
+	 * d'un dossier (liens résolus).
+	 */
+	traduire(
+		evenement: EvenementHook,
+		options: Set<string>,
+		lecture: LectureHook,
+		env: Record<string, string | undefined>,
+		maintenant: number,
+		cwdProcessus: string,
+		reel: (chemin: string) => string,
+	): { entree: EntreeHook; transcription?: string } | null;
+	/** Sortie attendue par le moteur pour la réponse (stdout), ou « ». */
+	sortie(evenement: EvenementHook, reponse: ReponseHook): string;
+};
+
+/** Lecture de la fenêtre de contexte d'une session dans sa transcription (`chemin`, donné par les hooks) ; null : illisible ou refusée. */
+export type LectureFenetre = { lire(chemin: string, dossier?: string | null): Promise<FenetreDeContexte | null> };
+
+/** Télémétrie d'un moteur : fenêtre de contexte, et quotas du compte tirés de ce que le moteur en dit (null : illisibles). */
+export type TelemetrieDuMoteur = { fenetre: LectureFenetre; quotas(brut: unknown): Quotas | null };
+
+/**
+ * Un agent de code qui fait tourner les sessions (Claude Code ; Codex à venir) : tout ce qui en diffère. `commandeParDefaut` :
+ * le nom écrit dans la ligne à coller quand il est introuvable ; `modeles` : liste indicative (saisie libre permise) ;
+ * `trouver` : sa commande (null : introuvable) ; `fichiersDeSession` : ce qu'il faut écrire pour la session (plugin, réglages,
+ * consigne, skills), puis `preparer` : arguments et environnement.
+ */
+export type Moteur = {
+	id: IdMoteur;
+	nom: string;
+	commandeParDefaut: string;
+	modeles: readonly string[];
+	trouver(env: Record<string, string | undefined>, plateforme: string): CommandeMoteur | null;
+	fichiersDeSession(dep: Dependances, session: Session, profil: Profil, appel: AppelPlugin): Promise<FichierPlugin[]>;
+	preparer(contexte: ContextePreparation): Lancement;
+	touches: TouchesDuMoteur;
+	hooks: HooksDuMoteur;
+	outils: OutilsDuMoteur;
+	telemetrie: TelemetrieDuMoteur;
+};
+
+/** Un moteur connu du service, et sa commande trouvée au démarrage (null : introuvable, mode dégradé). */
+export type MoteurDuService = { moteur: Moteur; commande: CommandeMoteur | null };
+
+/**
+ * Ce que le service pilote. `plugin` : écriture des fichiers de session (rend leur dossier absolu), leur retrait (session
+ * retirée de l'historique ; absent : rien à faire), appel des hooks (`<node> <main.ts> hook …`), racine absolue du dossier
+ * Mnemo. `moteurs` : les moteurs du service et leur commande. `hote` : ce que
  * l'application ne peut pas lire elle-même — l'environnement de l'utilisateur, la plateforme (ligne de commande manuelle),
  * un dossier relatif à la racine (`absolu`, et `reel` : son chemin réel, liens résolus, relatif à la racine réelle, en « / » ;
  * null s'il n'existe pas ou sort de la racine), l'état d'un pid enregistré (`mort`, `session` : vivant et lancé pour cette
@@ -763,9 +849,9 @@ export type Pilotage = {
 		ecrire(session: string, f: FichierPlugin[]): Promise<string>;
 		retirer(session: string): Promise<void>;
 		appel: AppelPlugin;
-		claude: { commande: string; avant: string[] } | null;
 		racine: string;
 	};
+	moteurs: Partial<Record<IdMoteur, MoteurDuService>>;
 	hote: {
 		env: Record<string, string | undefined>;
 		plateforme: string;

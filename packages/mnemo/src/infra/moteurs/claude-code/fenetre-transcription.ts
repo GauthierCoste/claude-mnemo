@@ -1,15 +1,14 @@
 import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
-import { fenetreDeContexte } from '../domaine/fenetre-contexte.ts';
-import type { FenetreDeContexte } from '../domaine/fenetre-contexte.ts';
+import type { LectureFenetre } from '../../../application/ports.ts';
+import { fenetreDeContexte } from '../../../domaine/moteurs/claude-code/fenetre-contexte.ts';
 import { seuilDeResumeAuto } from './reglage-resume-auto.ts';
 
 /**
  * Lecture de la transcription Claude Code d'une session (`transcript_path`) pour la seule jauge de la fenêtre de contexte : seule
  * sa fin est lue, et seul l'usage en tokens de la dernière réponse en est tiré. Le contexte injecté ne la lit jamais.
  */
-export type LectureFenetre = { lire(chemin: string, dossier?: string | null): Promise<FenetreDeContexte | null> };
 
 /** La dernière réponse de Claude est dans la fin du fichier, même pour une session de plusieurs heures. */
 export const OCTETS_LUS = 512 * 1024;

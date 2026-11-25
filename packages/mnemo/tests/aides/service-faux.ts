@@ -6,7 +6,8 @@ import type { ArretModeles, EtatModeles, EtatSessions, Modeles, Pilotage } from 
 import { demarrerService } from '../../src/adaptateurs/http/serveur.ts';
 import type { ReglagesService, Service } from '../../src/adaptateurs/http/serveur.ts';
 import type { AppClaude } from '../../src/adaptateurs/http/claude-desktop.ts';
-import { retirerPlugin } from '../../src/infra/claude.ts';
+import { retirerPlugin } from '../../src/infra/plugin-fichiers.ts';
+import { moteursDeTest } from './moteurs.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
 import { preparerDossierLocal } from '../../src/infra/systeme.ts';
 import { dossierTemporaire } from './dossier-temporaire.ts';
@@ -78,9 +79,9 @@ export async function serviceFaux(
 			ecrire: async (session) => join(racine, '.mnemo', 'plugins', session),
 			retirer: (session) => retirerPlugin(racine, session),
 			appel: { node: process.execPath, main: '/opt/mnemo/main.ts', version: '0.0.0-essai' },
-			claude: { commande: process.execPath, avant: ['/aides/faux-claude.mjs'] },
 			racine,
 		},
+		moteurs: moteursDeTest({ commande: process.execPath, avant: ['/aides/faux-claude.mjs'] }),
 		hote: {
 			env: { PATH: '/bin' },
 			plateforme: process.platform,

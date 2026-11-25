@@ -1,4 +1,5 @@
 import type { NiveauModeles } from '@mnemo/commun';
+import type { IdMoteur } from './moteurs/moteur.ts';
 
 export type EtatSession = 'travaille' | 'attend' | 'a_relire' | 'en_pause' | 'terminee';
 export type EvenementHook = 'debut' | 'message' | 'outil' | 'apres_outil' | 'arret' | 'fin';
@@ -52,6 +53,12 @@ export type Session = {
 	 * (`niveauEffectif`). Gardé à la reprise.
 	 */
 	niveauModeles?: NiveauModeles;
+	/**
+	 * Moteur et modèle enregistrés au lancement : une reprise garde les siens. Absents (session d'avant les moteurs) : Claude
+	 * Code et son modèle par défaut ; `modele` « » : le modèle par défaut du moteur.
+	 */
+	moteur?: IdMoteur;
+	modele?: string;
 };
 
 /** Un dialogue de Claude Code (permission) attend peut-être l'utilisateur : la dernière chose vue est une `Notification`. */

@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { FichierPlugin } from '../application/plugin.ts';
+import type { FichierPlugin } from '../application/ports.ts';
 import { estUuid } from '../domaine/session.ts';
 import { preparerDossierLocal } from './systeme.ts';
 

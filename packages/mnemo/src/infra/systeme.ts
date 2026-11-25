@@ -5,9 +5,9 @@ import { nodeDurable } from './node-durable.ts';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { ulid } from 'ulid';
-import type { AppelPlugin } from '../application/plugin.ts';
-import type { Dependances, EtatSessions, Index, Lots, Pilotage, Systeme, Terminaux, Verrou } from '../application/ports.ts';
-import { ecrirePlugin, retirerPlugin, trouverClaude } from './claude.ts';
+import type { AppelPlugin, Dependances, EtatSessions, Index, Lots, Pilotage, Systeme, Terminaux, Verrou } from '../application/ports.ts';
+import { moteursDuService } from './moteurs/moteurs.ts';
+import { ecrirePlugin, retirerPlugin } from './plugin-fichiers.ts';
 import { demarrageMachineMs, etatProcessus, nettoyerRestes } from './processus.ts';
 import { terminauxPty } from './terminaux-pty.ts';
 import { coffreFichiers } from './coffre-fichiers.ts';
@@ -238,8 +238,8 @@ async function dossierSousLaRacine(racine: string, relatif: string): Promise<{ a
 
 /**
  * Câble le pilotage du service : état des sessions (`.mnemo/etat.sqlite`, ouvert au premier usage), terminaux node-pty
- * (mode dégradé s'il manque), dépôt git des dossiers de session, plugins dans `.mnemo/plugins/`, hooks appelant ce `main.ts` avec ce Node, `claude` trouvé
- * (`MNEMO_CLAUDE` ou PATH). `env`, `plateforme`, `terminaux` : remplaçables (tests).
+ * (mode dégradé s'il manque), dépôt git des dossiers de session, plugins dans `.mnemo/plugins/`, hooks appelant ce `main.ts` avec ce Node, la
+ * commande de chaque moteur trouvée (`claude` : `MNEMO_CLAUDE` ou PATH). `env`, `plateforme`, `terminaux` : remplaçables (tests).
  */
 export async function pilotageReel(
 	racineDossier: string,
@@ -255,9 +255,9 @@ export async function pilotageReel(
 			ecrire: (session, fichiers) => ecrirePlugin(racineDossier, session, fichiers),
 			retirer: (session) => retirerPlugin(racineDossier, session),
 			appel: appelPlugin(),
-			claude: trouverClaude(env, plateforme),
 			racine: racineDossier,
 		},
+		moteurs: moteursDuService(env, plateforme),
 		hote: {
 			env,
 			plateforme,

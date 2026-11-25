@@ -1,4 +1,6 @@
 import type { Regle } from './consigne.ts';
+import { OUTILS_CLAUDE_CODE } from './moteurs/claude-code/outils.ts';
+import type { OutilsDuMoteur } from './moteurs/moteur.ts';
 import type { CauseNonVerifiee } from './refus-outil.ts';
 
 /**
@@ -11,8 +13,6 @@ export type ActionNonLue = { nonLue: CauseNonVerifiee };
 /** Permis ; refusé parce que contraire à une consigne ; ou refusé parce que la vérification n'a pas pu se faire. */
 export type Verdict = { refus: false } | { refus: true; consigne: string; motif: string } | { refus: true; cause: CauseNonVerifiee; detail: string | null };
 
-/** Outils d'écriture visés par `chemins_interdits`, et le champ qui porte leur chemin. */
-const CHAMP_DE_CHEMIN: Readonly<Record<string, string>> = { Write: 'file_path', Edit: 'file_path', MultiEdit: 'file_path', NotebookEdit: 'notebook_path' };
 const TYPES_REGLE: readonly string[] = ['chemins_interdits', 'commandes_interdites'];
 export const MOTIFS_MAX = 20;
 export const LONGUEUR_MAX_MOTIF = 200;
@@ -75,19 +75,22 @@ function relatif(chemin: { prefixe: string; segments: string[] }, racine: { pref
 }
 
 /**
- * Chemins écrits par l'action (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`) : relatifs à la racine du dossier Mnemo, en
+ * Chemins écrits par l'action (outils d'écriture du moteur, `cheminsEcrits`) : relatifs à la racine du dossier Mnemo, en
  * « / » ; un chemin hors de la racine est rendu absolu (« /etc/x », « D:/x »). null : outil non concerné. `sansCasse` :
  * la racine se reconnaît à la casse près (macOS ; un disque à lettre l'est toujours).
  */
-export function cheminsTouches(action: ActionOutil, racine: string, cwd: string, sansCasse = false): string[] | null {
-	if (!Object.hasOwn(CHAMP_DE_CHEMIN, action.nom)) return null;
-	const brut = action.entree[CHAMP_DE_CHEMIN[action.nom]!];
-	if (typeof brut !== 'string' || brut === '') return [];
-	const chemin = absolu(brut, cwd);
-	if (chemin === null) return [];
+export function cheminsTouches(action: ActionOutil, racine: string, cwd: string, sansCasse = false, outils: OutilsDuMoteur = OUTILS_CLAUDE_CODE): string[] | null {
+	const bruts = outils.cheminsEcrits(action);
+	if (bruts === null) return null;
 	const base = absolu(racine, '/');
-	const dedans = base === null ? null : relatif(chemin, base, sansCasse);
-	return [dedans ?? texteDe(chemin)];
+	const chemins: string[] = [];
+	for (const brut of bruts) {
+		const chemin = absolu(brut, cwd);
+		if (chemin === null) continue;
+		const dedans = base === null ? null : relatif(chemin, base, sansCasse);
+		chemins.push(dedans ?? texteDe(chemin));
+	}
+	return chemins;
 }
 
 /** Mots de tête qui ne changent pas la commande lancée : chaque forme dépouillée est aussi comparée aux motifs. */
@@ -231,11 +234,10 @@ function decouperCommandes(ligne: string): string[] {
 	return commandes;
 }
 
-/** Commandes simples de l'entrée de `Bash` ; null pour un autre outil. */
-export function commandesDe(action: ActionOutil): string[] | null {
-	if (action.nom !== 'Bash') return null;
-	const commande = action.entree['command'];
-	return typeof commande === 'string' ? decouperCommandes(commande) : [];
+/** Commandes simples de l'entrée de l'outil de commande du moteur ; null pour un autre outil. */
+export function commandesDe(action: ActionOutil, outils: OutilsDuMoteur = OUTILS_CLAUDE_CODE): string[] | null {
+	const commande = outils.commande(action);
+	return commande === null ? null : decouperCommandes(commande);
 }
 
 /**
@@ -389,11 +391,14 @@ function motifDeChemin(motif: string): string {
 	return net.replace(RE_LECTEUR, (_, lecteur: string, fin: string) => `${lecteur.toUpperCase()}:${fin}`);
 }
 
+/** Racine du dossier Mnemo, dossier courant de l'action, disque sans casse ; `outils` : ceux du moteur (Claude Code par défaut). */
+export type ContexteVerification = { racine: string; cwd: string; sansCasse: boolean; outils?: OutilsDuMoteur };
+
 /** Motif de la règle qui correspond, null si aucun ; la cause si la correspondance ne peut pas être calculée. */
 type Correspondance = { motif: string } | { cause: CauseNonVerifiee } | null;
 
-function motifDeChemins(regle: Regle, action: ActionOutil, contexte: { racine: string; cwd: string; sansCasse: boolean }): Correspondance {
-	const chemins = cheminsTouches(action, contexte.racine, contexte.cwd, contexte.sansCasse);
+function motifDeChemins(regle: Regle, action: ActionOutil, contexte: ContexteVerification, outils: OutilsDuMoteur): Correspondance {
+	const chemins = cheminsTouches(action, contexte.racine, contexte.cwd, contexte.sansCasse, outils);
 	if (chemins === null) return null;
 	const racine = absolu(contexte.racine, '/');
 	for (const chemin of chemins) {
@@ -410,11 +415,10 @@ function motifDeChemins(regle: Regle, action: ActionOutil, contexte: { racine: s
 	return null;
 }
 
-function motifDeCommandes(regle: Regle, action: ActionOutil): Correspondance {
-	const commandes = commandesDe(action);
+function motifDeCommandes(regle: Regle, action: ActionOutil, outils: OutilsDuMoteur): Correspondance {
+	const commandes = commandesDe(action, outils);
 	if (commandes === null) return null;
-	const brute = action.entree['command'];
-	if (typeof brute === 'string' && brute.length > LONGUEUR_MAX_COMMANDE) return { cause: 'commande_trop_longue' };
+	if (outils.commande(action)!.length > LONGUEUR_MAX_COMMANDE) return { cause: 'commande_trop_longue' };
 	for (const commande of commandes) {
 		const formes = formesDeCommande(commande);
 		for (const motif of regle.motifs) {
@@ -428,12 +432,13 @@ function motifDeCommandes(regle: Regle, action: ActionOutil): Correspondance {
  * Premier refus des consignes, dans leur ordre. Une consigne dont la règle est invalide, une action non lue ou trop longue
  * pour être comparée ne se vérifient pas : refus avec la cause. Sans aucune consigne, l'action est permise.
  */
-export function verifier(consignes: { texte: string; regle: Regle }[], action: ActionOutil | ActionNonLue, contexte: { racine: string; cwd: string; sansCasse: boolean }): Verdict {
+export function verifier(consignes: { texte: string; regle: Regle }[], action: ActionOutil | ActionNonLue, contexte: ContexteVerification): Verdict {
+	const outils = contexte.outils ?? OUTILS_CLAUDE_CODE;
 	for (const { texte, regle } of consignes) {
 		const invalide = motifRegleInvalide(regle);
 		if (invalide !== null) return { refus: true, cause: 'consigne_illisible', detail: `« ${texte} » : ${invalide}` };
 		if ('nonLue' in action) return { refus: true, cause: action.nonLue, detail: null };
-		const trouve = regle.type === 'chemins_interdits' ? motifDeChemins(regle, action, contexte) : motifDeCommandes(regle, action);
+		const trouve = regle.type === 'chemins_interdits' ? motifDeChemins(regle, action, contexte, outils) : motifDeCommandes(regle, action, outils);
 		if (trouve === null) continue;
 		if ('cause' in trouve) return { refus: true, cause: trouve.cause, detail: null };
 		return { refus: true, consigne: texte, motif: trouve.motif };

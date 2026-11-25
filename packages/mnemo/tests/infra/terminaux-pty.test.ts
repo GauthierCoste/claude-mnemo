@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { creerPilote } from '../../src/application/pilote.ts';
 import type { Pilote } from '../../src/application/pilote.ts';
 import type { EtatSessions, Pilotage, Terminal } from '../../src/application/ports.ts';
-import { ecrirePlugin } from '../../src/infra/claude.ts';
+import { ecrirePlugin } from '../../src/infra/plugin-fichiers.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
 import { demarrageMachineMs, etatProcessus, nettoyerRestes, signalerGroupe } from '../../src/infra/processus.ts';
 import { dependancesReelles, pilotageReel } from '../../src/infra/systeme.ts';
@@ -15,6 +15,7 @@ import { terminauxPty } from '../../src/infra/terminaux-pty.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { DEPOT_ABSENT, fauxPorts } from '../aides/faux-ports.ts';
 import { versionMnemo } from '../../src/infra/version.ts';
+import { commandeClaude, moteursDeTest } from '../aides/moteurs.ts';
 
 const FAUX_CLAUDE = resolve(import.meta.dirname, '../aides/faux-claude.mjs');
 const SERVICE = resolve(import.meta.dirname, '../aides/service-pilote.ts');
@@ -283,9 +284,9 @@ describe.skipIf(sauter)('Pilote sous de vrais pseudo-terminaux : aucun orphelin'
 				ecrire: (session, fichiers) => ecrirePlugin(racine, session, fichiers),
 				retirer: async () => {},
 				appel: { node: process.execPath, main: join(racine, 'journal.mjs'), version: '0.0.0-essai' },
-				claude: { commande: process.execPath, avant: [FAUX_CLAUDE, ...avant] },
 				racine,
 			},
+			moteurs: moteursDeTest({ commande: process.execPath, avant: [FAUX_CLAUDE, ...avant] }),
 			hote: { env: process.env, plateforme: process.platform, dossier: async (r) => ({ absolu: join(racine, r), reel: r }), processus: etatProcessus, demarrageMachineMs, nettoyerRestes },
 		});
 		const dep = fauxPorts();
@@ -338,9 +339,9 @@ describe.skipIf(sauter)('Pilote sous de vrais pseudo-terminaux : aucun orphelin'
 				ecrire: (session, fichiers) => ecrirePlugin(racine, session, fichiers),
 				retirer: async () => {},
 				appel: { node: process.execPath, main: join(racine, 'journal.mjs'), version: '0.0.0-essai' },
-				claude: { commande: process.execPath, avant: [FAUX_CLAUDE, '--tetu', '--enfant'] },
 				racine,
 			},
+			moteurs: moteursDeTest({ commande: process.execPath, avant: [FAUX_CLAUDE, '--tetu', '--enfant'] }),
 			hote: { env: process.env, plateforme: process.platform, dossier: async (r) => ({ absolu: join(racine, r), reel: r }), processus: etatProcessus, demarrageMachineMs, nettoyerRestes },
 		});
 		pilotes.push(pilote);
@@ -400,7 +401,7 @@ describe.skipIf(sauter)('Pilote sous de vrais pseudo-terminaux : aucun orphelin'
 
 		const pil = await pilotageReel(racine, { terminaux });
 		etats.push(pil.etat);
-		pil.plugin.claude = { commande: process.execPath, avant: [FAUX_CLAUDE] };
+		commandeClaude(pil, { commande: process.execPath, avant: [FAUX_CLAUDE] });
 		pil.plugin.appel = { node: process.execPath, main: hook, version: '0.0.0-essai' };
 		const dep = dependancesReelles(racine);
 		const pilote = creerPilote(dep, pil);
@@ -423,7 +424,7 @@ describe.skipIf(sauter)('Pilote sous de vrais pseudo-terminaux : aucun orphelin'
 		const pil = await pilotageReel(racine, { env: { MNEMO_CLAUDE: FAUX_CLAUDE, PATH: '' }, terminaux });
 		expect(pil.plugin.racine).toBe(racine);
 		expect(pil.plugin.appel).toEqual({ node: process.execPath, main: resolve(import.meta.dirname, '../../src/adaptateurs/cli/main.ts'), version: versionMnemo() });
-		expect(pil.plugin.claude).toEqual({ commande: process.execPath, avant: [FAUX_CLAUDE] });
+		expect(pil.moteurs['claude-code']?.commande).toEqual({ commande: process.execPath, avant: [FAUX_CLAUDE] });
 		expect(pil.terminaux).toBe(terminaux);
 		await symlink(join(racine, 'projet'), join(racine, 'lien'));
 		await mkdir(join(racine, '_mnemo', 'fiches'), { recursive: true });

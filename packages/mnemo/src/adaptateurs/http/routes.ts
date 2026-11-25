@@ -16,7 +16,6 @@ import { ecarterDuClassement } from '../../application/ecarter.ts';
 import { traiterEvenement } from '../../application/evenements.ts';
 import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
-import { fenetreDeTranscription } from '../../infra/fenetre-transcription.ts';
 import type { EntreeHook } from '../../application/evenements.ts';
 import { filDuJour } from '../../application/fil.ts';
 import { historiqueDesSessions } from '../../application/historique.ts';
@@ -34,7 +33,9 @@ import { validerArguments, validerDemande, validerParametresRecherche, validerRe
 import { cheminDeDepot, cheminDeLaRacine } from '../../domaine/chemin.ts';
 import { messageDErreur } from '../../domaine/texte.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
-import { memesQuotas, quotasDeLimites } from '../../domaine/quotas.ts';
+import { estIdMoteur, MOTEUR_PAR_DEFAUT } from '../../domaine/moteurs/moteur.ts';
+import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
+import { memesQuotas } from '../../domaine/quotas.ts';
 import type { Quotas } from '../../domaine/quotas.ts';
 import { estCauseNonVerifiee } from '../../domaine/refus-outil.ts';
 import { estSourceDeDebut, estUuid } from '../../domaine/session.ts';
@@ -231,7 +232,7 @@ const EVENEMENTS: readonly EvenementHook[] = ['debut', 'message', 'outil', 'apre
 /** Entrée de `mnemo hook` (celle qu'il traduit de Claude Code) : forme vérifiée, sinon 400. */
 function entreeHook(brut: unknown): EntreeHook {
 	if (!estObjet(brut)) throw new ErreurHttp(400, 'Événement attendu : un objet JSON.');
-	const { evenement, session, horodatageMs, cwd, prompt, outil, arret, sansContexte, source } = brut;
+	const { evenement, session, horodatageMs, cwd, prompt, outil, arret, sansContexte, source, moteur } = brut;
 	if (typeof evenement !== 'string' || !EVENEMENTS.includes(evenement as EvenementHook)) throw new ErreurHttp(400, 'Événement inconnu.');
 	if (typeof session !== 'string' || (session !== '' && !estUuid(session))) throw new ErreurHttp(400, 'Session : uuid ou « » attendu.');
 	if (typeof horodatageMs !== 'number' || !Number.isFinite(horodatageMs)) throw new ErreurHttp(400, 'Horodatage : nombre attendu.');
@@ -259,6 +260,10 @@ function entreeHook(brut: unknown): EntreeHook {
 		if (!estSourceDeDebut(source)) throw new ErreurHttp(400, 'source : startup, resume, clear ou compact attendu.');
 		entree.source = source;
 	}
+	if (moteur !== undefined) {
+		if (!estIdMoteur(moteur)) throw new ErreurHttp(400, 'moteur : identifiant de moteur attendu.');
+		entree.moteur = moteur;
+	}
 	return entree;
 }
 
@@ -281,7 +286,7 @@ function echeanceDuHook(brut: unknown, evenement: EvenementHook): number | undef
 	return (echeanceMs ?? Date.now() + ATTENTE_HOOK_SANS_ECHEANCE_MS) - MARGE_REPONSE_HOOK_MS;
 }
 
-/** Chemin de la transcription de Claude Code joint au hook, pour la seule jauge de la fenêtre de contexte ; hors de `EntreeHook`. */
+/** Chemin de la transcription du moteur joint au hook, pour la seule jauge de la fenêtre de contexte ; hors de `EntreeHook`. */
 function transcriptionDuHook(brut: unknown): string | undefined {
 	const transcription = estObjet(brut) ? brut.transcription : undefined;
 	if (transcription === undefined) return undefined;
@@ -346,19 +351,24 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		ctx.diffuser({ type: 'aServir', session: id, chemins });
 		return ok({ chemins } satisfies ReponseAServir);
 	};
-	/** Jauge seulement : la transcription n'est lue que pour la taille de la fenêtre de contexte, jamais pour le contexte injecté. */
-	const lectureFenetre = fenetreDeTranscription();
-	/** Fenêtre de contexte de chaque session, relue dans sa transcription après un hook ; diffusée si elle change. */
+	/** Télémétrie du moteur (Claude Code par défaut) ; null : moteur inconnu de ce service. */
+	const telemetrie = (moteur: IdMoteur = MOTEUR_PAR_DEFAUT) => pil.moteurs[moteur]?.moteur.telemetrie ?? null;
+	/**
+	 * Fenêtre de contexte de chaque session, relue dans sa transcription (par le moteur qui a lancé le hook) après un hook ;
+	 * diffusée si elle change. Jauge seulement : la transcription n'est jamais lue pour le contexte injecté.
+	 */
 	const fenetres = new Map<string, FenetreVue>();
-	const relireFenetre = async (session: string, chemin: string, dossier: string | null): Promise<void> => {
-		const fenetre = await lectureFenetre.lire(chemin, dossier);
+	const relireFenetre = async (session: string, chemin: string, dossier: string | null, moteur: IdMoteur | undefined): Promise<void> => {
+		const lecture = telemetrie(moteur)?.fenetre;
+		if (lecture === undefined) return;
+		const fenetre = await lecture.lire(chemin, dossier);
 		if (fenetre === null) return;
 		const avant = fenetres.get(session);
 		if (avant !== undefined && avant.utilises === fenetre.utilises && avant.max === fenetre.max && avant.avantResume === fenetre.avantResume) return;
 		fenetres.set(session, fenetre);
 		ctx.diffuser({ type: 'fenetre', session, fenetre });
 	};
-	/** Quotas du compte Claude, communs à toutes les sessions : le dernier relevé reçu d'une ligne d'état. */
+	/** Quotas du compte Claude, communs à toutes les sessions : le dernier relevé reçu d'une ligne d'état (Claude Code). */
 	let quotas: Quotas | null = null;
 	/** Écartés de la session, rendus et diffusés après un changement. */
 	const ecartesDiffuses = async (id: string): Promise<Reponse> => {
@@ -542,7 +552,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 			// relevé de `mnemo ligne-etat`, envoyé par chaque session : le plus récent vaut pour tout le compte
 			action: async (r) => {
 				const brut = await r.json();
-				const recus = quotasDeLimites(estObjet(brut) ? brut.rate_limits : undefined);
+				const recus = telemetrie()?.quotas(estObjet(brut) ? brut.rate_limits : undefined) ?? null;
 				if (recus === null) throw new ErreurHttp(400, 'Aucune fenêtre de quota lisible.');
 				if (!memesQuotas(quotas, recus)) {
 					quotas = recus;
@@ -596,7 +606,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const reponse = await traiterEvenement(depDuHook, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, rattachee: (id) => pilote.reecrirePlugin(id) });
 				if (entree.session !== '' && transcription !== undefined && (entree.evenement === 'message' || entree.evenement === 'apres_outil' || entree.evenement === 'arret' || entree.evenement === 'debut')) {
 					// hors du chemin du hook : sa réponse n'attend pas la lecture
-					void relireFenetre(entree.session, transcription, entree.cwd).catch(() => {});
+					void relireFenetre(entree.session, transcription, entree.cwd, entree.moteur).catch(() => {});
 				}
 				if (entree.session !== '') {
 					const s = await pil.etat.lire(entree.session).catch(() => null);

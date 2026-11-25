@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { seuilDeResumeAuto } from '../../src/infra/reglage-resume-auto.ts';
+import { seuilDeResumeAuto } from '../../src/infra/moteurs/claude-code/reglage-resume-auto.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
 async function reglage(dossier: string, nom: string, contenu: string): Promise<void> {

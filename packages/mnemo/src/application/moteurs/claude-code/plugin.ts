@@ -1,14 +1,12 @@
 import { DOSSIERS_FIXES } from '@mnemo/commun';
-import type { Profil } from '../domaine/profil.ts';
-import { EVENEMENTS_HOOK, skillPourProjet } from '../domaine/profil.ts';
-import { consignesVerifieesPossibles } from '../domaine/refus-outil.ts';
-import { estUuid } from '../domaine/session.ts';
-import type { EvenementHook, Session } from '../domaine/session.ts';
-import type { Dependances, PluginInstalle } from './ports.ts';
-import { deposerSkillsParDefaut, dossierSkillsDuProfil } from './profil.ts';
-
-/** Un fichier du plugin assemblé ; `chemin` relatif au dossier du plugin, séparé par « / ». */
-export type FichierPlugin = { chemin: string; texte: string };
+import { MATCHER_APRES_OUTIL, PREFIXE_MCP } from '../../../domaine/moteurs/claude-code/outils.ts';
+import type { Profil } from '../../../domaine/profil.ts';
+import { EVENEMENTS_HOOK, skillPourProjet } from '../../../domaine/profil.ts';
+import { consignesVerifieesPossibles } from '../../../domaine/refus-outil.ts';
+import { estUuid } from '../../../domaine/session.ts';
+import type { EvenementHook, Session } from '../../../domaine/session.ts';
+import type { AppelPlugin, ContextePreparation, Dependances, FichierPlugin, Lancement, PluginInstalle } from '../../ports.ts';
+import { deposerSkillsParDefaut, dossierSkillsDuProfil } from '../../profil.ts';
 
 /**
  * Variables que `claude` ne reçoit jamais : seul l'abonnement de l'utilisateur sert, jamais une clé d'API ni un autre
@@ -36,9 +34,6 @@ export function estInterdite(majuscules: string): boolean {
 	if (VARIABLES_INTERDITES.includes(majuscules)) return true;
 	return majuscules.startsWith(SELECTEUR_FOURNISSEUR) && majuscules !== OUTIL_GARDE;
 }
-
-/** Outils après lesquels Mnemo note ce que Claude a lu ou écrit : un fichier, une fiche lue ou écrite par Mnemo (rien n'est injecté). */
-export const MATCHER_APRES_OUTIL = 'Read|Edit|MultiEdit|Write|NotebookEdit|mcp__mnemo__.*';
 
 /**
  * Événements Claude Code de chaque événement Mnemo, avec leur délai (secondes) et leurs options. `PreToolUse` porte le matcher
@@ -68,10 +63,7 @@ const HOOKS_DE_CONTEXTE: readonly EvenementHook[] = ['debut', 'message', 'apres_
  * Outils de Mnemo permis d'avance dans une session (`permissions.allow` du `settings.json`) : `proposer`, que le bilan
  * demande, et la lecture (`diagnostiquer` compris). Sans eux, le bilan s'arrêterait sur une demande de permission. Ni `deplacer`, ni `entretenir`, ni `extraire_source`.
  */
-export const OUTILS_PERMIS = ['proposer', 'chercher', 'lire', 'lister', 'voisins', 'chronologie', 'contexte', 'diagnostiquer'].map((nom) => `mcp__mnemo__${nom}`);
-
-/** Comment le plugin appelle Mnemo (`node`, `main`) et la version de Mnemo écrite dans son manifeste. */
-export type AppelPlugin = { node: string; main: string; version: string };
+export const OUTILS_PERMIS = ['proposer', 'chercher', 'lire', 'lister', 'voisins', 'chronologie', 'contexte', 'diagnostiquer'].map((nom) => `${PREFIXE_MCP}${nom}`);
 
 const json = (valeur: unknown): string => `${JSON.stringify(valeur, null, 2)}\n`;
 
@@ -222,4 +214,18 @@ export function environnementClaude(env: Record<string, string | undefined>, ses
 		resultat[cle] = valeur;
 	}
 	return { ...resultat, ...ajouts };
+}
+
+/**
+ * Lancement de `claude` : arguments (`argumentsClaude`, puis à la reprise la consigne tapée d'emblée), environnement ; pour la
+ * ligne à coller, les variables de la session et les variables interdites présentes chez l'utilisateur.
+ */
+export function preparerClaudeCode(c: ContextePreparation): Lancement {
+	const args = [...argumentsClaude(c.session, c.profil, { plugin: c.dossierFichiers, racine: c.racine }, c.mode, c.objectif), ...(c.mode === 'reprise' ? premierMessage(c.objectif) : [])];
+	return {
+		args,
+		env: environnementClaude(c.env, c.session, c.racine),
+		ajouts: environnementClaude({}, c.session, c.racine),
+		retirees: Object.keys(c.env).filter((cle) => c.env[cle] !== undefined && estInterdite(cle.toUpperCase())),
+	};
 }

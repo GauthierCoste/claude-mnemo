@@ -1,6 +1,6 @@
 import type { PosteVerifie } from '@mnemo/contrat';
-import { trouverClaude } from '../../infra/claude.ts';
-import type { CommandeClaude } from '../../infra/claude.ts';
+import type { CommandeMoteur } from '../../application/ports.ts';
+import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
 import type { Executer } from './declarer.ts';
 import { ErreurCli } from './erreurs.ts';
 import { executeurReel } from './executeur.ts';
@@ -9,7 +9,7 @@ const USAGE = 'Usage : mnemo verifier-poste [--json]';
 const DELAI_GIT_MS = 10_000;
 
 /** Ce que lit la vérification ; remplaçable (tests : ni vrai `git` ni vrai `claude`). */
-export type DependancesPoste = { executer: Executer; claude: () => CommandeClaude | null; versionNode: string };
+export type DependancesPoste = { executer: Executer; claude: () => CommandeMoteur | null; versionNode: string };
 
 /** Version lue dans « git version 2.50.1 (Apple Git-155) » ; toute la ligne si elle n'a pas cette forme. */
 function versionGit(sortie: string): string {

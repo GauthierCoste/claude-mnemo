@@ -2,14 +2,14 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { creerPilote, ligneManuelle } from '../../src/application/pilote.ts';
 import type { Pilote } from '../../src/application/pilote.ts';
-import type { FichierPlugin } from '../../src/application/plugin.ts';
-import type { EtatSessions, Pilotage } from '../../src/application/ports.ts';
+import type { CommandeMoteur, EtatSessions, FichierPlugin, Pilotage } from '../../src/application/ports.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { DEPOT_ABSENT, fauxPorts } from '../aides/faux-ports.ts';
 import { fauxTerminaux } from '../aides/faux-terminaux.ts';
 import type { FauxTerminaux } from '../aides/faux-terminaux.ts';
+import { moteursDeTest } from '../aides/moteurs.ts';
 
 const RACINE = '/racine';
 const DEMARRAGE = 1_700_000_000_000;
@@ -41,7 +41,7 @@ type Contexte = {
 };
 
 async function contexte(
-	options: { claude?: Pilotage['plugin']['claude']; plateforme?: string; sessions?: Session[]; ecrire?: (session: string, f: FichierPlugin[]) => Promise<string> } = {},
+	options: { claude?: CommandeMoteur | null; plateforme?: string; sessions?: Session[]; ecrire?: (session: string, f: FichierPlugin[]) => Promise<string> } = {},
 ): Promise<Contexte> {
 	const dep = fauxPorts();
 	await dep.coffre.ecrire('projets/alpha/alpha.md', `${entete('dossier', 'dossier_projet: alpha\nportee: projet:alpha\n')}# Alpha\n`);
@@ -71,9 +71,9 @@ async function contexte(
 				plugins.delete(session);
 			},
 			appel: APPEL,
-			claude: options.claude === undefined ? CLAUDE : options.claude,
 			racine: RACINE,
 		},
+		moteurs: moteursDeTest(options.claude === undefined ? CLAUDE : options.claude),
 		hote: {
 			env: { PATH: '/bin', HOME: '/home/u', ANTHROPIC_API_KEY: 'sk-secret', CLAUDECODE: '1' },
 			plateforme: options.plateforme ?? 'darwin',
@@ -173,6 +173,11 @@ describe('Pilote.lancer', () => {
 		expect(await lancee(c, { profil: 'travail', dossier: '' })).toMatchObject({ dossier: '', position: '', projet: 'divers' });
 		// séparateurs Windows et « / » final normalisés
 		expect(await lancee(c, { profil: 'travail', dossier: 'travaux\\acme\\' })).toMatchObject({ dossier: 'travaux/acme' });
+	});
+
+	it('la session lancée enregistre son moteur (Claude Code) et un modèle vide', async () => {
+		const c = await contexte();
+		expect(await lancee(c, { profil: 'travail', dossier: 'alpha' })).toMatchObject({ moteur: 'claude-code', modele: '' });
 	});
 
 	it('Projets/Lumen couvert par projets/Lumen/Lumen.md (dossier_projet) : position et projet Lumen, rattaché', async () => {

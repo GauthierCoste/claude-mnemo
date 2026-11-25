@@ -5,9 +5,9 @@ import { dialogueOuvert, ETATS_RELANCES, objectifDe } from '../domaine/session.t
 import type { Session } from '../domaine/session.ts';
 import { CAPACITE_TAMPON, tamponCirculaire } from '../domaine/tampon.ts';
 import { ecrireEpisodeMinimal, episodesDuProjet, texteDuBilan, trouverEpisode } from './episode.ts';
-import { argumentsClaude, assemblerPlugin, environnementClaude, estInterdite, premierMessage } from './plugin.ts';
-import { PAUSE_APRES_ECHAP_MS } from './ports.ts';
-import type { Dependances, Pilotage, Terminal } from './ports.ts';
+import { MOTEUR_PAR_DEFAUT } from '../domaine/moteurs/moteur.ts';
+import type { IdMoteur } from '../domaine/moteurs/moteur.ts';
+import type { CommandeMoteur, Dependances, ModeLancement, MoteurDuService, Pilotage, Terminal } from './ports.ts';
 import { projetDeSession } from './portees.ts';
 import { positionNotee } from './dossiers-non-rattaches.ts';
 import type { PositionDuProjet } from './position.ts';
@@ -48,8 +48,11 @@ export type Pilote = {
 	 * comme par `taper`. Rend la session ; rien n'est tapé si elle ne peut pas tourner ici (mode dégradé, reprise impossible).
 	 */
 	confier(id: string, ligne: string): Promise<Session | null>;
-	/** Faux en mode dégradé (terminaux indisponibles, `claude` introuvable) : une session ne peut tourner qu'à la main. */
-	lancePossible(): boolean;
+	/**
+	 * Faux en mode dégradé (terminaux indisponibles, commande du moteur introuvable — Claude Code par défaut) : une session ne
+	 * peut tourner qu'à la main.
+	 */
+	lancePossible(moteur?: IdMoteur): boolean;
 	/** Réécrit le plugin de la session (skills de son projet) d'après son état actuel ; rien si elle est inconnue. */
 	reecrirePlugin(id: string): Promise<void>;
 	/**
@@ -78,11 +81,6 @@ const ATTENTE_DEBUT_BILAN_MS = 30_000;
 const ATTENTE_ARRET_BILAN_MS = 10 * 60_000;
 /** Intervalle de lecture de l'état pendant un bilan (les hooks l'écrivent, parfois sans passer par le service). */
 const SONDAGE_BILAN_MS = 200;
-/**
- * Après l'Échap qui ferme un dialogue de permission : attente du `Stop` qui suit, au plus. Claude Code ne lance pas `Stop`
- * quand l'utilisateur interrompt (doc des hooks) : passé ce délai, le dialogue est tenu pour fermé et la ligne est tapée.
- */
-const ATTENTE_STOP_APRES_ECHAP_MS = 1000;
 
 /**
  * Un terminal tenu par le pilote : sa sortie (tampon, abonnés) et la promesse de sa fin traitée. `ecritMajMs` : `majMs` de
@@ -92,6 +90,7 @@ const ATTENTE_STOP_APRES_ECHAP_MS = 1000;
  */
 type Vivant = {
 	terminal: Terminal;
+	moteur: MoteurDuService['moteur'];
 	tampon: ReturnType<typeof tamponCirculaire>;
 	abonnes: Set<(d: string) => void>;
 	fini: Promise<void>;
@@ -105,39 +104,40 @@ const NOM_DE_VARIABLE = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 
 /**
  * Ligne de commande à coller dans son propre terminal (mode dégradé) : se placer dans `dossier`, retirer les variables
- * interdites présentes, poser celles de la session, lancer `claude` (ou la commande trouvée) avec ses arguments. Chaque valeur
- * entre apostrophes (POSIX ou PowerShell, comme la déclaration MCP du jalon 3).
+ * interdites présentes, poser celles de la session, lancer la commande trouvée du moteur (introuvable : `parDefaut`) avec ses
+ * arguments. Chaque valeur entre apostrophes (POSIX ou PowerShell, comme la déclaration MCP du jalon 3).
  */
 export function ligneManuelle(
-	claude: { commande: string; avant: string[] } | null,
+	lanceur: CommandeMoteur | null,
 	args: string[],
 	dossier: string,
 	ajouts: Record<string, string>,
 	retirees: string[],
 	plateforme: string,
+	parDefaut = 'claude',
 ): string {
 	const variables = Object.entries(ajouts).filter(([cle]) => NOM_DE_VARIABLE.test(cle));
 	const sans = retirees.filter((cle) => NOM_DE_VARIABLE.test(cle));
 	if (plateforme === 'win32') {
-		const commande = claude === null ? 'claude' : citerPowerShell(claude.commande);
+		const commande = lanceur === null ? parDefaut : citerPowerShell(lanceur.commande);
 		const morceaux = [`Set-Location -LiteralPath ${citerPowerShell(dossier)}`];
 		for (const cle of sans) morceaux.push(`Remove-Item -ErrorAction SilentlyContinue Env:${cle}`);
 		for (const [cle, valeur] of variables) morceaux.push(`$env:${cle} = ${citerPowerShell(valeur)}`);
-		morceaux.push(`& ${commande} ${[...(claude?.avant ?? []), ...args].map(citerPowerShell).join(' ')}`);
+		morceaux.push(`& ${commande} ${[...(lanceur?.avant ?? []), ...args].map(citerPowerShell).join(' ')}`);
 		return morceaux.join('; ');
 	}
-	const commande = claude === null ? 'claude' : citerPosix(claude.commande);
+	const commande = lanceur === null ? parDefaut : citerPosix(lanceur.commande);
 	const env = sans.length > 0 ? `env ${sans.map((cle) => `-u ${cle}`).join(' ')} ` : '';
 	const affectations = variables.map(([cle, valeur]) => `${cle}=${citerPosix(valeur)} `).join('');
-	return `cd ${citerPosix(dossier)} && ${env}${affectations}${commande} ${[...(claude?.avant ?? []), ...args].map(citerPosix).join(' ')}`;
+	return `cd ${citerPosix(dossier)} && ${env}${affectations}${commande} ${[...(lanceur?.avant ?? []), ...args].map(citerPosix).join(' ')}`;
 }
 
 /** Champs modifiables d'une session. */
 type Champs = Parameters<Pilotage['etat']['modifier']>[1];
 
 /**
- * Le pilote tient les terminaux des sessions de ce service : lancement (plugin assemblé, `claude` dans un pseudo-terminal),
- * pause, reprise (`--resume`), relance au démarrage, arrêt de tout. Une session n'a jamais deux `claude` : un terminal tenu,
+ * Le pilote tient les terminaux des sessions de ce service : lancement (fichiers de session écrits, le moteur de la session dans
+ * un pseudo-terminal), pause, reprise, relance au démarrage, arrêt de tout. Une session n'a jamais deux processus : un terminal tenu,
  * un lancement en cours, ou un `pid` enregistré vivant et lancé pour elle (processus d'un autre service, jamais signalé)
  * bloquent la reprise. Un pid enregistré mort peut laisser des restes dans son groupe (plantage du service) : ceux qui sont
  * prouvés (nés pendant sa vie, d'après sa trace et son battement) sont tués avant toute relance. `battementMs` : tests.
@@ -169,7 +169,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	};
 	/**
 	 * Faut-il Échap avant d'écrire ? Seulement si un dialogue est ouvert d'après l'état ET qu'un hook a fait avancer `majMs`
-	 * depuis la dernière écriture du pilote (Échap ou ligne) : deux Échap de suite ouvrent le retour arrière de Claude Code.
+	 * depuis la dernière écriture du pilote (Échap ou ligne) : deux Échap de suite ouvrent le retour arrière (Claude Code).
 	 * Seul endroit où cette décision est prise (le terminal n'envoie Échap que sur demande).
 	 */
 	const echapNecessaire = (v: Vivant, s: Session | null): s is Session =>
@@ -306,39 +306,42 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		return d.absolu;
 	};
 
-	/**
-	 * Assemble et écrit le plugin, puis lance `claude` dans un terminal ; sans terminal possible (mode dégradé, `claude`
-	 * introuvable, lancement en échec), rend la ligne de commande à coller. Lève si le plugin ou le dossier font défaut.
-	 */
-	const lancePossible = (): boolean => pil.plugin.claude !== null && pil.terminaux.disponibles().ok;
+	/** Le moteur de la session (Claude Code pour une session d'avant les moteurs) ; null : inconnu de ce service. */
+	const moteurDe = (session: Pick<Session, 'moteur'>): MoteurDuService | null => pil.moteurs[session.moteur ?? MOTEUR_PAR_DEFAUT] ?? null;
 
-	/** Plugin écrit, arguments, environnement et dossier de `claude` pour cette session ; `manuel` : la même chose en une ligne à coller. */
-	const preparer = async (session: Session, mode: 'nouvelle' | 'reprise', objectif?: string) => {
+	const lancePossible = (moteur: IdMoteur = MOTEUR_PAR_DEFAUT): boolean => (pil.moteurs[moteur]?.commande ?? null) !== null && pil.terminaux.disponibles().ok;
+
+	/**
+	 * Fichiers de session écrits, arguments, environnement et dossier du moteur pour cette session ; `manuel` : la même chose en
+	 * une ligne à coller. Lève si les fichiers, le dossier ou le moteur font défaut.
+	 */
+	const preparer = async (session: Session, mode: ModeLancement, objectif?: string) => {
+		const duService = moteurDe(session);
+		if (duService === null) throw new Error(`Moteur inconnu de ce service : « ${session.moteur} ».`);
+		const { moteur, commande } = duService;
 		const profil = await chargerProfil(dep, session.profil);
-		const plugin = await pil.plugin.ecrire(session.id, await assemblerPlugin(dep, session, profil, pil.plugin.appel));
-		const args = [...argumentsClaude(session, profil, { plugin, racine: pil.plugin.racine }, mode, objectif), ...(mode === 'reprise' ? premierMessage(objectif) : [])];
-		const env = environnementClaude(pil.hote.env, session, pil.plugin.racine);
+		const dossierFichiers = await pil.plugin.ecrire(session.id, await moteur.fichiersDeSession(dep, session, profil, pil.plugin.appel));
+		const lancement = moteur.preparer({ session, profil, mode, ...(objectif === undefined ? {} : { objectif }), dossierFichiers, racine: pil.plugin.racine, env: pil.hote.env });
 		const dossier = await dossierDe(session);
-		const manuel = (): { manuel: string } => {
-			const ajouts = environnementClaude({}, session, pil.plugin.racine);
-			const retirees = Object.keys(pil.hote.env).filter((cle) => pil.hote.env[cle] !== undefined && estInterdite(cle.toUpperCase()));
-			return { manuel: ligneManuelle(pil.plugin.claude, args, dossier, ajouts, retirees, pil.hote.plateforme) };
-		};
-		return { args, env, dossier, manuel };
+		const manuel = (): { manuel: string } => ({ manuel: ligneManuelle(commande, lancement.args, dossier, lancement.ajouts, lancement.retirees, pil.hote.plateforme, moteur.commandeParDefaut) });
+		return { moteur, commande, args: lancement.args, env: lancement.env, dossier, manuel };
 	};
 
-	const demarrer = async (session: Session, mode: 'nouvelle' | 'reprise', objectif?: string): Promise<{ manuel: string } | { terminal: Terminal }> => {
-		const { args, env, dossier, manuel } = await preparer(session, mode, objectif);
-		const claude = pil.plugin.claude;
-		if (claude === null || !pil.terminaux.disponibles().ok) return manuel();
+	/**
+	 * Prépare la session, puis lance son moteur dans un terminal ; sans terminal possible (mode dégradé, commande du moteur
+	 * introuvable, lancement en échec), rend la ligne de commande à coller.
+	 */
+	const demarrer = async (session: Session, mode: ModeLancement, objectif?: string): Promise<{ manuel: string } | { terminal: Terminal }> => {
+		const { moteur, commande, args, env, dossier, manuel } = await preparer(session, mode, objectif);
+		if (commande === null || !pil.terminaux.disponibles().ok) return manuel();
 		let terminal: Terminal;
 		const lanceMs = Date.now();
 		try {
-			terminal = pil.terminaux.lancer({ commande: claude.commande, args: [...claude.avant, ...args], dossier, env, colonnes: COLONNES, lignes: LIGNES });
+			terminal = pil.terminaux.lancer({ commande: commande.commande, args: [...commande.avant, ...args], dossier, env, colonnes: COLONNES, lignes: LIGNES, touches: moteur.touches });
 		} catch {
 			return manuel();
 		}
-		const vivant: Vivant = { terminal, tampon: tamponCirculaire(CAPACITE_TAMPON), abonnes: new Set(), fini: Promise.resolve(), ecritMajMs: null, arret: false };
+		const vivant: Vivant = { terminal, moteur, tampon: tamponCirculaire(CAPACITE_TAMPON), abonnes: new Set(), fini: Promise.resolve(), ecritMajMs: null, arret: false };
 		terminal.surSortie((d) => {
 			vivant.tampon.ajouter(d);
 			for (const f of vivant.abonnes) {
@@ -414,8 +417,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	const reprendreSession = async (id: string): Promise<Session | null> => {
 		const s = await pil.etat.lire(id);
 		if (s === null || s.etat === 'terminee') return s;
-		const claude = pil.plugin.claude;
-		if (claude === null || !pil.terminaux.disponibles().ok) return s;
+		if ((moteurDe(s)?.commande ?? null) === null || !pil.terminaux.disponibles().ok) return s;
 		if ((await verifierPid(s)) === 'ailleurs') return pil.etat.lire(id);
 		// un bilan d'avant (interrompu par une pause) est oublié : seul `reprendreAuDemarrage` en redemande un
 		const prete = await modifier(id, { arretAttendu: null, etat: 'attend', bilanDemandeMs: null, bilanLuMs: null });
@@ -469,6 +471,8 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			commitDebut: null,
 			branche: null,
 			pid: null,
+			moteur: MOTEUR_PAR_DEFAUT,
+			modele: '',
 		};
 		const liberer = marquer(session.id);
 		try {
@@ -536,16 +540,17 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			if (!toujours(id, v)) return;
 			let s = await pil.etat.lire(id).catch(() => null);
 			if (echapNecessaire(v, s)) {
+				const { echap, pauseApresEchapMs, attenteApresEchapMs } = v.moteur.touches;
 				v.ecritMajMs = s.majMs;
-				v.terminal.ecrire('\x1b');
-				await new Promise((r) => setTimeout(r, PAUSE_APRES_ECHAP_MS));
-				await attendreEtat(id, (apres) => !dialogueOuvert(apres), ATTENTE_STOP_APRES_ECHAP_MS - PAUSE_APRES_ECHAP_MS);
+				v.terminal.ecrire(echap);
+				await new Promise((r) => setTimeout(r, pauseApresEchapMs));
+				await attendreEtat(id, (apres) => !dialogueOuvert(apres), attenteApresEchapMs - pauseApresEchapMs);
 				if (!toujours(id, v)) return;
 				s = (await pil.etat.lire(id).catch(() => null)) ?? s;
 			}
 			// la ligne n'est vue par l'état qu'à son hook `message` : d'ici là, le dialogue qu'il montre encore est périmé
 			if (s !== null) v.ecritMajMs = s.majMs;
-			v.terminal.ecrire(`${ligne}\r`);
+			v.terminal.ecrire(`${ligne}${v.moteur.touches.entree}`);
 		});
 	};
 
@@ -731,8 +736,9 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		lancePossible,
 		async reecrirePlugin(id) {
 			const session = await pil.etat.lire(id);
-			if (session === null) return;
-			await pil.plugin.ecrire(id, await assemblerPlugin(dep, session, await chargerProfil(dep, session.profil), pil.plugin.appel));
+			const moteur = session === null ? null : moteurDe(session);
+			if (session === null || moteur === null) return;
+			await pil.plugin.ecrire(id, await moteur.moteur.fichiersDeSession(dep, session, await chargerProfil(dep, session.profil), pil.plugin.appel));
 		},
 
 		async ligneDeReprise(id, consigne) {

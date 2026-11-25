@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { fenetreDeTranscription } from '../../src/infra/fenetre-transcription.ts';
+import { fenetreDeTranscription } from '../../src/infra/moteurs/claude-code/fenetre-transcription.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
 const reponse = (tokens: number): string => JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: tokens } } });

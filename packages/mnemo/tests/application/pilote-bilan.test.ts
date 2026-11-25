@@ -18,6 +18,7 @@ import { DEPOT_ABSENT, fauxPorts } from '../aides/faux-ports.ts';
 import { fauxTerminaux } from '../aides/faux-terminaux.ts';
 import type { FauxTerminaux } from '../aides/faux-terminaux.ts';
 import { git } from '../aides/git.ts';
+import { commandeClaude, moteursDeTest } from '../aides/moteurs.ts';
 
 const RACINE = '/racine';
 const FAUX_CLAUDE = resolve(import.meta.dirname, '../aides/faux-claude.mjs');
@@ -82,7 +83,7 @@ async function contexte(sessions: Session[] = []): Promise<Contexte> {
 		etat,
 		terminaux,
 		depot: DEPOT_ABSENT,
-		plugin: { ecrire: async (s) => `${RACINE}/.mnemo/plugins/${s}`, retirer: async () => {}, appel: { node: '/usr/bin/node', main: '/main.ts', version: '0.0.0-essai' }, claude: { commande: '/usr/bin/node', avant: ['/faux.mjs'] }, racine: RACINE },
+		plugin: { ecrire: async (s) => `${RACINE}/.mnemo/plugins/${s}`, retirer: async () => {}, appel: { node: '/usr/bin/node', main: '/main.ts', version: '0.0.0-essai' }, racine: RACINE }, moteurs: moteursDeTest({ commande: '/usr/bin/node', avant: ['/faux.mjs'] }),
 		hote: {
 			env: {},
 			plateforme: 'darwin',
@@ -517,7 +518,7 @@ async function dossierMnemo(): Promise<string> {
 /** Pilote réel : faux-claude sous un vrai pseudo-terminal, vrais hooks `mnemo hook` (sans service), script de bilan. */
 async function piloteReel(racine: string): Promise<{ pilote: Pilote; pil: Pilotage; dep: Dependances }> {
 	const pil = await pilotageReel(racine, { env: { ...process.env, FAUX_CLAUDE_BILAN: SCRIPT_BILAN }, terminaux });
-	pil.plugin.claude = { commande: process.execPath, avant: [FAUX_CLAUDE] };
+	commandeClaude(pil, { commande: process.execPath, avant: [FAUX_CLAUDE] });
 	ouverts.push(pil.etat);
 	const dep = dependancesReelles(racine);
 	deps.push(dep);

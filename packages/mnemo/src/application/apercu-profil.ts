@@ -5,7 +5,7 @@ import { skillPourProjet } from '../domaine/profil.ts';
 import type { EvenementHook } from '../domaine/session.ts';
 import { INSTRUCTIONS_SESSION } from './consignes-par-defaut.ts';
 import { texteDuBilan } from './episode.ts';
-import { enabledPluginsDe } from './plugin.ts';
+import { enabledPluginsDe } from './moteurs/claude-code/plugin.ts';
 import type { Dependances } from './ports.ts';
 import { chargerProfil, dossierSkillsDuProfil } from './profil.ts';
 

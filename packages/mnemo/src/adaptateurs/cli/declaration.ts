@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import type { SortieDeclarer } from '@mnemo/contrat';
-import { trouverClaude } from '../../infra/claude.ts';
-import type { CommandeClaude } from '../../infra/claude.ts';
+import type { CommandeMoteur } from '../../application/ports.ts';
+import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
 import { redeclarerServeurMcp, retirerServeurMcp, type Executer } from './declarer.ts';
 import { ErreurCli } from './erreurs.ts';
 import { executeurReel } from './executeur.ts';
@@ -13,7 +13,7 @@ const USAGE = `Usage : mnemo declarer (--remplacer | --retirer) [--json]
 const MAIN = fileURLToPath(new URL('./main.ts', import.meta.url));
 
 /** Ce que lit la commande ; remplaçable (tests : aucun vrai `claude`). */
-export type DependancesDeclarer = { executer: Executer; claude: () => CommandeClaude | null; main: string };
+export type DependancesDeclarer = { executer: Executer; claude: () => CommandeMoteur | null; main: string };
 
 const MESSAGES: Record<Exclude<SortieDeclarer['resultat'], 'echec'>, string> = {
 	absent: 'Aucune déclaration MCP « mnemo » : rien à faire.',

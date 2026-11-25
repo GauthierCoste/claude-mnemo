@@ -6,6 +6,9 @@ import { positionDeSession, positionNotee } from './dossiers-non-rattaches.ts';
 import type { Position } from './position.ts';
 import { raisonDeMutisme } from '../domaine/message-muet.ts';
 import { ficheTouchee } from '../domaine/outil-de-session.ts';
+import { MOTEUR_PAR_DEFAUT } from '../domaine/moteurs/moteur.ts';
+import type { IdMoteur } from '../domaine/moteurs/moteur.ts';
+import { outilsDuMoteur } from '../domaine/moteurs/outils.ts';
 import { BUDGET_HOOK_MS } from './chercher.ts';
 import type { FichesDemandees } from './fiches-demandees.ts';
 import { cartesDuJournal, dejaLuesDe } from './cartes.ts';
@@ -17,8 +20,8 @@ import type { AccordNonVerifie } from '../domaine/refus-outil.ts';
 import type { ActionNonLue, ActionOutil, Verdict } from '../domaine/regles-verifiees.ts';
 
 /**
- * Un événement de hook Claude Code, traduit : `session` (uuid de la session, « » si inconnue), `horodatageMs` (instant de
- * l'événement : un plus ancien que le dernier appliqué ne change pas l'état), `cwd` (dossier courant de Claude Code, absolu),
+ * Un événement de hook du moteur, traduit : `session` (uuid de la session, « » si inconnue), `horodatageMs` (instant de
+ * l'événement : un plus ancien que le dernier appliqué ne change pas l'état), `cwd` (dossier courant du moteur, absolu),
  * `prompt` (`message`), `outil` (`outil` : nom et entrée de l'outil), `arret` (`arret` : `Stop` ou `Notification` ; `stop`
  * par défaut), `sansContexte` (`debut`, `message` d'un profil qui ne les demande pas : l'état seulement, rien de servi).
  */
@@ -33,6 +36,8 @@ export type EntreeHook = {
 	sansContexte?: boolean;
 	/** `SessionStart` : `clear` et `compact` vident le contexte de Claude, les fiches injectées redeviennent à servir. */
 	source?: SourceDeDebut;
+	/** Moteur qui a lancé le hook, dont les outils sont lus ; absent : Claude Code. */
+	moteur?: IdMoteur;
 };
 
 /**
@@ -154,8 +159,10 @@ async function verifierOutil(dep: Dependances, pil: Pick<Pilotage, 'etat'>, sess
 	const verdict = await avantEcheance<Verdict | AccordNonVerifie>(
 		(async () => {
 			try {
+				const outils = outilsDuMoteur(entree.moteur ?? MOTEUR_PAR_DEFAUT);
+				if (outils === null) throw new Error(`Moteur sans implémentation : « ${entree.moteur} ».`);
 				const position = await positionDe(dep, pil, session, entree, reglages, true);
-				return await verifierAction(dep, position, action, { racine, cwd: entree.cwd ?? racine, sansCasse: reglages.sansCasse ?? false });
+				return await verifierAction(dep, position, action, { racine, cwd: entree.cwd ?? racine, sansCasse: reglages.sansCasse ?? false, outils });
 			} catch (erreur) {
 				return selonIndicateur(refusSurErreur(erreur), indicateur);
 			}
@@ -270,7 +277,8 @@ async function servirEvenement(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 /** La fiche lue est notée avec son empreinte du moment (elle ne sera plus tenue pour vue si elle change) ; une écriture n'en note pas. */
 async function noterFicheTouchee(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session: Session, entree: EntreeHook): Promise<void> {
 	const appel = entree.outil !== undefined && 'nom' in entree.outil ? entree.outil : null;
-	const touchee = appel === null ? null : ficheTouchee(appel);
+	const outils = outilsDuMoteur(entree.moteur ?? MOTEUR_PAR_DEFAUT);
+	const touchee = appel === null || outils === null ? null : ficheTouchee(appel, outils);
 	if (touchee === null) return;
 	const empreinte = touchee.action === 'lue' ? ((await dep.index.fiches().catch(() => [])).find((f) => f.chemin === touchee.chemin)?.empreinte ?? null) : null;
 	await pil.etat.noterFicheServieLueOuEcrite(session.id, { chemin: touchee.chemin, action: touchee.action, horodatageMs: entree.horodatageMs, empreinte }).catch(() => {});

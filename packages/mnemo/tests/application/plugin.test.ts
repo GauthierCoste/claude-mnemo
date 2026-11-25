@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { argumentsClaude, assemblerPlugin, enabledPluginsDe, environnementClaude } from '../../src/application/plugin.ts';
+import { argumentsClaude, assemblerPlugin, enabledPluginsDe, environnementClaude } from '../../src/application/moteurs/claude-code/plugin.ts';
 import type { PluginInstalle } from '../../src/application/ports.ts';
-import type { FichierPlugin } from '../../src/application/plugin.ts';
+import type { FichierPlugin } from '../../src/application/ports.ts';
 import { empreinte } from '../../src/domaine/empreinte.ts';
 import { ANCIENNES_SKILLS, chargerProfil, cheminDeProfil, CONSIGNE_ARCHIVISTE_PAR_DEFAUT, CONSIGNE_TRAVAIL_PAR_DEFAUT, SKILLS_PAR_DEFAUT } from '../../src/application/profil.ts';
 import { PROFILS_PAR_DEFAUT } from '../../src/domaine/profil.ts';

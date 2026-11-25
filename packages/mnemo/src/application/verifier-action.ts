@@ -4,7 +4,7 @@ import { lireFiche } from '../domaine/fiche.ts';
 import { refusSurErreur, selonIndicateur } from '../domaine/refus-outil.ts';
 import type { AccordNonVerifie } from '../domaine/refus-outil.ts';
 import { verifier } from '../domaine/regles-verifiees.ts';
-import type { ActionNonLue, ActionOutil, Verdict } from '../domaine/regles-verifiees.ts';
+import type { ActionNonLue, ActionOutil, ContexteVerification, Verdict } from '../domaine/regles-verifiees.ts';
 import type { Dependances } from './ports.ts';
 import type { Position } from './position.ts';
 import { consignesVerifiees } from './servir.ts';
@@ -13,7 +13,7 @@ import { consignesVerifiees } from './servir.ts';
  * Consignes choisies dans l'index sans le synchroniser, règles relues dans leurs fiches : une fiche retirée
  * ou passée à un autre niveau depuis ne compte plus ; une fiche illisible se refuse, sa règle étant inconnue.
  */
-export async function verifierAction(dep: Dependances, position: Position, action: ActionOutil | ActionNonLue, contexte: { racine: string; cwd: string; sansCasse: boolean }): Promise<Verdict | AccordNonVerifie> {
+export async function verifierAction(dep: Dependances, position: Position, action: ActionOutil | ActionNonLue, contexte: ContexteVerification): Promise<Verdict | AccordNonVerifie> {
 	let elements: Awaited<ReturnType<typeof consignesVerifiees>>;
 	try {
 		elements = await consignesVerifiees(dep, position);

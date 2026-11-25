@@ -1,9 +1,7 @@
 import { accessSync, constants, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { variable } from './environnement.ts';
-
-export { ecrirePlugin, retirerPlugin } from './plugin-fichiers.ts';
-
+import type { CommandeMoteur } from '../../../application/ports.ts';
+import { variable } from '../../environnement.ts';
 
 function estFichier(chemin: string): boolean {
 	try {
@@ -24,8 +22,6 @@ function estExecutable(chemin: string, plateforme: NodeJS.Platform): boolean {
 	}
 }
 
-export type CommandeClaude = { commande: string; avant: string[] };
-
 const SHIM = /\.(?:cmd|bat)$/iu;
 
 /** Cibles citées par un shim npm : `"%dp0%\chemin\cli.js"` (ou `%~dp0`), chemins relatifs au dossier du shim. */
@@ -38,7 +34,7 @@ function ciblesDuShim(texte: string): string[] {
  * courant, un exécutable natif directement (jamais `node.exe`, l'interpréteur du shim) ; à défaut le `cli.js` du paquet
  * `@anthropic-ai/claude-code` à côté du shim. Rien de trouvé : null (mode dégradé, ligne de commande manuelle).
  */
-function cibleDuShim(shim: string): CommandeClaude | null {
+function cibleDuShim(shim: string): CommandeMoteur | null {
 	const dossier = dirname(shim);
 	let texte = '';
 	try {
@@ -83,7 +79,7 @@ function dossiersDuPath(env: NodeJS.ProcessEnv, plateforme: NodeJS.Platform): st
  * Windows : `claude.exe` d'abord, dans tout le PATH ; puis les autres extensions de `PATHEXT`, un `.cmd`/`.bat` étant
  * remplacé par sa cible (`cibleDuShim`). Introuvable : null.
  */
-export function trouverClaude(env: NodeJS.ProcessEnv, plateforme: NodeJS.Platform): CommandeClaude | null {
+export function trouverClaude(env: NodeJS.ProcessEnv, plateforme: NodeJS.Platform): CommandeMoteur | null {
 	const force = env.MNEMO_CLAUDE;
 	if (force !== undefined && force !== '') {
 		if (!estFichier(force)) return null;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { memesQuotas, quotasDeLimites } from '../../src/domaine/quotas.ts';
+import { quotasDeLimites } from '../../src/domaine/moteurs/claude-code/quotas.ts';
+import { memesQuotas } from '../../src/domaine/quotas.ts';
 
 describe('quotasDeLimites', () => {
 	it('lit les deux fenêtres : pourcentage arrondi, remise en millisecondes', () => {

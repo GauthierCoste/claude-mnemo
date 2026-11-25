@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { initialiser } from '../../src/application/initialiser.ts';
 import { servirQuestion } from '../aides/servir.ts';
 import { ECHEANCES_MS } from '../../src/adaptateurs/cli/hook.ts';
-import { assemblerPlugin } from '../../src/application/plugin.ts';
+import { assemblerPlugin } from '../../src/application/moteurs/claude-code/plugin.ts';
 import { EVENEMENTS_HOOK, PROFILS_PAR_DEFAUT } from '../../src/domaine/profil.ts';
 import { refusSurErreur, reponseDe, texteDuRefus } from '../../src/domaine/refus-outil.ts';
 import { FICHIER_CONSIGNES_VERIFIEES } from '../../src/infra/indicateur-consignes.ts';
@@ -527,6 +527,24 @@ describe('mnemo hook (avec le service)', () => {
 			expect.objectContaining({ evenement: 'arret', arret: 'stop' }),
 			expect.objectContaining({ evenement: 'message', sansContexte: true }),
 		]);
+	});
+
+	it('--moteur : Claude Code par défaut ou nommé, transmis au service ; moteur inconnu ou sans implémentation : rien', async () => {
+		const racine = await dossierMnemo();
+		const { requetes } = await fauxService(racine, () => ({}));
+		await hook(racine, 'arret', JSON.stringify({ session_id: ID, cwd: racine }), { MNEMO_RACINE: racine });
+		await hook(racine, 'arret --moteur claude-code --notification', JSON.stringify({ session_id: ID, cwd: racine }), { MNEMO_RACINE: racine });
+		expect(requetes.map((q) => JSON.parse(q.corps) as Record<string, unknown>)).toEqual([
+			expect.objectContaining({ evenement: 'arret', arret: 'stop', moteur: 'claude-code' }),
+			expect.objectContaining({ evenement: 'arret', arret: 'notification', moteur: 'claude-code' }),
+		]);
+		for (const args of ['arret --moteur codex', 'arret --moteur gemini', 'arret --moteur', 'arret --moteur claude-code --moteur claude-code']) {
+			const r = await hook(racine, args, JSON.stringify({ session_id: ID, cwd: racine }), { MNEMO_RACINE: racine });
+			expect(r.code, args).toBe(0);
+			expect(r.out, args).toBe('');
+		}
+		expect((await hook(racine, 'arret --moteur codex', '{}', { MNEMO_RACINE: racine })).err).toMatch(/moteur inconnu « codex »/u);
+		expect(requetes).toHaveLength(2);
 	});
 
 	it('service : la transcription (pour la jauge), la source de SessionStart et PostToolUse (apres_outil) lui sont transmis', async () => {

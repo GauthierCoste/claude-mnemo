@@ -1,4 +1,4 @@
-import type { CommandeClaude } from '../../infra/claude.ts';
+import type { CommandeMoteur } from '../../application/ports.ts';
 import { nodeDurable } from '../../infra/node-durable.ts';
 
 /**
@@ -63,7 +63,7 @@ function raisonCourte(texte: string): string {
 export async function declarerServeurMcp(
 	executer: Executer,
 	cheminMain: string,
-	claude: CommandeClaude | null,
+	claude: CommandeMoteur | null,
 	plateforme: string = process.platform,
 ): Promise<ResultatDeclaration> {
 	const node = nodeDurable(plateforme as NodeJS.Platform);
@@ -120,7 +120,7 @@ const echecDe = (erreur: unknown): { echec: string } => {
  * mise à jour de Node ou un déplacement de Mnemo) : rien n'est déclaré quand il n'y en a pas, et une déclaration `mnemo`
  * qui ne lance pas Mnemo, ou d'une autre portée, n'est jamais touchée.
  */
-export async function redeclarerServeurMcp(executer: Executer, cheminMain: string, claude: CommandeClaude | null, plateforme: string = process.platform): Promise<ResultatRedeclaration> {
+export async function redeclarerServeurMcp(executer: Executer, cheminMain: string, claude: CommandeMoteur | null, plateforme: string = process.platform): Promise<ResultatRedeclaration> {
 	if (claude === null) return { echec: '`claude` introuvable (PATH, ou MNEMO_CLAUDE).' };
 	const node = nodeDurable(plateforme as NodeJS.Platform);
 	const lancer = (args: string[]) => executer(claude.commande, [...claude.avant, ...args]);
@@ -140,7 +140,7 @@ export async function redeclarerServeurMcp(executer: Executer, cheminMain: strin
 }
 
 /** Retire la déclaration de Mnemo (portée utilisateur) seulement si elle lance ce Node et ce `main.ts`. */
-export async function retirerServeurMcp(executer: Executer, cheminMain: string, claude: CommandeClaude | null, plateforme: string = process.platform): Promise<ResultatRetraitMcp> {
+export async function retirerServeurMcp(executer: Executer, cheminMain: string, claude: CommandeMoteur | null, plateforme: string = process.platform): Promise<ResultatRetraitMcp> {
 	if (claude === null) return { echec: '`claude` introuvable (PATH, ou MNEMO_CLAUDE).' };
 	const node = nodeDurable(plateforme as NodeJS.Platform);
 	const lancer = (args: string[]) => executer(claude.commande, [...claude.avant, ...args]);

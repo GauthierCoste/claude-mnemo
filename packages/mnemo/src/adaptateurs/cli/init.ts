@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import type { EtapeInit, MotifEchecInit } from '@mnemo/contrat';
 import { initialiser } from '../../application/initialiser.ts';
 import type { ResultatInitialisation } from '../../application/initialiser.ts';
-import { trouverClaude } from '../../infra/claude.ts';
+import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
 import { commandeAJour, dossierDeCommande } from '../../infra/commande-mnemo.ts';
 import type { Piece } from '../../infra/modeles/catalogue.ts';
 import { dependancesReelles } from '../../infra/systeme.ts';

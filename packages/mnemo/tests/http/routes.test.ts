@@ -10,7 +10,7 @@ import { PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { texteDuRefus } from '../../src/domaine/refus-outil.ts';
-import { ecrirePlugin } from '../../src/infra/claude.ts';
+import { ecrirePlugin } from '../../src/infra/plugin-fichiers.ts';
 import { appeler, jusqua, serviceFaux } from '../aides/service-faux.ts';
 import { traiterEvenement } from '../../src/application/evenements.ts';
 import { DEPOT_ABSENT } from '../aides/faux-ports.ts';

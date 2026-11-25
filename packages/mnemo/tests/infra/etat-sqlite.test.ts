@@ -315,6 +315,35 @@ describe('etat.sqlite', () => {
 		expect(await etat.derniereModificationMs()).toBe(avant);
 	});
 
+	it('moteur et modèle : enregistrés tels quels ; absents, ils le restent (session d’avant les moteurs)', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('m', { moteur: 'claude-code', modele: '' }));
+		await etat.creer(session('n'));
+		expect(await etat.lire('m')).toMatchObject({ moteur: 'claude-code', modele: '' });
+		expect(await etat.lire('n')).not.toHaveProperty('moteur');
+		expect(await etat.lire('n')).not.toHaveProperty('modele');
+	});
+
+	it('migre la version 11 (sans moteur ni modèle) vers la dernière sans rien perdre', async () => {
+		const { etat, chemin } = await ouvrir();
+		await etat.creer(session('s1', { pid: 4 }));
+		etat.fermer();
+		ouverts.pop();
+		const base = new DatabaseSync(chemin);
+		for (const colonne of ['moteur', 'modele']) base.exec(`ALTER TABLE sessions DROP COLUMN ${colonne}`);
+		base.exec('PRAGMA user_version = 11');
+		base.close();
+		const rouvert = ouvrirEtat(chemin);
+		ouverts.push(rouvert);
+		expect(await rouvert.lire('s1')).toMatchObject({ pid: 4 });
+		expect(await rouvert.lire('s1')).not.toHaveProperty('moteur');
+		await rouvert.creer(session('s2', { moteur: 'claude-code', modele: '' }));
+		expect(await rouvert.lire('s2')).toMatchObject({ moteur: 'claude-code', modele: '' });
+		const verif = new DatabaseSync(chemin);
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
+		verif.close();
+	});
+
 	it('migre la version 1 (sans trace) vers la dernière sans rien perdre', async () => {
 		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('s1', { pid: 4 }));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fenetreDeContexte } from '../../src/domaine/fenetre-contexte.ts';
+import { fenetreDeContexte } from '../../src/domaine/moteurs/claude-code/fenetre-contexte.ts';
 
 const reponse = (tokens: number): string => JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: tokens } } });
 
