@@ -40,7 +40,7 @@ Commandes :
   declarer          déclaration MCP existante (Codex : et ses hooks) : --remplacer (sur ce Node et ce Mnemo) | --retirer
                     [--moteur claude-code|codex] (claude-code par défaut) [--json]
   mcp               serveur MCP pour Claude Code et Codex (stdio)
-  hook <événement>  hook de session Claude Code (debut, message, outil, arret, fin), entrée JSON sur stdin
+  hook <événement>  hook de session (debut, message, outil, apres_outil, arret, fin) [--moteur claude-code|codex], entrée JSON sur stdin
   ligne-etat        ligne d'état des sessions Mnemo : transmet les quotas du compte au service, entrée JSON sur stdin
   sessions          sessions en cours (service lancé)
   session <action>  lancer <dossier> [--profil p] [--objectif t] | terminer <id> [--sans-bilan] | voir <id>

@@ -48,7 +48,7 @@ function sessionMnemo(env: Record<string, string | undefined>): string | null {
 
 /**
  * Sortie de Codex pour la réponse, ou « » : `hookSpecificOutput.additionalContext` (`debut`, `message`, `apres_outil`) ; pour
- * `outil`, `permissionDecision: "deny"` et sa raison, que le modèle rapporte (lot 0). Pas de `systemMessage` : Codex ne le
+ * `outil`, `permissionDecision: "deny"` et sa raison, que le modèle rapporte (mesuré). Pas de `systemMessage` : Codex ne le
  * documente pas pour `PreToolUse`.
  */
 function sortieDe(evenement: EvenementHook, reponse: ReponseHook): string {
@@ -64,7 +64,7 @@ function sortieDe(evenement: EvenementHook, reponse: ReponseHook): string {
 }
 
 /**
- * Entrée de Codex traduite (lot 0 : `session_id`, `transcript_path`, `cwd`, `hook_event_name`, puis `source`, `prompt`,
+ * Entrée de Codex traduite (mesurée : `session_id`, `transcript_path`, `cwd`, `hook_event_name`, puis `source`, `prompt`,
  * `tool_name`, `tool_input`, `reason`…). Session : `MNEMO_SESSION` seulement — le `session_id` de Codex est son propre
  * identifiant (`fil`), jamais celui de la session Mnemo. Null hors d'une session Mnemo, pour un hook que le profil de la
  * session ne demande pas (`MNEMO_HOOKS` : `outil`, `apres_outil` ; `debut` et `message` y passent sans contexte), pour un

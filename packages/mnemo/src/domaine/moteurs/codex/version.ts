@@ -1,4 +1,4 @@
-/** Plus ancienne version de Codex mesurée avec Mnemo (lot 0 et lot 5 : 0.171.0-alpha.13). */
+/** Plus ancienne version de Codex mesurée avec Mnemo (0.171.0-alpha.13). */
 export const VERSION_MIN_CODEX = '0.171.0';
 
 /** Version lue dans la sortie de `codex --version` (« codex-cli 0.171.0-alpha.13 ») ; null si elle est illisible. */

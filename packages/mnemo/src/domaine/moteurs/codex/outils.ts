@@ -3,15 +3,16 @@ import type { ActionOutil } from '../../regles-verifiees.ts';
 import type { OutilsDuMoteur } from '../moteur.ts';
 
 /**
- * Outils de commande de Codex, visés par `commandes_interdites` : `Bash` (lot 0) et les noms que Codex donne à son outil shell
- * selon le mode (`shell`, `exec_command`, `local_shell` ; à confirmer par un hook espion au lot 5).
+ * Outils de commande de Codex, visés par `commandes_interdites` : `Bash`, avec `{ command }` en chaîne (mesuré par un hook
+ * espion, même en `unified_exec`) ; `shell`, `exec_command`, `local_shell`, jamais vus, gardés par prudence (d'autres modes
+ * ou versions de Codex peuvent nommer ainsi leur outil shell).
  */
 const OUTILS_COMMANDE = new Set(['Bash', 'shell', 'exec_command', 'local_shell']);
 
 /** Outil d'écriture de Codex : un patch (`*** Begin Patch` …), visé par `chemins_interdits`. */
 const OUTIL_PATCH = 'apply_patch';
 
-/** Outils du serveur MCP `mnemo` chez Codex : `mcp__<serveur>__<outil>`, comme chez Claude Code (lot 0). */
+/** Outils du serveur MCP `mnemo` chez Codex : `mcp__<serveur>__<outil>`, comme chez Claude Code (mesuré). */
 const PREFIXE_MCP = 'mcp__mnemo__';
 
 /** Outils après lesquels Mnemo note ce que Codex a écrit ou lu : un patch, une fiche lue ou écrite par Mnemo. */
@@ -62,7 +63,7 @@ function texteDuPatch(action: ActionOutil): string | null {
 }
 
 /**
- * Outils de Codex tels que ses hooks les nomment (lot 0) : `Bash` avec `{ command }` ; `apply_patch` avec `{ command: "***
+ * Outils de Codex tels que ses hooks les nomment (mesuré) : `Bash` avec `{ command }` ; `apply_patch` avec `{ command: "***
  * Begin Patch\n*** Add File: <chemin>…" }`, dont les en-têtes donnent les chemins écrits ; outils MCP `mcp__mnemo__<outil>`.
  * Un patch introuvable ou sans en-tête lisible est `illisible` (refusé s'il y a des chemins interdits) ; une commande qui
  * passe un patch à `apply_patch` (heredoc) écrit aussi les chemins de ses en-têtes.

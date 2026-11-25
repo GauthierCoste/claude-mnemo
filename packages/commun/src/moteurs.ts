@@ -1,4 +1,4 @@
-/** Agent de code qui fait tourner une session : Claude Code, ou Codex (à venir). */
+/** Agent de code qui fait tourner une session : Claude Code ou Codex. */
 export type IdMoteur = 'claude-code' | 'codex';
 export const IDS_MOTEURS: readonly IdMoteur[] = ['claude-code', 'codex'];
 /** Moteur d'une session ou d'un profil qui n'en dit rien (état, profils et hooks d'avant les moteurs). */

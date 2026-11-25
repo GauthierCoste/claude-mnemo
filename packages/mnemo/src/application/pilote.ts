@@ -650,7 +650,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	 * Surveille un bilan : la session est arrêtée (`fin` → `terminee`) au premier `Stop` qui suit la consigne du bilan soumise
 	 * (`bilanLuMs`, noté par l'état au premier `message` après la demande) : `attend`, dernier événement après `bilanLuMs`. Un
 	 * `arret` sans ce `message` (fin du tour en cours) n'arrête rien. Filet : 10 minutes après la demande, arrêtée quand même
-	 * (épisode minimal si Claude n'a rien écrit). Si elle cesse de tourner, la surveillance s'arrête.
+	 * (épisode minimal si l'agent n'a rien écrit). Si elle cesse de tourner, la surveillance s'arrête.
 	 */
 	const surveillerBilan = (id: string, depuisMs: number): void => {
 		bilans.get(id)?.();
@@ -660,7 +660,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		};
 		bilans.set(id, arreter);
 		void (async () => {
-			// un `Stop` (tour fini) : une `Notification` (Claude demande une permission) ne termine pas le bilan
+			// un `Stop` (tour fini) : une `Notification` ou une `PermissionRequest` (l'agent demande une permission) ne termine pas le bilan
 			const lu = (s: Session) =>
 				s.arretAttendu === 'bilan' && (s.bilanLuMs ?? null) !== null && s.etat === 'attend' && s.dernierArret === 'stop' && s.majMs > s.bilanLuMs!;
 			const vu = await attendreEtat(id, (s) => !actif || lu(s), depuisMs + ATTENTE_ARRET_BILAN_MS - Date.now());
@@ -724,7 +724,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		return vivants.has(id) && !arrete;
 	};
 
-	/** Claude rédige le bilan dans son terminal : une session qu'on ne peut pas faire tourner est rendue sans bilan demandé. */
+	/** L'agent rédige le bilan dans son terminal : une session qu'on ne peut pas faire tourner est rendue sans bilan demandé. */
 	const bilan = async (id: string): Promise<Session | null> => {
 		await enLancement.get(id);
 		const s = await pil.etat.lire(id);

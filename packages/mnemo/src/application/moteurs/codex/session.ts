@@ -20,7 +20,7 @@ export const VARIABLES_INTERDITES_CODEX: readonly string[] = ['CODEX_API_KEY'];
 /**
  * Longueur au plus de la consigne de session (`developer_instructions`, citée) : elle passe en argument de la ligne de
  * commande, que Windows borne à 32 767 caractères en tout. Codex n'a pas de clé qui lise des instructions ajoutées depuis un
- * fichier (`model_instructions_file` remplace les siennes : mesuré au lot 5).
+ * fichier (`model_instructions_file` remplace les siennes : mesuré).
  */
 export const CONSIGNE_MAX = 24_000;
 
@@ -65,7 +65,7 @@ function descriptionDe(skill: SkillDeSession): string {
 
 /**
  * Consigne d'une session Codex (`developer_instructions`) : celle du profil, puis la liste des skills de la session. Codex ne
- * lit de skills que dans le dépôt et chez l'utilisateur (lot 0) : rien n'est écrit dans le dossier du projet, chaque skill
+ * lit de skills que dans le dépôt et chez l'utilisateur : rien n'est écrit dans le dossier du projet, chaque skill
  * est nommée avec sa description et l'identifiant de son `SKILL.md`, lu par l'outil `lire` de Mnemo quand elle s'applique.
  */
 export function consigneCodex(profil: Pick<Profil, 'consigne'>, skills: readonly SkillDeSession[]): string {
