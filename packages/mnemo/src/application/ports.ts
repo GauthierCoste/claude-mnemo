@@ -569,8 +569,11 @@ export type Classe = {
 	servi: boolean;
 	rang: number;
 	p?: number | null;
-	/** `apriori` : absent des entrées écrites avant l'a priori des gestes (lu comme 0). */
-	signaux?: Omit<SignauxBruts, 'apriori'> & { apriori?: number };
+	/**
+	 * `apriori` : absent des entrées écrites avant l'a priori des gestes (lu comme 0) ; `cosinusZ` : absent des entrées écrites
+	 * avant lui ; `logit` (brut, du reranker au hook) : présent seulement pour une candidate qu'il a notée.
+	 */
+	signaux?: Omit<SignauxBruts, 'apriori' | 'cosinusZ'> & { apriori?: number; cosinusZ?: number | null; logit?: number };
 	deja?: DejaDansLaSession;
 	piste?: boolean;
 	raison?: RaisonCarte;

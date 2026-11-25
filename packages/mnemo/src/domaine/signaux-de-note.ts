@@ -6,12 +6,21 @@
 /**
  * Signaux bruts d'une candidate. `cosinus` : similarité de sens du message et de la fiche (null : pas de vecteur, du message ou
  * de la fiche) ; `cosinusRelatif` : ce cosinus moins la médiane des cosinus de toutes les fiches de la mémoire pour ce message ;
+ * `cosinusZ` : sa variante z-score, l'écart du cosinus à la moyenne de ces cosinus rapporté à leur écart-type (le banc choisit
+ * l'une des deux ; null : pas de cosinus, ou des cosinus tous égaux) ;
  * `bm25Relatif` : le bm25 de la fiche rapporté au meilleur de sa liste de mots (0 : les mots ne la trouvent pas ; null : le
  * message n'a pas de mots cherchables) ; `signalSession` : le poids des signaux de la session (voisine d'une fiche injectée à la
  * main), 0 sans signal ; `apriori` : l'a priori des gestes entre sessions (`domaine/apriori-gestes.ts`, en logit, borné à ±1),
  * 0 sans geste ou sans le service qui le tient. Il est journalisé seulement : il ne change ni l'ordre ni les pistes.
  */
-export type SignauxBruts = { cosinus: number | null; cosinusRelatif: number | null; bm25Relatif: number | null; signalSession: number; apriori: number };
+export type SignauxBruts = {
+	cosinus: number | null;
+	cosinusRelatif: number | null;
+	cosinusZ: number | null;
+	bm25Relatif: number | null;
+	signalSession: number;
+	apriori: number;
+};
 
 /** Médiane ; null pour une liste vide. */
 export function mediane(valeurs: readonly number[]): number | null {
@@ -21,20 +30,42 @@ export function mediane(valeurs: readonly number[]): number | null {
 	return triees.length % 2 === 1 ? triees[m]! : (triees[m - 1]! + triees[m]!) / 2;
 }
 
+/** Moyenne et écart-type (de la population) ; null pour une liste vide. */
+export function moyenneEtEcartType(valeurs: readonly number[]): { moyenne: number; ecartType: number } | null {
+	if (valeurs.length === 0) return null;
+	const moyenne = valeurs.reduce((s, v) => s + v, 0) / valeurs.length;
+	const variance = valeurs.reduce((s, v) => s + (v - moyenne) ** 2, 0) / valeurs.length;
+	return { moyenne, ecartType: Math.sqrt(variance) };
+}
+
+/** Ce que les cosinus de toute la mémoire disent d'un message : la médiane (cosinus relatif), la moyenne et l'écart-type (z-score). */
+export type CosinusDuMessage = { parFiche: Map<string, number>; mediane: number | null; moyenne: number | null; ecartType: number | null };
+
 /**
- * Cosinus de chaque fiche (la première similarité vue de chaque chemin : `proches` est rangé du plus proche au moins proche) et
- * leur médiane. bge-m3 tasse les cosinus dans [0,6 ; 1] : seul l'écart à la médiane du message sépare une fiche proche d'une
- * autre d'un message à l'autre.
+ * Cosinus de chaque fiche (la première similarité vue de chaque chemin : `proches` est rangé du plus proche au moins proche),
+ * leur médiane, leur moyenne et leur écart-type. bge-m3 tasse les cosinus dans [0,6 ; 1] : seul l'écart à ce que la mémoire
+ * entière donne pour le message sépare une fiche proche d'une autre d'un message à l'autre.
  */
-export function cosinusDesFiches(proches: readonly { chemin: string; similarite: number }[]): { parFiche: Map<string, number>; mediane: number | null } {
+export function cosinusDesFiches(proches: readonly { chemin: string; similarite: number }[]): CosinusDuMessage {
 	const parFiche = new Map<string, number>();
 	for (const p of proches) if (!parFiche.has(p.chemin) && Number.isFinite(p.similarite)) parFiche.set(p.chemin, p.similarite);
-	return { parFiche, mediane: mediane([...parFiche.values()]) };
+	const valeurs = [...parFiche.values()];
+	const stats = moyenneEtEcartType(valeurs);
+	return { parFiche, mediane: mediane(valeurs), moyenne: stats?.moyenne ?? null, ecartType: stats?.ecartType ?? null };
 }
 
 /** Cosinus relatif : le cosinus moins la médiane ; null sans l'un des deux. */
 export function cosinusRelatif(cosinus: number | null, medianeDesCosinus: number | null): number | null {
 	return cosinus === null || medianeDesCosinus === null ? null : cosinus - medianeDesCosinus;
+}
+
+/** Sous cet écart-type, les cosinus sont tenus pour égaux (arrondis du calcul) : le z-score ne dirait rien. */
+const ECART_TYPE_MIN = 1e-9;
+
+/** Variante z-score : l'écart du cosinus à la moyenne, en écarts-types ; null sans l'un d'eux, ou si les cosinus sont tous égaux. */
+export function cosinusZ(cosinus: number | null, cos: Pick<CosinusDuMessage, 'moyenne' | 'ecartType'> | null): number | null {
+	if (cosinus === null || cos === null || cos.moyenne === null || cos.ecartType === null || !(cos.ecartType > ECART_TYPE_MIN)) return null;
+	return (cosinus - cos.moyenne) / cos.ecartType;
 }
 
 /**

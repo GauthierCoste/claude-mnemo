@@ -161,6 +161,7 @@ export async function servir(dep: Dependances, demande: DemandeServir): Promise<
 		...cartes,
 		// un message muet ne nomme rien et n'est pas classé : seule la fiche de position peut venir, sauf geste
 		message: muet === null ? demande.message : '',
+		...(muet === null || cartes.requete === undefined ? {} : { requete: '' }),
 		// chaque message porteur est classé ; le geste vaut désignation, même sur un message muet (le message ne donne que la base de la note)
 		classer: moment === 'message' && (muet === null || aInjecter.length > 0),
 		// des pistes au premier message porteur et au message qui part avec une fiche injectée à la main (pas de note apprise encore)

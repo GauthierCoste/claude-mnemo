@@ -35,6 +35,7 @@ import { dossierInterface, servirInterface } from './statique.ts';
 import { racineAffichee, titresDeLIndex } from './vues.ts';
 import { creerHub } from './websocket.ts';
 import { aprioriDesGestes } from '../../application/apriori.ts';
+import { dureeDuReranker, rerankerMesure } from '../../application/duree-reranker.ts';
 import { diffuserModeles, vueModeles } from './diffusion-modeles.ts';
 import { routesLots } from './lots.ts';
 import { versionMnemo } from '../../infra/version.ts';
@@ -271,6 +272,10 @@ export async function demarrerService(options: {
 	const orphelins = await nettoyerDepots(racine);
 	if (orphelins > 0) journal(`${orphelins} dépôt(s) interrompu(s) retiré(s) de .mnemo/depots/.`);
 
+	// chaque appel du reranker est mesuré : le hook de message ne le lance que si l'estimation de sa durée tient dans son temps
+	const dureeReranker = dureeDuReranker();
+	dep.reranker = rerankerMesure(dep.reranker, dureeReranker);
+
 	// extraction des documents à part de la recherche, qui la réveille (une recherche n'attend jamais un document de plusieurs Go)
 	const differee = dep.extractionDifferee === undefined ? extractionDifferee(dep, journal) : null;
 	if (differee !== null) dep.extractionDifferee = differee;
@@ -354,6 +359,7 @@ export async function demarrerService(options: {
 			journal,
 			depotMax,
 			apriori,
+			dureeReranker,
 		}),
 		...routesProfils(dep, () => hub.diffuser({ type: 'memoire', modifieeMs: Date.now() })),
 		...routesLots(dep, hub.diffuser),

@@ -24,8 +24,7 @@ export const HORS_PILE = 2;
 
 /**
  * La requête jointe d'un message (spec § 3.2) : le message joint au message porteur d'avant s'il est court ou anaphorique ;
- * null : la variante jointe est la même que le message seul. Règle provisoire (`domaine/requete-jointe-provisoire.ts`), remplacée
- * par celle de T4 (`domaine/requete-du-message.ts`).
+ * null : la variante jointe est la même que le message seul. Règle du hook : `requeteJointe` de `domaine/requete-du-message.ts`.
  */
 export type RequeteJointe = (message: string, precedent: string | null) => string | null;
 

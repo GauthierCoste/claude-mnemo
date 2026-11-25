@@ -12,7 +12,7 @@ import type { GestesDuBanc, Signaux } from '../../application/banc-signaux.ts';
 import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
 import { compterGestes, GESTES } from '../../domaine/gestes.ts';
 import type { ComptesDesGestes } from '../../domaine/gestes.ts';
-import { requeteJointeProvisoire } from '../../domaine/requete-jointe-provisoire.ts';
+import { requeteJointe } from '../../domaine/requete-du-message.ts';
 import type { InjectionManuelle } from '../../domaine/signal-injection.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
 import { ouvrirJournalEnLecture } from '../../infra/journal-en-lecture.ts';
@@ -32,8 +32,8 @@ const USAGE_CONTEXTE = [
 /** Messages extraits par défaut, et au plus par session (variété : 20 sessions au moins pour 120 messages). */
 const NOMBRE_PAR_DEFAUT = 50;
 const PAR_SESSION = 6;
-/** Règle provisoire de la requête jointe, remplacée par celle de T4. */
-const REQUETE_JOINTE = requeteJointeProvisoire;
+/** Règle de la requête jointe, celle du hook (`domaine/requete-du-message.ts`). */
+const REQUETE_JOINTE = requeteJointe;
 
 /** Cas du banc `contexte` : `.mnemo/banc-contexte.json` (état local, ignoré par git, jamais commité). */
 export function fichierBancContexte(racine: string): string {

@@ -5,7 +5,9 @@
  * signaux). À chaque message porteur, toutes les candidates (périmètre de la position, fiches neutres, fiches d'ailleurs dont le
  * lieu est nommé, voisines des fiches injectées à la main) sont classées (`classement-du-message.ts`) : le classement entier va
  * au journal et au panneau ; tant qu'aucune note apprise n'est acceptée, les premières nouvelles ne partent en pistes qu'au premier
- * message et au message qui part avec une fiche injectée à la main. L'outil `contexte` classe sur sa question. La fiche de position seule est servie entière. Avec le
+ * message et au message qui part avec une fiche injectée à la main. Au hook, le reranker note les premières de l'ordre si
+ * l'estimation de sa durée tient dans le temps restant (`duree-reranker.ts`) : son logit brut va aux signaux, sans rien décider.
+ * L'outil `contexte` classe sur sa question. La fiche de position seule est servie entière. Avec le
  * sens, toute carte porte sa note, fiche nommée et fiche de position comprises, sans que la note les reclasse.
  */
 import { fichesNommees } from '../domaine/fiches-nommees.ts';
@@ -24,6 +26,7 @@ import { normaliser } from '../domaine/sens.ts';
 import { candidatesDuMessage, classerLeMessage, ficheProposable } from './classement-du-message.ts';
 import type { LigneDeClassement } from './classement-du-message.ts';
 import { ficheDePosition } from './chercher.ts';
+import type { DureeDuReranker } from './duree-reranker.ts';
 import { aujourdhui } from './commun.ts';
 import { resolveurDeLiens } from './liens.ts';
 import type { CarteJournalisee, DejaDansLaSession, Dependances, FicheServieLueOuEcrite, RaisonCarte, VecteurDuMessage } from './ports.ts';
@@ -56,8 +59,18 @@ export type FicheDePositionServie = { chemin: string; titre: string; texte: stri
 export type DemandeCartes = {
 	/** Chemin de position de la session ('' = racine). */
 	position: string;
-	/** Le message de l'utilisateur seul (ou la question de l'outil). */
+	/** Le message de l'utilisateur seul (ou la question de l'outil) : les fiches nommées s'y cherchent. */
 	message: string;
+	/**
+	 * La requête du classement (`domaine/requete-du-message.ts`) : vecteur, mots et reranker. Absente : le message. Les fiches
+	 * nommées, elles, ne se cherchent que dans le message.
+	 */
+	requete?: string;
+	/**
+	 * Le service : la durée du reranker estimée d'après ses dernières durées mesurées. Au hook, il ne note les premières
+	 * candidates que si l'estimation tient dans le temps restant ; absente ou sans mesure : pas de reranker au hook.
+	 */
+	dureeReranker?: DureeDuReranker;
 	/** Vrai : classer les candidates (message porteur, ou message qui part avec une fiche injectée à la main) : le classement va au journal et au panneau. */
 	classer: boolean;
 	/**
@@ -117,8 +130,6 @@ const CANDIDATS_QUESTION = 40;
 /** Candidates de la question soumises au reranker. */
 const CANDIDATS_RERANKER = 30;
 const LIGNE_MAX = 160;
-/** Le reranker n'est lancé que s'il reste au moins ce temps avant l'échéance. */
-const BUDGET_RERANKER_MIN_MS = 500;
 
 const ficheDe = (id: string): string => id.split('#')[0]!;
 const declareUnLieu = (e: ElementIndexe): boolean => e.dossierProjet !== null || /^(projet|client):/u.test(e.portee ?? '');
@@ -176,9 +187,10 @@ async function similarites(dep: Dependances, chemins: readonly string[], vecteur
 	return resultat;
 }
 
+/** Notes brutes du reranker (des logits), une par texte, dans le temps qui reste ; null s'il ne répond pas (ou plus de temps). */
 async function notesDuReranker(dep: Dependances, question: string, textes: readonly string[], fin: number): Promise<number[] | null> {
 	const budgetMs = fin - Date.now();
-	if (budgetMs < BUDGET_RERANKER_MIN_MS || textes.length === 0) return null;
+	if (budgetMs <= 0 || textes.length === 0) return null;
 	try {
 		const notes = await dep.reranker.noter(question, [...textes], { budgetMs, demarrer: false, activite: { operation: 'injection' } });
 		return notes === null || notes.length !== textes.length ? null : notes;
@@ -187,8 +199,40 @@ async function notesDuReranker(dep: Dependances, question: string, textes: reado
 	}
 }
 
+/**
+ * Outil `contexte` : le reranker note-t-il ses candidates ? Oui si l'estimation de sa durée (le service) tient dans le temps
+ * restant ; sans estimation, s'il reste du temps : l'appel est borné par lui, et sa durée sera mesurée.
+ */
+function rerankerTient(duree: DureeDuReranker | undefined, documents: number, fin: number): boolean {
+	const estimee = duree?.estimer(documents) ?? null;
+	return estimee === null ? fin > Date.now() : estimee <= fin - Date.now();
+}
+
+/**
+ * Reranker au hook (spec classement vivant § 3.6) : il note les premières candidates de l'ordre, de 8 à 5 selon ce que
+ * l'estimation de sa durée laisse tenir dans le temps restant ; rend leurs logits bruts par chemin. Vide sans estimation (hook
+ * sans service, aucune mesure encore), si rien ne tient, ou s'il ne répond pas à temps : ni erreur, ni attente au-delà de `fin`.
+ * Le logit n'est qu'un signal brut : il ne change ni l'ordre ni les pistes tant qu'aucune note apprise ne l'utilise.
+ */
+async function logitsAuHook(
+	dep: Dependances,
+	duree: DureeDuReranker | undefined,
+	requete: string,
+	ordre: readonly Note[],
+	texte: (chemin: string) => string,
+	fin: number,
+): Promise<Map<string, number>> {
+	if (duree === undefined || ordre.length === 0 || requete.trim() === '') return new Map();
+	const k = duree.documentsAuHook(fin - Date.now(), ordre.length);
+	if (k === null) return new Map();
+	const premieres = ordre.slice(0, k).map((n) => n.chemin);
+	const notes = await notesDuReranker(dep, requete, premieres.map(texte), fin);
+	return notes === null ? new Map() : new Map(premieres.map((c, i) => [c, notes[i]!]));
+}
+
 export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promise<CartesCalculees> {
 	const reglages = dep.reglages().contexte;
+	const requete = d.requete ?? d.message;
 	const [indexees, elements, titres, liens] = await Promise.all([
 		dep.index.fiches(),
 		dep.index.elements({ genres: ['fiche'] }),
@@ -200,6 +244,8 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 	const titreDe = new Map(titres.map((t) => [t.chemin, t.titre]));
 	const titre = (chemin: string) => titreDe.get(chemin) ?? chemin;
 	const type = (chemin: string) => elementDe.get(chemin)?.typeFiche ?? '';
+	/** Ce que le reranker lit d'une fiche : son titre et sa synthèse. */
+	const texteDuReranker = (chemin: string) => `${titre(chemin)}\n${syntheseDe(elementDe.get(chemin))}`;
 
 	const fiches: FicheDuGraphe[] = elements.map((e) => ({ chemin: e.chemin, typeFiche: e.typeFiche, declareUnLieu: declareUnLieu(e) }));
 	const declarants = new Set(fiches.filter((f) => f.declareUnLieu).map((f) => f.chemin));
@@ -285,7 +331,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		// Outil `contexte` : tout est proposable, ailleurs compris ; la note (sens plus signaux) classe, le reranker remplace le sens.
 		const candidates = elements.map((e) => e.chemin).filter(proposable);
 		let notes: Note[] = [];
-		vecteurDuCalcul = await vecteurDuMessage(dep, d.message, d.fin);
+		vecteurDuCalcul = await vecteurDuMessage(dep, requete, d.fin);
 		const vecteur = vecteurDuCalcul?.valeurs ?? null;
 		if (vecteur !== null) {
 			mesure = 'sens';
@@ -300,7 +346,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 			// sans modèle, la base vaut 0 : les poids départagent les fiches trouvées par les mots, l'ordre des mots ensuite. Seuls
 			// les mots font entrer une fiche : une voisine d'une fiche injectée à la main que les mots ne trouvent pas n'est pas
 			// candidate (asymétrie voulue : avec le modèle, la voisine hors des plus proches est notée, puis soumise au seuil de sens)
-			const expression = expressionFts(d.message, await dep.index.alias());
+			const expression = expressionFts(requete, await dep.index.alias());
 			if (expression !== null) {
 				const permis = new Set(candidates);
 				const trouvees = await dep.index.chercher(expression.une, { genres: ['fiche'], statuts: ['servi'], chemins: candidates }, CANDIDATS_QUESTION);
@@ -310,8 +356,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 			}
 		}
 		notes = notes.slice(0, CANDIDATS_RERANKER);
-		const textes = notes.map((n) => `${titre(n.chemin)}\n${syntheseDe(elementDe.get(n.chemin))}`);
-		const rerank = await notesDuReranker(dep, d.message, textes, d.fin);
+		const rerank = rerankerTient(d.dureeReranker, notes.length, d.fin) ? await notesDuReranker(dep, requete, notes.map((n) => texteDuReranker(n.chemin)), d.fin) : null;
 		if (rerank !== null) {
 			// le reranker donne la base (sa note par la sigmoïde, échelle absolue) ; les poids des signaux s'y ajoutent ; à égalité, l'ordre d'avant
 			mesure = 'reranker';
@@ -339,11 +384,11 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		// dit la même chose partout ; seules les candidates sont classées par elle. Le vecteur du message est calculé une fois.
 		const horsClassement = [...cartesNommees, ...(carteDePosition === null ? [] : [carteDePosition])];
 		const aNoter = [...candidates, ...horsClassement];
-		vecteurDuCalcul = aNoter.length === 0 ? null : await vecteurDuMessage(dep, d.message, d.fin);
+		vecteurDuCalcul = aNoter.length === 0 ? null : await vecteurDuMessage(dep, requete, d.fin);
 		const aprioris = candidates.length === 0 || d.aprioris === undefined ? undefined : d.aprioris(vecteurDuCalcul);
 		const m = await classerLeMessage(dep, {
 			candidates,
-			message: d.message,
+			message: requete,
 			vecteur: vecteurDuCalcul?.valeurs ?? null,
 			nombreDeFiches: elements.length,
 			noter: noterPiste,
@@ -351,6 +396,8 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 			...(aprioris === undefined ? {} : { aprioris }),
 		});
 		if (m.sens) mesure = 'sens';
+		// reranker au hook sur les premières de l'ordre, si l'estimation de sa durée le permet : son logit va aux signaux bruts seulement
+		const logits = await logitsAuHook(dep, d.dureeReranker, requete, m.ordre, texteDuReranker, d.fin);
 		const noteHorsClassement = (chemin: string): number | null => (mesure === 'aucune' ? null : noterPiste(chemin, m.base(chemin)).total);
 		// Pistes : les premières nouvelles de l'ordre (pas de seuil tant qu'aucune note apprise n'est acceptée), seulement si la demande
 		// en veut. Sans le sens, il faut que les mots trouvent la fiche ou qu'un signal la désigne : la date seule ne dit rien du message ;
@@ -373,6 +420,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 			note: mesure === 'aucune' ? null : n.total,
 			p: null,
 			signaux: m.signaux(n),
+			logit: logits.get(n.chemin) ?? null,
 			deja: dejaDe(n.chemin),
 			raison: raisonDe.get(n.chemin) ?? null,
 			piste: enPiste.has(n.chemin),

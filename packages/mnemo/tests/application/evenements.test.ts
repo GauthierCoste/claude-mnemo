@@ -8,6 +8,7 @@ import { fichesDemandees } from '../../src/application/fiches-demandees.ts';
 import { proposer } from '../../src/application/proposer.ts';
 import { porteursRecents } from '../../src/application/porteurs-recents.ts';
 import { aprioriDesGestes } from '../../src/application/apriori.ts';
+import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
 import type { Sens } from '../../src/application/ports.ts';
 import { servirQuestion } from '../aides/servir.ts';
@@ -501,6 +502,39 @@ describe('traiterEvenement : contexte sobre au message', () => {
 		// un message muet sans rien à injecter n'est pas classé, ni journalisé
 		expect(await traiterEvenement(dep, pil, message(12, 'ok merci'), local)).toEqual({});
 		expect(await etat.servis(ID, 5)).toHaveLength(2);
+	});
+
+	it('service : reranker au hook si l’estimation tient ; logit brut au journal et dans la mémoire des porteurs ; sans service, aucun', async () => {
+		const { dep, etat, pil } = await memoire();
+		const requetes: string[] = [];
+		dep.reranker = { noter: async (requete, textes) => (requetes.push(requete), textes.map(() => 1.5)) };
+		const duree = dureeDuReranker();
+		duree.noter(5, 35);
+		duree.noter(10, 60);
+		const porteurs = porteursRecents();
+		await traiterEvenement(dep, pil, message(10, 'catalogue références'), { ...local, dureeReranker: duree, porteurs });
+		expect(requetes).toEqual(['catalogue références']);
+		const [j] = await etat.servis(ID, 1);
+		expect(j!.classement.find((c) => c.id === AVOIRS)!.signaux).toMatchObject({ logit: 1.5 });
+		expect(porteurs.lire(ID)!.classement!.get(AVOIRS)).toMatchObject({ signaux: { logit: 1.5 } });
+		// hook local (sans service) : pas d'estimation, pas de reranker
+		await traiterEvenement(dep, pil, message(11, 'catalogue références'), local);
+		expect(requetes).toHaveLength(1);
+		expect((await etat.servis(ID, 1))[0]!.classement.find((c) => c.id === AVOIRS)!.signaux).not.toHaveProperty('logit');
+	});
+
+	it('requête jointe (réglage interne) : un message court reprend le message porteur d’avant, jamais un muet ; par défaut, le message seul', async () => {
+		const { dep, pil } = await memoire();
+		const vus: string[] = [];
+		dep.sens = { modele: () => 'espion@1', vecteurs: async (textes) => (vus.push(...textes), textes.map(() => Float32Array.from([1, 0]))) };
+		await traiterEvenement(dep, pil, message(10, 'les avoirs du catalogue de la refonte'), local);
+		await traiterEvenement(dep, pil, message(11, 'ok merci'), local);
+		vus.length = 0;
+		await traiterEvenement(dep, pil, message(12, 'et pour les factures annulées ?'), { ...local, varianteRequete: 'jointe' });
+		expect(vus).toEqual(['les avoirs du catalogue de la refonte\net pour les factures annulées ?']);
+		vus.length = 0;
+		await traiterEvenement(dep, pil, message(13, 'et pour les factures annulées ?'), local);
+		expect(vus).toEqual(['et pour les factures annulées ?']);
 	});
 
 	it('hook local sans service : une écartée toujours (active) sort des candidates, une rétablie y revient ; a priori 0', async () => {

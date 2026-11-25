@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { calculerCartes, ligneDeCarte } from '../../src/application/cartes.ts';
 import type { DemandeCartes } from '../../src/application/cartes.ts';
+import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
 import type { Dependances, Reranker, Sens } from '../../src/application/ports.ts';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
@@ -536,6 +537,158 @@ describe('calculerCartes : classement à chaque message porteur', () => {
 		expect(ligne(OUTIL).signaux.apriori).toBe(-0.5);
 		expect(avec.classement.filter((l) => l.chemin !== dernier && l.chemin !== OUTIL).every((l) => l.signaux.apriori === 0)).toBe(true);
 		expect(sans.classement.every((l) => l.signaux.apriori === 0)).toBe(true);
+	});
+});
+
+describe('calculerCartes : reranker au hook et requête', () => {
+	const NEUTRES = Array.from({ length: 6 }, (_, i) => `notes/Note ${i}.md`);
+	/** La mémoire de base (5 candidates au périmètre), plus 6 fiches neutres : 11 candidates, le sens les ordonne. */
+	async function avecSens() {
+		const dep = await memoire();
+		for (const [i, chemin] of NEUTRES.entries()) await dep.coffre.ecrire(chemin, fiche('pratique', `Note ${i}`, `Maquette numéro ${i}.`, '', '', '2026-10-01'));
+		await synchroniser(dep, SANS_EXTRACTION);
+		dep.sens = sensParMots;
+		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
+		return dep;
+	}
+	/** Mesures de la machine de référence (documents courts) : 35 ms pour 5, 60 ms pour 10. */
+	const mesuree = () => {
+		const duree = dureeDuReranker();
+		duree.noter(5, 35);
+		duree.noter(10, 60);
+		return duree;
+	};
+	type Appel = { requete: string; textes: string[]; budgetMs: number; demarrer: boolean };
+	/** Reranker fictif : note d'après la longueur du texte, et garde chaque appel. */
+	const rerankerEspion = () => {
+		const appels: Appel[] = [];
+		const reranker: Reranker = {
+			noter: async (requete, textes, o) => (appels.push({ requete, textes, budgetMs: o.budgetMs, demarrer: o.demarrer }), textes.map((t) => -t.length / 10)),
+		};
+		return { appels, reranker };
+	};
+	const sansLogit = (c: { classement: { logit: number | null }[] }) => c.classement.every((l) => l.logit === null);
+	const message = 'la maquette des sites';
+
+	it('avec une estimation qui tient : les 8 premières de l’ordre notées (titre et synthèse), logit brut ; ordre, notes et pistes inchangés', async () => {
+		const dep = await avecSens();
+		const sans = await calculerCartes(dep, demande({ message }));
+		const { appels, reranker } = rerankerEspion();
+		dep.reranker = reranker;
+		const avec = await calculerCartes(dep, demande({ message, dureeReranker: mesuree() }));
+		expect(appels).toHaveLength(1);
+		expect(appels[0]).toMatchObject({ requete: message, demarrer: false });
+		expect(avec.classement.length).toBeGreaterThan(8);
+		const premieres = avec.classement.slice(0, 8);
+		expect(appels[0]!.textes.map((t) => t.split('\n')[0])).toEqual(premieres.map((l) => l.titre));
+		expect(appels[0]!.textes.find((t) => t.startsWith('Outil Parcs'))).toBe('Outil Parcs\nOutil de suivi des sites du client. Il sert aux chantiers.');
+		for (const l of premieres) expect(l.logit).toBeCloseTo(-appels[0]!.textes.find((t) => t.startsWith(`${l.titre}\n`))!.length / 10, 9);
+		expect(avec.classement.slice(8).every((l) => l.logit === null)).toBe(true);
+		// rien ne change dans les décisions : le logit n'est qu'un signal brut
+		expect(avec.classement.map((l) => [l.chemin, l.note, l.piste, l.raison])).toEqual(sans.classement.map((l) => [l.chemin, l.note, l.piste, l.raison]));
+		expect(chemins(avec)).toEqual(chemins(sans));
+		expect(avec.mesure).toBe('sens');
+	});
+
+	it('k de 8 à 5 selon le temps restant ; trop peu de temps : pas de reranker', async () => {
+		const dep = await avecSens();
+		const { appels, reranker } = rerankerEspion();
+		dep.reranker = reranker;
+		const duree = dureeDuReranker();
+		// 10 ms par document, sans fixe : 5 documents ≈ 70 ms marge comprise, 8 ≈ 106 ms
+		duree.noter(5, 50);
+		duree.noter(10, 100);
+		const restant = duree.estimer(6)! + 2;
+		const lent = { ...duree, documentsAuHook: (_restant: number, disponibles: number) => duree.documentsAuHook(restant, disponibles) };
+		const c = await calculerCartes(dep, demande({ message, dureeReranker: lent }));
+		expect(appels.at(-1)!.textes).toHaveLength(6);
+		expect(c.classement.filter((l) => l.logit !== null)).toHaveLength(6);
+		appels.length = 0;
+		const tropCourt = await calculerCartes(dep, demande({ message, dureeReranker: duree, fin: Date.now() + duree.estimer(5)! - 20 }));
+		expect(appels).toHaveLength(0);
+		expect(sansLogit(tropCourt)).toBe(true);
+	});
+
+	it('sans mesure, ou sans estimation (hook sans service) : pas de reranker au hook', async () => {
+		const dep = await avecSens();
+		const { appels, reranker } = rerankerEspion();
+		dep.reranker = reranker;
+		expect(sansLogit(await calculerCartes(dep, demande({ message, dureeReranker: dureeDuReranker() })))).toBe(true);
+		expect(sansLogit(await calculerCartes(dep, demande({ message })))).toBe(true);
+		expect(appels).toHaveLength(0);
+	});
+
+	it('reranker absent (null), en panne ou lent : aucun logit, aucune erreur, le hook dans son temps et ses décisions inchangées', async () => {
+		const dep = await avecSens();
+		const reference = await calculerCartes(dep, demande({ message }));
+		const decisions = (c: typeof reference) => [chemins(c), c.classement.map((l) => [l.chemin, l.note, l.piste])];
+		// lent : comme le client réel, il ne rend rien au-delà du budget qu'il reçoit
+		let budgetRecu = 0;
+		const lent: Reranker = {
+			noter: (_r, _t, o) => ((budgetRecu = o.budgetMs), new Promise((resoudre) => setTimeout(() => resoudre(null), o.budgetMs))),
+		};
+		const absent: Reranker = { noter: async () => null };
+		const enPanne: Reranker = {
+			noter: async () => {
+				throw new Error('serveur injoignable');
+			},
+		};
+		for (const reranker of [absent, enPanne, lent]) {
+			dep.reranker = reranker;
+			const debut = Date.now();
+			const fin = debut + 300;
+			const c = await calculerCartes(dep, demande({ message, dureeReranker: mesuree(), fin }));
+			expect(sansLogit(c)).toBe(true);
+			expect(decisions(c)).toEqual(decisions(reference));
+			// au plus le temps restant, plus ce qui suit le reranker (cartes, encadrement)
+			expect(Date.now()).toBeLessThan(fin + 50);
+		}
+		expect(budgetRecu).toBeGreaterThan(0);
+		expect(budgetRecu).toBeLessThanOrEqual(300);
+	});
+
+	it('la requête (jointe) sert au sens, aux mots et au reranker ; les fiches nommées se cherchent dans le message seul', async () => {
+		const dep = await avecSens();
+		const { appels, reranker } = rerankerEspion();
+		dep.reranker = reranker;
+		const vus: string[] = [];
+		dep.sens = { modele: sensParMots.modele, vecteurs: async (t, o) => (vus.push(...t), sensParMots.vecteurs(t, o)) };
+		const requete = 'le contact du client Corvel\net pour le site ?';
+		const c = await calculerCartes(dep, demande({ message: 'et pour le site ?', requete, dureeReranker: mesuree() }));
+		expect(vus).toEqual([requete]);
+		expect(appels[0]!.requete).toBe(requete);
+		// « Corvel » est dans la requête, pas dans le message : pas de fiche nommée
+		expect(c.cartes.some((x) => x.raison === 'nommee')).toBe(false);
+		const nommee = await calculerCartes(dep, demande({ message: 'et pour Corvel ?', requete }));
+		expect(nommee.cartes.find((x) => x.raison === 'nommee')?.chemin).toBe(CORVEL);
+	});
+
+	it('cosinus relatif, en médiane et en z-score : rapportés à toute la mémoire pour la requête', async () => {
+		const dep = await avecSens();
+		const c = await calculerCartes(dep, demande({ message }));
+		expect(c.classement.every((l) => l.signaux.cosinusZ !== null)).toBe(true);
+		// z-score : une fonction croissante du cosinus, la même pour toutes les candidates du message
+		const parCosinus = [...c.classement].sort((a, b) => a.signaux.cosinus! - b.signaux.cosinus!);
+		for (const [i, l] of parCosinus.entries()) if (i > 0) expect(l.signaux.cosinusZ!).toBeGreaterThanOrEqual(parCosinus[i - 1]!.signaux.cosinusZ! - 1e-12);
+	});
+
+	it('outil contexte : l’estimation remplace le seuil fixe ; sans estimation, il tente dans le temps qui reste', async () => {
+		const dep = await avecSens();
+		const { appels, reranker } = rerankerEspion();
+		dep.reranker = reranker;
+		const question = { question: true, classer: false, servirPosition: false, message: 'maquette ERP du site' };
+		// 200 ms restantes, sans estimation : le reranker est appelé (l'ancien seuil fixe de 500 ms l'aurait empêché)
+		const tente = await calculerCartes(dep, demande({ ...question, fin: Date.now() + 200 }));
+		expect(tente.mesure).toBe('reranker');
+		// une estimation qui ne tient pas : pas de reranker, le sens classe
+		const lente = dureeDuReranker();
+		lente.noter(10, 50_000);
+		appels.length = 0;
+		const sautee = await calculerCartes(dep, demande({ ...question, dureeReranker: lente }));
+		expect(appels).toHaveLength(0);
+		expect(sautee.mesure).toBe('sens');
+		// une estimation qui tient : le reranker note
+		expect((await calculerCartes(dep, demande({ ...question, dureeReranker: mesuree() }))).mesure).toBe('reranker');
 	});
 });
 

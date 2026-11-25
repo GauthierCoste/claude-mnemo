@@ -430,6 +430,17 @@ describe('routes : hook', () => {
 		expect(s).toMatchObject({ etat: 'travaille', objectif: 'Où en est Alpha ?' });
 	});
 
+	it('POST hook message : la durée du hook au journal, depuis le démarrage de son processus (l’horodatage) ; un horodatage trop ancien : depuis l’appel', async () => {
+		const c = await serviceFaux();
+		await c.etat.creer(sessionFixe(UUID, { objectif: null }));
+		const entree = { evenement: 'message' as const, session: UUID, cwd: join(c.racine, 'alpha'), prompt: 'Où en est le catalogue Alpha ?' };
+		expect((await api(c).post(ROUTES.hook, { ...entree, horodatageMs: Date.now() - 60_000 })).statut).toBe(200);
+		expect((await api(c).post(ROUTES.hook, { ...entree, horodatageMs: Date.now() - 250 })).statut).toBe(200);
+		const [recent, ancien] = await c.etat.servis(UUID, 2);
+		expect(ancien!.ms).toBeLessThan(10_000);
+		expect(recent!.ms).toBeGreaterThanOrEqual(250);
+	});
+
 	it('POST hook message : les modèles suivent le niveau de la session, relu à chaque hook (coupés : aucun appel au sens)', async () => {
 		const c = await serviceFaux();
 		const sens = fauxSens();

@@ -15,6 +15,7 @@ import { BORNES_DOCUMENTS, documentsDeLaMemoire, SANS_BORNE } from '../../applic
 import { ecarterDuClassement } from '../../application/ecarter.ts';
 import { noterGeste } from '../../application/gestes.ts';
 import type { AprioriDesGestes } from '../../application/apriori.ts';
+import type { DureeDuReranker } from '../../application/duree-reranker.ts';
 import { traiterEvenement } from '../../application/evenements.ts';
 import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
@@ -148,6 +149,11 @@ export type ContexteRoutes = {
 	depotMax: number;
 	/** A priori des gestes et fiches écartées toujours, tenus en mémoire par le service ; actualisés après chaque geste. */
 	apriori: AprioriDesGestes;
+	/**
+	 * Durée du reranker estimée d'après ses dernières durées mesurées (le service mesure chaque appel) : le hook de message ne le
+	 * lance que si elle tient dans son temps. Absente : pas de reranker au hook.
+	 */
+	dureeReranker?: DureeDuReranker;
 };
 
 type Route = { methode: 'GET' | 'POST' | 'PUT' | 'DELETE'; chemin: string; corps?: 'json' | 'flux'; action(r: Requete): Promise<Reponse> };
@@ -277,6 +283,18 @@ const ATTENTE_HOOK_SANS_ECHEANCE_MS = 300;
  * servies ; le service ne note donc une fiche servie que si sa réponse arrive avant que le hook cesse d'attendre (`echeanceMs`,
  * ou à défaut une attente prudente). Les autres événements ne servent rien : pas d'échéance. 400 si `echeanceMs` est mal formé.
  */
+/** Au-delà, un horodatage de hook n'est pas l'instant où son processus a démarré (horloge décalée, événement rejoué). */
+const DUREE_HOOK_MAX_MS = 10_000;
+
+/**
+ * Début du hook : l'horodatage de l'événement est l'instant où le processus du hook a démarré ; le journal mesure depuis lui la
+ * durée du hook entière (démarrage, appel du service, calcul). Un horodatage dans le futur, ou trop ancien : mesuré depuis l'appel.
+ */
+function debutDuHook(horodatageMs: number): { debutMs?: number } {
+	const maintenant = Date.now();
+	return horodatageMs <= maintenant && horodatageMs >= maintenant - DUREE_HOOK_MAX_MS ? { debutMs: horodatageMs } : {};
+}
+
 function echeanceDuHook(brut: unknown, evenement: EvenementHook): number | undefined {
 	const echeanceMs = estObjet(brut) ? brut.echeanceMs : undefined;
 	if (echeanceMs !== undefined && (typeof echeanceMs !== 'number' || !Number.isFinite(echeanceMs) || echeanceMs < 0 || echeanceMs > Date.now() + AVANCE_MAX_MS)) {
@@ -686,7 +704,19 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const transcription = transcriptionDuHook(brut);
 				// les modèles de la session bornés par son niveau (relu à chaque appel)
 				const depDuHook = entree.session === '' ? dep : dependancesDeSession(dep, pil.etat, entree.session);
-				const reponse = await traiterEvenement(depDuHook, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, porteurs, apriori, rattachee: (id) => pilote.reecrirePlugin(id) });
+				const reponse = await traiterEvenement(depDuHook, pil, entree, {
+					froid: 'permis',
+					...(echeance === undefined ? {} : { echeance }),
+					...debutDuHook(entree.horodatageMs),
+					racine: ctx.racine,
+					sansCasse: ctx.sansCasse,
+					enFond: ctx.enFond,
+					demandees,
+					porteurs,
+					apriori,
+					...(ctx.dureeReranker === undefined ? {} : { dureeReranker: ctx.dureeReranker }),
+					rattachee: (id) => pilote.reecrirePlugin(id),
+				});
 				if (entree.session !== '' && transcription !== undefined && (entree.evenement === 'message' || entree.evenement === 'apres_outil' || entree.evenement === 'arret' || entree.evenement === 'debut')) {
 					// hors du chemin du hook : sa réponse n'attend pas la lecture
 					void relireFenetre(entree.session, transcription, entree.cwd).catch(() => {});

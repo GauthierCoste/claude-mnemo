@@ -6,6 +6,9 @@ import type { NoteDuGeste } from '../domaine/gestes.ts';
 import { positionDeSession, positionNotee } from './dossiers-non-rattaches.ts';
 import type { Position } from './position.ts';
 import { raisonDeMutisme } from '../domaine/message-muet.ts';
+import { precedentUtile, requeteDuMessage, VARIANTE_DE_LA_REQUETE } from '../domaine/requete-du-message.ts';
+import type { VarianteDeRequete } from '../domaine/requete-du-message.ts';
+import type { DureeDuReranker } from './duree-reranker.ts';
 import { ficheTouchee } from '../domaine/outil-de-session.ts';
 import { BUDGET_HOOK_MS } from './chercher.ts';
 import type { FichesDemandees } from './fiches-demandees.ts';
@@ -85,6 +88,13 @@ export type ReglagesEvenement = {
 	 * dans l'état et l'a priori vaut 0.
 	 */
 	apriori?: AprioriDesGestes;
+	/**
+	 * Le service : la durée du reranker estimée d'après ses dernières durées mesurées ; le hook ne le lance sur les premières
+	 * candidates que si elle tient dans le temps restant. Sans elle (`mnemo hook` sans service) : pas de reranker au hook.
+	 */
+	dureeReranker?: DureeDuReranker;
+	/** Variante de la requête du classement (réglage interne ; défaut : `VARIANTE_DE_LA_REQUETE`). */
+	varianteRequete?: VarianteDeRequete;
 };
 
 /** Extrait de la demande gardé avec une entrée servie (et la trace d'un écarté) : large, la demande est journalisée presque entière. */
@@ -317,6 +327,19 @@ async function noterFicheTouchee(dep: Dependances, pil: Pick<Pilotage, 'etat'>, 
 	}
 }
 
+/** Entrées du journal relues pour trouver le message porteur d'avant. */
+const ENTREES_POUR_LE_PRECEDENT = 10;
+
+/**
+ * Le dernier message porteur de la session déjà journalisé (le message en cours ne l'est pas encore) : sa demande, comme le banc
+ * la lit (`banc-extraire.ts`) ; null s'il n'y en a pas parmi les dernières entrées, ou si l'état ne répond pas.
+ */
+async function messagePorteurPrecedent(etat: Pick<Pilotage['etat'], 'servis'>, session: string): Promise<string | null> {
+	const entrees = await etat.servis(session, ENTREES_POUR_LE_PRECEDENT, 'message').catch(() => []);
+	const porteuse = entrees.find((e) => e.muet === null && e.demande !== null && e.demande.trim() !== '' && raisonDeMutisme(e.demande) === null);
+	return porteuse?.demande ?? null;
+}
+
 /**
  * Le message, la position et ce que la session a déjà reçu (fiches servies, lues, écrites, cartes proposées, écartés, fiches
  * injectées à la main et leur âge) : ce que `servir` reçoit. Le message porteur est déjà compté (`servirAuMessage`) : l'âge lu
@@ -335,12 +358,18 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 	const rappels = session !== null && (await pil.etat.servis(session.id, 1, 'message').catch(() => [])).length === 0;
 	const premier = session !== null && muet === null && (await pil.etat.perimetrePropose(session.id).catch(() => 0)) === null;
 	const exclusDefinitivement = await exclusionDefinitive(pil.etat, reglages.apriori);
+	// requête du classement : le message seul, ou joint au message porteur d'avant (variante jointe, message court ou anaphorique)
+	const variante = reglages.varianteRequete ?? VARIANTE_DE_LA_REQUETE;
+	const precedent = session !== null && muet === null && precedentUtile(message, variante) ? await messagePorteurPrecedent(pil.etat, session.id) : null;
+	const requete = requeteDuMessage(message, precedent, variante);
 	const apriori = reglages.apriori;
 	// les gestes de la session courante passent par le signal de session et l'écart, pas par l'a priori
 	const contexte = { maintenantMs: entree.horodatageMs, sessionCourante: session?.id ?? null, dossier: session?.dossier ?? null, position: session?.position ?? null };
 	return {
 		position: position.chemin,
 		message,
+		...(requete === message ? {} : { requete }),
+		...(reglages.dureeReranker === undefined ? {} : { dureeReranker: reglages.dureeReranker }),
 		dejaServies: new Map(serviesLuesEcrites.map((f) => [f.chemin, f.empreinteInjectee])),
 		dejaLues: dejaLuesDe(serviesLuesEcrites),
 		proposees,

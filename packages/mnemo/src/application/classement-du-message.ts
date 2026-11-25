@@ -10,7 +10,7 @@ import type { ElementIndexe } from '../domaine/elements.ts';
 import { neutres, TYPES_NON_PROPOSABLES } from '../domaine/perimetre.ts';
 import type { FicheDuGraphe, Perimetre } from '../domaine/perimetre.ts';
 import { expressionFts } from '../domaine/requete.ts';
-import { bm25RelatifsDesListes, cosinusDesFiches, cosinusRelatif } from '../domaine/signaux-de-note.ts';
+import { bm25RelatifsDesListes, cosinusDesFiches, cosinusRelatif, cosinusZ } from '../domaine/signaux-de-note.ts';
 import type { SignauxBruts } from '../domaine/signaux-de-note.ts';
 import type { Classe, DejaDansLaSession, Dependances, RaisonCarte } from './ports.ts';
 
@@ -18,6 +18,7 @@ import type { Classe, DejaDansLaSession, Dependances, RaisonCarte } from './port
  * Une candidate classée à un message : `note` provisoire qui ordonne (sens du message plus poids des signaux ; null sans modèle du
  * sens), `p` (probabilité de la note apprise ; null tant qu'aucun modèle n'est accepté), signaux bruts, ce que la session en a
  * déjà fait (`deja`) et, si une carte la propose à ce message, sa raison (`piste` : proposée en piste, pas comme fiche nommée).
+ * `logit` : la note brute du reranker (sans sigmoïde) si la candidate lui a été soumise au hook et qu'il a répondu ; null sinon.
  */
 export type LigneDeClassement = {
 	chemin: string;
@@ -25,6 +26,7 @@ export type LigneDeClassement = {
 	note: number | null;
 	p: number | null;
 	signaux: SignauxBruts;
+	logit: number | null;
 	deja: DejaDansLaSession | null;
 	raison: RaisonCarte | null;
 	piste: boolean;
@@ -145,6 +147,7 @@ export async function classerLeMessage(
 		signaux: (n) => ({
 			cosinus: cosinus(n.chemin),
 			cosinusRelatif: cosinusRelatif(cosinus(n.chemin), cos?.mediane ?? null),
+			cosinusZ: cosinusZ(cosinus(n.chemin), cos),
 			bm25Relatif: mots === null ? null : bm25(n.chemin),
 			signalSession: n.apports.reduce((somme, a) => somme + a.poids, 0),
 			apriori: e.aprioris?.get(n.chemin) ?? 0,
@@ -161,7 +164,8 @@ export function arrondi(x: number | null): number | null {
 
 /**
  * Classement du journal : les `max` premières lignes (`CLASSEMENT_MAX` par défaut), rangs à partir de 1 ; la dernière gardée
- * compte les coupées. Léger : sans titre (relu dans l'index), note et signaux à 4 décimales, `p` omis tant qu'il est null.
+ * compte les coupées. Léger : sans titre (relu dans l'index), note et signaux à 4 décimales, `p` omis tant qu'il est null, le logit
+ * du reranker omis pour une candidate qu'il n'a pas notée.
  * `servi` : la fiche est déjà injectée dans la session.
  */
 export function classementDuJournal(classement: readonly LigneDeClassement[], max = CLASSEMENT_MAX): Classe[] {
@@ -176,9 +180,11 @@ export function classementDuJournal(classement: readonly LigneDeClassement[], ma
 		signaux: {
 			cosinus: arrondi(l.signaux.cosinus),
 			cosinusRelatif: arrondi(l.signaux.cosinusRelatif),
+			cosinusZ: arrondi(l.signaux.cosinusZ),
 			bm25Relatif: arrondi(l.signaux.bm25Relatif),
 			signalSession: arrondi(l.signaux.signalSession),
 			apriori: arrondi(l.signaux.apriori),
+			...(l.logit === null ? {} : { logit: arrondi(l.logit) }),
 		},
 		...(l.deja === null ? {} : { deja: l.deja }),
 		...(l.piste ? { piste: true } : {}),

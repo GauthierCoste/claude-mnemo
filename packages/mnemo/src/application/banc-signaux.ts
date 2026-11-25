@@ -29,9 +29,9 @@ import type { Dependances, VecteurDuMessage } from './ports.ts';
 /**
  * Signaux bruts d'une candidate pour une requête : ceux du classement du hook (`SignauxBruts`) et le logit du reranker (null :
  * le modèle n'a pas répondu, ou la fiche ne lui a pas été soumise). `signalSession` et `apriori` sont absents des cas extraits
- * avant qu'ils existent (lus comme 0) ; `bm25Relatif` y vaut 0 quand le message n'avait pas de mots cherchables (null depuis).
+ * avant qu'ils existent (lus comme 0), `cosinusZ` aussi ; `bm25Relatif` y vaut 0 quand le message n'avait pas de mots cherchables (null depuis).
  */
-export type Signaux = Omit<SignauxBruts, 'signalSession' | 'apriori'> & { logit: number | null; signalSession?: number; apriori?: number };
+export type Signaux = Omit<SignauxBruts, 'signalSession' | 'apriori' | 'cosinusZ'> & { logit: number | null; signalSession?: number; apriori?: number; cosinusZ?: number | null };
 export type ListeDuBanc = 'sens' | 'mots' | 'reranker';
 export const LISTES_DU_BANC: readonly ListeDuBanc[] = ['sens', 'mots', 'reranker'];
 

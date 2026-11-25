@@ -480,7 +480,8 @@ describe('rejouerJugements', () => {
 		expect(reranker.requetes.filter((q) => q !== 'essai')).toEqual(['et le contact ?', 'les sites du client\net le contact ?']);
 		expect(new Set(r.paires.map((p) => p.variante))).toEqual(new Set(['seule', 'jointe']));
 		expect(r.mesures.filter((m) => m.variante === 'jointe')).toHaveLength(3);
-		expect(r.aBrancher.join('\n')).toMatch(/au lieu de la règle provisoire/u);
+		// la règle de la requête jointe est celle du hook : plus rien à brancher pour elle
+		expect(r.aBrancher.join('\n')).not.toMatch(/requête/u);
 	});
 });
 

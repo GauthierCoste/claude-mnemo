@@ -379,7 +379,7 @@ export async function rejouerJugements(dep: Dependances, cas: readonly CasContex
 	}
 	const aBrancher = [
 		'après T3/T4 : classement par le vrai chemin (hook puis affinage), durée au hook (p50, p95), part des messages où le reranker a tenu au hook',
-		options.requeteJointe === undefined ? 'après T4 : variante jointe de la requête (requete-du-message.ts)' : 'après T4 : règle de la requête jointe de T4 au lieu de la règle provisoire',
+		...(options.requeteJointe === undefined ? ['après T4 : variante jointe de la requête (requete-du-message.ts)'] : []),
 		...(options.note === undefined ? ['après T8/T9 : note p (précision au-dessus du seuil, Wilson, ECE, silences avec injection, courbes des seuils)'] : []),
 	];
 	return { ...mesurerJugements(messages, options), indecises, empreintesChangees, modeles, aBrancher };

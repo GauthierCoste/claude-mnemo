@@ -8,7 +8,8 @@ const ligne = (i: number, surcharge: Partial<LigneDeClassement> = {}): LigneDeCl
 	titre: `F${i}`,
 	note: 0.812345678 - i / 1000,
 	p: null,
-	signaux: { cosinus: 0.812345678, cosinusRelatif: 0.1234567, bm25Relatif: null, signalSession: 0, apriori: 0 },
+	signaux: { cosinus: 0.812345678, cosinusRelatif: 0.1234567, cosinusZ: 1.23456789, bm25Relatif: null, signalSession: 0, apriori: 0 },
+	logit: null,
 	deja: i === 1 ? 'injectee' : null,
 	raison: i === 0 ? 'perimetre' : null,
 	piste: i === 0,
@@ -23,7 +24,7 @@ describe('classementDuJournal', () => {
 			note: 0.8123,
 			servi: false,
 			rang: 1,
-			signaux: { cosinus: 0.8123, cosinusRelatif: 0.1235, bm25Relatif: null, signalSession: 0, apriori: 0 },
+			signaux: { cosinus: 0.8123, cosinusRelatif: 0.1235, cosinusZ: 1.2346, bm25Relatif: null, signalSession: 0, apriori: 0 },
 			piste: true,
 			raison: 'perimetre',
 		});
@@ -31,6 +32,12 @@ describe('classementDuJournal', () => {
 		expect(seconde).not.toHaveProperty('titre');
 		expect(seconde).not.toHaveProperty('piste');
 		expect(seconde).not.toHaveProperty('coupees');
+	});
+
+	it('le logit brut du reranker, s’il a noté la candidate au hook ; omis sinon', () => {
+		const [notee, absente] = classementDuJournal([ligne(0, { logit: -2.345678 }), ligne(1)]);
+		expect(notee!.signaux).toMatchObject({ logit: -2.3457 });
+		expect(absente!.signaux).not.toHaveProperty('logit');
 	});
 
 	it(`au plus ${CLASSEMENT_MAX} lignes, les mieux classées ; la dernière gardée compte les coupées`, () => {
