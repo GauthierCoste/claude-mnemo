@@ -153,7 +153,7 @@ export function ecranInitial(s: SessionDemo | undefined, colonnes: number, trava
 	} else corps += `${SGR.gris}  Session lancée depuis l'interface.${SGR.fin}${NL}${NL}`;
 	if (travaille) corps += `${indicateur('Travaille', s?.moteur)}${NL}${NL}`;
 	// question de l'écran ouverte (confiance du dossier) : pas encore d'invite
-	if (s?.attentePremierMessage === true) return corps;
+	if (s?.attentePremierMessage !== undefined) return corps;
 	return corps + invite(colonnes, s?.moteur);
 }
 

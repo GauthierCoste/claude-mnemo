@@ -284,20 +284,24 @@ describe('vue Sessions', () => {
 		expect(faux.api.envoyer).not.toHaveBeenCalled();
 	});
 
-	it('GitHub Copilot CLI qui attend le premier message : dit dans l’état et le panneau ; bilan et pause restent possibles ; dit plus rien une fois commencée', async () => {
+	it('GitHub Copilot CLI qui attend le premier message : dit dans l’état et le panneau ; bilan et pause restent possibles ; la question de confiance seule si une ligne est partie avec le lancement ; plus rien une fois commencée', async () => {
 		const faux = await monter({ '/api/sessions/s1/bilan': { statut: 'ok' } });
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
-		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'copilot-cli', attentePremierMessage: true } }));
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'copilot-cli', attentePremierMessage: 'message' } }));
 		expect(within(contexte).getByText('Attend ton premier message')).toBeTruthy();
 		expect(within(carte('s1')).getByRole('img', { name: 'Attend ton premier message' })).toBeTruthy();
 		const note = within(contexte).getByText(/^En attente de ton premier message dans le terminal/u);
 		expect(note.getAttribute('role')).toBe('note');
-		expect(note.textContent).toBe('En attente de ton premier message dans le terminal ; réponds d’abord à la question de GitHub Copilot CLI s’il en pose une. Bilan et consigne restent possibles.');
+		expect(note.textContent).toBe('En attente de ton premier message dans le terminal ; réponds d’abord à la question de confiance de GitHub Copilot CLI. Le bilan reste possible.');
 		expect(within(contexte).getByRole('button', { name: 'Mettre en pause' }).getAttribute('aria-disabled')).toBeNull();
 		const bilan = within(contexte).getByRole('button', { name: 'Terminer avec bilan' });
 		expect(bilan.getAttribute('aria-disabled')).toBeNull();
 		await act(async () => bilan.click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions/s1/bilan', undefined);
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'copilot-cli', attentePremierMessage: 'confiance' } }));
+		expect(within(contexte).getByText('Attend ta réponse à la question de confiance')).toBeTruthy();
+		expect(within(contexte).getByText(/^Réponds dans le terminal à la question de confiance de GitHub Copilot CLI : il enverra ensuite lui-même le premier message de la session\.$/u).getAttribute('role')).toBe('note');
+		expect(within(contexte).queryByText(/^En attente de ton premier message/u)).toBeNull();
 		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'copilot-cli' } }));
 		expect(within(contexte).queryByText(/premier message/u)).toBeNull();
 		expect(within(contexte).getByText('Attend ta réponse')).toBeTruthy();

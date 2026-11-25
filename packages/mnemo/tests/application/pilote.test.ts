@@ -753,18 +753,23 @@ describe('Pilote : sessions GitHub Copilot CLI', () => {
 		expect((await c.etat.lire(s.id))!.fil).toBe(s.id);
 	});
 
-	it('attendPremierMessage : vrai tant qu’aucun hook de ce lancement n’est arrivé ; faux après un hook, pour une session qui ne tourne pas ici, et chez Claude Code', async () => {
+	it('attendPremierMessage : message (sans ligne au lancement) ou confiance (objectif ou bilan partis avec lui) tant qu’aucun hook de ce lancement n’est arrivé ; null après un hook, pour une session qui ne tourne pas ici, et chez Claude Code', async () => {
 		const c = await contexte();
 		await avecCopilot(c);
 		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
-		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBe(true);
+		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBe('message');
 		await new Promise((r) => setTimeout(r, 5));
 		await c.etat.appliquer(s.id, 'debut', Date.now(), { fil: s.id });
-		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBe(false);
+		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBeNull();
+		c.terminaux.arretFinit = true;
 		await c.pilote.pause(s.id);
-		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBe(false);
+		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBeNull();
+		await c.pilote.terminer(s.id, { bilan: true });
+		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBe('confiance');
+		const avecObjectif = await lancee(c, { profil: 'redaction', dossier: 'alpha', objectif: 'Relis le contrat' });
+		expect(c.pilote.attendPremierMessage((await c.etat.lire(avecObjectif.id))!)).toBe('confiance');
 		const claude = await lancee(c, { profil: 'travail', dossier: 'alpha' });
-		expect(c.pilote.attendPremierMessage((await c.etat.lire(claude.id))!)).toBe(false);
+		expect(c.pilote.attendPremierMessage((await c.etat.lire(claude.id))!)).toBeNull();
 	});
 
 	it('aucun hook depuis ce lancement (écran de confiance peut-être ouvert) : rien n’est tapé, consigne refusée, taper sans effet ; après un hook, tapée', async () => {

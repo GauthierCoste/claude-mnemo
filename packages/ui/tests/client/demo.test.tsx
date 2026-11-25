@@ -170,8 +170,8 @@ describe('mode démo', () => {
 			expect(estIdMoteur(x.moteur ?? 'claude-code')).toBe(true);
 			if (x.modele !== undefined) expect(proposes(x.moteur!)).toContain(x.modele);
 		}
-		const attente = sessions.filter((x) => x.attentePremierMessage === true);
-		expect(attente.map((x) => [x.moteur, x.etat, x.terminal])).toEqual([['copilot-cli', 'attend', true]]);
+		const attente = sessions.filter((x) => x.attentePremierMessage !== undefined);
+		expect(attente.map((x) => [x.moteur, x.etat, x.terminal, x.attentePremierMessage])).toEqual([['copilot-cli', 'attend', true, 'confiance']]);
 		expect(sessions.some((x) => x.moteur === 'mistral-vibe')).toBe(true);
 		const quotas = await api.lire<ReponseQuotas>(ROUTES.quotas);
 		expect(Object.keys(quotas.moteurs ?? {}).sort()).toEqual(['claude-code', 'codex']);
@@ -198,7 +198,7 @@ describe('mode démo', () => {
 		const { api } = creerClientDemo();
 		const id = '6f1b4d8e-9a2c-4e07-b3d5-c8a0e2f4b917';
 		const { session } = await api.envoyer<{ session: SessionVue }>(`/api/sessions/${id}/bilan`);
-		expect(session).toMatchObject({ id, etat: 'attend', attentePremierMessage: true });
+		expect(session).toMatchObject({ id, etat: 'attend', attentePremierMessage: 'confiance' });
 		expect(session.bilanDemandeMs).not.toBeNull();
 	});
 

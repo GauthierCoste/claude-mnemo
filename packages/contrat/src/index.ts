@@ -54,14 +54,18 @@ export type SessionVue = {
 	sansReprise?: string;
 	/**
 	 * La session tourne ici sans avoir commencé chez son moteur, qui n'envoie rien avant le premier message (GitHub Copilot CLI,
-	 * qui demande aussi à chaque lancement la confiance dans le dossier) : elle attend le premier message de l'utilisateur, tapé
-	 * dans son terminal. Bilan et consigne restent possibles : le service la relance avec eux. Absent : non.
+	 * qui demande aussi à chaque lancement la confiance dans le dossier) : `message`, elle attend le premier message de
+	 * l'utilisateur, tapé dans son terminal ; `confiance`, une ligne est partie avec le lancement (objectif, bilan) et le moteur
+	 * l'enverra lui-même : elle attend la réponse de l'utilisateur à la question de confiance. Le bilan reste possible (le
+	 * service la relance avec lui) ; une consigne est refusée. Absent : non.
 	 */
-	attentePremierMessage?: true;
+	attentePremierMessage?: AttentePremierMessage;
 };
 
 /** Une fiche écartée dans `sessions` sessions distinctes, sur `jours` jours, sans geste positif depuis. */
 export type SuggestionEcarteeToujoursVue = { chemin: string; sessions: number; jours: number };
+/** Ce qu'attend une session qui n'a pas encore commencé chez son moteur (`SessionVue.attentePremierMessage`). */
+export type AttentePremierMessage = 'message' | 'confiance';
 
 /**
  * Un profil de session qui peut être lancé : `description`, première ligne de sa consigne ; `lancement` : `projet` (dans le

@@ -78,9 +78,14 @@ export function PanneauContexte(p: {
 	return (
 		<aside className={s.panneau} aria-label="Contexte" style={p.largeur === undefined ? undefined : { width: p.largeur }}>
 			<EnteteSession session={x} />
-			{x.attentePremierMessage === true && (
+			{x.attentePremierMessage === 'message' && (
 				<p role="note" className={s.avis}>
-					En attente de ton premier message dans le terminal ; réponds d’abord à la question de {nomDuMoteur(x.moteur)} s’il en pose une. Bilan et consigne restent possibles.
+					En attente de ton premier message dans le terminal ; réponds d’abord à la question de confiance de {nomDuMoteur(x.moteur)}. Le bilan reste possible.
+				</p>
+			)}
+			{x.attentePremierMessage === 'confiance' && (
+				<p role="note" className={s.avis}>
+					Réponds dans le terminal à la question de confiance de {nomDuMoteur(x.moteur)} : il enverra ensuite lui-même le premier message de la session.
 				</p>
 			)}
 			{x.dossierNonRattache !== null && (

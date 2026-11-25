@@ -48,9 +48,11 @@ export type Pilote = {
 	motifSansReprise(s: Session): string | null;
 	/**
 	 * La session tourne ici, chez un moteur qui n'envoie aucun hook avant le premier message (`debutAuPremierMessage`), et aucun
-	 * hook de ce lancement n'est arrivé : elle attend le premier message de l'utilisateur dans son terminal.
+	 * hook de ce lancement n'est arrivé : `message`, elle attend le premier message de l'utilisateur dans son terminal ;
+	 * `confiance`, une ligne est partie avec le lancement (objectif, bilan), que le moteur enverra lui-même : elle attend la
+	 * réponse à la question de son écran. null : rien de tout cela.
 	 */
-	attendPremierMessage(s: Session): boolean;
+	attendPremierMessage(s: Session): 'message' | 'confiance' | null;
 	/**
 	 * Termine une session. `bilan` : l'agent rédige l'épisode (consigne tapée dans le terminal ; une session qui ne tourne pas
 	 * est d'abord reprise ; chez un moteur `debutAuPremierMessage`, la consigne part avec la reprise, et une session qui tourne
@@ -162,6 +164,8 @@ type Vivant = {
 	arret: boolean;
 	/** Instant du lancement du processus : un hook reçu depuis le montre commencé (`debutAuPremierMessage`). */
 	lanceMs: number;
+	/** Une ligne est partie avec le lancement (objectif, bilan), comme premier message : le moteur l'envoie lui-même. */
+	ligneAuLancement: boolean;
 };
 
 const NOM_DE_VARIABLE = /^[A-Za-z_][A-Za-z0-9_]*$/u;
@@ -461,7 +465,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		} catch {
 			return manuel();
 		}
-		const vivant: Vivant = { terminal, moteur, tampon: tamponCirculaire(CAPACITE_TAMPON), abonnes: new Set(), fini: Promise.resolve(), ecritMajMs: null, arret: false, lanceMs };
+		const vivant: Vivant = { terminal, moteur, tampon: tamponCirculaire(CAPACITE_TAMPON), abonnes: new Set(), fini: Promise.resolve(), ecritMajMs: null, arret: false, lanceMs, ligneAuLancement: objectif !== undefined && objectif.trim() !== '' };
 		// avant toute sortie du moteur : le terminal n'a encore aucun abonné, la relecture la montrera d'abord
 		for (const avertissement of avertissements) vivant.tampon.ajouter(lignesDAvertissement(avertissement));
 		terminal.surSortie((d) => {
@@ -990,7 +994,8 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 
 		attendPremierMessage(s) {
 			const v = vivants.get(s.id);
-			return v !== undefined && v.moteur.debutAuPremierMessage === true && s.etat !== 'terminee' && !commencee(v.moteur, s, v.lanceMs);
+			if (v === undefined || v.moteur.debutAuPremierMessage !== true || s.etat === 'terminee' || commencee(v.moteur, s, v.lanceMs)) return null;
+			return v.ligneAuLancement ? 'confiance' : 'message';
 		},
 
 		taper(id, ligne) {

@@ -266,8 +266,11 @@ holds anything Mnemo did not write, it is left as it is and the message says why
 
 **Trust and first message.** Copilot asks « Do you trust the files in this folder? » at each start, with « Yes » chosen
 by default. Answer it yourself in the terminal of the session: Mnemo never presses a key there, and never passes
-`--trust-folder`. Copilot sends nothing to Mnemo before your first message: until then, the interface shows the session
-as « Attend ton premier message » (waiting for your first message).
+`--trust-folder`. Copilot sends nothing to Mnemo before the first message of the session. A session started with an
+objective, or restarted for its wrap-up, has that text as its first message, which Copilot sends itself once you have
+answered: the interface shows « Attend ta réponse à la question de confiance » (waiting for your answer to the trust
+question). Otherwise you type the first message yourself, and until then the interface shows « Attend ton premier
+message » (waiting for your first message).
 
 ## Claude app (Claude Desktop)
 

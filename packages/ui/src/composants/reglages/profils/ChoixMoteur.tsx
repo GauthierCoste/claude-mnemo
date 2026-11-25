@@ -20,7 +20,7 @@ const EFFETS: Record<IdMoteur, string> = {
 	'claude-code': 'skills et hooks par un plugin de session, plugins Claude Code au choix, quotas de l’abonnement lus',
 	codex: 'skills listées dans la consigne et lues par l’outil lire, hooks à approuver une fois dans Codex, quotas de l’abonnement lus ; pas de plugins',
 	'mistral-vibe': 'skills listées dans la consigne et lues par l’outil lire ; ni plugins, ni quotas de l’abonnement',
-	'copilot-cli': 'attend ton premier message dans le terminal à chaque lancement ; skills listées dans la consigne et lues par l’outil lire ; ni plugins, ni quotas de l’abonnement',
+	'copilot-cli': 'pose sa question de confiance dans le terminal à chaque lancement, puis attend ton premier message s’il n’en a pas reçu avec lui ; skills listées dans la consigne et lues par l’outil lire ; ni plugins, ni quotas de l’abonnement',
 };
 
 /** Ligne d'état d'un moteur sur ce poste : sa version, ou pourquoi ses sessions ne se lanceront pas ici. */

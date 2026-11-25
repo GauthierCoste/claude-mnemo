@@ -5,7 +5,7 @@
  */
 import { ACCENT_PAR_DEFAUT, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import type { IdMoteur } from '@mnemo/commun';
-import type { ChampReglageVue, EtatSessionVue, RaisonCarteVue } from '@mnemo/contrat';
+import type { AttentePremierMessage, ChampReglageVue, EtatSessionVue, RaisonCarteVue } from '@mnemo/contrat';
 
 /** Dossier des projets dans la mémoire fictive de la démo : la position d'une session de démo est `<ce dossier>/<dossier>`. */
 export const DOSSIER_DES_PROJETS_DEMO = 'projets';
@@ -40,8 +40,8 @@ export type SessionDemo = {
 	modele?: string;
 	/** Pourquoi elle ne peut être ni mise en pause ni reprise (Codex dont aucun hook n'est arrivé). */
 	sansReprise?: string;
-	/** Elle tourne sans avoir commencé : son moteur attend le premier message (GitHub Copilot CLI, écran de confiance ouvert). */
-	attentePremierMessage?: true;
+	/** Elle tourne sans avoir commencé : ce que son moteur attend (GitHub Copilot CLI, écran de confiance ouvert). */
+	attentePremierMessage?: AttentePremierMessage;
 	/**
 	 * Écran du terminal : [genre, texte] ; u = utilisateur, m = Mnemo, t = outil, r = résultat, a = réponse, q = question,
 	 * w = avertissement écrit par le service en tête du terminal (`[Mnemo] …`, tel quel), x = texte du moteur, tel quel.
@@ -282,10 +282,11 @@ export const SESSIONS_DEMO: SessionDemo[] = [
 		profil: 'tests-e2e',
 		dossier: 'site-vitrine',
 		objectif: 'Écrire les tests du formulaire de contact',
-		// lancée, pas encore commencée : GitHub Copilot CLI montre sa question de confiance, aucun hook n'est arrivé
+		// lancée avec son objectif, pas encore commencée : GitHub Copilot CLI montre sa question de confiance, aucun hook
+		// n'est arrivé ; il enverra l'objectif lui-même une fois la question réglée
 		etat: 'attend',
 		moteur: 'copilot-cli',
-		attentePremierMessage: true,
+		attentePremierMessage: 'confiance',
 		ageMin: 1,
 		calmeMin: 1,
 		branche: 'feat/contact',

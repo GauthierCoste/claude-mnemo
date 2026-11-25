@@ -61,7 +61,7 @@ describe('Réglages › Profils : moteur et modèle', () => {
 		await waitFor(() => expect(description('Mistral Vibe').firstElementChild?.textContent).toBe('version 3.1.5'));
 		expect(description('Mistral Vibe').lastElementChild?.textContent).toMatch(/ni plugins, ni quotas de l’abonnement$/u);
 		expect(description('GitHub Copilot CLI').firstElementChild?.textContent).toBe('version 1.0.116');
-		expect(description('GitHub Copilot CLI').lastElementChild?.textContent).toMatch(/^attend ton premier message dans le terminal à chaque lancement/u);
+		expect(description('GitHub Copilot CLI').lastElementChild?.textContent).toMatch(/^pose sa question de confiance dans le terminal à chaque lancement, puis attend ton premier message/u);
 		expect(modele(editeur).value).toBe('mistral-medium-3.5');
 		const proposes = await within(editeur).findByRole('group', { name: 'Modèles proposés par Mistral Vibe' });
 		expect(within(proposes).getAllByRole('button').map((b) => b.textContent)).toEqual(['mistral-large-4-0', 'mistral-medium-3.5']);
