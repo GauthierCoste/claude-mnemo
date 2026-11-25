@@ -1,3 +1,4 @@
+import { effetDuHook, hooksDuTexte } from '../../../domaine/moteurs/hooks-du-profil.ts';
 import { estSourceDeDebut, estUuid } from '../../../domaine/session.ts';
 import type { EvenementHook } from '../../../domaine/session.ts';
 import { estObjet, objetJson } from '../../../domaine/valeurs.ts';
@@ -65,12 +66,17 @@ function sortieDe(evenement: EvenementHook, reponse: ReponseHook): string {
 /**
  * Entrée de Codex traduite (lot 0 : `session_id`, `transcript_path`, `cwd`, `hook_event_name`, puis `source`, `prompt`,
  * `tool_name`, `tool_input`, `reason`…). Session : `MNEMO_SESSION` seulement — le `session_id` de Codex est son propre
- * identifiant (`fil`), jamais celui de la session Mnemo. Null hors d'une session Mnemo, pour un `SessionEnd` ignoré, ou
- * une entrée illisible hors `outil` (qui doit décider : son action est alors « non lue »).
+ * identifiant (`fil`), jamais celui de la session Mnemo. Null hors d'une session Mnemo, pour un hook que le profil de la
+ * session ne demande pas (`MNEMO_HOOKS` : `outil`, `apres_outil` ; `debut` et `message` y passent sans contexte), pour un
+ * `SessionEnd` ignoré, ou une entrée illisible hors `outil` (qui doit décider : son action est alors « non lue »).
  */
 function traduire({ evenement, options, lecture, env, maintenantMs, cwdProcessus, reel }: AppelHook): { entree: EntreeHook; transcription?: string } | null {
 	const session = sessionMnemo(env);
 	if (session === null) return null;
+	// hooks communs à toutes les sessions : le profil de celle-ci dit ce que chacun fait (`MNEMO_HOOKS`, posée au lancement)
+	const demandes = hooksDuTexte(env.MNEMO_HOOKS);
+	const effet = demandes === null ? 'actif' : effetDuHook(evenement, demandes);
+	if (effet === 'absent') return null;
 	const lu = 'texte' in lecture ? objetJson(lecture.texte) : null;
 	if (lu === null && evenement !== 'outil') return null;
 	const champs = lu ?? {};
@@ -84,7 +90,7 @@ function traduire({ evenement, options, lecture, env, maintenantMs, cwdProcessus
 	if (typeof champs.tool_name === 'string') entree.outil = { nom: champs.tool_name, entree: estObjet(champs.tool_input) ? champs.tool_input : typeof champs.tool_input === 'string' ? { input: champs.tool_input } : {} };
 	else if (evenement === 'outil') entree.outil = { nonLue: 'nonLue' in lecture ? lecture.nonLue : 'entree_illisible' };
 	if (evenement === 'arret') entree.arret = options.has('--notification') ? 'notification' : 'stop';
-	if (options.has('--sans-contexte')) entree.sansContexte = true;
+	if (options.has('--sans-contexte') || effet === 'sans_contexte') entree.sansContexte = true;
 	return typeof champs.transcript_path === 'string' && champs.transcript_path !== '' ? { entree, transcription: champs.transcript_path } : { entree };
 }
 

@@ -8,6 +8,8 @@ import type { AppelDeclaration, Executer } from '../../src/application/ports.ts'
 import { commandeManuelleCodex, lireDeclarationCodex } from '../../src/domaine/moteurs/codex/declaration.ts';
 import { DECLARATION_MCP_CODEX } from '../../src/infra/moteurs/codex/declaration-mcp.ts';
 import { trouverCodex } from '../../src/infra/moteurs/codex/trouver-codex.ts';
+import { DELAI_MODELES_MS, modelesCodex } from '../../src/infra/moteurs/codex/modeles.ts';
+import { executeurReel } from '../../src/adaptateurs/cli/executeur.ts';
 import { MOTEURS, MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { commandesDuHook } from '../../src/domaine/moteurs/codex/hooks-installes.ts';
@@ -379,9 +381,55 @@ describe('mnemo declarer --moteur codex (faux codex par MNEMO_CODEX)', () => {
 });
 
 describe('registres', () => {
-	it('Codex est connu du poste (déclaration MCP) mais ne lance pas de session : absent de MOTEURS', () => {
+	it('Codex lance des sessions : dans MOTEURS, le même que sur le poste (déclaration MCP, hooks du poste)', () => {
 		expect(MOTEURS_DU_POSTE.codex.declarationMcp).toBe(DECLARATION_MCP_CODEX);
-		expect(MOTEURS.some((m) => m.id === 'codex')).toBe(false);
+		expect(MOTEURS.find((m) => m.id === 'codex')).toBe(MOTEURS_DU_POSTE.codex);
 		expect(MOTEURS_DU_POSTE['claude-code']).toBe(MOTEURS.find((m) => m.id === 'claude-code'));
+	});
+});
+
+describe('modèles de Codex (codex debug models)', () => {
+	const CATALOGUE = JSON.stringify({ models: [{ slug: 'gpt-b', visibility: 'list', priority: 2 }, { slug: 'gpt-a', visibility: 'list', priority: 1 }, { slug: 'cache', visibility: 'hide', priority: 0 }] });
+
+	it('lue par le faux codex (Node courant), sous un délai court, avec l’environnement donné', async () => {
+		const d = await dossierTemporaire();
+		const faux = join(d, 'faux-codex.mjs');
+		await writeFile(faux, `if (process.argv.slice(2).join(' ') !== 'debug models' || process.env.CODEX_HOME !== '/h/c') process.exit(3);\nprocess.stdout.write(${JSON.stringify(CATALOGUE)});\n`);
+		const commande = trouverCodex({ MNEMO_CODEX: faux }, 'darwin', '/nulle/part');
+		expect(await modelesCodex()({ executer: executeurReel(), commande, env: { CODEX_HOME: '/h/c', VIDE: undefined } })).toEqual(['gpt-a', 'gpt-b']);
+	});
+
+	it('en cache par commande et CODEX_HOME ; échec, sortie illisible ou introuvable : aucun modèle, réessayé plus tôt', async () => {
+		let maintenant = 0;
+		const appels: { args: string[]; delaiMs?: number }[] = [];
+		let reponse: () => Promise<{ code: number; sortie: string; erreur: string }> = async () => ({ code: 0, sortie: CATALOGUE, erreur: '' });
+		const executer: Executer = (_commande, args, options) => {
+			appels.push({ args, ...(options?.delaiMs === undefined ? {} : { delaiMs: options.delaiMs }) });
+			return reponse();
+		};
+		const modeles = modelesCodex(() => maintenant);
+		const commande = { commande: '/bin/codex', avant: [] };
+		expect(await modeles({ executer, commande, env: {} })).toEqual(['gpt-a', 'gpt-b']);
+		expect(await modeles({ executer, commande, env: {} })).toEqual(['gpt-a', 'gpt-b']);
+		expect(appels).toEqual([{ args: ['debug', 'models'], delaiMs: DELAI_MODELES_MS }]);
+		expect(DELAI_MODELES_MS).toBeLessThanOrEqual(5000);
+		// autre CODEX_HOME : relu ; en échec : aucun, gardé une minute
+		reponse = async () => {
+			throw new Error('délai dépassé');
+		};
+		expect(await modeles({ executer, commande, env: { CODEX_HOME: '/autre' } })).toEqual([]);
+		maintenant += 30_000;
+		expect(await modeles({ executer, commande, env: { CODEX_HOME: '/autre' } })).toEqual([]);
+		expect(appels).toHaveLength(2);
+		reponse = async () => ({ code: 1, sortie: '', erreur: 'Not logged in' });
+		maintenant += 31_000;
+		expect(await modeles({ executer, commande, env: { CODEX_HOME: '/autre' } })).toEqual([]);
+		expect(appels).toHaveLength(3);
+		// la liste lue sert dix minutes
+		maintenant += 10 * 60_000;
+		reponse = async () => ({ code: 0, sortie: 'illisible', erreur: '' });
+		expect(await modeles({ executer, commande, env: {} })).toEqual([]);
+		expect(await modeles({ executer, commande: null, env: {} })).toEqual([]);
+		expect(appels).toHaveLength(4);
 	});
 });

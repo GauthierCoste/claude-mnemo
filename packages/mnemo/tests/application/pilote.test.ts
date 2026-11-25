@@ -1,10 +1,13 @@
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { creerPilote, ErreurMoteurIndisponible, ligneManuelle } from '../../src/application/pilote.ts';
+import { creerPilote, ErreurMoteurIndisponible, ErreurRepriseImpossible, ligneManuelle } from '../../src/application/pilote.ts';
 import type { Pilote } from '../../src/application/pilote.ts';
 import type { CommandeMoteur, EtatSessions, FichierPlugin, Pilotage } from '../../src/application/ports.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
+import { MOTEUR_CODEX } from '../../src/infra/moteurs/codex.ts';
+import { HOOKS_DU_POSTE_CODEX } from '../../src/infra/moteurs/codex/hooks-json.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { DEPOT_ABSENT, fauxPorts } from '../aides/faux-ports.ts';
 import { fauxTerminaux } from '../aides/faux-terminaux.ts';
@@ -547,6 +550,94 @@ describe('Pilote : moteur de la session', () => {
 		expect(r).toEqual({ refus: expect.stringMatching(/« codex »/u) });
 		expect(c.terminaux.lances).toHaveLength(0);
 		expect(await c.etat.lister()).toEqual([]);
+	});
+});
+
+const CODEX = { commande: '/usr/bin/node', avant: ['/aides/faux-codex.mjs'] };
+const APPEL_CODEX = { ...APPEL, main: '/opt/mnemo/src/adaptateurs/cli/main.ts' };
+
+/** Codex dans le pilotage du test (commande donnée, null : introuvable), sa configuration dans un dossier jetable. */
+async function avecCodex(c: Contexte, commande: CommandeMoteur | null = CODEX): Promise<string> {
+	const maison = join(await dossierTemporaire(), 'codex');
+	c.pil.moteurs = { ...c.pil.moteurs, codex: { moteur: MOTEUR_CODEX, commande } };
+	// un `main.ts` de Mnemo, que les hooks installés lancent
+	c.pil.plugin.appel = APPEL_CODEX;
+	c.pil.hote.env = { ...c.pil.hote.env, CODEX_HOME: maison, OPENAI_API_KEY: 'sk-secret' };
+	await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmoteur: codex\nmodele: gpt-6.2-sol\nhooks: [debut, message, arret, fin]\n---\n# Rédaction\n\nRédige les courriers.\n');
+	return maison;
+}
+
+/** Hooks de Mnemo installés dans ce `CODEX_HOME`, et approuvés si `approuves` (clés de `hooks.state` comme Codex les écrit). */
+async function hooksCodex(maison: string, approuves: boolean): Promise<void> {
+	await HOOKS_DU_POSTE_CODEX.installer({ node: APPEL_CODEX.node, main: APPEL_CODEX.main, env: { CODEX_HOME: maison } });
+	if (!approuves) return;
+	const fichier = join(maison, 'hooks.json');
+	const cles = ['session_start', 'user_prompt_submit', 'pre_tool_use', 'post_tool_use', 'stop', 'permission_request', 'session_end'];
+	await writeFile(join(maison, 'config.toml'), cles.map((cle) => `[hooks.state."${fichier}:${cle}:0:0"]\ntrusted_hash = "sha256:0"\n`).join('\n'));
+}
+
+describe('Pilote : sessions Codex', () => {
+	it('lancement : codex avec la marque, le modèle, la consigne et l’objectif ; MNEMO_MOTEUR=codex et hooks du profil ; arrêt par /quit', async () => {
+		const c = await contexte();
+		const maison = await avecCodex(c);
+		await hooksCodex(maison, true);
+		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha', objectif: 'Écris au client' });
+		expect(s).toMatchObject({ moteur: 'codex', modele: 'gpt-6.2-sol' });
+		const t = c.terminaux.lances[0]!;
+		expect(t.options.commande).toBe(CODEX.commande);
+		expect(t.options.args.slice(0, 9)).toEqual([...CODEX.avant, '-c', `mnemo_session="${s.id}"`, '--no-daemon', '--no-alt-screen', '--disable', 'memories', '-m', 'gpt-6.2-sol']);
+		expect(t.options.args.slice(-2)).toEqual(['--', 'Écris au client']);
+		expect(t.options.args.find((a) => a.startsWith('developer_instructions='))).toMatch(/^developer_instructions="Rédige les courriers\./u);
+		expect(t.options.dossier).toBe(`${RACINE}/alpha`);
+		expect(t.options.env).toMatchObject({ MNEMO_SESSION: s.id, MNEMO_MOTEUR: 'codex', MNEMO_HOOKS: 'debut,message,arret,fin', CODEX_HOME: maison });
+		expect(t.options.env).not.toHaveProperty('OPENAI_API_KEY');
+		expect(t.options.touches).toMatchObject({ arret: '\x15/quit' });
+		expect(c.plugins.get(s.id)!.map((f) => f.chemin)).toEqual(['consigne.md']);
+		// hooks installés et approuvés : aucun avertissement dans le terminal
+		expect(c.pilote.abonner(s.id, () => {})!.relecture).toBe('');
+	});
+
+	it('hooks absents ou non approuvés : la session se lance quand même, une ligne le dit en tête du terminal', async () => {
+		const c = await contexte();
+		const maison = await avecCodex(c);
+		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
+		c.terminaux.lances[0]!.emettre('codex> ');
+		const relecture = c.pilote.abonner(s.id, () => {})!.relecture;
+		expect(relecture).toMatch(/^\r\n\[Mnemo\] Hooks de Mnemo pour Codex non installés .*mnemo init --codex.*\r\n\r\ncodex> $/su);
+		await hooksCodex(maison, false);
+		const t = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
+		expect(c.pilote.abonner(t.id, () => {})!.relecture).toMatch(/Hooks de Mnemo pour Codex non approuvés : .*\(\/hooks\)/su);
+	});
+
+	it('Codex introuvable : lancement refusé avec la raison, aucune session ; terminaux indisponibles : la ligne à coller', async () => {
+		const c = await contexte();
+		await avecCodex(c, null);
+		const r = await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' });
+		expect(r).toEqual({ refus: expect.stringMatching(/Codex, introuvable sur ce poste/u) });
+		expect(await c.etat.lister()).toEqual([]);
+		await avecCodex(c);
+		c.terminaux.indisponible = 'node-pty absent';
+		const m = await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' });
+		if (!('manuel' in m)) throw new Error('manuel attendu');
+		expect(m.manuel).toMatch(/MNEMO_MOTEUR='codex' .*'\/usr\/bin\/node' '\/aides\/faux-codex\.mjs' '-c' 'mnemo_session="/u);
+		expect(m.manuel).toMatch(/^cd '\/racine\/alpha' && env -u OPENAI_API_KEY /u);
+	});
+
+	it('reprise : codex resume <fil> une fois le fil appris ; sans fil, refusée avec la raison (rien lancé), et laissée au redémarrage', async () => {
+		const c = await contexte({ sessions: [session(ID_A, { etat: 'en_pause', profil: 'redaction', moteur: 'codex', modele: '' }), session(ID_B, { etat: 'a_relire', profil: 'redaction', moteur: 'codex', modele: '', fil: 'fil-b' })] });
+		await avecCodex(c);
+		await expect(c.pilote.reprendre(ID_A)).rejects.toThrow(ErreurRepriseImpossible);
+		await expect(c.pilote.reprendre(ID_A)).rejects.toThrow(/identifiant chez Codex est inconnu/u);
+		await expect(c.pilote.ligneDeReprise(ID_A)).rejects.toThrow(ErreurRepriseImpossible);
+		await expect(c.pilote.terminer(ID_A, { bilan: true })).rejects.toThrow(ErreurRepriseImpossible);
+		expect(c.terminaux.lances).toHaveLength(0);
+		expect(await c.pilote.reprendreAuDemarrage()).toEqual([ID_B]);
+		const t = c.terminaux.lances[0]!;
+		expect(t.options.args.slice(0, 2)).toEqual([...CODEX.avant, 'resume']);
+		expect(t.options.args.slice(-2)).toEqual(['--', 'fil-b']);
+		expect(await c.etat.lire(ID_A)).toMatchObject({ etat: 'en_pause' });
+		// abandon d'une session sans fil : possible (rien à reprendre)
+		expect(await c.pilote.terminer(ID_A, { bilan: false })).toMatchObject({ etat: 'terminee' });
 	});
 });
 

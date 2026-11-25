@@ -28,11 +28,16 @@ export const MOTEUR_CLAUDE_CODE: Moteur = {
 	id: 'claude-code',
 	nom: 'Claude Code',
 	commandeParDefaut: 'claude',
-	modeles: [],
+	// liste courte au lot 7 ; d'ici là, le modèle par défaut et la saisie libre
+	modeles: async () => [],
+	// introuvable : la ligne à coller, avec `claude`
+	sansCommande: 'manuel',
 	trouver: (env, plateforme) => trouverClaude(env, plateforme as NodeJS.Platform),
 	declarationMcp: DECLARATION_MCP_CLAUDE_CODE,
 	// lancé avec `--session-id` / `--resume <uuid>` : l'uuid de Mnemo est dans sa ligne de commande
 	marqueDeSession: (uuid) => uuid,
+	// reprise par `--resume <uuid de Mnemo>` : toujours possible
+	motifSansReprise: () => null,
 	fichiersDeSession: assemblerPlugin,
 	preparer: preparerClaudeCode,
 	touches: TOUCHES_CLAUDE_CODE,

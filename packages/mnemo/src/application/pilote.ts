@@ -7,7 +7,8 @@ import { CAPACITE_TAMPON, tamponCirculaire } from '../domaine/tampon.ts';
 import { ecrireEpisodeMinimal, episodesDuProjet, texteDuBilan, trouverEpisode } from './episode.ts';
 import { estIdMoteur, MOTEUR_PAR_DEFAUT } from '../domaine/moteurs/moteur.ts';
 import type { IdMoteur } from '../domaine/moteurs/moteur.ts';
-import type { CommandeMoteur, Dependances, ModeLancement, MoteurDuService, Pilotage, Terminal } from './ports.ts';
+import type { CommandeMoteur, Dependances, ModeLancement, Moteur, MoteurDuService, Pilotage, Terminal } from './ports.ts';
+import { avertissementDesHooks, lignesDAvertissement } from './moteurs/avertissement-hooks.ts';
 import { projetDeSession } from './portees.ts';
 import { positionNotee } from './dossiers-non-rattaches.ts';
 import type { PositionDuProjet } from './position.ts';
@@ -23,7 +24,10 @@ export type Pilote = {
 	 */
 	lancer(d: { profil: string; dossier: string; objectif?: string }): Promise<{ session: Session } | { session: Session; manuel: string } | { session: Session; existant: true } | { refus: string }>;
 	pause(id: string): Promise<Session | null>;
-	/** Rejette `ErreurMoteurIndisponible` si le moteur de la session n'a pas d'implémentation ici (de même bilan et `confier`). */
+	/**
+	 * Rejette `ErreurMoteurIndisponible` si le moteur de la session n'a pas d'implémentation ici, `ErreurRepriseImpossible` s'il
+	 * ne sait pas la reprendre (de même bilan, `confier` et `ligneDeReprise`).
+	 */
 	reprendre(id: string): Promise<Session | null>;
 	entree(id: string, d: string): void;
 	taille(id: string, c: number, l: number): void;
@@ -79,8 +83,17 @@ export class ErreurMoteurIndisponible extends Error {
 	}
 }
 
+/** Une session que son moteur ne sait pas reprendre (Codex : son identifiant chez Codex encore inconnu) : rien n'est lancé. */
+export class ErreurRepriseImpossible extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'ErreurRepriseImpossible';
+	}
+}
+
 /** Raison pour laquelle la session ne peut pas tourner avec son moteur dans ce service. */
 const moteurIndisponible = (moteur: string): string => `Moteur « ${moteur} » sans implémentation dans ce service : la session ne peut pas être relancée.`;
+const repriseImpossible = (motif: string): string => `Reprise impossible : ${motif}.`;
 
 const COLONNES = 120;
 const LIGNES = 32;
@@ -339,21 +352,46 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		const duService = moteurDe(session);
 		if (duService === null) throw new ErreurMoteurIndisponible(moteurIndisponible(session.moteur ?? MOTEUR_PAR_DEFAUT));
 		const { moteur, commande } = duService;
+		const sansReprise = mode === 'reprise' ? moteur.motifSansReprise(session) : null;
+		if (sansReprise !== null) throw new ErreurRepriseImpossible(repriseImpossible(sansReprise));
 		const profil = await chargerProfil(dep, session.profil);
-		const dossierFichiers = await pil.plugin.ecrire(session.id, await moteur.fichiersDeSession(dep, session, profil, pil.plugin.appel));
-		const lancement = moteur.preparer({ session, profil, mode, ...(objectif === undefined ? {} : { objectif }), dossierFichiers, racine: pil.plugin.racine, env: pil.hote.env });
+		const fichiers = await moteur.fichiersDeSession(dep, session, profil, pil.plugin.appel);
+		const dossierFichiers = await pil.plugin.ecrire(session.id, fichiers);
+		const lancement = moteur.preparer({
+			session,
+			profil,
+			mode,
+			...(objectif === undefined ? {} : { objectif }),
+			dossierFichiers,
+			fichiers,
+			racine: pil.plugin.racine,
+			appel: pil.plugin.appel,
+			env: pil.hote.env,
+		});
 		const dossier = await dossierDe(session);
 		const manuel = (): { manuel: string } => ({ manuel: ligneManuelle(commande, lancement.args, dossier, lancement.ajouts, lancement.retirees, pil.hote.plateforme, moteur.commandeParDefaut) });
 		return { moteur, commande, args: lancement.args, env: lancement.env, dossier, manuel };
 	};
 
 	/**
+	 * Avertissement à écrire en tête du terminal d'une session dont le moteur prend les hooks de Mnemo installés pour tout le
+	 * poste (Codex) et qui ne les exécutera pas (absents, d'une autre installation, non approuvés) ; null : rien à dire.
+	 */
+	const avertissementHooks = async (moteur: Moteur): Promise<string | null> => {
+		if (moteur.hooksDuPoste === undefined) return null;
+		const lu = await moteur.hooksDuPoste.lire({ node: pil.plugin.appel.node, main: pil.plugin.appel.main, env: pil.hote.env }).catch((erreur: unknown) => ({ echec: (erreur as Error).message }));
+		return avertissementDesHooks(moteur.nom, moteur.id, lu);
+	};
+
+	/**
 	 * Prépare la session, puis lance son moteur dans un terminal ; sans terminal possible (mode dégradé, commande du moteur
-	 * introuvable, lancement en échec), rend la ligne de commande à coller.
+	 * introuvable, lancement en échec), rend la ligne de commande à coller. Les hooks du moteur absents ou non approuvés ne
+	 * l'empêchent pas : une ligne le dit en tête du terminal.
 	 */
 	const demarrer = async (session: Session, mode: ModeLancement, objectif?: string): Promise<{ manuel: string } | { terminal: Terminal }> => {
 		const { moteur, commande, args, env, dossier, manuel } = await preparer(session, mode, objectif);
 		if (commande === null || !pil.terminaux.disponibles().ok) return manuel();
+		const avertissement = await avertissementHooks(moteur);
 		let terminal: Terminal;
 		const lanceMs = Date.now();
 		try {
@@ -362,6 +400,8 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			return manuel();
 		}
 		const vivant: Vivant = { terminal, moteur, tampon: tamponCirculaire(CAPACITE_TAMPON), abonnes: new Set(), fini: Promise.resolve(), ecritMajMs: null, arret: false };
+		// avant toute sortie du moteur : le terminal n'a encore aucun abonné, la relecture la montrera d'abord
+		if (avertissement !== null) vivant.tampon.ajouter(lignesDAvertissement(avertissement));
 		terminal.surSortie((d) => {
 			vivant.tampon.ajouter(d);
 			for (const f of vivant.abonnes) {
@@ -439,6 +479,8 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		if (s === null || s.etat === 'terminee') return s;
 		const duService = moteurDe(s);
 		if (duService === null) throw new ErreurMoteurIndisponible(moteurIndisponible(s.moteur ?? MOTEUR_PAR_DEFAUT));
+		const sansReprise = duService.moteur.motifSansReprise(s);
+		if (sansReprise !== null) throw new ErreurRepriseImpossible(repriseImpossible(sansReprise));
 		if (duService.commande === null || !pil.terminaux.disponibles().ok) return s;
 		if ((await verifierPid(s)) === 'ailleurs') return pil.etat.lire(id);
 		// un bilan d'avant (interrompu par une pause) est oublié : seul `reprendreAuDemarrage` en redemande un
@@ -474,8 +516,13 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		// ce que l'éditeur refuse, revérifié (fiche écrite à la main)
 		const refus = refusDuMoteur(profil);
 		if (refus !== null) return { refus: `Le profil « ${profil.nom} » ne peut pas être lancé : ${refus.motif}.` };
-		// le moteur du profil doit être implémenté ici ; introuvable sur le poste, la ligne à coller est rendue (mode dégradé)
-		if (moteurDe(profil) === null) return { refus: `Le profil « ${profil.nom} » utilise le moteur « ${profil.moteur} », pas encore pris en charge par ce service.` };
+		// le moteur du profil doit être implémenté ici ; introuvable sur le poste, la ligne à coller est rendue (mode dégradé),
+		// sauf pour un moteur dont la ligne ne lancerait rien (Codex) : refusé
+		const duService = moteurDe(profil);
+		if (duService === null) return { refus: `Le profil « ${profil.nom} » utilise le moteur « ${profil.moteur} », pas encore pris en charge par ce service.` };
+		if (duService.commande === null && duService.moteur.sansCommande === 'refus') {
+			return { refus: `Le profil « ${profil.nom} » utilise ${duService.moteur.nom}, introuvable sur ce poste (commande « ${duService.moteur.commandeParDefaut} ») : installe-le, puis relance le service.` };
+		}
 		const memoire = profil.lancement === 'memoire';
 		// une session lancée dans la mémoire est à sa racine
 		const trouvee: PositionDuProjet = memoire ? { chemin: '', rattachement: null } : await positionNotee(dep, pil.etat, relatif);
@@ -725,9 +772,10 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 				const refaireBilan = (s.arretAttendu === 'service' || s.arretAttendu === 'bilan') && s.bilanDemandeMs !== null;
 				if (relancees.length > 0) await new Promise((r) => setTimeout(r, ESPACEMENT_RELANCES_MS));
 				const repriseMs = Date.now();
-				// moteur sans implémentation ici : la session reste en l'état, jamais relancée par un autre moteur
+				// moteur sans implémentation ici, ou qui ne sait pas la reprendre : la session reste en l'état, jamais relancée
+				// par un autre moteur
 				const apres = await reprendre(s.id).catch((erreur: unknown) => {
-					if (erreur instanceof ErreurMoteurIndisponible) return null;
+					if (erreur instanceof ErreurMoteurIndisponible || erreur instanceof ErreurRepriseImpossible) return null;
 					throw erreur;
 				});
 				if (apres !== null && vivants.has(s.id)) {

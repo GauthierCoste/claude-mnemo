@@ -848,8 +848,8 @@ export type ModeLancement = 'nouvelle' | 'reprise';
 
 /**
  * Ce que le pilote donne au moteur pour lancer une session : son profil, le mode, l'objectif (premier message ; à la reprise,
- * la consigne tapée d'emblée), le dossier absolu où ses fichiers de session sont écrits, la racine absolue du dossier Mnemo
- * et l'environnement de l'utilisateur.
+ * la consigne tapée d'emblée), le dossier absolu où ses fichiers de session sont écrits et ces fichiers (`fichiersDeSession`),
+ * la racine absolue du dossier Mnemo, l'appel de Mnemo (`node`, `main`) et l'environnement de l'utilisateur.
  */
 export type ContextePreparation = {
 	session: Session;
@@ -857,7 +857,9 @@ export type ContextePreparation = {
 	mode: ModeLancement;
 	objectif?: string;
 	dossierFichiers: string;
+	fichiers: readonly FichierPlugin[];
 	racine: string;
+	appel: AppelPlugin;
 	env: Record<string, string | undefined>;
 };
 
@@ -916,7 +918,6 @@ export type TelemetrieDuMoteur = { fenetre: LectureFenetre; quotas(brut: unknown
 /**
  * Un agent de code sur le poste, hors des sessions : `commandeParDefaut`, le nom écrit dans une ligne à coller quand il est
  * introuvable ; `trouver` : sa commande (null : introuvable) ; `declarationMcp` : le serveur `mnemo` déclaré chez lui.
- * Un moteur qui n'est que cela (Codex, tant que ses hooks et ses sessions ne sont pas faits) ne lance aucune session.
  */
 export type MoteurDuPoste = {
 	id: IdMoteur;
@@ -928,16 +929,24 @@ export type MoteurDuPoste = {
 	hooksDuPoste?: HooksDuPoste;
 };
 
+/** Ce que reçoit la liste des modèles : l'exécuteur, la commande du moteur (null : introuvable) et l'environnement de l'utilisateur. */
+export type AppelModeles = { executer: Executer; commande: CommandeMoteur | null; env: Record<string, string | undefined> };
+
 /**
- * Un agent de code qui fait tourner les sessions (Claude Code) : tout ce qui en diffère. `modeles` : liste indicative (saisie
- * libre permise) ; `fichiersDeSession` : ce qu'il faut écrire pour la session (plugin, réglages, consigne, skills), puis
- * `preparer` : arguments et environnement.
+ * Un agent de code qui fait tourner les sessions (Claude Code, Codex) : tout ce qui en diffère. `modeles` : liste indicative
+ * (saisie libre permise ; vide : le modèle par défaut du moteur seulement) ; `fichiersDeSession` : ce qu'il faut écrire pour
+ * la session (plugin, réglages, consigne, skills), puis `preparer` : arguments et environnement. `sansCommande` : moteur
+ * introuvable sur le poste, la session est rendue en ligne à coller (`manuel`) ou refusée (`refus`).
  */
 export type Moteur = MoteurDuPoste & {
-	modeles: readonly string[];
+	modeles(a: AppelModeles): Promise<readonly string[]>;
+	sansCommande: 'manuel' | 'refus';
 	/** Ce que la ligne de commande d'un processus lancé pour la session `uuid` contient : de quoi le reconnaître vivant. */
 	marqueDeSession(uuid: string): string;
+	/** Pourquoi la session ne peut pas être reprise par ce moteur (Codex : son `fil` encore inconnu) ; null : elle le peut. */
+	motifSansReprise(session: Session): string | null;
 	fichiersDeSession(dep: Dependances, session: Session, profil: Profil, appel: AppelPlugin): Promise<FichierPlugin[]>;
+	/** Lève si la session ne peut pas être lancée ainsi (identifiant, modèle ou `fil` refusés). */
 	preparer(contexte: ContextePreparation): Lancement;
 	touches: TouchesDuMoteur;
 	hooks: HooksDuMoteur;

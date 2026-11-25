@@ -4,9 +4,9 @@ import { MOTEUR_CLAUDE_CODE } from './claude-code.ts';
 import { MOTEUR_CODEX } from './codex.ts';
 
 /** Moteurs qui font tourner des sessions. */
-export const MOTEURS: readonly Moteur[] = [MOTEUR_CLAUDE_CODE];
+export const MOTEURS: readonly Moteur[] = [MOTEUR_CLAUDE_CODE, MOTEUR_CODEX];
 
-/** Tous les moteurs connus sur le poste (commande, déclaration MCP), qu'ils lancent des sessions ou non. */
+/** Tous les moteurs connus sur le poste (commande, déclaration MCP, hooks du poste). */
 export const MOTEURS_DU_POSTE: Readonly<Record<IdMoteur, MoteurDuPoste>> = { 'claude-code': MOTEUR_CLAUDE_CODE, codex: MOTEUR_CODEX };
 
 /** Chaque moteur de sessions, avec sa commande cherchée dans cet environnement (null : introuvable). */

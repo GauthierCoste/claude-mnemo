@@ -21,7 +21,7 @@ import { filDuJour } from '../../application/fil.ts';
 import { historiqueDesSessions } from '../../application/historique.ts';
 import { lireElement, motifIntrouvable } from '../../application/lire.ts';
 import { lister } from '../../application/lister.ts';
-import { ErreurMoteurIndisponible } from '../../application/pilote.ts';
+import { ErreurMoteurIndisponible, ErreurRepriseImpossible } from '../../application/pilote.ts';
 import type { Pilote } from '../../application/pilote.ts';
 import type { Dependances, DossiersRacine, MemoireClaude, Modeles, Pilotage, ProjetsClaude } from '../../application/ports.ts';
 import { ErreurFichier } from '../../application/ports.ts';
@@ -341,7 +341,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	const surSession = (action: (id: string) => Promise<Session | null>) => async (r: Requete) => {
 		await session(r.id);
 		const apres = await action(r.id).catch((erreur: unknown) => {
-			if (erreur instanceof ErreurMoteurIndisponible) throw new ErreurHttp(409, erreur.message);
+			if (erreur instanceof ErreurMoteurIndisponible || erreur instanceof ErreurRepriseImpossible) throw new ErreurHttp(409, erreur.message);
 			throw erreur;
 		});
 		if (apres === null) throw new ErreurHttp(404, 'Session inconnue.');
