@@ -104,7 +104,8 @@ async function retirer(a: AppelDeclaration): Promise<ResultatRetraitMcp> {
 
 /**
  * GitHub Copilot CLI : l'entrée `mcpServers.mnemo` de `mcp-config.json` (`$COPILOT_HOME`, sinon `~/.copilot`), écrite par Mnemo
- * lui-même, atomiquement, les autres serveurs, leurs champs et le style du fichier gardés (`copilot mcp add` réécrirait tout
- * le fichier, champs inconnus et commentaires perdus ; mesuré). Désactivation : `disabledMcpServers` de `settings.json`.
+ * lui-même, atomiquement, les autres serveurs et leurs champs gardés, avec l'indentation, les fins de ligne et le BOM du
+ * fichier, le reste remis en forme (`copilot mcp add` réécrirait tout le fichier, champs inconnus et commentaires perdus ;
+ * mesuré). Désactivation : `disabledMcpServers` de `settings.json`.
  */
 export const DECLARATION_MCP_COPILOT_CLI: DeclarationMcp = { manuelle: commandeManuelleCopilotCli, lire, declarer, remplacer, retirer };

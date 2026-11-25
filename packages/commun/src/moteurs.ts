@@ -1,6 +1,8 @@
 /** Agent de code qui fait tourner une session : Claude Code, Codex, Mistral Vibe ou GitHub Copilot CLI. */
 export type IdMoteur = 'claude-code' | 'codex' | 'mistral-vibe' | 'copilot-cli';
 export const IDS_MOTEURS: readonly IdMoteur[] = ['claude-code', 'codex', 'mistral-vibe', 'copilot-cli'];
+/** Nom de chaque moteur, tel que l'interface et les messages le disent. */
+export const NOMS_MOTEURS: Readonly<Record<IdMoteur, string>> = { 'claude-code': 'Claude Code', codex: 'Codex', 'mistral-vibe': 'Mistral Vibe', 'copilot-cli': 'GitHub Copilot CLI' };
 /** Moteur d'une session ou d'un profil qui n'en dit rien (état, profils et hooks d'avant les moteurs). */
 export const MOTEUR_PAR_DEFAUT: IdMoteur = 'claude-code';
 

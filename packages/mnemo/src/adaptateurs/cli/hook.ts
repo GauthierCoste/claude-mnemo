@@ -205,9 +205,9 @@ function terminer(sortie: string): void {
 
 /**
  * `[--moteur <id>]` (une fois, n'importe où ; Claude Code par défaut), puis les arguments de l'événement, lus par les hooks de
- * ce moteur ; `inconnu` : identifiant inconnu (vrai) ou moteur sans implémentation dans cette version (faux).
+ * ce moteur ; `inconnu` : identifiant inconnu.
  */
-function lireArguments(args: string[]): { moteur: IdMoteur; hooks: HooksDuMoteur; evenement: EvenementHook; options: Set<string> } | { moteur: string; inconnu: boolean } | null {
+function lireArguments(args: string[]): { moteur: IdMoteur; hooks: HooksDuMoteur; evenement: EvenementHook; options: Set<string> } | { moteur: string; inconnu: true } | null {
 	const position = args.indexOf('--moteur');
 	let moteur: string = MOTEUR_PAR_DEFAUT;
 	let reste = args;
@@ -218,7 +218,6 @@ function lireArguments(args: string[]): { moteur: IdMoteur; hooks: HooksDuMoteur
 	}
 	if (!estIdMoteur(moteur)) return { moteur, inconnu: true };
 	const hooks = hooksDuMoteur(moteur);
-	if (hooks === null) return { moteur, inconnu: false };
 	const lu = hooks.lireArguments(reste);
 	return lu === null ? null : { moteur, hooks, ...lu };
 }
@@ -287,8 +286,7 @@ export async function commandeHook(args: string[]): Promise<void> {
 	const debutMs = Math.floor(performance.timeOrigin);
 	const lu = lireArguments(args);
 	if (lu !== null && 'inconnu' in lu) {
-		const disponibles = IDS_MOTEURS.filter((id) => hooksDuMoteur(id) !== null).join(', ');
-		process.stderr.write(lu.inconnu ? `mnemo hook : moteur inconnu « ${lu.moteur} » (${disponibles}).\n` : `mnemo hook : moteur sans implémentation dans cette version : « ${lu.moteur} » (${disponibles}).\n`);
+		process.stderr.write(`mnemo hook : moteur inconnu « ${lu.moteur} » (${IDS_MOTEURS.join(', ')}).\n`);
 		terminer('');
 		return;
 	}

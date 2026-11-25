@@ -1,7 +1,7 @@
 import { citerPosix, citerPowerShell } from '../../citer.ts';
 import { estObjet } from '../../valeurs.ts';
 import type { LancementMcp } from '../declaration-mnemo.ts';
-import { lireJsonc, styleJson, texteJson } from '../json-texte.ts';
+import { lireJsonc, texteJsonReecrit } from '../json-texte.ts';
 
 /**
  * Déclaration du serveur `mnemo` dans `mcp-config.json` de GitHub Copilot CLI (1.0.116, JSONC lu par Copilot :
@@ -43,14 +43,14 @@ export function declarationDansConfig(texte: string | null): ConfigMcpLue | { ec
 
 /**
  * Le texte de `mcp-config.json` avec la déclaration de Mnemo (`mcpServers.mnemo`, à sa place ou ajoutée à la fin) ou sans
- * elle (`node` null) ; tout le reste gardé (autres serveurs, leurs champs, clés inconnues), dans le style du fichier
- * (indentation, fins de ligne). Un `mcpServers` vidé reste (vide).
+ * elle (`node` null) ; tout le reste gardé (autres serveurs, leurs champs, clés inconnues), avec l'indentation, les fins de
+ * ligne et le BOM du fichier, remis en forme pour le reste (`texteJsonReecrit`). Un `mcpServers` vidé reste (vide).
  */
 export function texteAvecDeclaration(texte: string | null, racine: Record<string, unknown>, declaration: { node: string; main: string } | null): string {
 	const serveurs = { ...(estObjet(racine['mcpServers']) ? racine['mcpServers'] : {}) };
 	if (declaration === null) delete serveurs['mnemo'];
 	else serveurs['mnemo'] = entreeDeDeclaration(declaration.node, declaration.main);
-	return texteJson({ ...racine, mcpServers: serveurs }, styleJson(texte));
+	return texteJsonReecrit({ ...racine, mcpServers: serveurs }, texte);
 }
 
 /**

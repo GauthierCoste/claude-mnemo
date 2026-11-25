@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { hooksDuMoteur } from '../../src/application/moteurs/hooks.ts';
+import { IDS_MOTEURS } from '@mnemo/commun';
+import { CATALOGUE_MOTEURS } from '../../src/domaine/moteurs/catalogue.ts';
 import { outilsDuMoteur } from '../../src/domaine/moteurs/outils.ts';
-import { MOTEURS } from '../../src/infra/moteurs/moteurs.ts';
+import { MOTEURS, MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 
 describe('moteurs : un seul registre de vérité', () => {
 	it('les hooks et les outils de chaque moteur sont ceux des registres purs', () => {
@@ -10,6 +12,14 @@ describe('moteurs : un seul registre de vérité', () => {
 			expect(m.hooks, m.id).toBe(hooksDuMoteur(m.id));
 			expect(m.outils, m.id).toBe(outilsDuMoteur(m.id));
 		}
+	});
+
+	it('le catalogue du domaine (aide, hooks) dit de chaque moteur du poste son nom, son option d’init et s’il est facultatif', () => {
+		for (const id of IDS_MOTEURS) {
+			const m = MOTEURS_DU_POSTE[id];
+			expect(CATALOGUE_MOTEURS[id], id).toMatchObject({ nom: m.nom, optionInit: m.installation.optionInit, facultatif: m.installation.facultatif !== undefined });
+		}
+		expect(IDS_MOTEURS.filter((id) => CATALOGUE_MOTEURS[id].litLesHooksDeClaudeCode)).toEqual(['copilot-cli']);
 	});
 
 	it('Claude Code : sa marque de session est l’uuid de Mnemo', () => {

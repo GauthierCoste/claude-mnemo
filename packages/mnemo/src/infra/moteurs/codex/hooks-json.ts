@@ -2,7 +2,8 @@ import { realpath } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import type { AppelHooksDuPoste, HooksDuPoste, LectureHooksDuPoste, ResultatInstallationHooks, ResultatRemplacementHooks, ResultatRetraitHooks } from '../../../application/ports.ts';
 import { approbationDesHooks } from '../../../domaine/moteurs/codex/approbation-hooks.ts';
-import { estHookDe, etatDesHooks, hooksAttendus, lireHooksJson, remplacerHooks, texteHooksJson } from '../../../domaine/moteurs/codex/hooks-installes.ts';
+import { estHookDe, etatDesHooks, hooksAttendus, lireHooksJson, remplacerHooks } from '../../../domaine/moteurs/codex/hooks-installes.ts';
+import { texteJsonReecrit } from '../../../domaine/moteurs/json-texte.ts';
 import { ecrireConfiguration, lireConfiguration } from '../../fichier-de-configuration.ts';
 import type { ConfigurationLue } from '../../fichier-de-configuration.ts';
 import { dossierCodex, lireConfigCodex } from './dossier-codex.ts';
@@ -19,8 +20,8 @@ async function lireFichier(chemin: string): Promise<{ reel: string; texte: strin
 	return { ...lu, racine: json.racine };
 }
 
-/** Écrit la racine à la place du fichier lu ; l'échec dit pourquoi. */
-const ecrire = (chemin: string, lu: ConfigurationLue, racine: Record<string, unknown>): Promise<{ echec: string } | null> => ecrireConfiguration(chemin, lu, texteHooksJson(racine));
+/** Écrit la racine à la place du fichier lu (son indentation, ses fins de ligne et son BOM gardés) ; l'échec dit pourquoi. */
+const ecrire = (chemin: string, lu: ConfigurationLue, racine: Record<string, unknown>): Promise<{ echec: string } | null> => ecrireConfiguration(chemin, lu, texteJsonReecrit(racine, lu.texte));
 
 async function lire(a: AppelHooksDuPoste): Promise<LectureHooksDuPoste> {
 	const chemin = cheminHooksJson(a.env);

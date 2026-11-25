@@ -1,3 +1,4 @@
+import { CATALOGUE_MOTEURS } from '../../domaine/moteurs/catalogue.ts';
 import { HOOKS_MISTRAL_VIBE } from '../../application/moteurs/mistral-vibe/hooks.ts';
 import { agentDeSession, fichiersDeSessionMistralVibe, motifSansRepriseMistralVibe, preparerMistralVibe } from '../../application/moteurs/mistral-vibe/session.ts';
 import type { Moteur } from '../../application/ports.ts';
@@ -23,10 +24,10 @@ import { definies } from '../../domaine/valeurs.ts';
  */
 export const MOTEUR_MISTRAL_VIBE: Moteur = {
 	id: 'mistral-vibe',
-	nom: 'Mistral Vibe',
+	nom: CATALOGUE_MOTEURS['mistral-vibe'].nom,
 	commandeParDefaut: 'vibe',
 	installation: {
-		optionInit: '--mistral',
+		optionInit: CATALOGUE_MOTEURS['mistral-vibe'].optionInit,
 		facultatif: { bloc: 'mistral', etape: 'mistral', etapeHooks: 'mistral_hooks' },
 		recherche: 'commande vibe absente du PATH et de ~/.local/bin, ou MNEMO_VIBE invalide',
 		desactivation: 'disabled = true',

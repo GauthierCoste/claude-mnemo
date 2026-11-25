@@ -5,7 +5,8 @@ import type { Executer } from '../../src/application/ports.ts';
 import { commandeVerifierPoste, verifierPoste } from '../../src/adaptateurs/cli/poste.ts';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { hooksAttendus, remplacerHooks, texteHooksJson } from '../../src/domaine/moteurs/codex/hooks-installes.ts';
+import { hooksAttendus, remplacerHooks } from '../../src/domaine/moteurs/codex/hooks-installes.ts';
+import { texteJsonReecrit } from '../../src/domaine/moteurs/json-texte.ts';
 import { nodeDurable } from '../../src/infra/node-durable.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
@@ -134,7 +135,7 @@ describe('verifier-poste : Codex', () => {
 		const MAIN_MNEMO = '/depot/packages/mnemo/src/adaptateurs/cli/main.ts';
 		const avec = (executer: Executer) => ({ ...deps(executer, maison), main: MAIN_MNEMO });
 		const fichier = join(maison, 'hooks.json');
-		await writeFile(fichier, texteHooksJson(remplacerHooks({}, hooksAttendus(nodeDurable('darwin'), MAIN_MNEMO))));
+		await writeFile(fichier, texteJsonReecrit(remplacerHooks({}, hooksAttendus(nodeDurable('darwin'), MAIN_MNEMO)), null));
 		expect((await verifierPoste(avec(repond(get)))).codex.hooks).toEqual({ etat: 'a_jour', approbation: { etat: 'a_approuver', motif: expect.stringContaining('7 hook(s) de Mnemo sur 7') } });
 		const cles = ['session_start', 'user_prompt_submit', 'pre_tool_use', 'post_tool_use', 'stop', 'permission_request', 'session_end'];
 		await writeFile(join(maison, 'config.toml'), cles.map((c) => `[hooks.state."${fichier}:${c}:0:0"]\ntrusted_hash = "sha256:0"\n`).join('\n'));
@@ -143,7 +144,7 @@ describe('verifier-poste : Codex', () => {
 		const lignes: string[] = [];
 		await commandeVerifierPoste([], avec(repond(get)), (l) => lignes.push(l));
 		expect(lignes[2]).toMatch(/^Codex : \/opt\/outils\/codex \(0\.171\.0-alpha\.13\) — .* — hooks installés, approuvés \(approbation enregistrée/u);
-		await writeFile(fichier, texteHooksJson(remplacerHooks({}, hooksAttendus('/vieux/node', MAIN_MNEMO))));
+		await writeFile(fichier, texteJsonReecrit(remplacerHooks({}, hooksAttendus('/vieux/node', MAIN_MNEMO)), null));
 		expect((await verifierPoste(avec(repond(get)))).codex.hooks).toEqual({ etat: 'perime' });
 		await writeFile(fichier, '{');
 		expect((await verifierPoste(avec(repond(get)))).codex.hooks).toEqual({ etat: 'echec', motif: expect.stringContaining('JSON illisible') });

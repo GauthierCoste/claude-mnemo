@@ -5,12 +5,12 @@ import { HOOKS_CODEX } from './codex/hooks.ts';
 import { HOOKS_COPILOT_CLI } from './copilot-cli/hooks.ts';
 import { HOOKS_MISTRAL_VIBE } from './mistral-vibe/hooks.ts';
 
-const HOOKS: Partial<Record<IdMoteur, HooksDuMoteur>> = { 'claude-code': HOOKS_CLAUDE_CODE, codex: HOOKS_CODEX, 'mistral-vibe': HOOKS_MISTRAL_VIBE, 'copilot-cli': HOOKS_COPILOT_CLI };
+const HOOKS: Readonly<Record<IdMoteur, HooksDuMoteur>> = { 'claude-code': HOOKS_CLAUDE_CODE, codex: HOOKS_CODEX, 'mistral-vibe': HOOKS_MISTRAL_VIBE, 'copilot-cli': HOOKS_COPILOT_CLI };
 
 /**
  * Hooks du moteur, sans charger le reste de son implémentation (`mnemo hook` démarre à chaque événement : seuls ses modules
- * comptent dans son budget) ; null : ce moteur n'a pas encore d'implémentation.
+ * comptent dans son budget).
  */
-export function hooksDuMoteur(id: IdMoteur): HooksDuMoteur | null {
-	return HOOKS[id] ?? null;
+export function hooksDuMoteur(id: IdMoteur): HooksDuMoteur {
+	return HOOKS[id];
 }

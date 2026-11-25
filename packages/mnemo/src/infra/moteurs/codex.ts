@@ -1,3 +1,4 @@
+import { CATALOGUE_MOTEURS } from '../../domaine/moteurs/catalogue.ts';
 import { HOOKS_CODEX } from '../../application/moteurs/codex/hooks.ts';
 import { fichiersDeSessionCodex, motifSansRepriseCodex, preparerCodex } from '../../application/moteurs/codex/session.ts';
 import type { Moteur } from '../../application/ports.ts';
@@ -24,10 +25,10 @@ export const marqueCodex = (uuid: string): string => `mnemo_session='${uuid}'`;
  */
 export const MOTEUR_CODEX: Moteur = {
 	id: 'codex',
-	nom: 'Codex',
+	nom: CATALOGUE_MOTEURS.codex.nom,
 	commandeParDefaut: 'codex',
 	installation: {
-		optionInit: '--codex',
+		optionInit: CATALOGUE_MOTEURS.codex.optionInit,
 		facultatif: { bloc: 'codex', etape: 'codex', etapeHooks: 'codex_hooks' },
 		recherche: 'commande codex absente du PATH et de ChatGPT.app, ou MNEMO_CODEX invalide',
 		desactivation: 'enabled = false',
