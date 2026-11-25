@@ -385,7 +385,8 @@ export interface Modeles {
 	etat(): Promise<EtatModeles>;
 	demarrer(): Promise<void>;
 	arreter(): Promise<ArretModeles>;
-	changerNiveau(niveau: NiveauModeles): Promise<void>;
+	/** Rend l'arrêt qu'a causé un modèle retiré ; null : aucun (le niveau n'en retire pas). */
+	changerNiveau(niveau: NiveauModeles): Promise<ArretModeles | null>;
 	surveiller(rappel: () => void): () => void;
 }
 

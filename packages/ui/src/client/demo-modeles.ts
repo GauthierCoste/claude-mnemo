@@ -5,7 +5,7 @@
  * (veille, chargement, prêts, vectorisation, recherche et injection de la première session), arrêté par le premier geste.
  */
 import { estNiveauModeles, modelesPermis } from '@mnemo/commun';
-import type { ActiviteModeleVue, EtatModelesVue, MessageServeur, ReponseArretModeles } from '@mnemo/contrat';
+import type { ActiviteModeleVue, EtatModelesVue, MessageServeur, ReponseArretModeles, ReponseNiveauModeles } from '@mnemo/contrat';
 import { aDemarrer } from '../modeles/etat.ts';
 import { ErreurApi } from './api.ts';
 
@@ -122,7 +122,7 @@ export function creerModelesDemo(diffuser: (m: MessageServeur) => void, o: { dep
 			return publier({ gardien: 'demarrage', ...modelesSelon(etat.niveau, false) });
 		},
 		arreter: arreterSurDemande,
-		niveau(corps: unknown): EtatModelesVue {
+		niveau(corps: unknown): ReponseNiveauModeles {
 			const niveau = (corps as { niveau?: unknown } | null)?.niveau;
 			if (!estNiveauModeles(niveau)) throw new ErreurApi('Champ « niveau » invalide.', 400);
 			clearTimeout(scenario);
@@ -130,9 +130,12 @@ export function creerModelesDemo(diffuser: (m: MessageServeur) => void, o: { dep
 			const apres = modelesPermis(niveau);
 			etat = { ...etat, niveau };
 			// un modèle retiré arrête les modèles en marche ; un modèle ajouté ne lance rien
-			if ((avant.sens && !apres.sens) || (avant.reranker && !apres.reranker)) return arreter();
+			if ((avant.sens && !apres.sens) || (avant.reranker && !apres.reranker)) {
+				const enMarche = etat.gardien !== 'arrete';
+				return { ...arreter(), arret: enMarche ? 'arrete' : 'rien' };
+			}
 			const suivant = (t: 'sens' | 'reranker') => (!apres[t] ? 'exclu' : etat[t] === 'exclu' ? 'arrete' : etat[t]);
-			return publier({ sens: suivant('sens'), reranker: suivant('reranker') });
+			return { ...publier({ sens: suivant('sens'), reranker: suivant('reranker') }), arret: null };
 		},
 	};
 }

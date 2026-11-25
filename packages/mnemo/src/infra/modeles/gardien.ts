@@ -18,6 +18,7 @@ import { variable } from '../environnement.ts';
 import {
 	AGE_MAX_DEMARRAGE_MS,
 	chargementMaxMs,
+	echecsALaSuite,
 	cheminsModeles,
 	nettoyerLances,
 	nettoyerLancesSousVerrou,
@@ -113,6 +114,8 @@ export async function garder(env: NodeJS.ProcessEnv = process.env): Promise<void
 	/** Fichiers de clé pas encore retirés (un serveur les lit à son démarrage seulement). */
 	const fichiersCle = new Set<string>();
 	let phase: EtatGardien = 'demarrage';
+	/** Démarrages ratés à la suite avant celui-ci (lus à son démarrage) : gardés jusqu'à « prêt », qui les remet à zéro. */
+	let echecsAvant = 0;
 	let arret: Promise<never> | null = null;
 	let surveillance: ReturnType<typeof setInterval> | undefined;
 
@@ -121,7 +124,7 @@ export async function garder(env: NodeJS.ProcessEnv = process.env): Promise<void
 	const publier = (): Promise<void> => {
 		const ecrire = () =>
 			ecrireEtatServeurs(dossier, {
-				gardien: { pid: process.pid, depuis, etat: phase, inactiviteMs },
+				gardien: { pid: process.pid, depuis, etat: phase, inactiviteMs, ...(phase !== 'pret' && echecsAvant > 0 ? { echecs: echecsAvant } : {}) },
 				...Object.fromEntries([...serveurs.values()].map((s) => [s.type, s.entree])),
 			});
 		ecritures = ecritures.then(ecrire, ecrire);
@@ -155,7 +158,8 @@ export async function garder(env: NodeJS.ProcessEnv = process.env): Promise<void
 		try {
 			const etat = await lireEtatServeurs(dossier);
 			if (echec && etat?.gardien.pid === process.pid) {
-				await ecrireEtatServeurs(dossier, { gardien: { pid: process.pid, depuis: new Date().toISOString(), etat: 'echec' } });
+				// un échec de plus à la suite : la pause des relances automatiques s'allonge
+				await ecrireEtatServeurs(dossier, { gardien: { pid: process.pid, depuis: new Date().toISOString(), etat: 'echec', echecs: echecsAvant + 1 } });
 			} else await retirerEtatDuGardien(dossier, process.pid);
 		} catch {
 			/* rien à retirer */
@@ -174,6 +178,9 @@ export async function garder(env: NodeJS.ProcessEnv = process.env): Promise<void
 	}
 
 	async function demarrerEtGarder(): Promise<void> {
+		// échecs à la suite, portés par l'état qu'a écrit qui nous a lancés (relus sous le verrou plus bas)
+		const initial = await lireEtatServeurs(dossier);
+		if (initial?.gardien.pid === process.pid) echecsAvant = initial.gardien.echecs ?? 0;
 		// Les pièces installées.
 		const pieces = piecesPourPlateforme(plateforme, process.arch);
 		if (pieces === null) return arreter(`plateforme non prise en charge : ${plateforme}-${process.arch}`, true);
@@ -195,6 +202,8 @@ export async function garder(env: NodeJS.ProcessEnv = process.env): Promise<void
 			if (ancien !== null && ancien.gardien.pid !== process.pid) {
 				if (await autreGardienActif(ancien)) return 'occupee';
 			}
+			// l'état écrit par qui nous a lancés (ou laissé par un gardien en échec) porte les échecs à la suite
+			echecsAvant = ancien === null ? 0 : ancien.gardien.pid === process.pid ? (ancien.gardien.echecs ?? 0) : echecsALaSuite(ancien);
 			const permis = modelesPermis(await lireNiveau(dossier));
 			modeles = installes.filter((m) => permis[m.type]);
 			if (modeles.length === 0) return 'aucun';

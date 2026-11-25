@@ -5,6 +5,7 @@ import type { Piece } from '../../infra/modeles/catalogue.ts';
 import { dossierModeles, SOUS_DOSSIER_SERVEURS } from '../../infra/modeles/dossier.ts';
 import { etatDesPieces, installerPiece } from '../../infra/modeles/installer.ts';
 import type { Telecharger } from '../../infra/modeles/installer.ts';
+import { journaliser } from '../../infra/modeles/journal.ts';
 import { migrerAncienGardien } from '../../infra/modeles/migration-gardien-dossier.ts';
 import { arreterServeurs, lireEtatServeurs, pidVivant, serveursVerifies } from '../../infra/modeles/serveurs.ts';
 import type { ResultatArret } from '../../infra/modeles/serveurs.ts';
@@ -134,7 +135,13 @@ export async function commandeModeles(args: string[], partiel: Partial<ContexteM
 	let depuis: string | undefined;
 	if (action === 'garde') {
 		// interne : le gardien des serveurs de la machine, lancé détaché par le premier appel qui en a besoin
-		if (reste.length > 0) throw new ErreurCli(USAGE, 2);
+		if (reste.length > 0) {
+			// forme d'avant la mise à jour (`garde <racine>`, un gardien par dossier), lancée par un serveur MCP ou un service encore
+			// en marche : rien n'est lancé (le gardien de la machine s'en charge), une ligne de journal, sortie sans erreur
+			const contexte = contexteReel(partiel);
+			await journaliser(join(contexte.dossier, SOUS_DOSSIER_SERVEURS), 'ancienne forme « modeles garde <racine> » ignorée : relancez le service et les sessions ouvertes avant la mise à jour');
+			return;
+		}
 		const { garder } = await import('../../infra/modeles/gardien.ts');
 		return garder();
 	}

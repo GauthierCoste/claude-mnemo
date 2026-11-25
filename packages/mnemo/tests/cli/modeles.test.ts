@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -131,6 +131,19 @@ describe('mnemo modeles (processus)', () => {
 		const attendues = piecesPourPlateforme(process.platform, process.arch);
 		if (attendues === null) expect(r.out).toContain('plateforme non prise en charge');
 		else for (const p of attendues) expect(r.out).toContain(`${p.libelle} : absent`);
+	});
+
+	it('forme d’avant la mise à jour (`garde <racine>`) : sortie 0 sans rien lancer, une ligne de journal au plus', async () => {
+		const dossier = await dossierTemporaire();
+		const serveurs = join(dossier, 'serveurs');
+		await mkdir(serveurs, { recursive: true });
+		const r = await mnemo({ MNEMO_MODELES: dossier }, 'modeles', 'garde', '/une/ancienne/racine');
+		expect(r.code).toBe(0);
+		expect(r.err).toBe('');
+		expect(await readdir(serveurs)).toEqual(['modeles.log']);
+		const journal = (await readFile(join(serveurs, 'modeles.log'), 'utf8')).trim().split('\n');
+		expect(journal).toHaveLength(1);
+		expect(journal[0]).toContain('ancienne forme');
 	});
 
 	it('usage : code 2 ; listé dans l\'aide', async () => {

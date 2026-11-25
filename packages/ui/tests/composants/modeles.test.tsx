@@ -184,6 +184,13 @@ describe('bouton global des modèles', () => {
 		expect(demarrer.querySelector('[class*="detail"]')?.textContent).toBe('Les modèles sont coupés partout');
 	});
 
+	it('niveau qui retire un modèle, des modèles encore en chargement : le même toast que pour « Arrêter »', async () => {
+		monter(<BoutonModeles />, vueModeles(), { 'PUT /api/modeles/niveau': { ...vueModeles({ niveau: 'coupes', gardien: 'arrete', sens: 'exclu', reranker: 'exclu' }), arret: { enChargement: 1 } } });
+		const menu = await ouvrir(boutonGlobal());
+		await act(async () => fireEvent.click(within(menu).getAllByRole('menuitemradio')[2]!));
+		expect(await screen.findByText(ENCORE_EN_CHARGEMENT)).toBeTruthy();
+	});
+
 	it('prêts : « Arrêter maintenant » ; des modèles encore en chargement : un toast le dit', async () => {
 		const faux = monter(<BoutonModeles />, vueModeles(), { '/api/modeles/arreter': { ...vueModeles({ gardien: 'arrete' }), arret: { enChargement: 1 } } });
 		const menu = await ouvrir(boutonGlobal());

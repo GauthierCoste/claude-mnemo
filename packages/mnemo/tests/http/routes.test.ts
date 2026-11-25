@@ -329,7 +329,7 @@ describe('routes : hook', () => {
 		// sans niveau propre : le sens est appelé pour le message
 		expect((await api(c).post(ROUTES.hook, { ...entree, horodatageMs: Date.now() })).statut).toBe(200);
 		expect(sens.appels).toHaveLength(1);
-		// coupés pour la session, en cours de route : plus aucun appel, le contexte est servi par les mots
+		// coupés pour la session, en cours de route : plus aucun appel, le contexte est injecté par les mots
 		await c.etat.modifier(UUID, { niveauModeles: 'coupes' });
 		const r = await api(c).post(ROUTES.hook, { ...entree, horodatageMs: Date.now() + 1 });
 		expect(r.statut).toBe(200);

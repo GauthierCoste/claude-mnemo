@@ -8,10 +8,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { commandeModeles } from '../../src/adaptateurs/cli/modeles.ts';
 import { piecesPourPlateforme } from '../../src/infra/modeles/catalogue.ts';
 import { dossierPiece } from '../../src/infra/modeles/installer.ts';
-import { rerankerLlama, sensLlama } from '../../src/infra/modeles/client-llama.ts';
+import { modelesLocaux, rerankerLlama, sensLlama } from '../../src/infra/modeles/client-llama.ts';
 import { dossierServeurs } from '../../src/infra/modeles/dossier.ts';
 import { journaliser } from '../../src/infra/modeles/journal.ts';
-import { migrerAncienGardien } from '../../src/infra/modeles/migration-gardien-dossier.ts';
+import { migrerAncienGardien, retirerRestes } from '../../src/infra/modeles/migration-gardien-dossier.ts';
 import { ecrireService } from '../../src/infra/service-local.ts';
 import { ecrireReglagesDuDossier } from '../../src/infra/reglages-fichier.ts';
 import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
@@ -426,6 +426,50 @@ describe('gardien : arrêt', () => {
 		expect((await demarrer(b)).gardien.pid).not.toBe(mort);
 	}, 30_000);
 
+	it('échecs répétés : les relances automatiques attendent 1 min, puis 5, puis 15 ; « Démarrer » passe outre ; un succès remet à zéro', async () => {
+		const b = await banc({ reranker: false, sens: { defaut: 'echoue' } });
+		const modeles = modelesLocaux(b.racine, { env: b.env });
+		const etat = async () => (await lireEtatServeurs(b.serveurs))!.gardien;
+		const echouer = async (n: number) => {
+			await attendreQue(async () => (await lireEtatServeurs(b.serveurs))?.gardien.etat === 'echec' && (await etat()).echecs === n);
+		};
+		/** L'échec écrit il y a `ms`, comme si ce temps avait passé. */
+		const vieillir = async (ms: number) => {
+			const g = await etat();
+			await ecrireEtatServeurs(b.serveurs, { gardien: { ...g, depuis: new Date(Date.now() - ms).toISOString() } });
+		};
+		const hook = () => sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 300, demarrer: false });
+		/** Un hook relance-t-il un gardien ? (son lancement se lit dans l'état) */
+		const relance = async () => {
+			const avant = (await etat()).pid;
+			expect(await hook()).toBeNull();
+			await attendre(300);
+			return (await etat()).pid !== avant;
+		};
+		await modeles.demarrer();
+		await echouer(1);
+		// « Démarrer » passe outre la pause, et compte un échec de plus
+		await modeles.demarrer();
+		await echouer(2);
+		// deux échecs : 5 min de pause pour les hooks
+		await vieillir(2 * 60_000);
+		expect(await relance()).toBe(false);
+		await vieillir(6 * 60_000);
+		expect(await relance()).toBe(true);
+		await echouer(3);
+		// trois échecs et plus : 15 min
+		await vieillir(6 * 60_000);
+		expect(await relance()).toBe(false);
+		await vieillir(16 * 60_000);
+		expect(await relance()).toBe(true);
+		await echouer(4);
+		// le modèle charge de nouveau : prêt, compteur remis à zéro
+		await rm(`${b.gguf.sens}.faux.json`);
+		await modeles.demarrer();
+		await attendreQue(async () => (await lireEtatServeurs(b.serveurs))?.gardien.etat === 'pret');
+		expect((await etat()).echecs).toBeUndefined();
+	}, 60_000);
+
 	it('un modèle qui ne charge pas : l’autre est publié et sert ; le premier rend null sans relance', async () => {
 		const b = await banc({ rerankerReglages: { defaut: 'echoue' } });
 		const etat = await demarrer(b);
@@ -762,6 +806,23 @@ describe('migration : ancien gardien d’un dossier', () => {
 		expect(await migrerAncienGardien(b.racine, b.env)).toBe('rien');
 		expect((await readdir(local)).filter((f) => f !== 'etat.sqlite').sort()).toEqual(['autre.json']);
 		expect(await migrerAncienGardien(b.racine, b.env)).toBeNull();
+	});
+
+	it('restes : le registre est gardé tant qu’une de ses entrées vit encore, retiré ensuite ; il relance la migration', async () => {
+		const b = await banc();
+		const local = join(b.racine, '.mnemo');
+		const vivant = processusEtranger();
+		// comme un registre réécrit par l'ancien gardien pendant son arrêt, après l'élagage
+		await writeFile(join(local, 'modeles-lances.json'), JSON.stringify({ lances: [{ pid: vivant, port: 1, cle: 'a'.repeat(64), piece: 'bge-m3-q8_0.gguf', lanceMs: Date.now(), gardien: await pidMort() }] }));
+		await writeFile(join(local, 'modeles.log'), 'ancien journal\n');
+		await retirerRestes(local);
+		expect((await readdir(local)).filter((f) => f.startsWith('modeles'))).toEqual(['modeles-lances.json']);
+		// le registre restant relance la migration au démarrage suivant
+		expect(await migrerAncienGardien(b.racine, b.env)).not.toBeNull();
+		process.kill(vivant, 'SIGKILL');
+		await attendreQue(() => !pidVivant(vivant));
+		await retirerRestes(local);
+		expect((await readdir(local)).filter((f) => f.startsWith('modeles'))).toEqual([]);
 	});
 
 	it('un ancien état qui nomme un processus étranger : laissé en vie, état retiré', async () => {

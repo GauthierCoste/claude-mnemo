@@ -36,7 +36,7 @@ export type ContexteService = {
 	 * Faux modèles (jamais de vrai llama-server) : `vue` réglable, gestes notés (`gestes`), `signaler()` appelle les rappels
 	 * de la surveillance, `surveillances` : celles en cours.
 	 */
-	modeles: Modeles & { vue: EtatModeles; arret: ArretModeles; gestes: string[]; signaler(): void; surveillances: number };
+	modeles: Modeles & { vue: EtatModeles; arret: ArretModeles; arretNiveau: ArretModeles | null; gestes: string[]; signaler(): void; surveillances: number };
 };
 
 
@@ -100,6 +100,7 @@ export async function serviceFaux(
 	const modeles: ContexteService['modeles'] = {
 		vue: etatModelesFaux(),
 		arret: 'arrete',
+		arretNiveau: null,
 		gestes: [],
 		surveillances: 0,
 		async etat() {
@@ -115,6 +116,7 @@ export async function serviceFaux(
 		async changerNiveau(niveau) {
 			modeles.gestes.push(`niveau ${niveau}`);
 			modeles.vue = { ...modeles.vue, niveau };
+			return modeles.arretNiveau;
 		},
 		surveiller(rappel) {
 			rappels.add(rappel);

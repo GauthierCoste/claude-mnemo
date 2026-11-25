@@ -7,7 +7,7 @@ import { dossierModeles, dossierServeurs } from './dossier.ts';
 import { lireNiveau } from './niveau.ts';
 import { piecesInstallees } from './pieces-installees.ts';
 import type { PiecesInstallees } from './pieces-installees.ts';
-import { AGE_MAX_DEMARRAGE_MS, lireEtatServeurs, PAUSE_APRES_ECHEC_MS, pidVivant, verifierServeur } from './serveurs.ts';
+import { AGE_MAX_DEMARRAGE_MS, echecsALaSuite, lireEtatServeurs, pauseApresEchecs, pidVivant, verifierServeur } from './serveurs.ts';
 import type { EtatServeurs, TypeServeur } from './serveurs.ts';
 
 /** Vérification d'un serveur pour l'état : brève (un serveur prêt répond tout de suite, et n'est vérifié qu'une fois). */
@@ -19,15 +19,17 @@ export type OptionsEtatModeles = { env?: NodeJS.ProcessEnv; plateforme?: NodeJS.
 const age = (depuis: string, maintenant: number) => maintenant - (Date.parse(depuis) || 0);
 
 /**
- * Phase du gardien d'après `modeles.json` : aucun état, ou gardien mort, `arrete` ; un échec de moins d'une minute, `echec`
+ * Phase du gardien d'après `modeles.json` : aucun état, ou gardien mort, `arrete` ; un échec plus récent que sa pause
+ * (1 min, puis 5, puis 15 après des échecs à la suite), `echec`
  * (comme un gardien mort en plein démarrage récent, qui n'a pas pu l'écrire : les appels ne le relancent pas pendant ce
  * temps) ; un démarrage bloqué depuis plus de 3 min, `echec` aussi (un autre peut le remplacer).
  */
 export function phaseDuGardien(etat: EtatServeurs | null, maintenant: number = Date.now()): EtatModeles['gardien'] {
 	if (etat === null) return 'arrete';
 	const { pid, depuis, etat: phase } = etat.gardien;
-	if (phase === 'echec') return age(depuis, maintenant) < PAUSE_APRES_ECHEC_MS ? 'echec' : 'arrete';
-	if (!pidVivant(pid)) return phase === 'demarrage' && age(depuis, maintenant) < PAUSE_APRES_ECHEC_MS ? 'echec' : 'arrete';
+	// en échec tant que dure la pause des relances automatiques (elle s'allonge avec les échecs à la suite)
+	if (phase === 'echec' || (phase === 'demarrage' && !pidVivant(pid))) return age(depuis, maintenant) < pauseApresEchecs(echecsALaSuite(etat)) ? 'echec' : 'arrete';
+	if (!pidVivant(pid)) return 'arrete';
 	if (phase === 'demarrage') return age(depuis, maintenant) < AGE_MAX_DEMARRAGE_MS ? 'demarrage' : 'echec';
 	return 'pret';
 }

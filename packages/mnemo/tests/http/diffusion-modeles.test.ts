@@ -25,7 +25,7 @@ function fauxModeles(): FauxModeles {
 			},
 			demarrer: async () => {},
 			arreter: async () => 'rien' as const,
-			changerNiveau: async () => {},
+			changerNiveau: async () => null,
 			surveiller: () => () => {},
 		},
 	};

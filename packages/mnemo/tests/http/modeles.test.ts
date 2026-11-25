@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { ROUTES } from '@mnemo/contrat';
-import type { EtatModelesVue, MessageServeur, ReponseArretModeles, SessionVue } from '@mnemo/contrat';
+import type { EtatModelesVue, MessageServeur, ReponseArretModeles, ReponseNiveauModeles, SessionVue } from '@mnemo/contrat';
 import type { Session } from '../../src/domaine/session.ts';
 import { appeler, etatModelesFaux, jusqua, serviceFaux } from '../aides/service-faux.ts';
 import type { ContexteService } from '../aides/service-faux.ts';
@@ -118,6 +118,10 @@ describe('routes : modèles de la machine', () => {
 			expect((refus.corps as { erreur: string }).erreur).toContain('« niveau »');
 		}
 		expect(c.modeles.gestes).toEqual(['niveau sens']);
+		expect((r.corps as ReponseNiveauModeles).arret).toBeNull();
+		// un modèle retiré dont l'arrêt trouve des serveurs encore en chargement : la réponse le dit
+		c.modeles.arretNiveau = { enChargement: 2 };
+		expect(((await api(c).put(ROUTES.modelesNiveau, { niveau: 'coupes' })).corps as ReponseNiveauModeles).arret).toEqual({ enChargement: 2 });
 	});
 
 	it('jeton exigé', async () => {

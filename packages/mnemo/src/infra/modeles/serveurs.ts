@@ -16,8 +16,11 @@ export type EntreeServeur = { port: number; cle: string; modele: string; pid: nu
 export type EtatGardien = 'demarrage' | 'pret' | 'echec';
 /** Contenu de `serveurs/modeles.json` (droits 0600 : il contient les clés). */
 export type EtatServeurs = {
-	/** `inactiviteMs` : l'inactivité tolérée par le gardien (écrite par lui ; absente avant sa première publication). */
-	gardien: { pid: number; depuis: string; etat: EtatGardien; inactiviteMs?: number };
+	/**
+	 * `inactiviteMs` : l'inactivité tolérée par le gardien (écrite par lui ; absente avant sa première publication) ; `echecs` :
+	 * démarrages ratés à la suite (absent : aucun), remis à zéro par un démarrage réussi.
+	 */
+	gardien: { pid: number; depuis: string; etat: EtatGardien; inactiviteMs?: number; echecs?: number };
 	sens?: EntreeServeur;
 	reranker?: EntreeServeur;
 };
@@ -26,6 +29,25 @@ export type EtatServeurs = {
 export const AGE_MAX_DEMARRAGE_MS = 3 * 60_000;
 /** Après un démarrage en échec, pas de nouvel essai pendant ce temps (un appel ne relance pas un gardien voué à échouer). */
 export const PAUSE_APRES_ECHEC_MS = 60_000;
+/** Pauses après des échecs répétés : 1 min après le premier, puis 5, puis 15 (une petite machine ne recharge pas sans fin). */
+const PAUSES_APRES_ECHECS_MS = [PAUSE_APRES_ECHEC_MS, 5 * 60_000, 15 * 60_000];
+
+/** Pause des relances automatiques après `echecs` démarrages ratés à la suite (au moins un). */
+export function pauseApresEchecs(echecs: number): number {
+	return PAUSES_APRES_ECHECS_MS[Math.min(Math.max(echecs, 1), PAUSES_APRES_ECHECS_MS.length) - 1]!;
+}
+
+/**
+ * Démarrages ratés à la suite d'après l'état : ceux comptés dans un échec écrit, plus un pour un gardien mort en plein
+ * démarrage (qui n'a pas pu l'écrire) ; 0 pour un gardien prêt, en marche, ou sans état.
+ */
+export function echecsALaSuite(etat: EtatServeurs | null): number {
+	if (etat === null) return 0;
+	const { pid, etat: phase, echecs = 0 } = etat.gardien;
+	if (phase === 'echec') return Math.max(echecs, 1);
+	if (phase === 'demarrage' && !pidVivant(pid)) return echecs + 1;
+	return phase === 'demarrage' ? echecs : 0;
+}
 /** Attente de l'arrêt du gardien par `mnemo modeles arreter`, avant de tuer ses serveurs. */
 const ATTENTE_ARRET_MS = 5_000;
 const PAUSE_SONDAGE_MS = 100;
@@ -95,12 +117,14 @@ export async function lireEtatServeurs(dossier: string): Promise<EtatServeurs | 
 	const r = lireEntree(reranker);
 	if (s === null || r === null) return null;
 	const inactiviteMs = g['inactiviteMs'];
+	const echecs = g['echecs'];
 	return {
 		gardien: {
 			pid: g['pid'] as number,
 			depuis: g['depuis'] as string,
 			etat: g['etat'] as EtatGardien,
 			...(Number.isInteger(inactiviteMs) && (inactiviteMs as number) > 0 ? { inactiviteMs: inactiviteMs as number } : {}),
+			...(Number.isInteger(echecs) && (echecs as number) > 0 ? { echecs: echecs as number } : {}),
 		},
 		...(s === undefined ? {} : { sens: s }),
 		...(r === undefined ? {} : { reranker: r }),
@@ -318,16 +342,16 @@ const age = (depuis: string) => Date.now() - (Date.parse(depuis) || 0);
 
 /**
  * Faut-il laisser faire le gardien nommé (plutôt qu'en lancer un) ? Oui s'il démarre (récemment), s'il est prêt mais sans ce
- * modèle (pièce absente à son lancement), ou si le dernier démarrage a échoué il y a moins d'une minute. Un gardien mort en
- * plein démarrage (sans avoir pu écrire `echec`) compte comme un échec : pas de relance pendant une minute, sinon chaque
- * hook relancerait un gardien voué à mourir.
+ * modèle (pièce absente à son lancement), ou si le dernier démarrage a échoué depuis moins que la pause de ses échecs à la
+ * suite (1 min, puis 5, puis 15 : `pauseApresEchecs`). Un gardien mort en plein démarrage (sans avoir pu écrire `echec`)
+ * compte comme un échec de plus : sinon chaque hook relancerait un gardien voué à mourir, et rechargerait les modèles.
  */
 function gardienEnCharge(etat: EtatServeurs | null, type: TypeServeur, forcer = false): boolean {
 	if (etat === null) return false;
 	const { pid, depuis, etat: phase } = etat.gardien;
 	// un geste explicite (« Démarrer ») relance même pendant la pause qui suit un échec
-	if (phase === 'echec') return !forcer && age(depuis) < PAUSE_APRES_ECHEC_MS;
-	if (!pidVivant(pid)) return !forcer && phase === 'demarrage' && age(depuis) < PAUSE_APRES_ECHEC_MS;
+	if (phase === 'echec' || (phase === 'demarrage' && !pidVivant(pid))) return !forcer && age(depuis) < pauseApresEchecs(echecsALaSuite(etat));
+	if (!pidVivant(pid)) return false;
 	if (phase === 'demarrage') return age(depuis) < AGE_MAX_DEMARRAGE_MS;
 	return etat[type] === undefined;
 }
@@ -382,7 +406,9 @@ async function lancerGardien(dossier: string, type: TypeServeur, finMs: number, 
 			enfant.on('error', () => {});
 			enfant.unref();
 			if (enfant.pid === undefined) return;
-			await ecrireEtatServeurs(dossier, { gardien: { pid: enfant.pid, depuis: new Date().toISOString(), etat: 'demarrage' } });
+			// les échecs à la suite sont gardés jusqu'à un démarrage réussi
+			const echecs = echecsALaSuite(etat);
+			await ecrireEtatServeurs(dossier, { gardien: { pid: enfant.pid, depuis: new Date().toISOString(), etat: 'demarrage', ...(echecs > 0 ? { echecs } : {}) } });
 			await journaliser(dossier, `gardien lancé (pid ${enfant.pid}) pour le ${type}`);
 		});
 	})();
@@ -396,10 +422,9 @@ async function lancerGardien(dossier: string, type: TypeServeur, finMs: number, 
 
 /**
  * Sans serveur prêt : `attendre`, lancer le gardien puis attendre qu'il soit prêt (dans le budget) ; `sans-attendre`, le
- * lancer et rendre null aussitôt (un hook reste sur les mots pour ce tour, le suivant aura les modèles) ; `jamais`, ne rien
- * lancer (simple lecture de l'état).
+ * lancer et rendre null aussitôt (un hook reste sur les mots pour ce tour, le suivant aura les modèles).
  */
-export type Demarrage = 'attendre' | 'sans-attendre' | 'jamais';
+export type Demarrage = 'attendre' | 'sans-attendre';
 
 /**
  * `inactiviteMs` : l'inactivité tolérée transmise au gardien s'il est lancé (sinon la sienne par défaut). `forcer` : geste
@@ -417,7 +442,7 @@ export async function serveurPret(dossier: string, type: TypeServeur, options: O
 	const { finMs, demarrage } = options;
 	let etat = await lireEtatServeurs(dossier);
 	const pret = await utilisable(etat, type, finMs);
-	if (pret !== null || demarrage === 'jamais' || Date.now() >= finMs) return pret;
+	if (pret !== null || Date.now() >= finMs) return pret;
 	const forcer = options.forcer === true;
 	// geste explicite : un gardien prêt à qui manque ce modèle (permis et installé, garanti par l'appelant ; exclu par le niveau
 	// à son lancement, ou qui n'avait pas chargé) est arrêté proprement, puis relancé avec tous les modèles permis

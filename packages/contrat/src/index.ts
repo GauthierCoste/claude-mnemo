@@ -227,6 +227,9 @@ export type ActiviteModeleVue = { operation: OperationModele; session: string | 
  */
 export type ReponseArretModeles = EtatModelesVue & { arret: 'arrete' | 'rien' | { enChargement: number } };
 
+/** Réponse de `modelesNiveau` : la vue, et l'arrêt qu'a causé un modèle retiré (null : aucun, le niveau n'en retire pas). */
+export type ReponseNiveauModeles = EtatModelesVue & { arret: ReponseArretModeles['arret'] | null };
+
 /**
  * Les modèles locaux de la machine (partagés par tous les dossiers Mnemo) : `installes` (le moteur et au moins un modèle),
  * `niveau` de la machine, `gardien` (`arrete` : aucun ; `demarrage` : modèles en chargement ; `pret` ; `echec` : le dernier
@@ -305,8 +308,9 @@ export type MessageClient =
  *   sans attendre leur chargement ; même dans la minute qui suit un échec) ;
  * - `modelesArreter` POST → `ReponseArretModeles` : arrête les modèles de la machine sans changer le niveau (le prochain usage les
  *   relance) ;
- * - `modelesNiveau` PUT `{ niveau: NiveauModeles }` → `EtatModelesVue` : niveau de la machine (un niveau qui retire un modèle
- *   arrête les modèles en marche ; un niveau qui en ajoute ne lance rien) ; 400 : niveau invalide ;
+ * - `modelesNiveau` PUT `{ niveau: NiveauModeles }` → `ReponseNiveauModeles` : niveau de la machine (un niveau qui retire un
+ *   modèle arrête les modèles en marche, `arret` dit ce que cet arrêt a fait ; un niveau qui en ajoute ne lance rien,
+ *   `arret` null) ; 400 : niveau invalide ;
  * - `sessionModeles` PUT `{ niveau: NiveauModeles | null }` (null : suivre le niveau de la machine) → `{ session }` : niveau
  *   propre à la session, valable dès son prochain appel aux modèles (message `session` diffusé) ; 400 : niveau invalide ;
  *   404 : session inconnue ; 409 : session terminée ;

@@ -16,6 +16,7 @@ import {
 	type LueVue,
 	type EtatModelesVue,
 	type ReponseArretModeles,
+	type ReponseNiveauModeles,
 	type SessionVue,
 	type DonneesGraphe,
 	type NiveauDossiersVue,
@@ -348,7 +349,8 @@ export function useModeles(utile: boolean): {
 	etat: EtatModelesVue | undefined;
 	demarrer(): Promise<void>;
 	arreter(): Promise<ReponseArretModeles['arret']>;
-	changerNiveau(niveau: NiveauModeles): Promise<void>;
+	/** Rend l'arrêt qu'a causé un modèle retiré (null : aucun). */
+	changerNiveau(niveau: NiveauModeles): Promise<ReponseNiveauModeles['arret']>;
 } {
 	const { api, connexion } = useClient();
 	const base = useRessource(utile ? 'modeles' : null, () => api.lire<EtatModelesVue>(ROUTES.modeles));
@@ -380,7 +382,7 @@ export function useModeles(utile: boolean): {
 			return (await geste(() => api.envoyer<ReponseArretModeles>(ROUTES.modelesArreter, undefined))).arret;
 		},
 		async changerNiveau(niveau) {
-			await geste(() => api.remplacer<EtatModelesVue>(ROUTES.modelesNiveau, { niveau }));
+			return (await geste(() => api.remplacer<ReponseNiveauModeles>(ROUTES.modelesNiveau, { niveau }))).arret;
 		},
 	};
 }

@@ -43,7 +43,7 @@ describe('useModeles', () => {
 		const wrapper = ({ children }: { children: ReactNode }) => createElement(FournisseurClient, { client: faux.client, children });
 		const rendu = renderHook(() => useModeles(true), { wrapper });
 		await waitFor(() => expect(rendu.result.current.etat).toEqual(vue()));
-		let geste!: Promise<void>;
+		let geste!: Promise<unknown>;
 		act(() => {
 			geste = rendu.result.current.changerNiveau('sens');
 		});

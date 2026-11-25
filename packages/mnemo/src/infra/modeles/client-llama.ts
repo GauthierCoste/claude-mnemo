@@ -268,7 +268,9 @@ export function modelesLocaux(racine: string, options: OptionsClient = {}): Mode
 			return r === 'perime' ? 'rien' : r;
 		},
 		async changerNiveau(niveau) {
-			await changerNiveau(env, niveau, plateforme);
+			// l'arrêt qu'a causé un modèle retiré : des serveurs encore en chargement le disent à l'utilisateur
+			const { arret } = await changerNiveau(env, niveau, plateforme);
+			return arret === 'perime' ? 'rien' : arret;
 		},
 		surveiller(rappel) {
 			const dossier = lieu.dossier();

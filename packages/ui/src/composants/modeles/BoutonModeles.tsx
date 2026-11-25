@@ -5,7 +5,7 @@
  * Absent tant que les modèles ne sont pas installés.
  */
 import { NIVEAUX_MODELES, type NiveauModeles } from '@mnemo/commun';
-import type { EtatModelesVue } from '@mnemo/contrat';
+import type { EtatModelesVue, ReponseArretModeles } from '@mnemo/contrat';
 import type { ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
 import { useModeles, useReglages } from '../../client/hooks.ts';
@@ -31,7 +31,11 @@ export function BoutonModeles(): ReactNode {
 	const coupes = e.niveau === 'coupes';
 	const agir = (geste: () => Promise<void>) =>
 		void geste().catch((erreur: unknown) => toast(erreur instanceof ErreurApi ? erreur.message : 'Action impossible.'));
-	const choisirNiveau = (n: NiveauModeles) => agir(() => modeles.changerNiveau(n));
+	/** Un arrêt qui a trouvé des modèles encore en chargement (geste « Arrêter », ou niveau qui en retire un) : le dire. */
+	const direArret = (arret: ReponseArretModeles['arret'] | null) => {
+		if (arret !== null && typeof arret === 'object') toast(ENCORE_EN_CHARGEMENT);
+	};
+	const choisirNiveau = (n: NiveauModeles) => agir(async () => direArret(await modeles.changerNiveau(n)));
 	return (
 		<MenuModeles
 			libelle={`Modèles locaux : ${texte}`}
@@ -72,10 +76,7 @@ export function BoutonModeles(): ReactNode {
 						<ItemMenu
 							libelle="Arrêter maintenant"
 							surChoix={() => {
-								agir(async () => {
-									const arret = await modeles.arreter();
-									if (typeof arret === 'object') toast(ENCORE_EN_CHARGEMENT);
-								});
+								agir(async () => direArret(await modeles.arreter()));
 								fermer();
 							}}
 						/>

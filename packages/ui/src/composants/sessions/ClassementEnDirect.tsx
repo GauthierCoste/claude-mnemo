@@ -157,7 +157,8 @@ export function ClassementEnDirect(p: {
 	const premiereServie = servies.at(-1)?.id;
 	// toutes les lignes : une fiche qui vient d'être injectée monte, et le dit (▲)
 	const ordre = [...serviesLues, ...enLice].map((l) => l.id).join('\n');
-	// notes absentes : on dit pourquoi (modèles arrêtés ou non installés), et le démarrage reste un geste explicite
+	// notes absentes : on dit pourquoi (niveau, chargement, modèles arrêtés ou non installés) ; arrêtés, le hook les relance en
+	// arrière-plan pour le message suivant, et « Démarrer » les lance tout de suite
 	const sansNotes = lignes.length > 0 && lignes.every((l) => l.note === null);
 	// l'état sert aussi au repère « sans note de sens » (rien à dire de plus quand la session est coupée)
 	const modeles = useModeles(sansNotes || sansSens);

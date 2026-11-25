@@ -2,7 +2,8 @@
  * Palette (⌘K, Ctrl+K hors macOS, ou le champ `.cmd` de la barre de titre) : un champ posé sur celui de la barre de titre
  * et, juste dessous, un menu de même bord gauche et de même largeur. Résultats : les sessions qui correspondent nettement
  * (les vivantes, puis les terminées, avec leur état), puis le classement du moteur de recherche du service (mots seuls d'abord, puis sens et reranker s'ils
- * tournent : la palette ne les démarre jamais, elle le propose), les éléments d'une même fiche regroupés sous elle ; les
+ * tournent ; arrêtés, la recherche du service les relance en arrière-plan pour la suivante, et la palette propose de les
+ * démarrer tout de suite), les éléments d'une même fiche regroupés sous elle ; les
  * fiches au titre correspondant ne s'affichent que le temps qu'il réponde. Filtres : Tout, Sessions, Fiches, Documents,
  * « Ce projet » (session choisie ou fiche ouverte). Flèches pour choisir, Entrée pour ouvrir, Échap pour fermer. Une
  * session s'ouvre en grand dans la grille (l'archiviste : son tiroir), une fiche ou un élément dans Mémoire › Fichiers.
@@ -47,7 +48,8 @@ function PaletteOuverte(p: { texteInitial: string; surOuverture(): void; ancre: 
 	const projetDisponible = nav.projetPremierPlan;
 	const projet = ceProjet && projetUtilisable(filtre) ? projetDisponible : null;
 	const moteur = useRechercheMoteur(q, { ...demandeAuMoteur(filtre, projet), actif: filtre !== 'sessions' });
-	// réponse complète sans aucune note : les modèles ne tournent pas, ou le niveau les exclut (la palette ne les démarre pas d'elle-même)
+	// réponse complète sans aucune note : les modèles ne tournaient pas (la recherche les relance en arrière-plan pour la
+	// suivante), ils chargent, ou le niveau les exclut ; l'avis dit lequel
 	const sansNotes = moteur.complet && (moteur.trouves?.length ?? 0) > 0 && moteur.trouves!.every((t) => t.note === null);
 	const modeles = useModeles(sansNotes);
 	// la palette n'a pas de session : le niveau de la machine seul

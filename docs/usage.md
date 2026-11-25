@@ -146,8 +146,8 @@ platform there is no search by meaning, and search works by words.
 
 - `mnemo modeles installer [--depuis <folder>]`: installs what is missing in the user cache: `MNEMO_MODELES` if set,
   otherwise `~/Library/Caches/mnemo` on macOS, `$XDG_CACHE_HOME/mnemo` or
-  `~/.cache/mnemo` on Linux. The pieces: the llama.cpp engine b11671 (12 MB), the meaning model bge-m3 (635 MB), the
-  reranker bge-reranker-v2-m3 (636 MB). Each piece has a fixed address and SHA-256 hash, checked before installing.
+  `~/.cache/mnemo` on Linux. The pieces: the llama.cpp engine b11671 (12 MB), the meaning model bge-m3 (about 605 MB), the
+  reranker bge-reranker-v2-m3 (about 606 MB), in the units of the interface. Each piece has a fixed address and SHA-256 hash, checked before installing.
   `--depuis` copies a piece already present on the machine instead of downloading it, if its hash matches.
 - `mnemo modeles etat`: installed pieces and running servers of the machine.
 - `mnemo modeles arreter`: stops the servers of the machine. Run from a Mnemo folder, it also stops the servers that an
@@ -181,7 +181,8 @@ Three levels set which models run. The bench counts the questions whose right so
 
 - **Everywhere.** The level of the machine is kept in the models cache (`serveurs/niveau.json`) and applies to every
   folder. A model it excludes is never started nor called. A change that removes a model stops the servers at once; a
-  change that adds one starts nothing: the next use starts the servers with the right models.
+  change that adds one starts nothing at once: the running guardian stops within 30 seconds, and the next use starts
+  the servers again with every allowed model. « Démarrer maintenant » restarts them at once.
 - **For one session.** A session can have its own level. It is kept when the session is resumed. The more restrictive of
   the two levels applies: a session cannot use a model the machine excludes. Its tools and hooks then neither call nor
   start the excluded models. This frees no memory: the servers are shared and keep running for the other sessions.
@@ -192,7 +193,7 @@ Three levels set which models run. The bench counts the questions whose right so
 
 The **Modèles** button sits in the title bar, between the quotas and the Archiviste button. It is absent while the
 models are not installed. Its text follows the state live: « Modèles en veille » (stopped), « Chargement… » (loading),
-« Modèles prêts » (ready; « Sens seul prêt » at that level), « Vectorisation n/N », « Recherche… », « Injection… »
+« Modèles prêts » (ready; « Sens seul prêt » and « Sens seul en veille » at that level), « Vectorisation n/N », « Recherche… », « Injection… »
 (work in progress, the latest one, « +1 » if there are others), « Modèles coupés » (off) or « Modèles en échec »
 (failed).
 
@@ -200,9 +201,11 @@ A click opens a menu and changes nothing by itself. It shows:
 
 - each piece with its state: the meaning model bge-m3 and the reranker bge-reranker-v2-m3, both from BAAI in Q8_0, with
   their size and the start of their SHA-256 hash; the engine llama.cpp b11671, local on `127.0.0.1`;
-- the work in progress, with its session (or « autre dossier » for another folder);
+- the work in progress, with « – cette session » for the session selected in Sessions, or « – autre dossier » for
+  another folder;
 - the level under « Partout » (everywhere): « Complets », « Sens seul », « Coupés »;
-- « Démarrer maintenant » (start now) or « Arrêter maintenant » (stop now), which keeps the level;
+- « Démarrer maintenant » (start now) or « Arrêter maintenant » (stop now), which keeps the level: the next use (a
+  search or a hook) starts the models again;
 - the shutdown delay after inactivity.
 
 In the Contexte panel, a small button at the right of « Injecté dans la session » shows the level of the selected

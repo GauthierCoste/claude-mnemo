@@ -37,7 +37,7 @@ Details:
 - **Program**: about 270 MB once the dependencies are installed (measured: `node_modules` 268 MB, sources and built
   interface a few MB more).
 - **Local models** (optional): about 1.3 GB in a cache outside the folder: llama.cpp engine 12 MB, meaning model
-  bge-m3 635 MB, reranker bge-reranker-v2-m3 636 MB.
+  bge-m3 about 605 MB, reranker bge-reranker-v2-m3 about 606 MB.
 - **Service**: about 130 MB of RAM when idle on a fresh memory (measured on macOS); a larger memory and open sessions add
   to it (estimate: under 250 MB for the service itself). Each Claude Code session is a separate `claude` process with its
   own memory use.
@@ -80,6 +80,12 @@ the application and the MCP declaration point to it), then run `pnpm installer` 
 this clone with the Node.js that installed it, whatever Node.js your terminal uses by default. Later, or after moving the
 clone or upgrading Node.js: `mnemo commande` (from the clone: `node packages/mnemo/src/adaptateurs/cli/main.ts commande`).
 If `~/.local/bin` is not in your `PATH`, it prints the line to add. After a Node.js upgrade, run `pnpm rebuild node-pty`.
+
+### Updating
+
+After an update (`git pull`, then `pnpm installer`), restart what was already running: stop the service (`mnemo arreter`,
+from the Mnemo folder), then open Mnemo again, and restart the Claude Code sessions opened before the update. Until then,
+they run the old code, and only one set of models should run for the machine.
 
 ## The questions of `mnemo init`
 

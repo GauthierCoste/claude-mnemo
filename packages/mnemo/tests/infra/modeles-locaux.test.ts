@@ -113,8 +113,10 @@ describe('modelesLocaux : état', () => {
 		expect(etat).toMatchObject({ installes: true, niveau: 'complets', gardien: 'arrete', sens: 'arrete', reranker: 'arrete', activites: [] });
 		expect(etat.pieces.sens).toEqual({ modele: 'bge-m3', editeur: 'BAAI', quantification: 'Q8_0', octets: 4, empreinte: sha('sens').slice(0, 8) });
 		expect(etat.pieces.reranker).toMatchObject({ modele: 'bge-reranker-v2-m3', octets: 4, empreinte: sha('reranker').slice(0, 8) });
-		await b.modeles.changerNiveau('sens');
+		// un modèle retiré, rien en marche : l'arrêt est tenté et ne trouve rien ; un niveau qui n'en retire pas : aucun arrêt
+		expect(await b.modeles.changerNiveau('sens')).toBe('rien');
 		expect(await b.modeles.etat()).toMatchObject({ niveau: 'sens', sens: 'arrete', reranker: 'exclu' });
+		expect(await b.modeles.changerNiveau('complets')).toBeNull();
 		await b.modeles.changerNiveau('coupes');
 		expect(await b.modeles.etat()).toMatchObject({ niveau: 'coupes', sens: 'exclu', reranker: 'exclu' });
 	});
