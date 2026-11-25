@@ -11,8 +11,8 @@ import { raisonDeMutisme } from '../domaine/message-muet.ts';
 /**
  * Un message étiqueté. `attendues` / `interdites` : chemin complet de fiche ou dernier segment (« Corvel.md » désigne
  * `projets/clients/Corvel/Corvel.md`) ; `silence` : rien ne doit être proposé. `premier` : premier message de la session (la
- * fiche de position est servie) ; sinon elle est déjà servie. Tout message porteur est classé (pistes). Un cas `premier` dont le
- * message est muet ne propose aucune piste, mais sert quand même la fiche de position ; dans un cas `silence` de ce genre, cette fiche n'est pas
+ * fiche de position est servie, le périmètre part en pistes) ; sinon elle est déjà servie et seules les fiches nommées partent. Un
+ * cas `premier` dont le message est muet ne propose aucune piste, mais sert quand même la fiche de position ; dans un cas `silence` de ce genre, cette fiche n'est pas
  * indésirable (seules les cartes le sont). `injectees` (facultatif, mêmes désignations) : fiches injectées à la main par
  * l'utilisateur (« Injecter dans la session ») juste avant ce message, qui part avec elles : injectées entières (ni attendues ni
  * indésirables), elles pèsent sur leurs voisines, classées et proposées avec les autres candidates. Une désignation `injectees`

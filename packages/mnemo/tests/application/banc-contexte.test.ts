@@ -32,8 +32,7 @@ const cas = (c: Partial<CasContexte> & Pick<CasContexte, 'nom' | 'message'>): Ca
 const CAS: CasContexte[] = [
 	cas({ nom: 'premier message', message: 'Maquette ERP', premier: true, attendues: ['SVE.md', 'Outil Parcs.md'], interdites: ['ERP Corvelis.md', 'Doc SVE.md', 'clients.md'] }),
 	cas({ nom: 'acquiescement', message: 'oui vas y pousse', silence: true }),
-	// chaque message porteur est classé : le lieu nommé ouvre ses fiches, jamais une source ni un dossier
-	cas({ nom: 'fiche nommée', message: 'parle-moi de Corvel', attendues: ['Corvel.md'], interdites: ['Doc SVE.md', 'clients.md'] }),
+	cas({ nom: 'fiche nommée', message: 'parle-moi de Corvel', attendues: ['Corvel.md'], interdites: ['Outil Parcs.md', 'Doc SVE.md', 'clients.md'] }),
 	cas({ nom: 'notification', message: '<task-notification>fini</task-notification>', silence: true }),
 ];
 
@@ -52,9 +51,9 @@ describe('rejouerCas', () => {
 	});
 
 	it('une attendue non proposée est signalée', async () => {
-		const { mesure, echecs } = await rejouerCas(await memoire(), [cas({ nom: 'manquée', message: 'parle-moi de Corvel', attendues: ['Doc SVE.md'] })]);
+		const { mesure, echecs } = await rejouerCas(await memoire(), [cas({ nom: 'manquée', message: 'parle-moi de Corvel', attendues: ['ERP Corvelis.md'] })]);
 		expect(mesure).toMatchObject({ justes: 0, attenduesProposees: 0, attenduesTotal: 1 });
-		expect(echecs).toEqual([{ nom: 'manquée', manquees: ['Doc SVE.md'], indesirables: [] }]);
+		expect(echecs).toEqual([{ nom: 'manquée', manquees: ['ERP Corvelis.md'], indesirables: [] }]);
 	});
 
 	it('un cas silence qui reçoit des cartes compte ces cartes comme indésirables', async () => {

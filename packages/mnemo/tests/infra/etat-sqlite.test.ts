@@ -201,33 +201,78 @@ describe('etat.sqlite', () => {
 		expect((await etat.servis('s1', 2))[1]).toMatchObject({ demande: 'quoi ?', classement });
 	});
 
-	it('completerClassement : remplace le classement de l’entrée de message à cet horodatage, et elle seule ; entrée disparue : rien', async () => {
+	it('completerClassement : l’entrée la plus récente de la session seulement, avec son état d’affinage ; une entrée dépassée : rien', async () => {
 		const { etat } = await ouvrir();
 		await etat.creer(session('s1'));
 		await etat.creer(session('s2'));
 		const entree = { moment: 'message' as const, ids: [], texte: '', ms: 1, sens: true, demande: 'q', muet: null, cartes: [], position: null };
 		const signaux = { cosinus: 0.81, cosinusRelatif: 0.12, bm25Relatif: 0.5, signalSession: 0 };
 		const avant = [
-			{ id: 'a.md', titre: 'A', note: 0.81, servi: false, rang: 1, p: null, signaux, piste: true, raison: 'perimetre' as const },
-			{ id: 'b.md', titre: 'B', note: 0.7, servi: false, rang: 2, p: null, signaux, deja: 'proposee' as const },
+			{ id: 'a.md', note: 0.81, servi: false, rang: 1, signaux, piste: true, raison: 'perimetre' as const },
+			{ id: 'b.md', note: 0.7, servi: false, rang: 2, signaux, deja: 'proposee' as const },
 		];
 		await etat.journaliser({ ...entree, session: 's1', horodatageMs: 10, classement: avant });
 		await etat.journaliser({ ...entree, session: 's1', horodatageMs: 20, classement: avant });
-		await etat.journaliser({ ...entree, session: 's2', horodatageMs: 10, classement: avant });
-		// les champs du classement vivant sont relus tels quels
+		await etat.journaliser({ ...entree, session: 's2', horodatageMs: 20, classement: avant });
+		// les champs du classement vivant sont relus tels quels ; pas d'affinage encore
 		expect((await etat.servis('s1', 1))[0]!.classement).toEqual(avant);
+		expect((await etat.servis('s1', 1))[0]).not.toHaveProperty('affinage');
 		const apres = [
 			{ ...avant[1]!, rang: 1, p: 0.93, signaux: { ...signaux, logit: 2.4 } },
 			{ ...avant[0]!, rang: 2, p: 0.4 },
 		];
-		expect(await etat.completerClassement('s1', 10, apres)).toBe(true);
+		// l'entrée de 10 n'est plus la plus récente : un message plus récent rend l'affinage caduc
+		expect(await etat.completerClassement('s1', 10, apres, 'fait')).toBe(false);
+		expect(await etat.completerClassement('s1', 20, apres, 'en_cours')).toBe(true);
+		expect(await etat.completerClassement('s1', 20, apres, 'fait')).toBe(true);
 		const [vingt, dix] = await etat.servis('s1', 2);
-		expect(dix!.classement).toEqual(apres);
+		expect(vingt!.classement).toEqual(apres);
 		// le reste de l'entrée ne change pas
-		expect(dix).toMatchObject({ horodatageMs: 10, demande: 'q', texte: '', moment: 'message' });
-		expect(vingt!.classement).toEqual(avant);
+		expect(vingt).toMatchObject({ horodatageMs: 20, demande: 'q', texte: '', moment: 'message', affinage: 'fait' });
+		expect(dix!.classement).toEqual(avant);
 		expect((await etat.servis('s2', 1))[0]!.classement).toEqual(avant);
-		expect(await etat.completerClassement('s1', 99, apres)).toBe(false);
+		expect(await etat.completerClassement('s1', 99, apres, 'fait')).toBe(false);
+	});
+
+	it('journal : un même instant ne s’écrit qu’une fois par session et par moment (repli local du hook)', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('s1'));
+		const entree = { session: 's1', moment: 'message' as const, horodatageMs: 10, ids: [], texte: 'service', ms: 1, sens: true, demande: 'q', classement: [], muet: null, cartes: [], position: null };
+		await etat.journaliser(entree);
+		await etat.journaliser({ ...entree, texte: 'repli local' });
+		await etat.journaliser({ ...entree, moment: 'contexte', texte: 'outil' });
+		expect((await etat.servis('s1', 10)).map((e) => e.texte)).toEqual(['outil', 'service']);
+	});
+
+	it('journal : les 50 dernières entrées gardent leur classement entier ; plus anciennes, coupé à 30 lignes et compté', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('s1'));
+		const classement = Array.from({ length: 40 }, (_, i) => ({ id: `f${i}.md`, note: null, servi: false, rang: i + 1 }));
+		for (let h = 1; h <= 52; h++) {
+			await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: h, ids: [], texte: '', ms: 1, sens: false, demande: null, classement, muet: null, cartes: [], position: null });
+		}
+		const entrees = await etat.servis('s1', 100);
+		expect(entrees.slice(0, 50).every((e) => e.classement.length === 40)).toBe(true);
+		for (const e of entrees.slice(50)) {
+			expect(e.classement).toHaveLength(30);
+			expect(e.classement.at(-1)).toMatchObject({ rang: 30, coupees: 10 });
+		}
+	});
+
+	it('servis : `classement: dernier` ne rend que le classement de l’entrée la plus récente (de ce moment)', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('s1'));
+		const classement = [{ id: 'a.md', note: null, servi: false, rang: 1 }];
+		const entree = (moment: 'message' | 'contexte', horodatageMs: number) => ({ session: 's1', moment, horodatageMs, ids: [], texte: '', ms: 1, sens: false, demande: null, classement, muet: null, cartes: [], position: null });
+		await etat.journaliser(entree('message', 1));
+		await etat.journaliser(entree('message', 2));
+		await etat.journaliser(entree('contexte', 3));
+		expect((await etat.servis('s1', 10, undefined, { classement: 'dernier' })).map((e) => e.classement.length)).toEqual([1, 0, 0]);
+		expect((await etat.servis('s1', 10, 'message', { classement: 'dernier' })).map((e) => [e.horodatageMs, e.classement.length])).toEqual([
+			[2, 1],
+			[1, 0],
+		]);
+		expect((await etat.servis('s1', 10)).map((e) => e.classement.length)).toEqual([1, 1, 1]);
 	});
 
 	it('une entrée ancienne (classement sans les champs du classement vivant) reste lisible', async () => {
@@ -850,6 +895,12 @@ describe('etat.sqlite', () => {
 		expect(a!.note).toEqual({ note: 0.8, servi: false, rang: 1, p: null, signaux, piste: true, raison: 'proche' });
 		// sans note provisoire (pas de sens) : la ligne sans `note`
 		expect(b!.note).toEqual({ servi: false, rang: 2, p: null, signaux });
+		// la recherche se borne aux 5 dernières entrées de la session
+		for (let h = 11; h <= 15; h++) {
+			await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: h, ids: [], texte: '', ms: 1, sens: true, demande: null, classement: [], muet: null, cartes: [], position: null });
+		}
+		await etat.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche: 'a.md', empreinte: null, horodatageMs: 30 });
+		expect((await etat.gestes({ limite: 1 }))[0]!.note).toBeNull();
 	});
 
 	it('journal des gestes : contexte lu dans la session, note de la carte (JSON), vecteur du même message seulement, origines', async () => {

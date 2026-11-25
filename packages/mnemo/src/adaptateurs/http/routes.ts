@@ -17,7 +17,7 @@ import { noterGeste } from '../../application/gestes.ts';
 import { traiterEvenement } from '../../application/evenements.ts';
 import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
-import { porteursRecents, vecteurDuPorteur } from '../../application/porteurs-recents.ts';
+import { noteDuPorteur, porteursRecents, vecteurDuPorteur } from '../../application/porteurs-recents.ts';
 import { fenetreDeTranscription } from '../../infra/fenetre-transcription.ts';
 import type { EntreeHook } from '../../application/evenements.ts';
 import { filDuJour } from '../../application/fil.ts';
@@ -451,10 +451,10 @@ export function routes(ctx: ContexteRoutes): Route[] {
 			chemin: ROUTES.servis,
 			action: async (r) => {
 				await session(r.id);
-				// le panneau n'affiche que le dernier classement : les autres entrées partent sans le leur
+				// le panneau n'affiche que le dernier classement : les autres entrées partent sans le leur, que la base ne lit même pas
 				const lues = await luesDe(r.id);
 				const titres = await titresDeLIndex();
-				return ok({ servis: (await pil.etat.servis(r.id, 200)).map((e, i) => vueServie(i === 0 ? e : { ...e, classement: [] }, titres)), lues });
+				return ok({ servis: (await pil.etat.servis(r.id, 200, undefined, { classement: 'dernier' })).map((e) => vueServie(e, titres)), lues });
 			},
 		},
 		{ methode: 'GET', chemin: ROUTES.modeles, action: async () => ok(vueModeles(await ctx.modeles.etat())) },
@@ -516,8 +516,19 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				if (resultat === 'terminee') throw new ErreurHttp(409, 'Session terminée : plus rien à écarter.');
 				// un geste seulement si l'élément n'était pas déjà écarté ; le message est celui de l'entrée où il a été trouvé
 				if (resultat === 'ecarte') {
-					const vecteur = vecteurDuPorteur(porteurs.lire(s.id));
-					await noterGeste(dep, pil.etat, { geste: 'ecartee_ici', session: s.id, fiche: id!.split('#')[0]!, horodatageMs: Date.now(), vecteur, ...(porteur === undefined ? {} : { porteur }) });
+					const recent = porteurs.lire(s.id);
+					const fiche = id!.split('#')[0]!;
+					// la note : la ligne de la fiche au dernier classement gardé en mémoire (sinon l'état la cherche dans les dernières entrées)
+					const note = noteDuPorteur(recent, fiche, porteur?.rang);
+					await noterGeste(dep, pil.etat, {
+						geste: 'ecartee_ici',
+						session: s.id,
+						fiche,
+						horodatageMs: Date.now(),
+						vecteur: vecteurDuPorteur(recent),
+						...(porteur === undefined ? {} : { porteur }),
+						...(note === undefined ? {} : { note }),
+					});
 				}
 				return ecartesDiffuses(s.id);
 			},
@@ -532,7 +543,10 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const resultat = await pil.etat.retablir(s.id, id);
 				if (resultat === 'terminee') throw new ErreurHttp(409, 'Session terminée : plus rien à rétablir.');
 				if (resultat === 'retabli') {
-					await noterGeste(dep, pil.etat, { geste: 'retablie', session: s.id, fiche: id.split('#')[0]!, horodatageMs: Date.now(), vecteur: vecteurDuPorteur(porteurs.lire(s.id)) });
+					const recent = porteurs.lire(s.id);
+					const fiche = id.split('#')[0]!;
+					const note = noteDuPorteur(recent, fiche);
+					await noterGeste(dep, pil.etat, { geste: 'retablie', session: s.id, fiche, horodatageMs: Date.now(), vecteur: vecteurDuPorteur(recent), ...(note === undefined ? {} : { note }) });
 				}
 				return ecartesDiffuses(s.id);
 			},
@@ -628,8 +642,13 @@ export function routes(ctx: ContexteRoutes): Route[] {
 						}
 						// un message porteur est journalisé même sans contexte rendu (son classement) : diffusé aussi (le WebSocket ne rediffuse pas une entrée déjà connue)
 						if (entree.evenement === 'message' || (reponse.contexte !== undefined && entree.evenement === 'debut')) {
-							const [dernier] = await pil.etat.servis(s.id, 1).catch(() => []);
-							if (dernier !== undefined) ctx.diffuser({ type: 'servi', entree: vueServie(dernier, await titresDeLIndex()) });
+							// après la réponse : le hook n'attend ni la relecture du journal ni les titres de l'index
+							ctx.enFond(
+								(async () => {
+									const [dernier] = await pil.etat.servis(s.id, 1);
+									if (dernier !== undefined) ctx.diffuser({ type: 'servi', entree: vueServie(dernier, await titresDeLIndex()) });
+								})().catch(() => {}),
+							);
 						}
 					}
 				}

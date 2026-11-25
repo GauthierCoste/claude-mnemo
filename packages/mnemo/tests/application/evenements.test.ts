@@ -297,6 +297,28 @@ describe('traiterEvenement : après un outil', () => {
 		]);
 	});
 
+	it('le service garde le classement du dernier message porteur : la note d’un geste vient de lui, sans relire le journal', async () => {
+		const { dep, etat, pil } = await contexte();
+		const AVOIRS = 'projets/vela/avoirs.md';
+		await dep.coffre.ecrire(AVOIRS, `${entete()}# Avoirs\n\nUn avoir annule une facture.\n`);
+		const porteurs = porteursRecents();
+		await traiterEvenement(dep, pil, entree('message', 10, { prompt: 'catalogue références' }), { ...local, porteurs });
+		const ligne = porteurs.lire(ID)?.classement?.get(AVOIRS);
+		expect(ligne).toMatchObject({ rang: 1, piste: true, raison: 'perimetre' });
+		// une note différente du journal en mémoire : c'est elle que le geste reprend
+		porteurs.noter(ID, { ...porteurs.lire(ID)!, classement: new Map([[AVOIRS, { rang: 7, note: 0.5 }]]) });
+		await traiterEvenement(dep, pil, entree('apres_outil', 11, lire(AVOIRS)), { ...local, porteurs });
+		expect((await etat.gestes({ limite: null }))[0]).toMatchObject({ geste: 'lue_apres_carte', note: { rang: 7, note: 0.5 } });
+	});
+
+	it('trop peu de temps pour noter avant l’échéance : rien n’est noté, journalisé ni rendu', async () => {
+		const { dep, etat, pil } = await contexte();
+		const r = await traiterEvenement(dep, pil, entree('message', 10, { prompt: 'catalogue références' }), { froid: 'si-budget', echeance: Date.now() + 15 });
+		expect(r).toEqual({});
+		expect(await etat.servis(ID, 5)).toEqual([]);
+		expect(await etat.fichesServiesLuesOuEcrites(ID)).toEqual([]);
+	});
+
 	it('lue après une carte, après /clear : comptée une fois ; une nouvelle proposition la fait compter de nouveau', async () => {
 		const { dep, etat, pil } = await contexte();
 		const AVOIRS = 'projets/vela/avoirs.md';
@@ -437,24 +459,23 @@ describe('traiterEvenement : contexte sobre au message', () => {
 		expect((await etat.servis(ID, 1))[0]).toMatchObject({ moment: 'message', demande: prompt, muet: null, position: 'projets/vela', ids: [VELA], cartes: [{ chemin: AVOIRS, raison: 'perimetre' }] });
 	});
 
-	it('second message porteur : classé de nouveau, seules les nouvelles partent en pistes ; avec un nom, la carte nommée', async () => {
+	it('second message porteur : classé (journal), sans pistes ; seule une fiche nommée part', async () => {
 		const { dep, etat, pil } = await memoire();
 		await traiterEvenement(dep, pil, message(10, 'catalogue références'), local);
+		await dep.coffre.ecrire('projets/vela/ristournes.md', `${entete()}# Ristournes\n\nUne ristourne baisse le prix.\n`);
 		const seul = await traiterEvenement(dep, pil, message(11, 'catalogue références'), local);
 		expect(seul.contexte).toContain('Réponds en français.');
 		expect(seul.contexte).not.toContain('###');
-		// Avoirs, déjà proposée, reste au classement sans repartir en piste
+		// Ristournes, nouvelle, est classée mais ne part pas en piste : tant que la note n'est pas apprise, pas de pistes à ce message
 		expect(seul.contexte).not.toContain('Pistes de Mnemo');
-		expect((await etat.servis(ID, 1))[0]!.classement).toMatchObject([{ id: AVOIRS, deja: 'proposee', rang: 1 }]);
-		await dep.coffre.ecrire('projets/vela/ristournes.md', `${entete()}# Ristournes\n\nUne ristourne baisse le prix.\n`);
-		const nouvelle = await traiterEvenement(dep, pil, message(12, 'catalogue références'), local);
-		expect(nouvelle.contexte).toContain('- Ristournes — projets/vela/ristournes.md');
-		expect(nouvelle.contexte).not.toContain('- Avoirs');
-		await dep.coffre.ecrire('projets/vela/remises.md', `${entete()}# Remises\n\nUne remise baisse le prix.\n`);
-		const nomme = await traiterEvenement(dep, pil, message(13, 'les Remises du catalogue'), local);
-		expect(nomme.contexte).toContain('- Remises — projets/vela/remises.md');
-		// nommée, elle n'est pas aussi une piste
-		expect((await etat.servis(ID, 1))[0]!.cartes).toEqual([{ chemin: 'projets/vela/remises.md', raison: 'nommee' }]);
+		const classement = (await etat.servis(ID, 1))[0]!.classement;
+		expect(new Set(classement.map((c) => c.id))).toEqual(new Set([AVOIRS, 'projets/vela/ristournes.md']));
+		expect(classement.find((c) => c.id === AVOIRS)).toMatchObject({ deja: 'proposee' });
+		expect(classement.some((c) => c.piste === true)).toBe(false);
+		const nomme = await traiterEvenement(dep, pil, message(12, 'les Ristournes du catalogue'), local);
+		expect(nomme.contexte).toContain('- Ristournes — projets/vela/ristournes.md');
+		expect(nomme.contexte).not.toContain('- Avoirs');
+		expect((await etat.servis(ID, 1))[0]!.cartes).toEqual([{ chemin: 'projets/vela/ristournes.md', raison: 'nommee' }]);
 		// le périmètre n'a été noté qu'une fois, au premier message
 		expect(await etat.perimetrePropose(ID)).toBe(10);
 	});
@@ -472,7 +493,10 @@ describe('traiterEvenement : contexte sobre au message', () => {
 		expect(await traiterEvenement(dep, pil, message(11, 'avoirs des factures'), local)).toEqual({});
 		const [j] = await etat.servis(ID, 1);
 		expect(j).toMatchObject({ moment: 'message', horodatageMs: 11, texte: '', ids: [], cartes: [], demande: 'avoirs des factures', muet: null, rangMessage: 2 });
-		expect(j!.classement).toMatchObject([{ id: AVOIRS, titre: 'Avoirs', rang: 1, deja: 'proposee', servi: false, p: null }]);
+		expect(j!.classement).toMatchObject([{ id: AVOIRS, rang: 1, deja: 'proposee', servi: false }]);
+		// journal léger : ni titre (relu dans l'index), ni `p` tant qu'il est null
+		expect(j!.classement[0]).not.toHaveProperty('titre');
+		expect(j!.classement[0]).not.toHaveProperty('p');
 		// un message muet sans rien à injecter n'est pas classé, ni journalisé
 		expect(await traiterEvenement(dep, pil, message(12, 'ok merci'), local)).toEqual({});
 		expect(await etat.servis(ID, 5)).toHaveLength(2);

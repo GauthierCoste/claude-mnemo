@@ -1,8 +1,9 @@
 import { closeSync, openSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { estNiveauModeles } from '@mnemo/commun';
-import type { ActionSurFiche, Classe, EntreeServie, EtatSessions, GesteNote, Lots, VecteurDuMessage } from '../application/ports.ts';
-import { origineDe } from '../domaine/gestes.ts';
+import type { ActionSurFiche, Affinage, Classe, EntreeServie, EtatSessions, GesteNote, Lots, VecteurDuMessage } from '../application/ports.ts';
+import { couperClassement } from '../domaine/couper-classement.ts';
+import { noteDeLigne, origineDe } from '../domaine/gestes.ts';
 import type { Geste, NoteDuGeste, OrigineGeste } from '../domaine/gestes.ts';
 import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
 import type { RaisonMuet } from '../domaine/message-muet.ts';
@@ -15,6 +16,11 @@ export const VERSION_ETAT = 13;
 const RATTRAPAGE_MAX_MS = 7 * 86_400_000;
 const ATTENTE_VERROU_MS = 2000;
 const ENTREES_GARDEES = 200;
+/** Entrées les plus récentes d'une session qui gardent leur classement entier ; plus anciennes, il est coupé à `CLASSEMENT_ELAGUE` lignes. */
+const ENTREES_CLASSEMENT_COMPLET = 50;
+const CLASSEMENT_ELAGUE = 30;
+/** Entrées les plus récentes où un geste cherche la ligne ou la carte de sa fiche, sans `porteurs` en mémoire. */
+const ENTREES_NOTE_DU_GESTE = 5;
 
 /** Écartés d'une session (effacés à sa fin) et trace de chaque geste (gardée) : ajoutés en version 5. */
 const SCHEMA_ECARTES = `
@@ -180,7 +186,8 @@ CREATE TABLE IF NOT EXISTS servis (
 	muet TEXT,
 	cartes TEXT NOT NULL DEFAULT '[]',
 	position TEXT,
-	rang_message INTEGER
+	rang_message INTEGER,
+	affinage TEXT
 );
 CREATE INDEX IF NOT EXISTS servis_session ON servis (session, rang);
 ${SCHEMA_ECARTES}${SCHEMA_RATTACHEMENT}${SCHEMA_FICHES_SERVIES_LUES_ECRITES}${SCHEMA_CARTES}${SCHEMA_INJECTIONS_MANUELLES}${SCHEMA_LOTS}${SCHEMA_GESTES}`;
@@ -275,6 +282,7 @@ function ligneVersEntree(l: Ligne): EntreeServie {
 		position: (l.position as string | null) ?? null,
 		// absent des entrées sans rang (muettes, outil `contexte`, anciennes) : elles restent égales à ce qui a été journalisé
 		...(l.rang_message === null || l.rang_message === undefined ? {} : { rangMessage: Number(l.rang_message) }),
+		...(l.affinage === 'en_cours' || l.affinage === 'fait' ? { affinage: l.affinage as Affinage } : {}),
 	};
 }
 
@@ -352,8 +360,8 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 	const base = new DatabaseSync(chemin);
 	try {
 		base.exec(`PRAGMA busy_timeout = ${attente.bornee ? 0 : ATTENTE_VERROU_MS}`);
-		// ce qui est effacé (session supprimée : textes et vecteurs des messages) est écrasé dans le fichier, pas seulement libéré
-		base.exec('PRAGMA secure_delete = ON');
+		// l'écrasement de ce qui est effacé n'est demandé que par `supprimer`, le temps de la suppression
+		base.exec('PRAGMA secure_delete = OFF');
 		reessayerSiOccupe(base, attente, () => {
 			const mode = Object.values(base.prepare('PRAGMA journal_mode').get() as Ligne)[0];
 			if (String(mode).toLowerCase() !== 'wal') base.exec('PRAGMA journal_mode = WAL');
@@ -411,7 +419,12 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				if (!colonnesSessions.includes('dernier_message')) base.exec('ALTER TABLE sessions ADD COLUMN dernier_message TEXT');
 				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesServis.includes('rang_message')) base.exec('ALTER TABLE servis ADD COLUMN rang_message INTEGER');
+				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
+			} else if (version === VERSION_ETAT) {
+				// 13 non publiée : un état déjà en 13 (développement) reçoit l'état d'affinage du classement
+				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
+				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
 			} else if (version !== VERSION_ETAT) {
 				throw new ErreurEtat(
 					`L'état des sessions (${chemin}) est en version de schéma ${version}, ce Mnemo lit la version ${VERSION_ETAT} : rien n'est effacé, mettre Mnemo à jour.`,
@@ -647,6 +660,9 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 
 		async journaliser(entree) {
 			ecrire(() => {
+				// un même instant ne s'écrit qu'une fois par session et par moment : le hook en repli local ne double pas l'entrée du service
+				const deja = base.prepare('SELECT 1 AS un FROM servis WHERE session = ? AND horodatage_ms = ? AND moment = ? LIMIT 1').get(entree.session, entree.horodatageMs, entree.moment);
+				if (deja !== undefined) return;
 				base
 					// le rang du message : celui du dernier message porteur, pour une entrée de message non muette
 					.prepare(
@@ -672,28 +688,44 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 				base
 					.prepare('DELETE FROM servis WHERE session = ? AND rang <= (SELECT rang FROM servis WHERE session = ? ORDER BY rang DESC LIMIT 1 OFFSET ?)')
 					.run(entree.session, entree.session, ENTREES_GARDEES);
+				// l'entrée qui sort des 50 dernières garde le haut de son classement seulement
+				const sortante = base
+					.prepare('SELECT rang, json_array_length(classement) AS n FROM servis WHERE session = ? ORDER BY rang DESC LIMIT 1 OFFSET ?')
+					.get(entree.session, ENTREES_CLASSEMENT_COMPLET) as Ligne | undefined;
+				if (sortante !== undefined && Number(sortante.n) > CLASSEMENT_ELAGUE) {
+					const { classement } = base.prepare('SELECT classement FROM servis WHERE rang = ?').get(sortante.rang as number) as Ligne;
+					const coupe = couperClassement(JSON.parse(classement as string) as Classe[], CLASSEMENT_ELAGUE);
+					base.prepare('UPDATE servis SET classement = ? WHERE rang = ?').run(JSON.stringify(coupe), sortante.rang as number);
+				}
 				ecriture(entree.session);
 			});
 		},
 
-		async completerClassement(session, horodatageMs, classement) {
+		async completerClassement(session, horodatageMs, classement, affinage) {
 			return ecrire(() => {
+				// seulement l'entrée la plus récente de la session : un message plus récent rend l'affinage caduc
 				const { changes } = base
-					.prepare("UPDATE servis SET classement = ? WHERE session = ? AND horodatage_ms = ? AND moment = 'message'")
-					.run(JSON.stringify(classement), session, horodatageMs);
+					.prepare(
+						`UPDATE servis SET classement = ?, affinage = ?
+						WHERE rang = (SELECT MAX(rang) FROM servis WHERE session = ?) AND session = ? AND horodatage_ms = ? AND moment = 'message'`,
+					)
+					.run(JSON.stringify(classement), affinage, session, session, horodatageMs);
 				if (changes > 0) ecriture(session);
 				return changes > 0;
 			});
 		},
 
-		async servis(session, limite, moment) {
-			return reessayer(() =>
-				(
-					(moment === undefined
-						? base.prepare('SELECT * FROM servis WHERE session = ? ORDER BY rang DESC LIMIT ?').all(session, limite)
-						: base.prepare('SELECT * FROM servis WHERE session = ? AND moment = ? ORDER BY rang DESC LIMIT ?').all(session, moment, limite)) as Ligne[]
-				).map(ligneVersEntree),
-			);
+		async servis(session, limite, moment, options) {
+			// `dernier` : le JSON du classement n'est lu que pour l'entrée la plus récente rendue
+			const colonnes =
+				options?.classement === 'dernier'
+					? `session, moment, horodatage_ms, ids, texte, ms, sens, demande, muet, cartes, position, rang_message, affinage,
+						CASE WHEN rang = (SELECT MAX(rang) FROM servis WHERE session = ?1${moment === undefined ? '' : ' AND moment = ?2'}) THEN classement ELSE '[]' END AS classement`
+					: '*';
+			const filtre = moment === undefined ? 'session = ?1' : 'session = ?1 AND moment = ?2';
+			const parametres = moment === undefined ? [session, limite] : [session, moment, limite];
+			const limiteParam = moment === undefined ? '?2' : '?3';
+			return reessayer(() => (base.prepare(`SELECT ${colonnes} FROM servis WHERE ${filtre} ORDER BY rang DESC LIMIT ${limiteParam}`).all(...parametres) as Ligne[]).map(ligneVersEntree));
 		},
 
 
@@ -861,16 +893,23 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 		},
 
 		async supprimer(id) {
-			return ecrire(() => {
-				const s = lire(id);
-				if (s === null) return 'inconnue';
-				if (s.etat !== 'terminee') return 'non_terminee';
-				for (const table of ['servis', 'ecartes', 'traces_ecartes', 'fiches_servies_lues_ecrites', 'cartes_proposees', 'actions_fiches', 'injections_manuelles']) base.prepare(`DELETE FROM ${table} WHERE session = ?`).run(id);
-				// les gestes restent (données d'apprentissage) ; le texte de l'utilisateur et son vecteur partent avec la session
-				base.prepare('UPDATE gestes SET message = NULL, vecteur = NULL, modele_vecteur = NULL WHERE session = ?').run(id);
-				base.prepare('DELETE FROM sessions WHERE id = ?').run(id);
-				return 'supprimee';
-			});
+			// ce qui est effacé (textes et vecteurs des messages) est écrasé dans le fichier, pas seulement libéré : seulement le temps de
+			// `supprimer` (ailleurs, l'écrasement coûterait à chaque écriture du journal)
+			base.exec('PRAGMA secure_delete = ON');
+			try {
+				return ecrire(() => {
+					const s = lire(id);
+					if (s === null) return 'inconnue';
+					if (s.etat !== 'terminee') return 'non_terminee';
+					for (const table of ['servis', 'ecartes', 'traces_ecartes', 'fiches_servies_lues_ecrites', 'cartes_proposees', 'actions_fiches', 'injections_manuelles']) base.prepare(`DELETE FROM ${table} WHERE session = ?`).run(id);
+					// les gestes restent (données d'apprentissage) ; le texte de l'utilisateur et son vecteur partent avec la session
+					base.prepare('UPDATE gestes SET message = NULL, vecteur = NULL, modele_vecteur = NULL WHERE session = ?').run(id);
+					base.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+					return 'supprimee';
+				});
+			} finally {
+				base.exec('PRAGMA secure_delete = OFF');
+			}
 		},
 
 		async noterGeste(g) {
@@ -880,28 +919,26 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 					if (s === undefined) return;
 					// texte et rang du message viennent ensemble : du geste, sinon du dernier message porteur de la session
 					const porteur = g.porteur ?? { texte: (s.dernier_message as string | null) ?? null, rang: Number(s.messages_porteurs) };
-					// la ligne de la fiche au dernier classement qui la contient (rang, note, signaux bruts…), sinon la note de sa dernière
-					// carte notée dans le journal servi de la session
+					// repli (sans la note gardée en mémoire par le service) : la ligne de la fiche au dernier classement qui la contient (rang,
+					// note, signaux bruts…), sinon la note de sa dernière carte notée, parmi les 5 dernières entrées de la session seulement
 					const noteDuJournal = (): NoteDuGeste | null => {
+						const recentes = 'SELECT rang, classement, cartes FROM servis WHERE session = ? ORDER BY rang DESC LIMIT ?';
 						const classee = base
 							.prepare(
-								`SELECT c.value AS ligne FROM servis s, json_each(s.classement) c
-								WHERE s.session = ? AND json_extract(c.value, '$.id') = ?
+								`SELECT c.value AS ligne FROM (${recentes}) s, json_each(s.classement) c
+								WHERE json_extract(c.value, '$.id') = ?
 								ORDER BY s.rang DESC LIMIT 1`,
 							)
-							.get(g.session, g.fiche) as Ligne | undefined;
+							.get(g.session, ENTREES_NOTE_DU_GESTE, g.fiche) as Ligne | undefined;
 						const ligne = classee === undefined ? null : noteLue(classee.ligne);
-						if (ligne !== null) {
-							const { id: _id, titre: _titre, note: n, ...reste } = ligne;
-							return { ...(typeof n === 'number' ? { note: n } : {}), ...reste };
-						}
+						if (ligne !== null) return noteDeLigne(ligne);
 						const l = base
 							.prepare(
-								`SELECT json_extract(c.value, '$.note') AS note FROM servis s, json_each(s.cartes) c
-								WHERE s.session = ? AND json_extract(c.value, '$.chemin') = ? AND json_type(c.value, '$.note') IN ('real', 'integer')
+								`SELECT json_extract(c.value, '$.note') AS note FROM (${recentes}) s, json_each(s.cartes) c
+								WHERE json_extract(c.value, '$.chemin') = ? AND json_type(c.value, '$.note') IN ('real', 'integer')
 								ORDER BY s.rang DESC LIMIT 1`,
 							)
-							.get(g.session, g.fiche) as Ligne | undefined;
+							.get(g.session, ENTREES_NOTE_DU_GESTE, g.fiche) as Ligne | undefined;
 						return l === undefined ? null : { note: Number(l.note) };
 					};
 					const note = g.note !== undefined ? g.note : noteDuJournal();

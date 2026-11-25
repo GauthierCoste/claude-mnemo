@@ -1,7 +1,26 @@
-import type { VecteurDuMessage, VecteurDuPorteur } from './ports.ts';
+import { noteDeLigne } from '../domaine/gestes.ts';
+import type { NoteDuGeste } from '../domaine/gestes.ts';
+import type { Classe, VecteurDuMessage, VecteurDuPorteur } from './ports.ts';
 
-/** Le dernier message porteur d'une session, vu par le service : son rang, la position de la session, son vecteur s'il a été calculé. */
-export type PorteurRecent = { rang: number; position: string; vecteur: VecteurDuMessage | null };
+/**
+ * Le dernier message porteur d'une session, vu par le service : son rang, la position de la session, son vecteur s'il a été
+ * calculé, et la note de chaque fiche de son classement (chemin → ligne du journal), que reprend un geste sur cette fiche.
+ */
+export type PorteurRecent = { rang: number; position: string; vecteur: VecteurDuMessage | null; classement?: ReadonlyMap<string, NoteDuGeste> };
+
+/** Les lignes d'un classement du journal, par fiche : la note qu'un geste en reprend. */
+export function notesDuClassement(classement: readonly Classe[]): Map<string, NoteDuGeste> {
+	return new Map(classement.map((c) => [c.id, noteDeLigne(c)]));
+}
+
+/**
+ * La note d'un geste sur `fiche` tirée du dernier classement gardé en mémoire ; undefined (l'état la cherche alors dans les
+ * dernières entrées du journal) si la fiche n'y est pas, ou si le geste porte un autre message (`rang`).
+ */
+export function noteDuPorteur(porteur: PorteurRecent | null, fiche: string, rang?: number): NoteDuGeste | undefined {
+	if (porteur === null || (rang !== undefined && rang !== porteur.rang)) return undefined;
+	return porteur.classement?.get(fiche);
+}
 
 /**
  * Dernier message porteur de chaque session, gardé en mémoire par le service (jamais écrit) : les gestes faits depuis

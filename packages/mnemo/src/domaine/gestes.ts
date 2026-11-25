@@ -25,6 +25,15 @@ export function origineDe(geste: Geste): OrigineGeste {
  */
 export type NoteDuGeste = { note?: number } & Record<string, unknown>;
 
+/**
+ * La note d'un geste tirée de la ligne de la fiche dans un classement (rang, note, `p`, signaux bruts…) : la ligne sans son id ni
+ * son titre ; `note` gardée seulement si elle est un nombre.
+ */
+export function noteDeLigne(ligne: Readonly<Record<string, unknown>>): NoteDuGeste {
+	const { id: _id, titre: _titre, note, ...reste } = ligne;
+	return { ...(typeof note === 'number' ? { note } : {}), ...reste };
+}
+
 /** Nombre de gestes d'une sorte sur une fiche : ce que le décompte du journal rend. */
 export type GesteCompte = { geste: Geste; fiche: string; nombre: number };
 

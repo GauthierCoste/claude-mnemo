@@ -552,17 +552,18 @@ export class ErreurExtraction extends Error {
 }
 
 /**
- * Une fiche du classement d'un message (`rang` à partir de 1, dans l'ordre du classement) : `note` : la note provisoire qui
+ * Une fiche du classement d'un message (`rang` à partir de 1, dans l'ordre du classement) : `titre` (entrées anciennes seulement :
+ * le classement vivant ne le garde pas, il se relit dans l'index) ; `note` : la note provisoire qui
  * ordonne (sens du message plus les poids des signaux ; null sans modèle du sens ; dans les entrées anciennes, celle du
  * reranker) ; `servi` : la fiche est déjà injectée dans la session (ou, entrée ancienne, son id est parmi ceux servis).
  * Champs du classement vivant, absents des entrées anciennes : `p` (probabilité de la note apprise ; null tant qu'aucun modèle
- * n'est accepté), `signaux` (bruts, pour l'apprentissage), `deja` (déjà injectée, lue ou proposée dans la session : classée,
+ * n'est accepté ; omis tant qu'il l'est), `signaux` (bruts, à 4 décimales, pour l'apprentissage), `deja` (déjà injectée, lue ou proposée dans la session : classée,
  * jamais reproposée), `piste` (proposée en piste à ce message), `raison` (de la carte proposée à ce message, piste ou fiche
  * nommée), `coupees` (sur la dernière ligne gardée seulement : nombre de candidates coupées au-delà de `CLASSEMENT_MAX`).
  */
 export type Classe = {
 	id: string;
-	titre: string;
+	titre?: string;
 	note: number | null;
 	servi: boolean;
 	rang: number;
@@ -600,7 +601,15 @@ export type EntreeServie = {
 	position: string | null;
 	/** Rang du message dans la session, écrit par `journaliser` pour un message porteur ; absent sinon (et dans les entrées anciennes). */
 	rangMessage?: number | null;
+	/** Affinage du classement en arrière-plan (`completerClassement`) : en cours, ou fait ; absent : pas d'affinage. */
+	affinage?: Affinage;
 };
+
+/** État de l'affinage d'un classement en arrière-plan (spec classement vivant § 3.6). */
+export type Affinage = 'en_cours' | 'fait';
+
+/** `classement: 'dernier'` : seule l'entrée la plus récente rendue garde son classement (les autres l'ont vide) ; la base ne lit pas les autres. */
+export type OptionsServis = { classement?: 'tous' | 'dernier' };
 export type { RaisonCarte };
 /** Une carte du journal : `depuis` (raison `liee`) : chemin de la fiche injectée à la main d'où vient le poids ; absent sinon (et des entrées anciennes). */
 /** `note` : note de la piste quand le sens l'a notée, fiche nommée comprise (absente sans modèle et dans les entrées anciennes). */
@@ -708,12 +717,16 @@ export interface EtatSessions {
 	/** Garde les 200 dernières entrées par session. */
 	journaliser(entree: EntreeServie): Promise<void>;
 	/**
-	 * Remplace le classement de l'entrée de message de la session à cet horodatage (affinage en arrière-plan : mêmes candidates,
-	 * notes complétées) ; sans effet si l'entrée n'existe plus. Rend vrai si une entrée a été mise à jour.
+	 * Remplace le classement et l'état d'affinage de l'entrée de message de la session à cet horodatage (affinage en arrière-plan :
+	 * mêmes candidates, notes complétées), seulement si c'est encore l'entrée la plus récente de la session (un message plus
+	 * récent rend l'affinage caduc). Rend vrai si l'entrée a été mise à jour.
 	 */
-	completerClassement(session: string, horodatageMs: number, classement: Classe[]): Promise<boolean>;
-	/** Les `limite` dernières entrées de la session, les plus récentes d'abord ; `moment` : celles de ce moment seulement. */
-	servis(session: string, limite: number, moment?: EntreeServie['moment']): Promise<EntreeServie[]>;
+	completerClassement(session: string, horodatageMs: number, classement: Classe[], affinage: Affinage): Promise<boolean>;
+	/**
+	 * Les `limite` dernières entrées de la session, les plus récentes d'abord ; `moment` : celles de ce moment seulement ;
+	 * `options.classement` : `dernier` ne lit le classement que de la plus récente rendue.
+	 */
+	servis(session: string, limite: number, moment?: EntreeServie['moment'], options?: OptionsServis): Promise<EntreeServie[]>;
 	/**
 	 * Écarte un élément des prochains calculs de `servir` pour la session (sans effet s'il l'est déjà) et note la trace du
 	 * geste (dossier, extrait de la demande, élément, date), gardée après la session, même s'il l'était déjà. `deja_ecarte` :

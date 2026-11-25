@@ -72,11 +72,11 @@ export async function consignesVerifiees(dep: Dependances, position: Position): 
 	return consignesDe(dep, portees, ['verifiee']);
 }
 
-export type DemandeServir = Omit<DemandeCartes, 'classer' | 'servirPosition' | 'question' | 'demandees'> & {
+export type DemandeServir = Omit<DemandeCartes, 'classer' | 'pistes' | 'premier' | 'servirPosition' | 'question' | 'demandees'> & {
 	moment: Moment;
 	/** Le message ne porte pas de sens : ni cartes ni consigne trouvée, seule la fiche de position peut venir. */
 	muet: RaisonMuet | null;
-	/** Premier message non muet de la session, et de nouveau après /clear ou /compact (noté : le périmètre a été proposé). Le classement, lui, tourne à chaque message porteur. */
+	/** Premier message non muet de la session, et de nouveau après /clear ou /compact : le périmètre part en pistes. Le classement, lui, tourne à chaque message porteur. */
 	premier: boolean;
 	/** Premier contexte injecté dans la session : les consignes `rappelee` y sont jointes. */
 	rappels: boolean;
@@ -146,7 +146,7 @@ async function consignesTrouvees(dep: Dependances, rappelees: readonly ElementIn
 
 export async function servir(dep: Dependances, demande: DemandeServir): Promise<Servi> {
 	await synchroniser(dep, SANS_EXTRACTION);
-	const { moment, muet, premier: _premier, rappels: tousLesRappels, demandees: voulues, injectees: anciennes, ...cartes } = demande;
+	const { moment, muet, premier, rappels: tousLesRappels, demandees: voulues, injectees: anciennes, ...cartes } = demande;
 	// les fiches injectées à la main à ce message ont l'âge 0 (une réinjection fait repartir le poids)
 	const aInjecter = [...new Set(voulues ?? [])];
 	const aLaMain = [...(anciennes ?? []).filter((i) => !aInjecter.includes(i.chemin)), ...aInjecter.map((chemin) => ({ chemin, messages: 0 }))];
@@ -161,6 +161,9 @@ export async function servir(dep: Dependances, demande: DemandeServir): Promise<
 		message: muet === null ? demande.message : '',
 		// chaque message porteur est classé ; le geste vaut désignation, même sur un message muet (le message ne donne que la base de la note)
 		classer: moment === 'message' && (muet === null || aInjecter.length > 0),
+		// des pistes au premier message porteur et au message qui part avec une fiche injectée à la main (pas de note apprise encore)
+		pistes: moment === 'message' && ((muet === null && premier) || aInjecter.length > 0),
+		premier: moment === 'message' && muet === null && premier,
 		servirPosition: moment === 'message',
 		question: moment === 'contexte',
 		injectees: aLaMain,

@@ -3,15 +3,16 @@
  * (titre, chemin, première phrase, raison) au lieu de les injecter. Les cartes viennent des fiches nommées dans le message (dans
  * l'ordre du message), ou d'un classement unique par la note (`domaine/note-des-pistes.ts` : sens du message plus poids des
  * signaux). À chaque message porteur, toutes les candidates (périmètre de la position, fiches neutres, fiches d'ailleurs dont le
- * lieu est nommé, voisines des fiches injectées à la main) sont classées : le classement entier va au journal, les premières
- * nouvelles partent en pistes. L'outil `contexte` classe sur sa question. La fiche de position seule est servie entière. Avec le
+ * lieu est nommé, voisines des fiches injectées à la main) sont classées (`classement-du-message.ts`) : le classement entier va
+ * au journal et au panneau ; tant qu'aucune note apprise n'est acceptée, les premières nouvelles ne partent en pistes qu'au premier
+ * message et au message qui part avec une fiche injectée à la main. L'outil `contexte` classe sur sa question. La fiche de position seule est servie entière. Avec le
  * sens, toute carte porte sa note, fiche nommée et fiche de position comprises, sans que la note les reclasse.
  */
 import { fichesNommees } from '../domaine/fiches-nommees.ts';
 import type { Nommable } from '../domaine/fiches-nommees.ts';
 import { apportPrincipal, baseDuReranker, classer, designees, noter, signalDominant } from '../domaine/note-des-pistes.ts';
 import type { Note, Signal } from '../domaine/note-des-pistes.ts';
-import { deverrouiller, neutres, perimetreDe, TYPES_NON_PROPOSABLES } from '../domaine/perimetre.ts';
+import { deverrouiller, perimetreDe, TYPES_NON_PROPOSABLES } from '../domaine/perimetre.ts';
 import type { Arete, FicheDuGraphe } from '../domaine/perimetre.ts';
 import { signalInjection } from '../domaine/signal-injection.ts';
 import type { InjectionManuelle } from '../domaine/signal-injection.ts';
@@ -21,12 +22,12 @@ import { estDocument } from '../domaine/regles.ts';
 import { expressionFts } from '../domaine/requete.ts';
 import { sansFaitsInactifs } from '../domaine/sans-faits-inactifs.ts';
 import { normaliser } from '../domaine/sens.ts';
-import { bm25RelatifsDesListes, cosinusDesFiches, cosinusRelatif } from '../domaine/signaux-de-note.ts';
-import type { SignauxBruts } from '../domaine/signaux-de-note.ts';
+import { candidatesDuMessage, classerLeMessage } from './classement-du-message.ts';
+import type { LigneDeClassement } from './classement-du-message.ts';
 import { ficheDePosition } from './chercher.ts';
 import { aujourdhui } from './commun.ts';
 import { resolveurDeLiens } from './liens.ts';
-import type { CarteJournalisee, Classe, DejaDansLaSession, Dependances, FicheServieLueOuEcrite, RaisonCarte, VecteurDuMessage } from './ports.ts';
+import type { CarteJournalisee, DejaDansLaSession, Dependances, FicheServieLueOuEcrite, RaisonCarte, VecteurDuMessage } from './ports.ts';
 
 /** Fiches lues ou écrites par la session, d'après son état : chemin → empreinte de la fiche à sa lecture (null : écrite, ou inconnue). */
 export function dejaLuesDe(fiches: readonly FicheServieLueOuEcrite[]): Map<string, string | null> {
@@ -58,8 +59,16 @@ export type DemandeCartes = {
 	position: string;
 	/** Le message de l'utilisateur seul (ou la question de l'outil). */
 	message: string;
-	/** Vrai : classer les candidates (message porteur, ou message qui part avec une fiche injectée à la main) et proposer les pistes. */
+	/** Vrai : classer les candidates (message porteur, ou message qui part avec une fiche injectée à la main) : le classement va au journal et au panneau. */
 	classer: boolean;
+	/**
+	 * Vrai : Claude reçoit des pistes (les premières nouvelles du classement). Tant qu'aucune note apprise n'est acceptée : au premier
+	 * message porteur (périmètre) et au message qui part avec une fiche injectée à la main (voisinage) seulement ; les fiches nommées,
+	 * elles, sont toujours proposées.
+	 */
+	pistes: boolean;
+	/** Premier message porteur de la session (et de nouveau après /clear ou /compact) : sans le sens, le périmètre part en pistes par date. */
+	premier?: boolean;
 	/** Vrai : servir la fiche de position si elle n'est pas déjà servie. */
 	servirPosition: boolean;
 	/** Vrai : outil `contexte` (note par le sens ou le reranker plus les signaux, ailleurs admis, au plus 10). */
@@ -78,26 +87,11 @@ export type DemandeCartes = {
 	demandees?: readonly string[];
 };
 /**
- * Une candidate classée à un message : `note` provisoire qui ordonne (sens du message plus poids des signaux ; null sans modèle du
- * sens), `p` (probabilité de la note apprise ; null tant qu'aucun modèle n'est accepté), signaux bruts, ce que la session en a
- * déjà fait (`deja`) et, si une carte la propose à ce message, sa raison (`piste` : proposée en piste, pas comme fiche nommée).
- */
-export type LigneDeClassement = {
-	chemin: string;
-	titre: string;
-	note: number | null;
-	p: number | null;
-	signaux: SignauxBruts;
-	deja: DejaDansLaSession | null;
-	raison: RaisonCarte | null;
-	piste: boolean;
-};
-
-/**
  * `positionFiche` : fiche de la position si elle existe dans l'index (injectée ou non) ; null sinon : il n'y a alors pas de périmètre à proposer.
  * `vecteur` : celui du message, s'il a été calculé (jamais calculé pour lui seul). `classement` : toutes les candidates du message,
  * dans l'ordre (vide si rien n'a été classé : message muet sans geste, outil `contexte`).
  */
+export type { LigneDeClassement };
 export type CartesCalculees = {
 	position: FicheDePositionServie | null;
 	positionFiche: string | null;
@@ -106,9 +100,6 @@ export type CartesCalculees = {
 	vecteur?: VecteurDuMessage;
 	classement: LigneDeClassement[];
 };
-
-/** Lignes du classement gardées au journal par message : les mieux classées ; au-delà, coupées et comptées. */
-export const CLASSEMENT_MAX = 500;
 
 /** Au-delà, la fiche de position n'est plus servie entière : elle devient la première carte. */
 export const TAILLE_POSITION_MAX = 8000;
@@ -128,28 +119,6 @@ function syntheseDe(e: ElementIndexe | undefined): string {
 	const texte = e?.texte ?? '';
 	const coupe = texte.indexOf('\n\n');
 	return coupe === -1 ? '' : texte.slice(coupe + 2).trim();
-}
-
-/**
- * Classement du journal : les `CLASSEMENT_MAX` premières lignes, rangs à partir de 1 ; la dernière gardée compte les coupées.
- * `servi` : la fiche est déjà injectée dans la session.
- */
-export function classementDuJournal(classement: readonly LigneDeClassement[]): Classe[] {
-	const gardees = classement.slice(0, CLASSEMENT_MAX);
-	const coupees = classement.length - gardees.length;
-	return gardees.map((l, i) => ({
-		id: l.chemin,
-		titre: l.titre,
-		note: l.note,
-		servi: l.deja === 'injectee',
-		rang: i + 1,
-		p: l.p,
-		signaux: l.signaux,
-		...(l.deja === null ? {} : { deja: l.deja }),
-		...(l.piste ? { piste: true } : {}),
-		...(l.raison === null ? {} : { raison: l.raison }),
-		...(coupees > 0 && i === gardees.length - 1 ? { coupees } : {}),
-	}));
 }
 
 /** Cartes du journal (chemin, raison, fiche d'où vient le poids). */
@@ -186,34 +155,6 @@ async function vecteurDuMessage(dep: Dependances, message: string, fin: number):
 	} catch {
 		return null;
 	}
-}
-
-/**
- * Cosinus de chaque fiche de la mémoire avec le vecteur du message, et leur médiane (pour le cosinus relatif) : un seul parcours
- * des vecteurs, déjà en mémoire. Null sans vecteur, sans modèle ou sans aucune fiche vectorisée.
- */
-async function cosinusDeLaMemoire(dep: Dependances, vecteur: Float32Array | null, nombreDeFiches: number): Promise<ReturnType<typeof cosinusDesFiches> | null> {
-	const modele = dep.sens.modele();
-	if (vecteur === null || modele === null || nombreDeFiches === 0) return null;
-	const proches = await dep.index.plusProches(modele, vecteur, { genres: ['fiche'] }, nombreDeFiches);
-	const cos = cosinusDesFiches(proches.map((p) => ({ chemin: ficheDe(p.id), similarite: p.similarite })));
-	return cos.parFiche.size === 0 ? null : cos;
-}
-
-/**
- * bm25 relatif de chaque candidate (règle de `bm25Relatif`) : deux recherches plein texte sur les seules candidates, tous les mots
- * puis l'un d'eux ; 0 pour une candidate que les mots ne trouvent pas. Null : le message n'a aucun mot cherchable.
- */
-async function bm25DesCandidates(dep: Dependances, message: string, candidates: readonly string[]): Promise<Map<string, number> | null> {
-	if (candidates.length === 0 || message.trim() === '') return null;
-	const expression = expressionFts(message, await dep.index.alias());
-	if (expression === null) return null;
-	const filtre = { genres: ['fiche' as const], statuts: ['servi' as const], chemins: [...candidates] };
-	// un seul mot : les deux listes seraient la même
-	const expressions = expression.toutes === expression.une ? [expression.une] : [expression.toutes, expression.une];
-	const listes = [];
-	for (const e of expressions) listes.push(await dep.index.chercher(e, filtre, candidates.length));
-	return bm25RelatifsDesListes(listes).relatifs;
 }
 
 /** Similarité de sens de chaque fiche avec le vecteur (0 pour une fiche sans vecteur à jour) ; vide sans vecteur ni modèle. */
@@ -379,34 +320,26 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 			.slice(0, reglages.cartesNommees);
 		const nommeesRetenues = new Set(cartesNommees);
 
-		// Candidates (spec classement vivant § 3.3), à chaque message porteur et au message qui part avec une fiche injectée à la main :
-		// le périmètre, les fiches neutres, les fiches d'ailleurs dont le lieu est nommé, les fiches désignées par un signal (voisines
-		// d'une injectée, même d'ailleurs : le geste les désigne). À la racine, périmètre et ailleurs sont vides : les neutres seules.
-		const sansLieu = neutres(fiches, { dans, ailleurs }, declarants);
-		const deverrouillees = new Set([...ouvertes].filter((c) => ailleurs.has(c)));
-		const candidates = d.classer ? [...new Set([...dans, ...sansLieu, ...deverrouillees, ...designeesParSignal])].filter(candidate) : [];
+		// Candidates (spec classement vivant § 3.3), à chaque message porteur et au message qui part avec une fiche injectée à la main.
+		const { candidates, origine } = d.classer
+			? candidatesDuMessage({ dans, ailleurs }, fiches, declarants, ouvertes, designeesParSignal, candidate)
+			: { candidates: [] as string[], origine: () => null };
 		// Toute carte proposée est notée (sens du message plus poids), les fiches nommées et la fiche de position comprises : la note
-		// dit la même chose partout ; seules les candidates sont classées par elle. Le vecteur du message est calculé une fois, et
-		// les cosinus de toute la mémoire en un parcours (le cosinus relatif se rapporte à leur médiane).
+		// dit la même chose partout ; seules les candidates sont classées par elle. Le vecteur du message est calculé une fois.
 		const horsClassement = [...cartesNommees, ...(carteDePosition === null ? [] : [carteDePosition])];
 		const aNoter = [...candidates, ...horsClassement];
 		vecteurDuCalcul = aNoter.length === 0 ? null : await vecteurDuMessage(dep, d.message, d.fin);
-		const cos = await cosinusDeLaMemoire(dep, vecteurDuCalcul?.valeurs ?? null, elements.length);
-		if (cos !== null) mesure = 'sens';
-		const cosinus = (chemin: string): number | null => cos?.parFiche.get(chemin) ?? null;
-		const base = (chemin: string): number => Math.max(0, cosinus(chemin) ?? 0);
-		const mots = await bm25DesCandidates(dep, d.message, candidates);
-		const bm25 = (chemin: string): number => mots?.get(chemin) ?? 0;
-		const noteHorsClassement = (chemin: string): number | null => (mesure === 'aucune' ? null : noterPiste(chemin, base(chemin)).total);
-		// à note égale (sans modèle : poids seuls), les mots, puis la plus récente
-		const notes = candidates.map((c) => noterPiste(c, base(c)));
-		const ordre = classer(notes, (a, b) => bm25(b.chemin) - bm25(a.chemin) || date(b.chemin).localeCompare(date(a.chemin)) || a.chemin.localeCompare(b.chemin));
-		const origine = (chemin: string): 'perimetre' | 'proche' | null => (dans.has(chemin) ? 'perimetre' : sansLieu.has(chemin) || deverrouillees.has(chemin) ? 'proche' : null);
-		// Pistes : les premières nouvelles de l'ordre (pas de seuil tant qu'aucune note apprise n'est acceptée). Sans le sens, une
-		// fiche neutre ou déverrouillée n'est piste que si les mots la trouvent : la date seule ne dit rien du message.
+		const m = await classerLeMessage(dep, { candidates, message: d.message, vecteur: vecteurDuCalcul?.valeurs ?? null, nombreDeFiches: elements.length, noter: noterPiste, date });
+		if (m.sens) mesure = 'sens';
+		const noteHorsClassement = (chemin: string): number | null => (mesure === 'aucune' ? null : noterPiste(chemin, m.base(chemin)).total);
+		// Pistes : les premières nouvelles de l'ordre (pas de seuil tant qu'aucune note apprise n'est acceptée), seulement si la demande
+		// en veut. Sans le sens, il faut que les mots trouvent la fiche ou qu'un signal la désigne : la date seule ne dit rien du message ;
+		// au premier message seulement, le périmètre part par date, comme avant le classement vivant.
 		const pisteEligible = (n: Note): boolean =>
-			!dejaVue(n.chemin) && !nommeesRetenues.has(n.chemin) && (mesure !== 'aucune' || origine(n.chemin) !== 'proche' || bm25(n.chemin) > 0 || n.apports.length > 0);
-		const pistes = ordre.filter(pisteEligible).slice(0, reglages.pistesParMessage);
+			!dejaVue(n.chemin) &&
+			!nommeesRetenues.has(n.chemin) &&
+			(mesure !== 'aucune' || m.bm25(n.chemin) > 0 || n.apports.length > 0 || (d.premier === true && origine(n.chemin) === 'perimetre'));
+		const pistes = d.pistes ? m.ordre.filter(pisteEligible).slice(0, reglages.pistesParMessage) : [];
 		choisies = [
 			...pistes.map((n) => choisie(n, origine(n.chemin))),
 			...cartesNommees.map((chemin): Choisie => ({ chemin, raison: 'nommee', depuis: null, note: noteHorsClassement(chemin) })),
@@ -414,17 +347,12 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		if (carteDePosition !== null) noteDePosition = noteHorsClassement(carteDePosition);
 		const raisonDe = new Map(choisies.map((c) => [c.chemin, c.raison]));
 		const enPiste = new Set(pistes.map((n) => n.chemin));
-		classement = ordre.map((n) => ({
+		classement = m.ordre.map((n) => ({
 			chemin: n.chemin,
 			titre: titre(n.chemin),
 			note: mesure === 'aucune' ? null : n.total,
 			p: null,
-			signaux: {
-				cosinus: cosinus(n.chemin),
-				cosinusRelatif: cosinusRelatif(cosinus(n.chemin), cos?.mediane ?? null),
-				bm25Relatif: mots === null ? null : bm25(n.chemin),
-				signalSession: n.apports.reduce((somme, a) => somme + a.poids, 0),
-			},
+			signaux: m.signaux(n),
 			deja: dejaDe(n.chemin),
 			raison: raisonDe.get(n.chemin) ?? null,
 			piste: enPiste.has(n.chemin),

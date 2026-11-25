@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { calculerCartes, CLASSEMENT_MAX, classementDuJournal, ligneDeCarte } from '../../src/application/cartes.ts';
-import type { DemandeCartes, LigneDeClassement } from '../../src/application/cartes.ts';
+import { calculerCartes, ligneDeCarte } from '../../src/application/cartes.ts';
+import type { DemandeCartes } from '../../src/application/cartes.ts';
 import type { Dependances, Reranker, Sens } from '../../src/application/ports.ts';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
@@ -44,6 +44,9 @@ const demande = (surcharge: Partial<DemandeCartes> = {}): DemandeCartes => ({
 	position: 'organisations/clients/SVE',
 	message: 'Maquette ERP',
 	classer: true,
+	// par défaut, le premier message porteur : des pistes, le périmètre par date sans le sens
+	pistes: true,
+	premier: true,
 	servirPosition: true,
 	question: false,
 	dejaServies: new Map(),
@@ -458,40 +461,47 @@ describe('calculerCartes : classement à chaque message porteur', () => {
 		expect([...notes].sort((a, b) => b - a)).toEqual(notes);
 	});
 
+	it('message porteur suivant (sans pistes) : tout est classé, seules les fiches nommées partent', async () => {
+		const dep = await avecNeutre();
+		dep.sens = sensParMots;
+		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
+		const c = await calculerCartes(dep, demande({ message: 'la maquette des sites, et Ysaline', pistes: false, premier: false }));
+		expect(c.cartes.map((x) => [x.chemin, x.raison])).toEqual([[YSALINE, 'nommee']]);
+		expect(new Set(classees(c))).toEqual(new Set([OUTIL, SOUS, YSALINE, GIT, NEUTRE]));
+		expect(c.classement.filter((l) => l.piste)).toEqual([]);
+		expect(c.classement.find((l) => l.chemin === YSALINE)?.raison).toBe('nommee');
+	});
+
+	it('sans le sens, hors du premier message : une piste doit être trouvée par les mots ou désignée par un signal', async () => {
+		const c = await calculerCartes(await avecNeutre(), demande({ message: 'Maquette ERP', premier: false }));
+		// la neutre porte « Maquette » ; le périmètre, que la date seule ordonne, n'est pas proposé
+		expect(chemins(c)).toEqual([NEUTRE]);
+	});
+
+	it('à la racine, la voisine d’une fiche injectée à la main reste candidate : le geste vaut désignation', async () => {
+		const c = await calculerCartes(await avecNeutre(), demande({ position: '', message: 'Maquette', premier: false, injectees: [{ chemin: YSALINE, messages: 0 }] }));
+		expect(classees(c)).toContain(ERP);
+		expect(c.cartes.find((x) => x.chemin === ERP)).toMatchObject({ raison: 'liee', depuis: { chemin: YSALINE, titre: 'Ysaline' } });
+	});
+
+	it('une fiche rangée sous un lieu ascendant de la position est candidate, du périmètre', async () => {
+		const dep = fauxPorts();
+		await dep.coffre.ecrire('clients/Orme/Orme.md', fiche('entite', 'Orme', 'Client Orme.', 'portee: client:Orme\n'));
+		await dep.coffre.ecrire('clients/Orme/Chantier/Chantier.md', fiche('entite', 'Chantier', 'Le chantier du client.'));
+		await dep.coffre.ecrire('clients/Orme/Tarifs.md', fiche('entite', 'Tarifs', 'Les tarifs du client.'));
+		await synchroniser(dep, SANS_EXTRACTION);
+		const c = await calculerCartes(dep, demande({ position: 'clients/Orme/Chantier', message: 'on avance' }));
+		expect(c.position?.chemin).toBe('clients/Orme/Chantier/Chantier.md');
+		expect(classees(c)).toEqual(expect.arrayContaining(['clients/Orme/Tarifs.md', 'clients/Orme/Orme.md']));
+		expect(c.cartes.find((x) => x.chemin === 'clients/Orme/Tarifs.md')?.raison).toBe('perimetre');
+	});
+
 	it('le geste pèse au classement : signal de session de la voisine d’une fiche injectée à la main', async () => {
 		const dep = await avecNeutre();
 		const c = await calculerCartes(dep, demande({ message: 'Maquette', injectees: [{ chemin: YSALINE, messages: 0 }] }));
 		const erp = c.classement.find((l) => l.chemin === ERP);
 		expect(erp?.signaux.signalSession).toBeGreaterThan(0);
 		expect(erp?.raison).toBe('liee');
-	});
-});
-
-describe('classementDuJournal', () => {
-	const ligne = (i: number): LigneDeClassement => ({
-		chemin: `f/${i}.md`,
-		titre: `F${i}`,
-		note: 1 - i / 1000,
-		p: null,
-		signaux: { cosinus: 0.8, cosinusRelatif: 0.1, bm25Relatif: null, signalSession: 0 },
-		deja: i === 1 ? 'injectee' : null,
-		raison: i === 0 ? 'perimetre' : null,
-		piste: i === 0,
-	});
-
-	it('rangs à partir de 1, servi pour une fiche déjà injectée, champs du classement vivant', () => {
-		const [premiere, seconde] = classementDuJournal([ligne(0), ligne(1)]);
-		expect(premiere).toEqual({ id: 'f/0.md', titre: 'F0', note: 1, servi: false, rang: 1, p: null, signaux: ligne(0).signaux, piste: true, raison: 'perimetre' });
-		expect(seconde).toMatchObject({ id: 'f/1.md', servi: true, rang: 2, deja: 'injectee' });
-		expect(seconde).not.toHaveProperty('piste');
-		expect(seconde).not.toHaveProperty('coupees');
-	});
-
-	it(`au plus ${CLASSEMENT_MAX} lignes, les mieux classées ; la dernière gardée compte les coupées`, () => {
-		const journal = classementDuJournal(Array.from({ length: CLASSEMENT_MAX + 7 }, (_, i) => ligne(i)));
-		expect(journal).toHaveLength(CLASSEMENT_MAX);
-		expect(journal.at(-1)).toMatchObject({ rang: CLASSEMENT_MAX, coupees: 7 });
-		expect(journal.filter((l) => l.coupees !== undefined)).toHaveLength(1);
 	});
 });
 
@@ -535,12 +545,12 @@ describe('calculerCartes : poids d’une fiche injectée à la main', () => {
 		const empreinte = (await dep.index.fiches()).find((f) => f.chemin === YSALINE)!.empreinte;
 		const c = await calculerCartes(
 			dep,
-			demande({ message: 'Maquette', classer: true, servirPosition: false, injectees: YSALINE_INJECTEE, dejaServies: new Map([[YSALINE, empreinte]]) }),
+			demande({ message: 'Maquette', premier: false, servirPosition: false, injectees: YSALINE_INJECTEE, dejaServies: new Map([[YSALINE, empreinte]]) }),
 		);
 		expect(c.cartes[0]).toMatchObject({ chemin: ERP, raison: 'liee', depuis: { chemin: YSALINE, titre: 'Ysaline' } });
-		// sans modèle, la base vaut 0 : le périmètre restant suit, du plus récent au plus ancien
-		expect(chemins(c)).toEqual([ERP, OUTIL, GIT, SOUS]);
-		expect(c.cartes.slice(1).every((x) => x.raison === 'perimetre' && x.depuis === null)).toBe(true);
+		// sans modèle et hors du premier message, une piste doit être trouvée par les mots ou désignée : le périmètre reste classé seulement
+		expect(chemins(c)).toEqual([ERP]);
+		expect(c.classement.map((l) => l.chemin)).toEqual(expect.arrayContaining([ERP, OUTIL, GIT, SOUS]));
 	});
 
 	it('message non classé (muet, sans geste) : le poids encore actif ne propose rien hors des fiches nommées', async () => {

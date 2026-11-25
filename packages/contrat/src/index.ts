@@ -201,6 +201,8 @@ export type EntreeServieVue = {
 	cartes: CarteVue[];
 	/** Titre des fiches de `ids` (chemin → titre) ; absent des entrées anciennes. */
 	titres?: Record<string, string>;
+	/** Affinage du classement en arrière-plan : en cours, ou fait (l'entrée est rediffusée) ; absent : pas d'affinage. */
+	affinage?: 'en_cours' | 'fait';
 };
 
 /** Une fiche lue par la session (outil `lire`) : son chemin et l'heure de sa dernière lecture. */

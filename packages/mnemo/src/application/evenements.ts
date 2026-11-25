@@ -1,19 +1,21 @@
 import type { CauseArret, EvenementHook, Session, SourceDeDebut } from '../domaine/session.ts';
 import { objectifDe } from '../domaine/session.ts';
 import { ecrireEpisodeMinimal } from './episode.ts';
-import type { Dependances, Pilotage } from './ports.ts';
+import type { Classe, Dependances, Pilotage } from './ports.ts';
+import type { NoteDuGeste } from '../domaine/gestes.ts';
 import { positionDeSession, positionNotee } from './dossiers-non-rattaches.ts';
 import type { Position } from './position.ts';
 import { raisonDeMutisme } from '../domaine/message-muet.ts';
 import { ficheTouchee } from '../domaine/outil-de-session.ts';
 import { BUDGET_HOOK_MS } from './chercher.ts';
 import type { FichesDemandees } from './fiches-demandees.ts';
-import { cartesDuJournal, classementDuJournal, dejaLuesDe } from './cartes.ts';
+import { cartesDuJournal, dejaLuesDe } from './cartes.ts';
+import { classementDuJournal } from './classement-du-message.ts';
 import { servir } from './servir.ts';
 import type { DemandeServir, Servi } from './servir.ts';
 import { verifierAction } from './verifier-action.ts';
 import { noterGeste } from './gestes.ts';
-import { vecteurDuPorteur } from './porteurs-recents.ts';
+import { noteDuPorteur, notesDuClassement, vecteurDuPorteur } from './porteurs-recents.ts';
 import type { PorteursRecents } from './porteurs-recents.ts';
 import { refusDelai, refusSurErreur, reponseDe, selonIndicateur } from '../domaine/refus-outil.ts';
 import type { AccordNonVerifie } from '../domaine/refus-outil.ts';
@@ -85,6 +87,12 @@ export const DELAI_GIT_DEBUT_MS = 1000;
 
 /** Temps laissé, après `servir`, pour le journal et la sortie avant l'échéance du processus. */
 export const MARGE_SORTIE_MS = 100;
+
+/**
+ * Temps qu'il doit rester avant l'échéance pour noter ce qui part (fiches servies, cartes, journal) : sinon rien n'est noté ni
+ * rendu, et le hook (en repli local) sert ce qui n'a pas été noté.
+ */
+export const MARGE_ECRITURE_MS = 30;
 
 /** « C:\a\b\ » → « C:/a/b » : séparateurs en « / », sans « / » final (sauf la racine du système). */
 function net(chemin: string): string {
@@ -287,8 +295,17 @@ async function noterFicheTouchee(dep: Dependances, pil: Pick<Pilotage, 'etat'>, 
 	await pil.etat.noterFicheServieLueOuEcrite(session.id, { chemin: touchee.chemin, action: touchee.action, horodatageMs: entree.horodatageMs, empreinte }).catch(() => {});
 	// la lecture d'abord, le geste ensuite ; seul `lire` compte : `voisins` ne lit pas la fiche pour elle-même
 	if (touchee.outil === 'lire') {
-		const vecteur = vecteurDuPorteur(reglages.porteurs?.lire(session.id) ?? null);
-		await noterGeste(dep, pil.etat, { geste: 'lue_apres_carte', session: session.id, fiche: touchee.chemin, empreinte, horodatageMs: entree.horodatageMs, vecteur });
+		const recent = reglages.porteurs?.lire(session.id) ?? null;
+		const note = noteDuPorteur(recent, touchee.chemin);
+		await noterGeste(dep, pil.etat, {
+			geste: 'lue_apres_carte',
+			session: session.id,
+			fiche: touchee.chemin,
+			empreinte,
+			horodatageMs: entree.horodatageMs,
+			vecteur: vecteurDuPorteur(recent),
+			...(note === undefined ? {} : { note }),
+		});
 	}
 }
 
@@ -339,6 +356,9 @@ async function noterInjection(
 	servi: Servi,
 	debutMs: number,
 	rang: number | null,
+	classement: Classe[],
+	/** La note d'une fiche demandée : sa ligne au classement que l'utilisateur voyait (celui du message porteur précédent). */
+	noteDemandee: (chemin: string) => NoteDuGeste | undefined,
 ): Promise<void> {
 	const { position, cartes } = servi.calcul;
 	const injectees = [...(position === null ? [] : [position]), ...servi.demandees];
@@ -364,7 +384,7 @@ async function noterInjection(
 			ms: Date.now() - debutMs,
 			sens: servi.calcul.mesure !== 'aucune',
 			demande: entree.prompt === undefined ? null : entree.prompt.slice(0, DEMANDE_MAX),
-			classement: classementDuJournal(servi.calcul.classement),
+			classement,
 			muet: demande.muet,
 			cartes: cartesDuJournal(cartes),
 			position: session.position,
@@ -375,7 +395,8 @@ async function noterInjection(
 	// geste ➤ : le dernier message porteur de la session (celui qui porte la fiche s'il est porteur), avec son vecteur s'il a été calculé
 	const vecteur = rang === null || servi.calcul.vecteur === undefined ? null : { rang, vecteur: servi.calcul.vecteur };
 	for (const f of injectees.filter((f) => demandees.has(f.chemin))) {
-		await noterGeste(dep, pil.etat, { geste: 'injectee_main', session: session.id, fiche: f.chemin, empreinte: f.empreinte, horodatageMs: entree.horodatageMs, vecteur });
+		const note = noteDemandee(f.chemin);
+		await noterGeste(dep, pil.etat, { geste: 'injectee_main', session: session.id, fiche: f.chemin, empreinte: f.empreinte, horodatageMs: entree.horodatageMs, vecteur, ...(note === undefined ? {} : { note }) });
 	}
 }
 
@@ -392,17 +413,30 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 	const lue = await demandeDe(dep, pil, session, entree, reglages, fin);
 	const demande = demandees.length === 0 ? lue : { ...lue, demandees };
 	const servi = await servir(dep, demande);
-	if (session !== null && rang !== null) reglages.porteurs?.noter(session.id, { rang, position: demande.position, vecteur: servi.calcul.vecteur ?? null });
-	const aTempsPourRepondre = aTemps(reglages);
-	const injecte = servi.texte !== '' && aTempsPourRepondre;
+	const classement = classementDuJournal(servi.calcul.classement);
+	// le classement que voyait l'utilisateur quand il a demandé une fiche : lu avant d'être remplacé par celui de ce message
+	const precedent = session === null ? null : (reglages.porteurs?.lire(session.id) ?? null);
+	if (session !== null && rang !== null) {
+		reglages.porteurs?.noter(session.id, { rang, position: demande.position, vecteur: servi.calcul.vecteur ?? null, classement: notesDuClassement(classement) });
+	}
+	// noter prend du temps : il faut qu'il en reste assez pour noter puis répondre avant que le hook cesse d'attendre
+	const aTempsPourNoter = aTemps(reglages, MARGE_ECRITURE_MS);
+	let injecte = servi.texte !== '' && aTempsPourNoter;
 	// un message porteur est journalisé même sans texte injecté : son classement en est la trace (panneau, apprentissage)
-	if (session !== null && (injecte || (rang !== null && aTempsPourRepondre))) await noterInjection(dep, pil, session, entree, demande, servi, debut, rang);
+	if (session !== null && (injecte || (rang !== null && aTempsPourNoter))) {
+		await noterInjection(dep, pil, session, entree, demande, servi, debut, rang, classement, (chemin) => noteDuPorteur(precedent, chemin));
+		// après les écritures : le hook attend-il encore ? Sinon, la réponse ne lui parviendrait pas
+		if (!aTemps(reglages)) injecte = false;
+	}
 	// le hook n'attend plus : les fiches demandées partiront au message suivant
 	if (session !== null && !injecte && demandees.length > 0) reglages.demandees?.remettre(session.id, demandees);
 	return injecte ? { contexte: servi.texte } : {};
 }
 
-/** Reste-t-il du temps avant l'échéance (sans échéance : oui) ? Une fiche n'est notée servie que si le hook reçoit la réponse. */
-function aTemps(reglages: ReglagesEvenement): boolean {
-	return reglages.echeance === undefined || Date.now() < reglages.echeance;
+/**
+ * Reste-t-il au moins `margeMs` avant l'échéance (sans échéance : oui) ? Une fiche n'est notée servie que si le hook reçoit la
+ * réponse.
+ */
+function aTemps(reglages: ReglagesEvenement, margeMs = 0): boolean {
+	return reglages.echeance === undefined || Date.now() + margeMs < reglages.echeance;
 }

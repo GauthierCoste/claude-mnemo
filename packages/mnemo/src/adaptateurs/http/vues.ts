@@ -63,7 +63,14 @@ export function vueServie(e: EntreeServie, titres: ReadonlyMap<string, string> =
 		texte: e.texte,
 		ms: e.ms,
 		sens: e.sens,
-		classement: e.classement.slice(0, CLASSEMENT_VU_MAX).map((c) => ({ id: c.id, titre: c.titre, note: c.note, servi: c.servi, rang: c.rang })),
+		// classement vivant (une ligne a des signaux) : pas de % tant qu'aucune note apprise ne donne `p` (ordre seul) ; titre relu dans l'index
+		classement: e.classement.slice(0, CLASSEMENT_VU_MAX).map((c) => ({
+			id: c.id,
+			titre: c.titre ?? titreDeFiche(c.id.split('#')[0]!, titres),
+			note: c.signaux === undefined ? c.note : (c.p ?? null),
+			servi: c.servi,
+			rang: c.rang,
+		})),
 		muet: e.muet,
 		cartes: e.cartes.map((c) => ({
 			id: c.chemin,
@@ -72,6 +79,7 @@ export function vueServie(e: EntreeServie, titres: ReadonlyMap<string, string> =
 			...(c.depuis === undefined ? {} : { depuis: { id: c.depuis, titre: titreDeFiche(c.depuis, titres) } }),
 			...(c.note === undefined ? {} : { note: c.note }),
 		})),
+		...(e.affinage === undefined ? {} : { affinage: e.affinage }),
 		titres: Object.fromEntries(e.ids.map((id) => id.split('#')[0]!).map((chemin) => [chemin, titreDeFiche(chemin, titres)])),
 	};
 }
