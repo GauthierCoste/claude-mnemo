@@ -638,7 +638,10 @@ export type EntreeServie = {
 /** État de l'affinage d'un classement en arrière-plan (spec classement vivant § 3.6). */
 export type Affinage = 'en_cours' | 'fait';
 
-/** `classement: 'dernier'` : seule l'entrée la plus récente rendue garde son classement (les autres l'ont vide) ; la base ne lit pas les autres. */
+/**
+ * `classement: 'dernier'` : seule l'entrée porteuse (message non muet) la plus récente rendue garde son classement (les autres l'ont
+ * vide) ; la base ne lit pas les autres.
+ */
 export type OptionsServis = { classement?: 'tous' | 'dernier' };
 export type { RaisonCarte };
 /** Une carte du journal : `depuis` (raison `liee`) : chemin de la fiche injectée à la main d'où vient le poids ; absent sinon (et des entrées anciennes). */

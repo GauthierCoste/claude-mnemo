@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ecarterDuClassement } from '../../src/application/ecarter.ts';
 import type { EtatSessions } from '../../src/application/ports.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { chmodSync, existsSync, readFileSync, statSync } from 'node:fs';
@@ -342,6 +343,19 @@ describe('etat.sqlite', () => {
 			[1, 0],
 		]);
 		expect((await etat.servis('s1', 10)).map((e) => e.classement.length)).toEqual([1, 1, 1]);
+	});
+
+	it('servis : `classement: dernier` saute un message muet (une ➤ partie avec un « ok ») : le classement reste celui du dernier message porteur', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('s1'));
+		const porteur = [{ id: 'a.md', note: 0.9, servi: false, rang: 1 }, { id: 'b.md', note: 0.5, servi: false, rang: 2 }];
+		await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: 1, ids: [], texte: '', ms: 1, sens: true, demande: 'les avoirs', classement: porteur, muet: null, cartes: [], position: null });
+		await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: 2, ids: ['c.md'], texte: 'c', ms: 1, sens: false, demande: 'ok', classement: [{ id: 'a.md', note: null, servi: false, rang: 1 }], muet: 'sans_contenu', cartes: [], position: null });
+		const [muet, dernier] = await etat.servis('s1', 10, undefined, { classement: 'dernier' });
+		expect(muet!.classement).toEqual([]);
+		expect(dernier!.classement.map((c) => [c.id, c.note])).toEqual([['a.md', 0.9], ['b.md', 0.5]]);
+		// « Pas pour cette session » trouve une ligne du classement porteur, et la trace en garde la demande
+		expect(await ecarterDuClassement(etat, { id: 's1', dossier: '' }, 'b.md')).toMatchObject({ resultat: 'ecarte' });
 	});
 
 	it('une entrée ancienne (classement sans les champs du classement vivant) reste lisible', async () => {

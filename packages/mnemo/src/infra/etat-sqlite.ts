@@ -792,11 +792,12 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 		},
 
 		async servis(session, limite, moment, options) {
-			// `dernier` : le JSON du classement n'est lu que pour l'entrée la plus récente rendue (hors trace d'un /clear, qui n'en a pas)
+			// `dernier` : le JSON du classement n'est lu que pour l'entrée porteuse la plus récente rendue (hors trace d'un /clear, qui
+			// n'en a pas, et hors message muet : une ➤ partie avec un « ok » ne remplace pas le classement du dernier message porteur)
 			const colonnes =
 				options?.classement === 'dernier'
 					? `session, moment, horodatage_ms, ids, texte, ms, sens, demande, muet, cartes, position, rang_message, affinage, ms_service, calibree,
-						CASE WHEN rang = (SELECT MAX(rang) FROM servis WHERE session = ?1 AND NOT (moment = 'debut' AND ids = '[]' AND texte = '')${moment === undefined ? '' : ' AND moment = ?2'}) THEN classement ELSE '[]' END AS classement`
+						CASE WHEN rang = (SELECT MAX(rang) FROM servis WHERE session = ?1 AND muet IS NULL AND NOT (moment = 'debut' AND ids = '[]' AND texte = '')${moment === undefined ? '' : ' AND moment = ?2'}) THEN classement ELSE '[]' END AS classement`
 					: '*';
 			const filtre = moment === undefined ? 'session = ?1' : 'session = ?1 AND moment = ?2';
 			const parametres = moment === undefined ? [session, limite] : [session, moment, limite];

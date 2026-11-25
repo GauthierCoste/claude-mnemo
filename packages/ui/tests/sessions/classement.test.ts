@@ -1,6 +1,6 @@
 import type { ClassementVue, EntreeServieVue } from '@mnemo/contrat';
 import { describe, expect, it } from 'vitest';
-import { dernierClassement, estCalibre, estEcarte, modesDInjection, pourcentage, seuilInjection, sousLeSeuil } from '../../src/sessions/classement.ts';
+import { dernierClassement, derniereEntree, estCalibre, estEcarte, modesDInjection, pourcentage, seuilInjection, sousLeSeuil } from '../../src/sessions/classement.ts';
 
 const c = (id: string, rang: number, note: number | null, servi = false): ClassementVue => ({ id, titre: id, note, servi, rang });
 const entree = (horodatageMs: number, classement: ClassementVue[]): EntreeServieVue => ({ session: 's1', moment: 'message', horodatageMs, ids: [], texte: '', ms: 1, sens: false, classement, muet: null, cartes: [] });
@@ -11,6 +11,15 @@ describe('classement', () => {
 		const entrees = [entree(1, [c('vieux.md', 1, null)]), entree(5, [c('b.md', 2, null), c('a.md', 1, null)]), entree(3, [c('moyen.md', 1, null)])];
 		expect(ids(dernierClassement(entrees, []))).toEqual(['a.md', 'b.md']);
 		expect(dernierClassement([], [])).toEqual([]);
+	});
+
+	it('un message muet (une ➤ partie avec un « ok ») ne remplace pas le classement du dernier message porteur', () => {
+		const porteur = { ...entree(1, [c('a.md', 1, 0.9), c('b.md', 2, 0.5)]), calibree: true };
+		const muet: EntreeServieVue = { ...entree(5, []), muet: 'sans_contenu', ids: ['c.md'] };
+		expect(ids(dernierClassement([porteur, muet], []))).toEqual(['a.md', 'b.md']);
+		expect(derniereEntree([porteur, muet])).toBe(porteur);
+		expect(estCalibre(derniereEntree([porteur, muet]))).toBe(true);
+		expect(derniereEntree([muet])).toBeNull();
 	});
 
 	it('avec des notes : triées par note décroissante (le pourcentage est l’ordre), les lignes sans note après, par rang', () => {

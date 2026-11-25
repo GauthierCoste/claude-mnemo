@@ -6,9 +6,12 @@ export function estEcarte(id: string, ecartes: readonly string[]): boolean {
 	return ecartes.some((e) => id === e || (!e.includes('#') && id.startsWith(`${e}#`)));
 }
 
-/** L'entrée la plus récente, ou null. */
+/**
+ * L'entrée porteuse la plus récente (message non muet), ou null : le panneau garde le classement du dernier message porteur
+ * (spec § 3.1) ; une ➤ partie avec un message muet (« ok ») s'ajoute aux injectées sans effacer ses lignes.
+ */
 export function derniereEntree(entrees: readonly EntreeServieVue[]): EntreeServieVue | null {
-	return entrees.reduce<EntreeServieVue | null>((a, e) => (a === null || e.horodatageMs > a.horodatageMs ? e : a), null);
+	return entrees.reduce<EntreeServieVue | null>((a, e) => (e.muet === null && (a === null || e.horodatageMs > a.horodatageMs) ? e : a), null);
 }
 
 /**

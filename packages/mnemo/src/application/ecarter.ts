@@ -19,7 +19,7 @@ export async function ecarterDuClassement(
 	maintenantMs = Date.now(),
 	titreDe: (chemin: string) => string = (chemin) => chemin,
 ): Promise<{ resultat: 'ecarte' | 'deja_ecarte' | 'introuvable' | 'terminee'; porteur?: MessagePorteur }> {
-	// le classement de la dernière entrée seulement (celui que montre le panneau), les cartes des autres
+	// le classement de la dernière entrée porteuse seulement (celui que montre le panneau), les cartes des autres
 	for (const entree of await etat.servis(session.id, ENTREES_CONSULTEES, undefined, { classement: 'dernier' })) {
 		const classee = entree.classement.find((c) => c.id === id);
 		// une ligne du classement vivant n'a pas de titre : il se relit dans l'index
