@@ -55,7 +55,7 @@ describe('simulerInjections', () => {
 		const r = simulerInjections([
 			m('a', [c(0.95, 'non_pertinente')], { silence: true }),
 			m('b', [c(0.3, 'non_pertinente')], { silence: true }),
-			m(SESSION_MANUELLE, [c(0.95, 'pertinente'), c(0.7, 'pertinente'), c(0.1, 'pertinente')]),
+			m(SESSION_MANUELLE, [c(0.95, 'pertinente'), c(0.7, 'pertinente'), c(0.05, 'pertinente')]),
 		]);
 		expect(r).toMatchObject({ silences: 2, sessionsSilence: 2, silencesAvecInjection: 1, partSilencesAvecInjection: 0.5, sessions: 1 });
 		expect(r.rappel).toBeCloseTo(1 / 3);
@@ -69,7 +69,7 @@ describe('grilleDesSeuils', () => {
 		const g = grilleDesSeuils([m('a', [c(0.85, 'pertinente'), c(0.5, 'pertinente'), c(0.2, 'pertinente'), c(0.75, 'non_pertinente')])]);
 		expect(g).toHaveLength(9);
 		expect(g.find((x) => x.seuil === 0.8 && x.seuilPiste === 0.15)).toMatchObject({ utilesInjectees: 1, utilesEnPiste: 2, partUtilesAtteintes: 1, injectionsATort: 0 });
-		expect(g.find((x) => x.seuil === 0.7 && x.seuilPiste === 0.6)).toMatchObject({ utilesInjectees: 1, utilesEnPiste: 0, injectionsATort: 1 });
+		expect(g.find((x) => x.seuil === 0.7 && x.seuilPiste === 0.3)).toMatchObject({ utilesInjectees: 1, utilesEnPiste: 1, injectionsATort: 1 });
 	});
 });
 

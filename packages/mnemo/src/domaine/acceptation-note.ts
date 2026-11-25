@@ -35,7 +35,7 @@ export type ReglageDInjection = {
 	pistesParMessage: number;
 };
 
-export const REGLAGE_PAR_DEFAUT: ReglageDInjection = { seuil: 0.9, injectionsParMessage: 2, garde: GARDE_APRIORI, seuilPiste: 0.3, pistesParMessage: 3 };
+export const REGLAGE_PAR_DEFAUT: ReglageDInjection = { seuil: 0.9, injectionsParMessage: 2, garde: GARDE_APRIORI, seuilPiste: 0.1, pistesParMessage: 3 };
 
 const estReelle = (session: string) => session !== SESSION_MANUELLE;
 const part = (n: number, d: number): number | null => (d === 0 ? null : n / d);
@@ -144,7 +144,7 @@ export type CaseDeSeuils = {
 };
 
 export const SEUILS_INJECTION_GRILLE = [0.7, 0.8, 0.9];
-export const SEUILS_PISTE_GRILLE = [0.15, 0.3, 0.6];
+export const SEUILS_PISTE_GRILLE = [0.1, 0.15, 0.3];
 
 /** Chaque seuil d'injection croisé avec chaque seuil de piste. */
 export function grilleDesSeuils(messages: readonly MessageNote[], base: ReglageDInjection = REGLAGE_PAR_DEFAUT): CaseDeSeuils[] {
