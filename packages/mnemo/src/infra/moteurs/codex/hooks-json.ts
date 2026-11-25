@@ -4,7 +4,7 @@ import { basename, dirname, join } from 'node:path';
 import type { AppelHooksDuPoste, HooksDuPoste, LectureHooksDuPoste, ResultatInstallationHooks, ResultatRemplacementHooks, ResultatRetraitHooks } from '../../../application/ports.ts';
 import { approbationDesHooks } from '../../../domaine/moteurs/codex/approbation-hooks.ts';
 import { estHookDe, etatDesHooks, hooksAttendus, lireHooksJson, remplacerHooks, texteHooksJson } from '../../../domaine/moteurs/codex/hooks-installes.ts';
-import { dossierCodex } from './dossier-codex.ts';
+import { dossierCodex, lireConfigCodex } from './dossier-codex.ts';
 
 /** `hooks.json` de l'utilisateur chez Codex : `$CODEX_HOME/hooks.json`, sinon `~/.codex/hooks.json`. */
 export const cheminHooksJson = (env: Record<string, string | undefined>): string => join(dossierCodex(env), 'hooks.json');
@@ -85,7 +85,7 @@ async function lire(a: AppelHooksDuPoste): Promise<LectureHooksDuPoste> {
 	const { etat, cles } = etatDesHooks(lu.racine, a.node, a.main);
 	if (etat !== 'a_jour') return { etat, chemin };
 	// absent : rien d'approuvé ; illisible : état inconnu
-	const config = await texteOuAbsent(join(dossierCodex(a.env), 'config.toml')).then(
+	const config = await lireConfigCodex(a.env).then(
 		(t) => t ?? '',
 		() => null,
 	);

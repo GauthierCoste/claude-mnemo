@@ -62,10 +62,10 @@ export type Pilote = {
 	 */
 	confier(id: string, ligne: string): Promise<Session | null>;
 	/**
-	 * Faux en mode dégradé (terminaux indisponibles, commande du moteur introuvable — Claude Code par défaut) : une session ne
-	 * peut tourner qu'à la main.
+	 * Faux en mode dégradé (terminaux indisponibles, commande de Claude Code introuvable — le moteur de l'archiviste, seul
+	 * appelant) : une session ne peut tourner qu'à la main.
 	 */
-	lancePossible(moteur?: IdMoteur): boolean;
+	lancePossible(): boolean;
 	/** Réécrit le plugin de la session (skills de son projet) d'après son état actuel ; rien si elle est inconnue. */
 	reecrirePlugin(id: string): Promise<void>;
 	/**
@@ -377,7 +377,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	/** Ce que la ligne de commande d'un processus lancé pour la session contient (son uuid, à défaut de moteur connu). */
 	const marqueDe = (s: Session): string => moteurDe(s)?.moteur.marqueDeSession(s.id) ?? s.id;
 
-	const lancePossible = (moteur: IdMoteur = MOTEUR_PAR_DEFAUT): boolean => (pil.moteurs[moteur]?.commande ?? null) !== null && pil.terminaux.disponibles().ok;
+	const lancePossible = (): boolean => (pil.moteurs[MOTEUR_PAR_DEFAUT]?.commande ?? null) !== null && pil.terminaux.disponibles().ok;
 
 	/**
 	 * Fichiers de session écrits, arguments, environnement et dossier du moteur pour cette session ; `manuel` : la même chose en

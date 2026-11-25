@@ -1,5 +1,6 @@
 import { citerPosix, citerPowerShell } from '../../citer.ts';
 import { estObjet } from '../../valeurs.ts';
+import { listeValeursToml, valeurToml } from './toml.ts';
 
 /**
  * Déclaration `mnemo` telle que `codex mcp get mnemo --json` la rend (Codex 0.171 : `{ name, enabled, transport: { type,
@@ -82,7 +83,10 @@ export function commandeManuelleCodex(node: string, main: string, plateforme: st
 	return `codex mcp add mnemo -- ${citer(node)} ${citer(main)} mcp`;
 }
 
-/** Lignes à mettre à la main dans `[mcp_servers.mnemo]` de `config.toml` (chaînes TOML), les autres réglages gardés. */
+/**
+ * Lignes à mettre à la main dans `[mcp_servers.mnemo]` de `config.toml` (chaînes TOML par `valeurToml` : littérales quand
+ * c'est possible, ce qui garde lisibles les chemins Windows), les autres réglages gardés.
+ */
 export function lignesTomlCodex(node: string, main: string): string {
-	return `command = ${JSON.stringify(node)} et args = [${JSON.stringify(main)}, "mcp"]`;
+	return `command = ${valeurToml(node)} et args = ${listeValeursToml([main, 'mcp'])}`;
 }

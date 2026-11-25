@@ -221,7 +221,7 @@ describe('déclaration MCP chez Codex', () => {
 			const s = simule([reponse], env);
 			const r = await DECLARATION_MCP_CODEX.remplacer(s.appel());
 			expect(r, reglage).toMatchObject({ echec: expect.stringContaining(reglage) });
-			expect((r as { echec: string }).echec).toContain(`command = ${JSON.stringify(process.execPath)} et args = [${JSON.stringify(MAIN)}, "mcp"]`);
+			expect((r as { echec: string }).echec).toContain(`command = '${process.execPath}' et args = ['${MAIN}', 'mcp']`);
 			expect(s.appels).toHaveLength(1);
 		}
 		for (const [config, reglage] of [
@@ -339,7 +339,7 @@ describe('mnemo declarer --moteur codex (faux codex par MNEMO_CODEX)', () => {
 		const sortie = JSON.parse(lignes[0]!) as { resultat: string; message: string };
 		expect(sortie.resultat).toBe('echec');
 		expect(sortie.message).toContain('réglages personnels (tools.lire.approval_mode)');
-		expect(sortie.message).toContain(`command = ${JSON.stringify(process.execPath)}`);
+		expect(sortie.message).toContain(`command = '${process.execPath}' et args = ['${MAIN}', 'mcp']`);
 		expect(process.exitCode).toBe(1);
 		expect(await readFile(join(d, 'config.toml'), 'utf8')).toBe(config);
 		expect((await readFile(join(d, 'appels.log'), 'utf8')).trim().split('\n')).toEqual(['mcp get mnemo --json']);

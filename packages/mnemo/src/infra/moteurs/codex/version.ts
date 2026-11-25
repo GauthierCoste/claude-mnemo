@@ -1,8 +1,8 @@
-import { execFile } from 'node:child_process';
 import type { Executer, MoteurDuPoste } from '../../../application/ports.ts';
 import { environnementPermisCodex } from '../../../application/moteurs/codex/session.ts';
 import { versionDeCodex } from '../../../domaine/moteurs/codex/version.ts';
 import { avecDelaiGaranti, MARGE_DELAI_MS } from '../../delai-garanti.ts';
+import { executeurReel } from '../../executeur.ts';
 
 /** Délai de `codex --version`. */
 export const DELAI_VERSION_MS = 5000;
@@ -10,16 +10,8 @@ export const DELAI_VERSION_MS = 5000;
 const GARDE_MS = 10 * 60_000;
 const GARDE_ECHEC_MS = 60_000;
 
-/** Exécuteur minimal (sans shell) : code et sorties ; rejette si le programme ne se lance pas ou dépasse le délai. */
-const executerSansShell: Executer = (commande, args, options = {}) =>
-	new Promise((resoudre, rejeter) => {
-		const enfant = execFile(commande, args, { timeout: options.delaiMs ?? DELAI_VERSION_MS, windowsHide: true, ...(options.env === undefined ? {} : { env: options.env }) }, (erreur, sortie, erreurSortie) => {
-			if (erreur === null) resoudre({ code: 0, sortie, erreur: erreurSortie });
-			else if (typeof erreur.code === 'number') resoudre({ code: erreur.code, sortie, erreur: erreurSortie });
-			else rejeter(erreur);
-		});
-		enfant.stdin?.end();
-	});
+/** Exécuteur réel (sans shell), le délai passé à chaque appel. */
+const executerSansShell: Executer = executeurReel();
 
 type EnCache = { jusquaMs: number; version: Promise<string | null> };
 

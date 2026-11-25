@@ -1,24 +1,10 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import type { AppelDeclaration, DeclarationMcp, LectureDeclaration, ResultatDeclaration, ResultatRedeclaration, ResultatRetraitMcp } from '../../../application/ports.ts';
 import { commandeManuelleCodex, estDeclarationMnemo, lanceCeMnemo, lignesTomlCodex, lireDeclarationCodex, reglagesDansConfig } from '../../../domaine/moteurs/codex/declaration.ts';
 import type { DeclarationCodex } from '../../../domaine/moteurs/codex/declaration.ts';
 import { nodeDurable } from '../../node-durable.ts';
-import { dossierCodex } from './dossier-codex.ts';
+import { cheminConfigCodex, lireConfigCodex } from './dossier-codex.ts';
 
 const INTROUVABLE = '`codex` introuvable (PATH, MNEMO_CODEX, ou ChatGPT.app).';
-
-/** `config.toml` de Codex : `$CODEX_HOME`, sinon `~/.codex`. */
-const cheminConfig = (env: Record<string, string | undefined>): string => join(dossierCodex(env), 'config.toml');
-
-/** Texte de `config.toml`, lu seulement (jamais écrit par Mnemo) ; null : illisible ou absent. */
-async function texteConfig(chemin: string): Promise<string | null> {
-	try {
-		return await readFile(chemin, 'utf8');
-	} catch {
-		return null;
-	}
-}
 
 function raisonCourte(texte: string): string {
 	return (texte.split(/\r?\n/u).find((l) => l.trim() !== '') ?? '').trim().slice(0, 200);
@@ -104,8 +90,8 @@ async function remplacer(a: AppelDeclaration): Promise<ResultatRedeclaration> {
 		if (lanceCeMnemo(e.declaration, node, a.main)) return 'deja';
 		if (!estDeclarationMnemo(e.declaration)) return 'autre';
 		// `codex mcp add` réécrit toute la table `[mcp_servers.mnemo]` : jamais sur des réglages que Mnemo ne pose pas
-		const chemin = cheminConfig(a.env);
-		const texte = await texteConfig(chemin);
+		const chemin = cheminConfigCodex(a.env);
+		const texte = await lireConfigCodex(a.env).catch(() => null);
 		if (texte === null) return { echec: `${chemin} illisible : impossible de vérifier que la déclaration MCP « mnemo » ne porte pas de réglages personnels ; mettez-la à jour à la main : ${lignesTomlCodex(node, a.main)}.` };
 		const reglages = [...new Set([...e.declaration.reglages, ...reglagesDansConfig(texte)])];
 		if (reglages.length > 0)
