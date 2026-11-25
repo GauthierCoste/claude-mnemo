@@ -144,6 +144,15 @@ describe('injection automatique et pistes', () => {
 		expect(ensemble).toEqual({ ok: true, reglages: { ...REGLAGES_PAR_DEFAUT, contexte: { ...REGLAGES_PAR_DEFAUT.contexte, seuilInjection: 55, seuilPiste: 55 } } });
 	});
 
+	it('fichier où le seuil des pistes dépasse le seuil d’injection : ramené au seuil d’injection, avec un avertissement', () => {
+		const { reglages, avertissements } = lireReglages({ contexte: { seuilInjection: 70, seuilPiste: 85 } });
+		expect(reglages.contexte).toMatchObject({ seuilInjection: 70, seuilPiste: 70 });
+		expect(avertissements).toEqual(['Réglage « contexte.seuilPiste » (Seuil des pistes) : 85 % dépasse le seuil d’injection automatique ; ramené à 70 %.']);
+		// seuil d'injection invalide : son défaut (90) sert de borne
+		expect(lireReglages({ contexte: { seuilInjection: 20, seuilPiste: 95 } }).reglages.contexte).toMatchObject({ seuilInjection: 90, seuilPiste: 90 });
+		expect(lireReglages({ contexte: { seuilInjection: 70, seuilPiste: 70 } }).avertissements).toEqual([]);
+	});
+
 	it('cartesPerimetre retiré : ignoré sans avertissement à la lecture, refusé à la modification', () => {
 		expect(REGLAGES_RETIRES).toContain('contexte.cartesPerimetre');
 		expect(CHAMPS_REGLAGES.some((c) => c.cle === 'contexte.cartesPerimetre')).toBe(false);

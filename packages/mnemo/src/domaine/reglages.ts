@@ -425,6 +425,11 @@ export function lireReglages(brut: unknown): { reglages: Reglages; avertissement
 			if (!CHAMPS_REGLAGES.some((c) => c.cle === cle) && !REGLAGES_RETIRES.includes(cle)) avertissements.push(`Réglage inconnu « ${groupe}.${nom} » : ignoré.`);
 		}
 	}
+	const { seuilPiste, seuilInjection } = reglages.contexte;
+	if (seuilPiste > seuilInjection) {
+		avertissements.push(`Réglage « contexte.seuilPiste » (Seuil des pistes) : ${seuilPiste} % dépasse le seuil d’injection automatique ; ramené à ${seuilInjection} %.`);
+		reglages = avecValeur(reglages, 'contexte.seuilPiste', seuilInjection);
+	}
 	return { reglages, avertissements };
 }
 
