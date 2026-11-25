@@ -30,6 +30,14 @@ describe('aperçu du profil selon son moteur', () => {
 		expect(blocs.find((b) => b.origine === 'hors_mnemo')?.elements?.map((e) => e.nom)).toContain('CLAUDE.md');
 	});
 
+	it('moteur inconnu de ce Mnemo (fiche écrite à la main) : l\'aperçu dit que le lancement est refusé', async () => {
+		const dep = fauxPorts();
+		await dep.coffre.ecrire('profils/revue/revue.md', '---\ntype: profil\nmoteur: gemini\n---\n# Revue\n\nRelis.\n');
+		const { blocs, avertissements } = await apercuProfil(dep, 'revue');
+		expect(blocs.length).toBeGreaterThan(0);
+		expect(avertissements).toContainEqual(expect.stringMatching(/^Le profil « revue » ne peut pas être lancé : moteur « gemini » inconnu de ce Mnemo/u));
+	});
+
 	it('Codex : la consigne reçue avec la liste des skills (lues par lire), sans plugins, AGENTS.md hors Mnemo', async () => {
 		const { blocs } = await avecSkill('codex');
 		expect(blocs[0]?.titre).toBe('Consigne du profil (personnalisée), avec la liste des skills');

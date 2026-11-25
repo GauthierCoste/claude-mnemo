@@ -74,8 +74,9 @@ describe('lireProfil', () => {
 		expect(lireProfil(fiche('---\ntype: profil\nmoteur: codex\nmodele: gpt-6.2-sol\n---\n# A\n'), TRAVAIL, [])).toMatchObject({ moteur: 'codex', modele: 'gpt-6.2-sol' });
 		expect(lireProfil(fiche('---\ntype: profil\nmodele: opus\n---\n# A\n'), TRAVAIL, [])).toMatchObject({ moteur: 'claude-code', modele: 'opus' });
 		expect(lireProfil(fiche('---\ntype: profil\n---\n# A\n'), TRAVAIL, [])).toMatchObject({ moteur: 'claude-code', modele: '' });
-		expect(lireProfil(fiche('---\ntype: profil\nmoteur: gemini\nmodele: \'-x\'\n---\n# A\n'), TRAVAIL, [])).toMatchObject({ moteur: 'claude-code', modele: '' });
-		expect(lireProfil(fiche('---\ntype: profil\nmoteur: 3\nmodele: [opus]\n---\n# A\n'), TRAVAIL, [])).toMatchObject({ moteur: 'claude-code', modele: '' });
+		expect(lireProfil(fiche('---\ntype: profil\nmoteur: gemini\nmodele: \'-x\'\n---\n# A\n'), TRAVAIL, [])).toMatchObject({ moteur: 'claude-code', modele: '', moteurInconnu: 'gemini' });
+		expect(lireProfil(fiche('---\ntype: profil\nmoteur: 3\nmodele: [opus]\n---\n# A\n'), TRAVAIL, [])).toMatchObject({ moteur: 'claude-code', modele: '', moteurInconnu: '3' });
+		expect(lireProfil(fiche('---\ntype: profil\nmoteur: codex\n---\n# A\n'), TRAVAIL, [])).not.toHaveProperty('moteurInconnu');
 		expect(lireProfil(fiche('---\ntype: profil\nmodele: " opus"\n---\n# A\n'), TRAVAIL, []).modele).toBe('');
 	});
 
@@ -148,6 +149,8 @@ describe('moteur du profil', () => {
 		expect(refusDuMoteur({ nom: 'redaction', moteur: 'codex', plugins: ['a@b'] })).toEqual({ champ: 'plugins', motif: MOTIF_PLUGINS_HORS_CLAUDE_CODE });
 		expect(refusDuMoteur({ nom: 'redaction', moteur: 'codex', plugins: [] })).toBeNull();
 		expect(refusDuMoteur({ nom: 'archiviste', moteur: 'claude-code', plugins: ['a@b'] })).toBeNull();
+		// moteur inconnu de ce Mnemo (lu comme Claude Code) : refusé
+		expect(refusDuMoteur({ nom: 'redaction', moteur: 'claude-code', plugins: [], moteurInconnu: 'gemini' })).toEqual({ champ: 'moteur', motif: expect.stringContaining('« gemini » inconnu de ce Mnemo') });
 	});
 	it('moteurOuModeleInvalides : un avertissement par valeur présente et invalide ; absente ou valide, aucun', () => {
 		expect(moteurOuModeleInvalides(fiche('---\ntype: profil\nmoteur: Codex\nmodele: 4.5\n---\n# A\n'))).toEqual([expect.stringContaining('« Codex »'), expect.stringContaining('« 4.5 »')]);

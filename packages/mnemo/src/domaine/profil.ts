@@ -10,7 +10,9 @@ import type { EvenementHook } from './session.ts';
  * projet choisi ; `memoire` : `_mnemo/`, la racine ajoutée par `--add-dir`) ; `lanceur` : qui le lance (`LANCEURS_DE_PROFIL`) ;
  * `skillsMemoire` : skills de `_mnemo/skills/` retenues (`tous`, ou leurs noms) ; `plugins` : identifiants `nom@marketplace`
  * des plugins Claude Code activés (seulement avec le moteur Claude Code) ; `avatar` : forme et couleur affichées dans l'interface ;
- * `moteur` : l'agent de code qui fait tourner ses sessions ; `modele` : son modèle (« » : celui par défaut du moteur).
+ * `moteur` : l'agent de code qui fait tourner ses sessions ; `modele` : son modèle (« » : celui par défaut du moteur) ;
+ * `moteurInconnu` : le moteur écrit dans la fiche quand ce Mnemo ne le connaît pas (`moteur` vaut alors le défaut, et le
+ * lancement est refusé par `refusDuMoteur`).
  */
 export type Profil = {
 	nom: string;
@@ -24,6 +26,7 @@ export type Profil = {
 	avatar: Avatar;
 	moteur: IdMoteur;
 	modele: string;
+	moteurInconnu?: string;
 };
 
 /** Ordre canonique des événements (celui du `hooks.json` assemblé). */
@@ -65,11 +68,16 @@ export const MOTIF_PLUGINS_HORS_CLAUDE_CODE = 'les plugins Claude Code ne valent
 /** Motif d'un archiviste réglé sur un autre moteur que Claude Code. */
 export const MOTIF_ARCHIVISTE_HORS_CLAUDE_CODE = 'l\'archiviste tourne sur Claude Code';
 
+/** Motif d'un profil réglé sur un moteur que ce Mnemo ne connaît pas. */
+export const motifMoteurInconnuDuProfil = (moteur: string): string => `moteur « ${moteur} » inconnu de ce Mnemo (${IDS_MOTEURS.join(' ou ')} attendu) : choisis-en un dans le profil`;
+
 /**
- * Ce que le moteur du profil interdit : un archiviste hors Claude Code (`moteur`), des plugins Claude Code avec un autre
- * moteur (`plugins`) ; null si rien. Vérifié à l'enregistrement et de nouveau au lancement (fiche écrite à la main).
+ * Ce que le moteur du profil interdit : un moteur inconnu de ce Mnemo (`moteur`, fiche écrite à la main), un archiviste hors
+ * Claude Code (`moteur`), des plugins Claude Code avec un autre moteur (`plugins`) ; null si rien. Vérifié à l'enregistrement
+ * et de nouveau au lancement (fiche écrite à la main).
  */
-export function refusDuMoteur(profil: Pick<Profil, 'nom' | 'moteur' | 'plugins'>): { champ: 'moteur' | 'plugins'; motif: string } | null {
+export function refusDuMoteur(profil: Pick<Profil, 'nom' | 'moteur' | 'plugins' | 'moteurInconnu'>): { champ: 'moteur' | 'plugins'; motif: string } | null {
+	if (profil.moteurInconnu !== undefined) return { champ: 'moteur', motif: motifMoteurInconnuDuProfil(profil.moteurInconnu) };
 	if (profil.moteur === 'claude-code') return null;
 	if (profil.nom === PROFIL_ARCHIVISTE) return { champ: 'moteur', motif: MOTIF_ARCHIVISTE_HORS_CLAUDE_CODE };
 	if (profil.plugins.length > 0) return { champ: 'plugins', motif: MOTIF_PLUGINS_HORS_CLAUDE_CODE };
@@ -79,14 +87,14 @@ export function refusDuMoteur(profil: Pick<Profil, 'nom' | 'moteur' | 'plugins'>
 const enTexte = (v: unknown): string => (typeof v === 'string' ? v : JSON.stringify(v) ?? String(v));
 
 /**
- * Avertissements d'une fiche `profil` dont `moteur` ou `modele` sont présents mais invalides (fiche écrite à la main) : lus
- * comme le défaut, ce qui doit se voir plutôt que passer en silence.
+ * Avertissements d'une fiche `profil` dont `moteur` ou `modele` sont présents mais invalides (fiche écrite à la main) : un
+ * modèle invalide est lu comme le défaut, un moteur inconnu refuse le lancement ; cela doit se voir plutôt que passer en silence.
  */
 export function moteurOuModeleInvalides(fiche: Fiche | null): string[] {
 	if (fiche === null || fiche.type !== 'profil') return [];
 	const { moteur, modele } = fiche.donnees;
 	const motifs: string[] = [];
-	if (moteur !== undefined && moteur !== null && !estIdMoteur(moteur)) motifs.push(`moteur « ${enTexte(moteur)} » inconnu (${IDS_MOTEURS.join(' ou ')} attendu) : Claude Code utilisé`);
+	if (moteur !== undefined && moteur !== null && !estIdMoteur(moteur)) motifs.push(`moteur « ${enTexte(moteur)} » inconnu (${IDS_MOTEURS.join(' ou ')} attendu) : ses sessions sont refusées tant qu'un moteur connu n'est pas choisi`);
 	if (modele !== undefined && modele !== null && !estModele(modele)) motifs.push(`modèle « ${enTexte(modele)} » refusé : celui par défaut du moteur utilisé`);
 	return motifs;
 }
@@ -176,6 +184,7 @@ export function lireProfil(fiche: Fiche | null, parDefaut: Profil, anciennesCons
 		avatar: lireAvatar(avatar) ?? { ...parDefaut.avatar },
 		moteur: estIdMoteur(moteur) ? moteur : parDefaut.moteur,
 		modele: estModele(modele) ? modele : parDefaut.modele,
+		...(moteur === undefined || moteur === null || estIdMoteur(moteur) ? {} : { moteurInconnu: enTexte(moteur) }),
 	};
 }
 

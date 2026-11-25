@@ -1,7 +1,7 @@
 // Aperçu, en lecture seule, de tout ce qu'une session d'un profil reçoit, avec l'origine de chaque élément.
 import { consigneATraiter, DOSSIERS_FIXES } from '@mnemo/commun';
 import { separerFrontmatter } from '../domaine/fiche.ts';
-import { skillPourProjet } from '../domaine/profil.ts';
+import { refusDuMoteur, skillPourProjet } from '../domaine/profil.ts';
 import type { EvenementHook } from '../domaine/session.ts';
 import { INSTRUCTIONS_SESSION } from './consignes-par-defaut.ts';
 import { texteDuBilan } from './episode.ts';
@@ -60,6 +60,9 @@ export async function apercuProfil(dep: Dependances, nom: string, projet?: strin
 	const codex = profil.moteur === 'codex';
 	const { plugins: installes, avertissements: lus } = codex ? { plugins: [], avertissements: [] } : await dep.pluginsClaude.installes();
 	const avertissements = [...lus];
+	// moteur inconnu de ce Mnemo : l'aperçu est celui de Claude Code, mais aucune session ne se lance
+	const refus = refusDuMoteur(profil);
+	if (refus !== null && profil.moteurInconnu !== undefined) avertissements.push(`Le profil « ${profil.nom} » ne peut pas être lancé : ${refus.motif}.`);
 
 	const duProfil = await skillsAvecTexte(dep, dossierSkillsDuProfil(profil.nom));
 	const nomsDuProfil = new Set(duProfil.map((s) => s.nom));

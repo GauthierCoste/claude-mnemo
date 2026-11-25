@@ -537,12 +537,15 @@ describe('Pilote : moteur de la session', () => {
 		expect(sans.manuel).not.toContain('--model');
 	});
 
-	it('profil écrit à la main que l\'éditeur refuserait (plugins hors Claude Code, archiviste hors Claude Code) : lancement refusé avec la raison, aucune session créée', async () => {
+	it('profil écrit à la main que l\'éditeur refuserait (plugins hors Claude Code, archiviste hors Claude Code, moteur inconnu) : lancement refusé avec la raison, aucune session créée', async () => {
 		const c = await contexte();
 		await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmoteur: codex\nplugins: [superpowers@superpowers-marketplace]\n---\n# Rédaction\n\nRédige les courriers.\n');
 		await c.dep.coffre.ecrire('profils/archiviste/archiviste.md', '---\ntype: profil\nmoteur: codex\n---\n# Archiviste\n');
 		expect(await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' })).toEqual({ refus: expect.stringMatching(/plugins Claude Code/u) });
 		expect(await c.pilote.lancer({ profil: 'archiviste', dossier: 'alpha' })).toEqual({ refus: expect.stringMatching(/archiviste tourne sur Claude Code/u) });
+		// moteur inconnu de ce Mnemo : refusé, jamais lancé comme Claude Code avec son modèle
+		await c.dep.coffre.ecrire('profils/revue/revue.md', '---\ntype: profil\nmoteur: gemini\nmodele: gemini-3\n---\n# Revue\n\nRelis.\n');
+		expect(await c.pilote.lancer({ profil: 'revue', dossier: 'alpha' })).toEqual({ refus: expect.stringMatching(/^Le profil « revue » ne peut pas être lancé : moteur « gemini » inconnu de ce Mnemo/u) });
 		expect(c.terminaux.lances).toHaveLength(0);
 		expect(await c.etat.lister()).toEqual([]);
 	});
