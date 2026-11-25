@@ -7,7 +7,7 @@ import { noteDeLigne, origineDe } from '../domaine/gestes.ts';
 import type { Geste, NoteDuGeste, OrigineGeste } from '../domaine/gestes.ts';
 import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
 import type { RaisonMuet } from '../domaine/message-muet.ts';
-import { autreOutilQueLeDialogue, etatApres, messageApresSonDebut } from '../domaine/session.ts';
+import { autreOutilQueLeDialogue, etatApres } from '../domaine/session.ts';
 import type { ArretAttendu, CauseArret, EtatSession, EvenementHook, Session } from '../domaine/session.ts';
 
 /** Version du schéma (`PRAGMA user_version`). L'état n'est pas jetable : une autre version est une erreur, jamais un effacement. */
@@ -645,7 +645,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 					base.prepare('UPDATE sessions SET fil = ? WHERE id = ? AND fil IS NULL').run(complement.fil, id);
 					actuelle.fil = complement.fil;
 				}
-				if (horodatageMs <= actuelle.majMs && !(e === 'message' && messageApresSonDebut(actuelle, horodatageMs))) return actuelle;
+				if (horodatageMs <= actuelle.majMs) return actuelle;
 				const objectif = actuelle.objectif === null && e === 'message' && complement?.objectif !== undefined ? complement.objectif : actuelle.objectif;
 				const commitDebut = complement?.commitDebut !== undefined ? complement.commitDebut : actuelle.commitDebut;
 				const branche = complement?.branche !== undefined ? complement.branche : actuelle.branche;
@@ -661,7 +661,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 				const dialogueOutil = dernierArret === 'notification' ? (e === 'arret' ? (complement?.outil ?? null) : (actuelle.dialogueOutil ?? null)) : null;
 				base
 					.prepare('UPDATE sessions SET etat = ?, maj_ms = ?, objectif = ?, commit_debut = ?, branche = ?, bilan_lu_ms = ?, dernier_arret = ?, dialogue_outil = ?, ecrit_ms = ? WHERE id = ?')
-					.run(etatApres(actuelle, e), Math.max(horodatageMs, actuelle.majMs), objectif, commitDebut, branche, bilanLu, dernierArret, dialogueOutil, Date.now(), id);
+					.run(etatApres(actuelle, e), horodatageMs, objectif, commitDebut, branche, bilanLu, dernierArret, dialogueOutil, Date.now(), id);
 				oublierEcartesSiTerminee(id);
 				return lire(id);
 			});

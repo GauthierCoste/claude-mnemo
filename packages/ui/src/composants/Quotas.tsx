@@ -3,8 +3,7 @@
  * (Codex), côte à côte quand les deux sont relevés, sinon celui qui l'est ; communs à toutes les sessions (la fenêtre de
  * contexte, propre à chaque session, reste sur sa jauge). Replié, par abonnement, un cercle à deux anneaux (intérieur :
  * 5 heures ; extérieur : semaine) ; un clic le déplie en barres avec la remise à zéro, un autre le replie. Rien tant qu'aucun
- * quota n'est connu. Mistral Vibe n'en communique aucun de lisible : le panneau Contexte de ses sessions le
- * dit.
+ * quota n'est connu. Mistral Vibe n'en communique aucun de lisible : le panneau Contexte de ses sessions le dit.
  */
 import { IDS_MOTEURS } from '@mnemo/commun';
 import type { IdMoteur } from '@mnemo/commun';

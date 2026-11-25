@@ -9,12 +9,8 @@ import { MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 
 describe('remèdes des moteurs', () => {
 	it('commandes tirées de l’installation ; moteur par défaut sans --moteur', () => {
-		expect(remedesDuMoteur(MOTEURS_DU_POSTE['claude-code'])).toEqual({ declarer: 'mnemo init --mcp', remplacer: 'mnemo declarer --remplacer', retirer: 'mnemo declarer --retirer' });
-		expect(remedesDuMoteur(MOTEURS_DU_POSTE['mistral-vibe'])).toEqual({
-			declarer: 'mnemo init --mistral',
-			remplacer: 'mnemo declarer --moteur mistral-vibe --remplacer',
-			retirer: 'mnemo declarer --moteur mistral-vibe --retirer',
-		});
+		expect(remedesDuMoteur(MOTEURS_DU_POSTE['claude-code'])).toEqual({ declarer: 'mnemo init --mcp', remplacer: 'mnemo declarer --remplacer' });
+		expect(remedesDuMoteur(MOTEURS_DU_POSTE['mistral-vibe'])).toEqual({ declarer: 'mnemo init --mistral', remplacer: 'mnemo declarer --moteur mistral-vibe --remplacer' });
 	});
 
 	it('avertissement de session : hooks absents, la vraie option d’init (acceptée par init)', () => {

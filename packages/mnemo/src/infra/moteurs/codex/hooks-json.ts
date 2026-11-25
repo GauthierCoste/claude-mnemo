@@ -3,7 +3,7 @@ import { basename, dirname, join } from 'node:path';
 import type { AppelHooksDuPoste, HooksDuPoste, LectureHooksDuPoste, ResultatInstallationHooks, ResultatRemplacementHooks, ResultatRetraitHooks } from '../../../application/ports.ts';
 import { approbationDesHooks } from '../../../domaine/moteurs/codex/approbation-hooks.ts';
 import { estHookDe, etatDesHooks, hooksAttendus, lireHooksJson, remplacerHooks } from '../../../domaine/moteurs/codex/hooks-installes.ts';
-import { texteJsonReecrit } from '../../../domaine/moteurs/json-texte.ts';
+import { texteJsonReecrit } from '../../../domaine/moteurs/codex/json-texte.ts';
 import { ecrireConfiguration, lireConfiguration } from '../../fichier-de-configuration.ts';
 import type { ConfigurationLue } from '../../fichier-de-configuration.ts';
 import { dossierCodex, lireConfigCodex } from './dossier-codex.ts';

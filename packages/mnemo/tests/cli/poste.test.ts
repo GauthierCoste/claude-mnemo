@@ -6,7 +6,7 @@ import { commandeVerifierPoste, verifierPoste } from '../../src/adaptateurs/cli/
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { hooksAttendus, remplacerHooks } from '../../src/domaine/moteurs/codex/hooks-installes.ts';
-import { texteJsonReecrit } from '../../src/domaine/moteurs/json-texte.ts';
+import { texteJsonReecrit } from '../../src/domaine/moteurs/codex/json-texte.ts';
 import { nodeDurable } from '../../src/infra/node-durable.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
@@ -62,9 +62,9 @@ describe('mnemo verifier-poste', () => {
 		const lignes: string[] = [];
 		await expect(commandeVerifierPoste([], { executer: gitRepond(0, 'git version 2.50.1'), trouver: { 'claude-code': () => null, codex: () => null, 'mistral-vibe': () => null }, versionNode: '26.13.1', ...sansCodex }, (l) => lignes.push(l))).rejects.toMatchObject({ code: 1 });
 		expect(lignes[0]).toBe('git : 2.50.1');
-		expect(lignes[1]).toMatch(/^Claude Code : absent — /u);
-		expect(lignes[2]).toMatch(/^Codex : absent \(facultatif\) — /u);
-		expect(lignes[3]).toMatch(/^Mistral Vibe : absent \(facultatif\) — /u);
+		expect(lignes[1]).toMatch(/^Claude Code : absent ; /u);
+		expect(lignes[2]).toMatch(/^Codex : absent \(facultatif\) ; /u);
+		expect(lignes[3]).toMatch(/^Mistral Vibe : absent \(facultatif\) ; /u);
 		expect(lignes[4]).toBe('Node : 26.13.1');
 	});
 
@@ -112,11 +112,11 @@ describe('verifier-poste : Codex', () => {
 	it('texte : une ligne Codex ; Codex absent n’est pas un manque (code 0)', async () => {
 		const lignes: string[] = [];
 		await commandeVerifierPoste([], deps(repond({ code: 1, sortie: '', erreur: "Error: No MCP server named 'mnemo' found." })), (l) => lignes.push(l));
-		expect(lignes[2]).toBe('Codex : /opt/outils/codex (0.171.0-alpha.13) — serveur MCP non déclaré (mnemo init --codex) — hooks non installés (mnemo init --codex)');
+		expect(lignes[2]).toBe('Codex : /opt/outils/codex (0.171.0-alpha.13) ; serveur MCP non déclaré (mnemo init --codex) ; hooks non installés (mnemo init --codex)');
 		// trop ancien : dit ; illisible : absente, sans autre conséquence
 		const ancien: string[] = [];
 		await commandeVerifierPoste([], deps(repond(declaration(process.execPath, [MAIN, 'mcp']), 'codex-cli 0.150.0')), (l) => ancien.push(l));
-		expect(ancien[2]).toMatch(/^Codex : \/opt\/outils\/codex \(Codex 0\.150\.0 trop ancien, 0\.171 ou plus requis\) — serveur MCP déclaré/u);
+		expect(ancien[2]).toMatch(/^Codex : \/opt\/outils\/codex \(Codex 0\.150\.0 trop ancien, 0\.171 ou plus requis\) ; serveur MCP déclaré/u);
 		const illisible = await verifierPoste(deps(repond(declaration(process.execPath, [MAIN, 'mcp']), 'codex dev')));
 		expect(illisible.codex).not.toHaveProperty('version');
 		expect(illisible.codex.ok).toBe(true);
@@ -140,7 +140,7 @@ describe('verifier-poste : Codex', () => {
 		expect(approuves).toEqual({ etat: 'a_jour', approbation: { etat: 'approuves', motif: expect.stringContaining('recalculer') } });
 		const lignes: string[] = [];
 		await commandeVerifierPoste([], avec(repond(get)), (l) => lignes.push(l));
-		expect(lignes[2]).toMatch(/^Codex : \/opt\/outils\/codex \(0\.171\.0-alpha\.13\) — .* — hooks installés, approuvés \(approbation enregistrée/u);
+		expect(lignes[2]).toMatch(/^Codex : \/opt\/outils\/codex \(0\.171\.0-alpha\.13\) ; .* ; hooks installés, approuvés \(approbation enregistrée/u);
 		await writeFile(fichier, texteJsonReecrit(remplacerHooks({}, hooksAttendus('/vieux/node', MAIN_MNEMO)), null));
 		expect((await verifierPoste(avec(repond(get)))).codex.hooks).toEqual({ etat: 'perime' });
 		await writeFile(fichier, '{');

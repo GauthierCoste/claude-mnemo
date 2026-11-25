@@ -10,7 +10,7 @@ const PERTE = 'cette session ne transmettra rien à Mnemo (état, contexte servi
  * d'une autre installation, illisibles, ou pas approuvés chez le moteur. La session se lance quand même ; null : rien à
  * signaler (approbation lue, ou impossible à vérifier : `verifier-poste` le dit).
  */
-export function avertissementDesHooks(moteur: Pick<MoteurDuPoste, 'id' | 'installation'>, lu: LectureHooksDuPoste): string | null {
+export function avertissementDesHooks(moteur: Pick<MoteurDuPoste, 'id'>, lu: LectureHooksDuPoste): string | null {
 	const nom = NOMS_MOTEURS[moteur.id];
 	const r = remedesDuMoteur(moteur);
 	if ('echec' in lu) return `Hooks de Mnemo pour ${nom} illisibles (${lu.echec}) : ${PERTE}.`;

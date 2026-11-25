@@ -103,15 +103,6 @@ export const dialogueOuvert = (s: Pick<Session, 'etat' | 'dernierArret' | 'majMs
 	s.etat === 'attend' && s.dernierArret === 'notification' && ((s.lanceMs ?? null) === null || s.majMs > s.lanceMs!);
 
 /**
- * Un `message` horodaté avant le dernier événement appliqué, mais après le lancement du processus, quand ce dernier événement
- * est le `debut` de ce lancement (`attend`, aucun arrêt depuis, `majMs` après `lanceMs`) : appliqué quand même. Un moteur
- * qui lance ses hooks de début et de message ensemble peut horodater le `debut` après le message qu'il précède : le message,
- * ignoré, ne serait jamais vu (objectif, bilan lu, session au travail).
- */
-export const messageApresSonDebut = (s: Pick<Session, 'etat' | 'dernierArret' | 'majMs' | 'lanceMs'>, horodatageMs: number): boolean =>
-	s.etat === 'attend' && (s.dernierArret ?? null) === null && (s.lanceMs ?? null) !== null && s.majMs > s.lanceMs! && horodatageMs > s.lanceMs!;
-
-/**
  * Un `apres_outil` de l'outil `outil` pendant un dialogue ouvert pour un autre outil nommé : il ne le ferme pas (outils lancés
  * en parallèle). Faux si l'un des deux noms est inconnu : l'après-outil ferme alors le dialogue, comme avant.
  */

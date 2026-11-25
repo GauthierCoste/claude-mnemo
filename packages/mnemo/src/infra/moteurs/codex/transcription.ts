@@ -3,10 +3,10 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { LectureFenetre } from '../../../application/ports.ts';
 import { telemetrieDeCodex } from '../../../domaine/moteurs/codex/telemetrie.ts';
+import { RE_FIL_SUR } from '../../../domaine/moteurs/fil.ts';
 import { cheminReelPermis, racinesReelles } from '../../chemin-permis.ts';
 import { lignesDeLaFin } from '../../fin-de-fichier.ts';
 import { dossierCodex } from './dossier-codex.ts';
-import { RE_FIL_SUR } from '../../../domaine/moteurs/fil.ts';
 
 /**
  * Lecture de la transcription Codex d'une session (rollout `sessions/AAAA/MM/JJ/rollout-<date>-<fil>.jsonl`) pour la jauge de

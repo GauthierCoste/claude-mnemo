@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { cheminsDuPatch, OUTILS_CODEX } from '../../src/domaine/moteurs/codex/outils.ts';
 import { modelesDuCatalogue } from '../../src/domaine/moteurs/codex/modeles.ts';
 import { TOUCHES_CODEX } from '../../src/domaine/moteurs/codex/touches.ts';
 import { chaineToml, listeToml, listeValeursToml, valeurToml } from '../../src/domaine/moteurs/toml.ts';
@@ -114,5 +115,17 @@ describe('version de Codex', () => {
 		expect(refusDeVersionCodex('1.0.0')).toBeNull();
 		expect(refusDeVersionCodex(null)).toBeNull();
 		expect(refusDeVersionCodex('dev')).toBeNull();
+	});
+});
+
+describe('patch apply_patch de Codex', () => {
+	it('chemins des en-têtes, sans doublon ; illisible : absent, ou du contenu sans en-tête ; vide : rien', () => {
+		const patch = '*** Begin Patch\n*** Add File: a.md\n+x\n*** Update File: b.md\n*** Move to: c.md\n*** Delete File: a.md\n*** End Patch';
+		const ecrits = (entree: Record<string, unknown>) => OUTILS_CODEX.cheminsEcrits({ nom: 'apply_patch', entree });
+		expect(cheminsDuPatch(patch)).toEqual(['a.md', 'b.md', 'c.md']);
+		expect(ecrits({ command: patch })).toEqual(['a.md', 'b.md', 'c.md']);
+		expect(ecrits({})).toBe('illisible');
+		expect(ecrits({ command: 'rm -rf /' })).toBe('illisible');
+		expect(ecrits({ command: '*** Begin Patch\n*** End Patch\n' })).toEqual([]);
 	});
 });

@@ -2,12 +2,12 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { LectureFenetre } from '../../../application/ports.ts';
-import type { FenetreDeContexte } from '../../../domaine/moteurs/moteur.ts';
+import { RE_FIL_SUR } from '../../../domaine/moteurs/fil.ts';
 import { fenetreDansEtatDuMoteur, fenetreMistralVibe, generationCourante, tokensDansLaProjection, tokensDansLeJournal } from '../../../domaine/moteurs/mistral-vibe/telemetrie.ts';
+import type { FenetreDeContexte } from '../../../domaine/moteurs/moteur.ts';
 import { cheminReelPermis, racinesReelles } from '../../chemin-permis.ts';
 import { lignesDeLaFin } from '../../fin-de-fichier.ts';
 import { dossierVibe } from './dossier-vibe.ts';
-import { RE_FIL_SUR } from '../../../domaine/moteurs/fil.ts';
 
 /**
  * Lecture du dossier de session de Mistral Vibe (`logs/session/unified/<id>/`) pour la jauge de la fenêtre de contexte : la fin

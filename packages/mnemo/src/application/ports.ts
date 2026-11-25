@@ -726,13 +726,12 @@ export interface EtatSessions {
 	/** Les sessions terminées ne sont rendues qu'avec `archivees: true`. */
 	lister(options?: { archivees?: boolean }): Promise<Session[]>;
 	/**
-	 * Applique l'événement seulement si `horodatageMs` > `majMs`, sauf un `message` qui suit le `debut` de ce lancement
-	 * (`messageApresSonDebut` : jamais ignoré, `majMs` ne recule pas) ; rend la session après (inchangée si ignoré), null si inconnue.
+	 * Applique l'événement seulement si `horodatageMs` > `majMs` ; rend la session après (inchangée si ignoré), null si inconnue.
 	 * Le premier `message` après `bilanDemandeMs` d'une session en bilan note `bilanLuMs`. `arret` note `dernierArret`
-	 * (`complement.arret`, `stop` par défaut) ; `debut`, `message` et `outil` l'effacent ; un dialogue ouvert note l'outil qu'il
-	 * nomme (`complement.outil`, `dialogueOutil`), et un `apres_outil` d'un autre outil nommé est alors ignoré (`autreOutilQueLeDialogue`).
-	 * `complement.fil` (identifiant de la
-	 * session chez son moteur) est noté au premier événement qui le porte, même ignoré par ailleurs, et jamais écrasé ensuite.
+	 * (`complement.arret`, `stop` par défaut) ; `debut`, `message` et `outil` l'effacent ; un dialogue ouvert note l'outil
+	 * qu'il nomme (`complement.outil`, `dialogueOutil`), et un `apres_outil` d'un autre outil nommé est alors ignoré
+	 * (`autreOutilQueLeDialogue`). `complement.fil` (identifiant de la session chez son moteur) est noté au premier événement
+	 * qui le porte, même ignoré par ailleurs, et jamais écrasé ensuite.
 	 */
 	appliquer(
 		id: string,
@@ -1107,10 +1106,6 @@ export type TelemetrieDuMoteur = {
 };
 
 /**
- * Un agent de code sur le poste, hors des sessions : `commandeParDefaut`, le nom écrit dans une ligne à coller quand il est
- * introuvable ; `trouver` : sa commande (null : introuvable) ; `declarationMcp` : le serveur `mnemo` déclaré chez lui.
- */
-/**
  * Ce que Mnemo dit d'un moteur sur le poste (`mnemo init`, `verifier-poste`, `declarer`, Réglages › Système, avertissements de
  * session) ; les commandes `mnemo` qui y remédient en sont tirées (`remedesDuMoteur`, avec l'option de `mnemo init` du
  * catalogue). `recherche` : où sa commande est cherchée (dit quand elle est introuvable) ; `desactivation` : le réglage qui éteint sa
@@ -1125,6 +1120,10 @@ export type InstallationDuMoteur = {
 	approbation: { commande: string; consigne: string } | null;
 };
 
+/**
+ * Un agent de code sur le poste, hors des sessions : `commandeParDefaut`, le nom écrit dans une ligne à coller quand il est
+ * introuvable ; `trouver` : sa commande (null : introuvable) ; `declarationMcp` : le serveur `mnemo` déclaré chez lui.
+ */
 export type MoteurDuPoste = {
 	id: IdMoteur;
 	commandeParDefaut: string;

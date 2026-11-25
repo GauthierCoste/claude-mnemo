@@ -1,6 +1,6 @@
 import { estObjet } from '../../valeurs.ts';
 import { commandeGardee, estCommandeDeHookMnemo, lanceCeNodeEtCeMain } from '../commande-de-hook.ts';
-import { sansBom } from '../json-texte.ts';
+import { sansBom } from './json-texte.ts';
 import { OUTILS_CODEX } from './outils.ts';
 
 /**

@@ -49,13 +49,6 @@ async function skillsAvecTexte(dep: Dependances, dossier: string): Promise<{ nom
 	return resultat;
 }
 
-/**
- * Ce que reçoit une session du profil `nom`, dans l'ordre : consigne du profil, instructions du serveur MCP, hooks, skills de
- * la mémoire, plugins Claude Code, ce qui vient du moteur hors Mnemo, consignes système. Avec `projet`, les skills de
- * `_mnemo/skills/` sont filtrées par leur champ `projets` comme au lancement ; sans projet, ce filtre n'est pas appliqué.
- * Codex, Mistral Vibe : les skills actives (`skillsRetenues`, la source des sessions) sont listées dans la consigne (lues par
- * l'outil `lire`), qui est montrée telle que la session la reçoit ; ni plugins ni skills personnelles de Claude Code.
- */
 /** Ce que lit, hors Mnemo, un moteur sans plugins de session (ses skills sont listées dans la consigne). */
 const HORS_MNEMO_SANS_PLUGINS: Partial<Record<IdMoteur, readonly ElementApercu[]>> = {
 	codex: [
@@ -68,6 +61,13 @@ const HORS_MNEMO_SANS_PLUGINS: Partial<Record<IdMoteur, readonly ElementApercu[]
 	],
 };
 
+/**
+ * Ce que reçoit une session du profil `nom`, dans l'ordre : consigne du profil, instructions du serveur MCP, hooks, skills de
+ * la mémoire, plugins Claude Code, ce qui vient du moteur hors Mnemo, consignes système. Avec `projet`, les skills de
+ * `_mnemo/skills/` sont filtrées par leur champ `projets` comme au lancement ; sans projet, ce filtre n'est pas appliqué.
+ * Codex, Mistral Vibe : les skills actives (`skillsRetenues`, la source des sessions) sont listées dans la consigne (lues par
+ * l'outil `lire`), qui est montrée telle que la session la reçoit ; ni plugins ni skills personnelles de Claude Code.
+ */
 export async function apercuProfil(dep: Dependances, nom: string, projet?: string): Promise<{ blocs: BlocApercu[]; avertissements: string[] }> {
 	const profil = await chargerProfil(dep, nom);
 	const sansPlugins = HORS_MNEMO_SANS_PLUGINS[profil.moteur];
@@ -101,7 +101,7 @@ export async function apercuProfil(dep: Dependances, nom: string, projet?: strin
 	const horsMnemo: ElementApercu[] =
 		sansPlugins !== undefined
 			? [...sansPlugins]
-		: [
+			: [
 				...(await dep.pluginsClaude.skillsPersonnelles()).map((s) => ({ nom: s, detail: 'skill personnelle de Claude Code (~/.claude/skills/)', actif: true })),
 				{ nom: 'CLAUDE.md', detail: 'instructions de l\'utilisateur et du projet, lues par Claude Code', actif: true },
 			];

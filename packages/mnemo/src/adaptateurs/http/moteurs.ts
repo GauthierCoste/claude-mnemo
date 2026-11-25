@@ -28,7 +28,7 @@ type Remede = NonNullable<PointMoteurVue['remede']>;
 const terminal = (texte: string): Remede => ({ texte, dans: 'terminal' });
 
 /** Commandes qui déclarent (ou refont) le serveur MCP et les hooks de Mnemo chez chaque moteur, et ce que dit son absence. */
-function commandesDe(moteur: Moteur): { declarer: string; remplacer: string; retirer: string; introuvable: string; desactivation: string } {
+function commandesDe(moteur: Moteur): { declarer: string; remplacer: string; introuvable: string; desactivation: string } {
 	const { recherche, desactivation } = moteur.installation;
 	const sessions = moteur.sansCommande === 'manuel' ? 'les sessions se lancent par une ligne à coller' : 'ses sessions sont refusées';
 	return { ...remedesDuMoteur(moteur), introuvable: `${recherche} : ${sessions}`, desactivation };

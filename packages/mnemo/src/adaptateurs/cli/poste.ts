@@ -70,9 +70,9 @@ function ligneHooks(moteur: MoteurDuPoste, hooks: EtatHooksVerifie): string {
 
 /** Ligne d'un moteur facultatif : son chemin, sa version (trop ancienne : dit), sa déclaration MCP, ses hooks ; ou son absence. */
 function ligneMoteur(moteur: MoteurDuPoste, v: MoteurVerifie): string {
-	if (!v.ok) return `${NOMS_MOTEURS[moteur.id]} : absent (facultatif) — ${v.motif}`;
-	const mcp = v.mcp === undefined ? '' : ` — ${v.mcp.etat === 'echec' ? `déclaration MCP illisible : ${v.mcp.motif ?? ''}` : v.mcp.etat === 'desactive' ? `serveur MCP ${motifDesactive(moteur)}` : etatMcp(moteur, v.mcp.etat)}`;
-	const hooks = v.hooks === undefined ? '' : ` — ${ligneHooks(moteur, v.hooks)}`;
+	if (!v.ok) return `${NOMS_MOTEURS[moteur.id]} : absent (facultatif) ; ${v.motif}`;
+	const mcp = v.mcp === undefined ? '' : ` ; ${v.mcp.etat === 'echec' ? `déclaration MCP illisible : ${v.mcp.motif ?? ''}` : v.mcp.etat === 'desactive' ? `serveur MCP ${motifDesactive(moteur)}` : etatMcp(moteur, v.mcp.etat)}`;
+	const hooks = v.hooks === undefined ? '' : ` ; ${ligneHooks(moteur, v.hooks)}`;
 	// trop ancienne : le motif du refus, qui la dit
 	const version = v.version === undefined ? '' : ` (${moteur.refusDeVersion?.(v.version) ?? v.version})`;
 	return `${NOMS_MOTEURS[moteur.id]} : ${v.chemin}${version}${mcp}${hooks}`;
@@ -139,8 +139,8 @@ export async function commandeVerifierPoste(args: string[], partiel: Partial<Dep
 		ecrire(JSON.stringify(poste));
 		return;
 	}
-	ecrire(poste.git.ok ? `git : ${poste.git.version}` : `git : absent — ${poste.git.motif}`);
-	ecrire(poste.claude.ok ? `Claude Code : ${poste.claude.chemin}` : `Claude Code : absent — ${poste.claude.motif}`);
+	ecrire(poste.git.ok ? `git : ${poste.git.version}` : `git : absent ; ${poste.git.motif}`);
+	ecrire(poste.claude.ok ? `Claude Code : ${poste.claude.chemin}` : `Claude Code : absent ; ${poste.claude.motif}`);
 	for (const m of MOTEURS_FACULTATIFS) ecrire(ligneMoteur(m.moteur, blocDuPoste(poste, m)));
 	ecrire(`Node : ${poste.node.version}`);
 	if (!poste.git.ok || !poste.claude.ok) throw new ErreurCli('Poste incomplet : installez ce qui manque, puis relancez « mnemo verifier-poste ».', 1);

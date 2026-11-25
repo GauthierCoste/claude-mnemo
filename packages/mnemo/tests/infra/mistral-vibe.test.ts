@@ -193,7 +193,7 @@ describe('mnemo declarer --moteur mistral-vibe et verifier-poste', () => {
 		});
 		const lignes: string[] = [];
 		await commandeVerifierPoste([], { executer, trouver: { 'claude-code': () => VIBE, codex: () => null, 'mistral-vibe': () => ({ commande: process.execPath, avant: [faux] }) }, versionNode: '26.0.0', main: MAIN, env: { VIBE_HOME: home } }, (l) => lignes.push(l));
-		expect(lignes[3]).toBe(`Mistral Vibe : ${faux} (Mistral Vibe 3.1.4 trop ancien, 3.1.5 ou plus requis) — serveur MCP non déclaré (mnemo init --mistral) — hooks non installés (mnemo init --mistral)`);
+		expect(lignes[3]).toBe(`Mistral Vibe : ${faux} (Mistral Vibe 3.1.4 trop ancien, 3.1.5 ou plus requis) ; serveur MCP non déclaré (mnemo init --mistral) ; hooks non installés (mnemo init --mistral)`);
 		expect(poste.mistral).toEqual({ ok: true, chemin: faux, version: '3.1.4', mcp: { etat: 'absent' }, hooks: { etat: 'absent' } });
 	});
 });

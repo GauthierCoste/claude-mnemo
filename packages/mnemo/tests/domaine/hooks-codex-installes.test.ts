@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { commandesDuHook, estHookDe, estHookMnemo, etatDesHooks, HOOKS_CODEX_INSTALLES, hooksAttendus, lireHooksJson, nomDansLaCle, remplacerHooks } from '../../src/domaine/moteurs/codex/hooks-installes.ts';
-import { texteJsonReecrit } from '../../src/domaine/moteurs/json-texte.ts';
+import { texteJsonReecrit } from '../../src/domaine/moteurs/codex/json-texte.ts';
 
 const NODE = '/opt/node/bin/node';
 const MAIN = "/maison/a/Mes projets/l'outil/packages/mnemo/src/adaptateurs/cli/main.ts";

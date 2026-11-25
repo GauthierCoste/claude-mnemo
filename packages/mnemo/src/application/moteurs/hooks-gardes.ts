@@ -45,8 +45,8 @@ const arretParDefaut = (_champs: Record<string, unknown>, options: ReadonlySet<s
  * session d'un autre moteur en hérite (avec son `MNEMO_MOTEUR`), un agent lancé par l'agent compris.
  *
  * Entrée traduite (champs mesurés chez Codex et Mistral Vibe : `session_id`, `transcript_path`, `cwd`, puis `source`,
- * `prompt`, `tool_name`, `tool_input`, `reason`…). Session :
- * `MNEMO_SESSION` seulement — le `session_id` du moteur est son propre identifiant (`fil`). Null hors d'une session Mnemo, pour un hook que le profil de la session ne demande pas
+ * `prompt`, `tool_name`, `tool_input`, `reason`…). Session : `MNEMO_SESSION` seulement ; le `session_id` du moteur est son
+ * propre identifiant (`fil`). Null hors d'une session Mnemo, pour un hook que le profil de la session ne demande pas
  * (`MNEMO_HOOKS` : `outil`, `apres_outil` ; `debut` et `message` y passent sans contexte), pour une fin ou un arrêt ignorés,
  * ou une entrée illisible hors `outil` (qui doit décider : son action est alors « non lue »).
  */

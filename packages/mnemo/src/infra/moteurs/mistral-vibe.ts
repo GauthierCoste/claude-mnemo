@@ -1,3 +1,4 @@
+import { environnementPermis } from '../../application/moteurs/environnement-de-session.ts';
 import { HOOKS_MISTRAL_VIBE } from '../../application/moteurs/mistral-vibe/hooks.ts';
 import { agentDeSession, fichiersDeSessionMistralVibe, motifSansRepriseMistralVibe, preparerMistralVibe } from '../../application/moteurs/mistral-vibe/session.ts';
 import type { Moteur } from '../../application/ports.ts';
@@ -9,9 +10,7 @@ import { hooksDuPosteMistralVibe } from './mistral-vibe/hooks-toml.ts';
 import { modelesMistralVibe } from './mistral-vibe/modeles.ts';
 import { lectureTranscriptionMistralVibe } from './mistral-vibe/transcription.ts';
 import { trouverVibe } from './mistral-vibe/trouver-vibe.ts';
-import { environnementPermis } from '../../application/moteurs/environnement-de-session.ts';
 import { versionParCommande } from './version-par-commande.ts';
-
 
 /**
  * Mistral Vibe : `vibe` (`MNEMO_VIBE`, le PATH, puis `~/.local/bin` d'`uv tool`), une consigne par session (profil d'agent dans
