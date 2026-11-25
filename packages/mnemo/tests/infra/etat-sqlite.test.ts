@@ -341,13 +341,35 @@ describe('etat.sqlite', () => {
 		expect(await etat.lire('f')).toMatchObject({ fil: 'fil-1', majMs: 30 });
 	});
 
-	it('migre la version 11 (sans moteur ni modèle) vers la dernière sans rien perdre', async () => {
+	it('migre la version 12 (niveau des modèles, sans moteur ni modèle ni fil) vers la 13 : le niveau de la session est gardé', async () => {
+		const { etat, chemin } = await ouvrir();
+		await etat.creer(session('n1', { pid: 7, niveauModeles: 'sens' }));
+		etat.fermer();
+		ouverts.pop();
+		const base = new DatabaseSync(chemin);
+		for (const colonne of ['moteur', 'modele', 'fil']) base.exec(`ALTER TABLE sessions DROP COLUMN ${colonne}`);
+		base.exec('PRAGMA user_version = 12');
+		base.close();
+		const rouvert = ouvrirEtat(chemin);
+		ouverts.push(rouvert);
+		const lue = await rouvert.lire('n1');
+		expect(lue).toMatchObject({ pid: 7, niveauModeles: 'sens' });
+		expect(lue).not.toHaveProperty('moteur');
+		expect(lue).not.toHaveProperty('fil');
+		await rouvert.appliquer('n1', 'debut', Date.now(), { fil: 'fil-codex' });
+		expect((await rouvert.lire('n1'))?.fil).toBe('fil-codex');
+		const verif = new DatabaseSync(chemin);
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: 13 });
+		verif.close();
+	});
+
+	it('migre la version 11 (sans niveau des modèles, moteur ni modèle) vers la dernière sans rien perdre', async () => {
 		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('s1', { pid: 4 }));
 		etat.fermer();
 		ouverts.pop();
 		const base = new DatabaseSync(chemin);
-		for (const colonne of ['moteur', 'modele', 'fil']) base.exec(`ALTER TABLE sessions DROP COLUMN ${colonne}`);
+		for (const colonne of ['niveau_modeles', 'moteur', 'modele', 'fil']) base.exec(`ALTER TABLE sessions DROP COLUMN ${colonne}`);
 		base.exec('PRAGMA user_version = 11');
 		base.close();
 		const rouvert = ouvrirEtat(chemin);
