@@ -12,6 +12,7 @@ import { projetDeSession } from './portees.ts';
 import { positionNotee } from './dossiers-non-rattaches.ts';
 import type { PositionDuProjet } from './position.ts';
 import { chargerProfil } from './profil.ts';
+import { refusDuMoteur } from '../domaine/profil.ts';
 import { DOSSIER_MEMOIRE } from '../domaine/dossier-memoire.ts';
 
 export type Pilote = {
@@ -111,7 +112,8 @@ type Vivant = {
 };
 
 const citerPosix = (texte: string): string => `'${texte.replaceAll("'", "'\\''")}'`;
-const citerPowerShell = (texte: string): string => `'${texte.replaceAll("'", "''")}'`;
+// PowerShell lit aussi les apostrophes typographiques ’ ‘ ‚ ‛ comme `'` : chacune est doublée
+const citerPowerShell = (texte: string): string => `'${texte.replace(/['‘’‚‛]/gu, '$&$&')}'`;
 const NOM_DE_VARIABLE = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 
 /**
@@ -471,6 +473,9 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		const objectif = d.objectif?.trim() ?? '';
 		if (objectif.length > OBJECTIF_MAX) return { refus: `Objectif trop long (${objectif.length} caractères, ${OBJECTIF_MAX} au plus).` };
 		const profil = await chargerProfil(dep, d.profil);
+		// ce que l'éditeur refuse, revérifié (fiche écrite à la main)
+		const refus = refusDuMoteur(profil);
+		if (refus !== null) return { refus: `Le profil « ${profil.nom} » ne peut pas être lancé : ${refus.motif}.` };
 		// le moteur du profil doit être implémenté ici ; introuvable sur le poste, la ligne à coller est rendue (mode dégradé)
 		if (moteurDe(profil) === null) return { refus: `Le profil « ${profil.nom} » utilise le moteur « ${profil.moteur} », pas encore pris en charge par ce service.` };
 		const memoire = profil.lancement === 'memoire';

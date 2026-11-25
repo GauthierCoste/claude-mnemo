@@ -10,9 +10,9 @@ describe('moteurs', () => {
 		expect(estIdMoteur(undefined)).toBe(false);
 	});
 
-	it('modèle : vide (celui par défaut du moteur) ou un nom court, sans contrôle, espace de bord ni « - » au début', () => {
-		for (const bon of ['', 'opus', 'claude-opus-5-5', 'gpt-6.2-sol', 'sonnet[1m]', 'a'.repeat(MODELE_MAX)]) expect(estModele(bon), bon).toBe(true);
-		for (const mauvais of [' opus', 'opus ', '-x', '--model', 'op\nus', 'op\tus', 'op\u0000us', 'a'.repeat(MODELE_MAX + 1), 3, null, undefined, ['opus']]) {
+	it('modèle : vide (celui par défaut du moteur) ou un nom ASCII court de la liste blanche, jamais une option', () => {
+		for (const bon of ['', 'opus', 'claude-opus-5-5', 'gpt-6.2-sol', 'sonnet[1m]', 'org/modele:v2', 'a@b+c_d', 'a'.repeat(MODELE_MAX)]) expect(estModele(bon), bon).toBe(true);
+		for (const mauvais of [' opus', 'opus ', '-x', '--model', 'op\nus', 'op\tus', 'op\u0000us', 'op’us', "op'us", 'op\u202Eus', 'opus\u200B', 'opüs', 'op us', '.opus', 'a'.repeat(MODELE_MAX + 1), 3, null, undefined, ['opus']]) {
 			expect(estModele(mauvais), String(mauvais)).toBe(false);
 		}
 	});

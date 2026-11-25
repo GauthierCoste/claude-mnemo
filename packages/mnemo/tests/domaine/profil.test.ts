@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { lireFiche } from '../../src/domaine/fiche.ts';
-import { CLES_GEREES_DU_PROFIL, donneesDeProfil, estConsigneParDefaut, estIdentifiantDePlugin, lanceurPropreSansChemin, lireProfil, PROFILS_PAR_DEFAUT, skillPourProjet } from '../../src/domaine/profil.ts';
+import { CLES_GEREES_DU_PROFIL, donneesDeProfil, moteurOuModeleInvalides, MOTIF_ARCHIVISTE_HORS_CLAUDE_CODE, MOTIF_PLUGINS_HORS_CLAUDE_CODE, refusDuMoteur, estConsigneParDefaut, estIdentifiantDePlugin, lanceurPropreSansChemin, lireProfil, PROFILS_PAR_DEFAUT, skillPourProjet } from '../../src/domaine/profil.ts';
 import type { Profil } from '../../src/domaine/profil.ts';
 
 const DEFAUT: Profil = { ...PROFILS_PAR_DEFAUT.archiviste, hooks: [...PROFILS_PAR_DEFAUT.archiviste.hooks], consigne: 'Consigne par défaut.' };
@@ -139,6 +139,22 @@ describe('lireProfil', () => {
 		expect(DEFAUT.plugins).toEqual([]);
 		expect(DEFAUT.avatar).toEqual({ forme: 'chouette', couleur: 'violet' });
 		expect(DEFAUT.skillsMemoire).toEqual([]);
+	});
+});
+
+describe('moteur du profil', () => {
+	it('refusDuMoteur : archiviste hors Claude Code, plugins avec un autre moteur ; rien avec Claude Code', () => {
+		expect(refusDuMoteur({ nom: 'archiviste', moteur: 'codex', plugins: [] })).toEqual({ champ: 'moteur', motif: MOTIF_ARCHIVISTE_HORS_CLAUDE_CODE });
+		expect(refusDuMoteur({ nom: 'redaction', moteur: 'codex', plugins: ['a@b'] })).toEqual({ champ: 'plugins', motif: MOTIF_PLUGINS_HORS_CLAUDE_CODE });
+		expect(refusDuMoteur({ nom: 'redaction', moteur: 'codex', plugins: [] })).toBeNull();
+		expect(refusDuMoteur({ nom: 'archiviste', moteur: 'claude-code', plugins: ['a@b'] })).toBeNull();
+	});
+	it('moteurOuModeleInvalides : un avertissement par valeur présente et invalide ; absente ou valide, aucun', () => {
+		expect(moteurOuModeleInvalides(fiche('---\ntype: profil\nmoteur: Codex\nmodele: 4.5\n---\n# A\n'))).toEqual([expect.stringContaining('« Codex »'), expect.stringContaining('« 4.5 »')]);
+		expect(moteurOuModeleInvalides(fiche('---\ntype: profil\nmodele: [opus]\n---\n# A\n'))).toEqual([expect.stringContaining('["opus"]')]);
+		expect(moteurOuModeleInvalides(fiche('---\ntype: profil\nmoteur: codex\nmodele: gpt-6.2-sol\n---\n# A\n'))).toEqual([]);
+		expect(moteurOuModeleInvalides(fiche('---\ntype: profil\n---\n# A\n'))).toEqual([]);
+		expect(moteurOuModeleInvalides(null)).toEqual([]);
 	});
 });
 

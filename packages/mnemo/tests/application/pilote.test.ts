@@ -298,6 +298,11 @@ describe('Pilote.lancer', () => {
 		);
 	});
 
+	it('ligne manuelle PowerShell : les apostrophes typographiques (’ ‘ ‚ ‛), lues comme « \' » par PowerShell, sont doublées', () => {
+		const ligne = ligneManuelle({ commande: 'claude.exe', avant: [] }, ['l’objectif‘; Remove-Item x; ‚‛'], 'C:\\d’a', {}, [], 'win32');
+		expect(ligne).toBe("Set-Location -LiteralPath 'C:\\d’’a'; & 'claude.exe' 'l’’objectif‘‘; Remove-Item x; ‚‚‛‛'");
+	});
+
 	it('dossier qui est un lien vers _mnemo/ ou .mnemo/ (chemin réel revalidé) : refusé', async () => {
 		const c = await contexte();
 		c.existants.add('lien');
@@ -523,6 +528,16 @@ describe('Pilote : moteur de la session', () => {
 		const sans = await c.pilote.lancer({ profil: 'travail', dossier: 'alpha' });
 		if (!('manuel' in sans)) throw new Error('manuel attendu');
 		expect(sans.manuel).not.toContain('--model');
+	});
+
+	it('profil écrit à la main que l\'éditeur refuserait (plugins hors Claude Code, archiviste hors Claude Code) : lancement refusé avec la raison, aucune session créée', async () => {
+		const c = await contexte();
+		await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmoteur: codex\nplugins: [superpowers@superpowers-marketplace]\n---\n# Rédaction\n\nRédige les courriers.\n');
+		await c.dep.coffre.ecrire('profils/archiviste/archiviste.md', '---\ntype: profil\nmoteur: codex\n---\n# Archiviste\n');
+		expect(await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' })).toEqual({ refus: expect.stringMatching(/plugins Claude Code/u) });
+		expect(await c.pilote.lancer({ profil: 'archiviste', dossier: 'alpha' })).toEqual({ refus: expect.stringMatching(/archiviste tourne sur Claude Code/u) });
+		expect(c.terminaux.lances).toHaveLength(0);
+		expect(await c.etat.lister()).toEqual([]);
 	});
 
 	it('profil d\'un moteur sans implémentation ici : lancement refusé avec la raison, aucune session créée', async () => {

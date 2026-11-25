@@ -2,6 +2,7 @@
  * Routes de gestion des profils (Réglages › Profils) : détail, enregistrement, duplication, suppression, aperçu. Canal de
  * l'utilisateur seulement (le serveur MCP n'expose rien de tout cela) ; mêmes protections que toute route de l'API.
  */
+import { MODELE_MAX } from '@mnemo/commun';
 import { ROUTES } from '@mnemo/contrat';
 import type { ApercuProfilVue, EnregistrementProfil, ProfilDetailVue, RefusProfil, ReponseEcritureProfil } from '@mnemo/contrat';
 import { apercuProfil } from '../../application/apercu-profil.ts';
@@ -31,7 +32,7 @@ function editableDe(brut: unknown): ProfilEditable {
 	if (skillsMemoire !== 'tous' && !listeDeTextes(skillsMemoire)) throw new ErreurHttp(400, 'Champ « editable.skillsMemoire » : « tous » ou liste de textes attendu.');
 	if (!listeDeTextes(plugins)) throw new ErreurHttp(400, 'Champ « editable.plugins » : liste de textes attendue.');
 	if (typeof moteur !== 'string') throw new ErreurHttp(400, 'Champ « editable.moteur » : texte attendu.');
-	if (typeof modele !== 'string' || modele.length > 1000) throw new ErreurHttp(400, 'Champ « editable.modele » : texte attendu (« » : le modèle par défaut du moteur).');
+	if (typeof modele !== 'string' || modele.length > MODELE_MAX) throw new ErreurHttp(400, `Champ « editable.modele » : texte de ${MODELE_MAX} caractères au plus attendu (« » : le modèle par défaut du moteur).`);
 	return { avatar, consigne, lancement, hooks, skillsMemoire, plugins, moteur, modele } as ProfilEditable;
 }
 

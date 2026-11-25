@@ -10,12 +10,13 @@ export const estIdMoteur = (v: unknown): v is IdMoteur => typeof v === 'string' 
 export const MODELE_MAX = 100;
 
 /**
- * Modèle d'un profil passé tel quel au moteur (`--model`, `-m`) : « » (le modèle par défaut du moteur), ou un texte de
- * `MODELE_MAX` caractères au plus, sans caractère de contrôle, sans espace au début ni à la fin, sans « - » au début (jamais
- * lu comme une option).
+ * Modèle d'un profil passé tel quel au moteur (`--model`, `-m`) et écrit dans la ligne à coller : « » (le modèle par défaut
+ * du moteur), ou un nom ASCII de `MODELE_MAX` caractères au plus, lettres, chiffres et `. _ : / @ + [ ] -`, commençant par une
+ * lettre ou un chiffre (jamais lu comme une option ; ni espace, ni apostrophe, ni caractère de contrôle ou de mise en forme).
  */
+const RE_MODELE = /^[A-Za-z0-9][A-Za-z0-9._:/@+[\]-]*$/u;
+
 export function estModele(v: unknown): v is string {
 	if (typeof v !== 'string') return false;
-	if (v === '') return true;
-	return v.length <= MODELE_MAX && v === v.trim() && !v.startsWith('-') && !/\p{Cc}/u.test(v);
+	return v === '' || (v.length <= MODELE_MAX && RE_MODELE.test(v));
 }

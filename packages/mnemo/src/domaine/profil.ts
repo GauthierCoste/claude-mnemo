@@ -1,5 +1,5 @@
 import { parse } from 'yaml';
-import { estIdMoteur, estModele, LANCEURS_DE_PROFIL, lireAvatar, MOTEUR_PAR_DEFAUT, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
+import { estIdMoteur, estModele, IDS_MOTEURS, LANCEURS_DE_PROFIL, lireAvatar, MOTEUR_PAR_DEFAUT, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import type { Avatar, IdMoteur, LanceurDeProfil } from '@mnemo/commun';
 import type { Fiche } from './fiche.ts';
 import type { EvenementHook } from './session.ts';
@@ -61,6 +61,35 @@ export const CLES_GEREES_DU_PROFIL = ['avatar', 'plugins', 'skills_memoire', 'sk
 
 /** Motif d'un profil qui déclare des plugins avec un autre moteur que Claude Code. */
 export const MOTIF_PLUGINS_HORS_CLAUDE_CODE = 'les plugins Claude Code ne valent qu\'avec le moteur Claude Code : retire-les ou choisis ce moteur';
+
+/** Motif d'un archiviste réglé sur un autre moteur que Claude Code. */
+export const MOTIF_ARCHIVISTE_HORS_CLAUDE_CODE = 'l\'archiviste tourne sur Claude Code';
+
+/**
+ * Ce que le moteur du profil interdit : un archiviste hors Claude Code (`moteur`), des plugins Claude Code avec un autre
+ * moteur (`plugins`) ; null si rien. Vérifié à l'enregistrement et de nouveau au lancement (fiche écrite à la main).
+ */
+export function refusDuMoteur(profil: Pick<Profil, 'nom' | 'moteur' | 'plugins'>): { champ: 'moteur' | 'plugins'; motif: string } | null {
+	if (profil.moteur === 'claude-code') return null;
+	if (profil.nom === PROFIL_ARCHIVISTE) return { champ: 'moteur', motif: MOTIF_ARCHIVISTE_HORS_CLAUDE_CODE };
+	if (profil.plugins.length > 0) return { champ: 'plugins', motif: MOTIF_PLUGINS_HORS_CLAUDE_CODE };
+	return null;
+}
+
+const enTexte = (v: unknown): string => (typeof v === 'string' ? v : JSON.stringify(v) ?? String(v));
+
+/**
+ * Avertissements d'une fiche `profil` dont `moteur` ou `modele` sont présents mais invalides (fiche écrite à la main) : lus
+ * comme le défaut, ce qui doit se voir plutôt que passer en silence.
+ */
+export function moteurOuModeleInvalides(fiche: Fiche | null): string[] {
+	if (fiche === null || fiche.type !== 'profil') return [];
+	const { moteur, modele } = fiche.donnees;
+	const motifs: string[] = [];
+	if (moteur !== undefined && moteur !== null && !estIdMoteur(moteur)) motifs.push(`moteur « ${enTexte(moteur)} » inconnu (${IDS_MOTEURS.join(' ou ')} attendu) : Claude Code utilisé`);
+	if (modele !== undefined && modele !== null && !estModele(modele)) motifs.push(`modèle « ${enTexte(modele)} » refusé : celui par défaut du moteur utilisé`);
+	return motifs;
+}
 
 const RE_PLUGIN = /^[^@\s]+@[^@\s]+$/u;
 

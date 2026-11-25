@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { avertissementIndex } from '../../src/application/synchroniser.ts';
 import { ENTETE_REMPLACEMENT, ROUTES } from '@mnemo/contrat';
 import type { FicheVue, ProfilDetailVue, RefusProfil, ReponseProfils, SessionVue } from '@mnemo/contrat';
-import { PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
+import { MODELE_MAX, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { texteDuRefus } from '../../src/domaine/refus-outil.ts';
@@ -124,6 +124,9 @@ describe('routes : sessions', () => {
 		expect(Object.keys((refus.corps as RefusProfil).motifs).sort()).toEqual(['modele', 'plugins']);
 		const { moteur: _moteur, ...sansMoteur } = detail.editable;
 		expect((await put(sansMoteur)).statut).toBe(400);
+		const long = await put({ ...detail.editable, modele: 'a'.repeat(MODELE_MAX + 1) });
+		expect(long.statut).toBe(400);
+		expect((long.corps as { erreur: string }).erreur).toContain(`${MODELE_MAX} caractères au plus`);
 		expect((await put({ ...detail.editable, modele: 'opus' })).statut).toBe(200);
 		const liste = (await api(c).get(ROUTES.profils)).corps as ReponseProfils;
 		expect(liste.profils.find((p) => p.nom === PROFIL_TRAVAIL)).toMatchObject({ moteur: 'claude-code', modele: 'opus' });

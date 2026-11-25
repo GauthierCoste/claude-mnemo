@@ -1,6 +1,6 @@
 import { DOSSIERS_FIXES, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { lireFiche } from '../domaine/fiche.ts';
-import { estNomDeProfil, lanceurPropreSansChemin, estConsigneParDefaut, lireProfil as profilDeFiche, MOTIF_LANCEUR_PROPRE, MOTIF_NOM_DE_PROFIL, PROFILS_PAR_DEFAUT } from '../domaine/profil.ts';
+import { estNomDeProfil, lanceurPropreSansChemin, moteurOuModeleInvalides, estConsigneParDefaut, lireProfil as profilDeFiche, MOTIF_LANCEUR_PROPRE, MOTIF_NOM_DE_PROFIL, PROFILS_PAR_DEFAUT } from '../domaine/profil.ts';
 import type { Fiche } from '../domaine/fiche.ts';
 import type { Profil } from '../domaine/profil.ts';
 import { commiter, sousVerrou } from './commun.ts';
@@ -240,6 +240,7 @@ export async function profilsDisponibles(
 		profils.push({ nom, description: profil.consigne.split('\n')[0]!.trim(), lancement: profil.lancement, lanceur: profil.lanceur, avatar: profil.avatar, personnalise: profil.consignePersonnalisee, moteur: profil.moteur, modele: profil.modele });
 		const fiche = await ficheDeProfil(dep, nom).catch(() => null);
 		if (lanceurPropreSansChemin(fiche, profilParDefaut(nom))) avertissements.push({ nom, motif: MOTIF_LANCEUR_PROPRE });
+		for (const motif of moteurOuModeleInvalides(fiche)) avertissements.push({ nom, motif });
 	}
 	return { profils, ignores: dossiers.filter((nom) => !estNomDeProfil(nom)).map((nom) => ({ nom, motif: MOTIF_NOM_DE_PROFIL })), avertissements };
 }
