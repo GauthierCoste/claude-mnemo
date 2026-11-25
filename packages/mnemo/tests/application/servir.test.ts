@@ -367,15 +367,17 @@ describe('servir : injection automatique (note de confiance acceptée)', () => {
 		expect(s.calcul.injectees[0]!.niveau).toBe('complets');
 	});
 
-	it('niveau coupé par le suivi : aucune injection, ni % ; la fiche reste une piste', async () => {
+	it('niveau coupé par le suivi : aucune injection ; les % et l’ordre calibré restent, la fiche reste une piste', async () => {
 		const dep = await memoireNotee();
 		avecModeles(dep, { sens: modele() });
 		const coupure = { niveau: 'sens' as const, injections: 20, ecartees: 17, depuisMs: 1, motif: 'm' };
 		const s = await servir(dep, demande({ modeles: avecLesCoupures(modelesActifs(dep), { complets: null, sens: coupure }) }));
 		expect(injectees(s)).toEqual([]);
-		expect(s.calcul.calibree).toBe(false);
-		expect(s.calcul.classement.every((l) => l.p === null)).toBe(true);
-		expect(cartes(s)).toContain(AVOIRS);
+		const libre = await servir(dep, demande());
+		expect(s.calcul.calibree).toBe(true);
+		expect(s.calcul.classement.map((l) => [l.chemin, l.p])).toEqual(libre.calcul.classement.map((l) => [l.chemin, l.p]));
+		expect(s.calcul.classement.find((l) => l.chemin === AVOIRS)!.p).toBeGreaterThanOrEqual(0.9);
+		expect(cartes(s)[0]).toBe(AVOIRS);
 	});
 
 	it('ni à un message muet, ni à l’outil `contexte`', async () => {

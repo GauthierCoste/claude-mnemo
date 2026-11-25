@@ -4,6 +4,7 @@ import { WebSocket } from 'ws';
 import { CODE_FERMETURE_LENT, ENTREE_MAX_OCTETS, MESSAGE_CLIENT_MAX_OCTETS, ROUTES } from '@mnemo/contrat';
 import type { MessageClient, MessageServeur, SessionVue } from '@mnemo/contrat';
 import type { Session } from '../../src/domaine/session.ts';
+import { echelleDesSignaux, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import { signalerGroupe } from '../../src/infra/processus.ts';
 import { terminauxPty } from '../../src/infra/terminaux-pty.ts';
@@ -272,6 +273,32 @@ describe('WebSocket : messages', () => {
 		expect(await jusqua(() => client.recus.some((m) => m.type === 'ecartes' && m.session === UUID && m.ecartes.length === 1 && m.ecartes[0]!.id === fait), 2000)).toBe(true);
 		await appeler(c.service.port, 'DELETE', `${route}?id=${encodeURIComponent(fait)}`, { jeton: c.service.jeton });
 		expect(await jusqua(() => client.recus.some((m) => m.type === 'ecartes' && m.session === UUID && m.ecartes.length === 0), 2000)).toBe(true);
+	});
+
+	it('vue de session rediffusée quand un écart coupe l’injection automatique, puis quand une réactivation la lève', async () => {
+		const c = await serviceFaux();
+		await c.etat.creer(sessionFixe(UUID));
+		const sens = { ...modeleNonAppris(), apprisLe: '2026-11-25T10:00:00.000Z', refus: [], accepte: true, echelle: echelleDesSignaux(c.dep.reglages().contexte), biais: 3, poids: { cosinusRelatif: 0 } };
+		c.dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens }, installes: { sens: null, reranker: null } });
+		const T = Date.parse('2026-11-25T11:00:00.000Z');
+		// 17 fiches injectées par Mnemo, 16 déjà écartées : la dix-septième coupera
+		for (let i = 0; i < 17; i++) {
+			await c.etat.noterGeste({ geste: 'injectee_auto', session: UUID, fiche: `notes/n${i}.md`, empreinte: null, horodatageMs: T + i, note: { niveau: 'sens' } });
+			if (i < 16) await c.etat.noterGeste({ geste: 'ecartee_ici', session: UUID, fiche: `notes/n${i}.md`, empreinte: null, horodatageMs: T + 100 + i });
+		}
+		await c.etat.journaliser({ session: UUID, moment: 'message', horodatageMs: Date.now(), ids: [], texte: '', ms: 1, sens: false, demande: 'Alpha', classement: [{ id: 'notes/n16.md', note: 0.9, servi: true, rang: 1 }], muet: null, cartes: [], position: null });
+		const client = await connecter(c);
+		await jusqua(() => client.recus.length > 0, 2000);
+		const coupee = (m: MessageServeur) => m.type === 'session' && m.session.id === UUID && (m.session.injectionCoupee?.length ?? 0) > 0;
+		expect(client.recus.some(coupee)).toBe(false);
+		expect((await appeler(c.service.port, 'POST', ROUTES.ecartes.replace(':id', UUID), { jeton: c.service.jeton, corps: { id: 'notes/n16.md' } })).statut).toBe(200);
+		expect(await jusqua(() => client.recus.some(coupee), 2000)).toBe(true);
+		const vue = client.recus.find(coupee) as Extract<MessageServeur, { type: 'session' }>;
+		expect(vue.session.injectionCoupee).toEqual([{ niveau: 'sens', injections: 17, ecartees: 17, depuisMs: expect.any(Number), motif: '17 des 17 dernières fiches injectées par Mnemo ont été écartées' }]);
+		const avant = client.recus.length;
+		expect((await appeler(c.service.port, 'POST', ROUTES.injectionAutomatique, { jeton: c.service.jeton, corps: { session: UUID } })).statut).toBe(200);
+		const levee = (m: MessageServeur) => m.type === 'session' && m.session.id === UUID && m.session.injectionCoupee === undefined;
+		expect(await jusqua(() => client.recus.slice(avant).some(levee), 2000)).toBe(true);
 	});
 
 	it('sondage : une entrée journalisée est diffusée ; la fin d’une session diffuse ses écartés vidés', { timeout: 20_000 }, async () => {

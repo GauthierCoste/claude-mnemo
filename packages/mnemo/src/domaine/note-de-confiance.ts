@@ -13,7 +13,7 @@ import { sigmoide } from './regression-logistique.ts';
 
 /**
  * Un modèle accepté et utilisable ; appris mais refusé (ou d'autres GGUF) ; accepté mais coupé par le suivi des injections
- * (`suivi-injection.ts` : trop d'écarts ; traité comme refusé : il ordonne, sans % ni injection) ; jamais appris.
+ * (`suivi-injection.ts` : trop d'écarts ; ses % et son ordre restent, seule l'injection automatique s'arrête) ; jamais appris.
  */
 export type EtatDuModele = 'accepte' | 'refuse' | 'coupe' | 'non_appris';
 
@@ -84,10 +84,13 @@ export function noteApprise(m: ModelesDeNote): boolean {
  * `aprioriConnu` faux (l'a priori des gestes n'a pas été lu : hook sans service) : une note dont le modèle pèse l'a priori n'est
  * pas calibrée (elle ordonne, sans %).
  */
-export type NoteDeLaCandidate = { p: number; pSansApriori: number; niveau: NiveauDeNote; accepte: boolean };
+export type NoteDeLaCandidate = { p: number; pSansApriori: number; niveau: NiveauDeNote; accepte: boolean; coupee?: true };
+
+/** Un modèle qui donne des % : accepté, coupé par le suivi compris (la coupure n'arrête que l'injection automatique). */
+const calibre = (etat: EtatDuModele): boolean => etat === 'accepte' || etat === 'coupe';
 
 export function noterLaCandidate(m: ModelesDeNote, s: SignauxDeNote, options: { aprioriConnu?: boolean } = {}): NoteDeLaCandidate | null {
-	const completsPermis = m.complets.etat === 'accepte' || m.sens.etat !== 'accepte';
+	const completsPermis = calibre(m.complets.etat) || !calibre(m.sens.etat);
 	const niveaux: NiveauDeNote[] = s.logit !== undefined && s.logit !== null && completsPermis ? ['complets', 'sens'] : ['sens'];
 	for (const niveau of niveaux) {
 		const { modele, etat } = m[niveau];
@@ -95,7 +98,7 @@ export function noterLaCandidate(m: ModelesDeNote, s: SignauxDeNote, options: { 
 		const n = noteDeConfiance(modele, niveau, s);
 		if (n === null) continue;
 		const aprioriManquant = options.aprioriConnu === false && (modele.poids.apriori ?? 0) > 0;
-		return { ...n, niveau, accepte: etat === 'accepte' && !aprioriManquant };
+		return { ...n, niveau, accepte: calibre(etat) && !aprioriManquant, ...(etat === 'coupe' ? { coupee: true as const } : {}) };
 	}
 	return null;
 }

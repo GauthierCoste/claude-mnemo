@@ -87,7 +87,7 @@ export function coupuresDesNiveaux(gestes: readonly GesteDuSuivi[], modeles: Mod
 	return { complets: niveau('complets'), sens: niveau('sens') };
 }
 
-/** Un niveau coupé ne donne plus de % ni n'injecte : son modèle passe à l'état `coupe` (sa note ordonne encore, comme refusée). */
+/** Un niveau coupé n'injecte plus : son modèle passe à l'état `coupe` ; ses % et son ordre calibré restent (➤ pour injecter à la main). */
 export function avecLesCoupures(modeles: ModelesDeNote, coupures: CoupuresDInjection): ModelesDeNote {
 	const etat = (n: NiveauDeNote) => (coupures[n] !== null && modeles[n].etat === 'accepte' ? { ...modeles[n], etat: 'coupe' as const } : modeles[n]);
 	return { complets: etat('complets'), sens: etat('sens') };

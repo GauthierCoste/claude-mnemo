@@ -905,7 +905,9 @@ describe('traiterEvenement : injection automatique', () => {
 		expect(lus.every((g) => g.vecteur === null && g.geste === 'injectee_auto')).toBe(true);
 		const coupee = await traiterEvenement(dep, pil, message(10, 'montant exact des avoirs annulés en novembre'), local);
 		expect(coupee.contexte ?? '').not.toContain('Fiches injectées par Mnemo');
-		expect((await etat.servis(ID, 1))[0]).toMatchObject({ calibree: false });
+		// coupée : les % restent (classement calibré), seule l'injection automatique s'arrête ; la fiche part en piste
+		expect((await etat.servis(ID, 1))[0]).toMatchObject({ calibree: true });
+		expect(coupee.contexte).toContain(`- Avoirs — ${AVOIRS}`);
 		expect((await coupuresDesInjections(etat, modelesActifs(dep))).sens).toMatchObject({ injections: 17, ecartees: 17, motif: '17 des 17 dernières fiches injectées par Mnemo ont été écartées' });
 		// réactivée par l'utilisateur, hors session : geste noté, l'injection revient
 		expect(await reactiverInjection(dep, etat, modelesActifs(dep), { session: '', horodatageMs: Date.parse('2026-11-25T12:00:00.000Z') })).toEqual(['sens']);

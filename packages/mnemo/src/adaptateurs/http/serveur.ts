@@ -29,7 +29,7 @@ import type { AppClaude } from './claude-desktop.ts';
 import { fichierConfigClaudeDesktop } from '../../infra/config-claude-desktop.ts';
 import { nodeDurable } from '../../infra/node-durable.ts';
 import { choixDesTypesAConfirmer } from '../../application/types-du-coffre.ts';
-import { CORPS_MAX, ErreurHttp, routes, trouverRoute } from './routes.ts';
+import { CORPS_MAX, coupuresConnues, ErreurHttp, routes, trouverRoute } from './routes.ts';
 import type { Reponse, Route } from './routes.ts';
 import { ENTETES_SECURITE, hoteValide, jetonDeLEntete, jetonDuWebSocket, jetonValide, origineValide } from './securite.ts';
 import { dossierInterface, servirInterface } from './statique.ts';
@@ -319,8 +319,12 @@ export async function demarrerService(options: {
 	// a priori des gestes entre sessions : lu une fois en arrière-plan, puis seulement les gestes nouveaux
 	const apriori = aprioriDesGestes(pil.etat, { chemins: async () => (await dep.index.titres()).map((t) => t.chemin), journal });
 	enFond(apriori.actualiser({ ecartees: true }));
+	// injection automatique coupée par le suivi : lue au démarrage, puis après chaque geste (vue des sessions)
+	const coupures = coupuresConnues(dep, pil.etat);
+	enFond(coupures.relire().catch(() => false));
 	const hub = creerHub({
 		suggestions: (session) => apriori.suggestions(session),
+		coupures: () => coupures.lire(),
 		etatModeles: async () => vueModeles(await modeles.etat()),
 		pilote,
 		etat: pil.etat,
@@ -372,6 +376,7 @@ export async function demarrerService(options: {
 			journal,
 			depotMax,
 			apriori,
+			coupures,
 			dureeReranker,
 		}),
 		...routesProfils(dep, () => hub.diffuser({ type: 'memoire', modifieeMs: Date.now() })),

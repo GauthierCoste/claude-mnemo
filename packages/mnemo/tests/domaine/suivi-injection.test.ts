@@ -100,7 +100,7 @@ describe('coupuresDesNiveaux et avecLesCoupures', () => {
 		expect(instantDApprentissage(null)).toBeNull();
 	});
 
-	it('seul un niveau accepté est suivi ; coupé, son modèle passe à « coupe » : ni % ni injection, il ordonne encore', () => {
+	it('seul un niveau accepté est suivi ; coupé, son modèle passe à « coupe » : ses % restent, il n’injecte plus', () => {
 		const gestes = [...serie(20, 20), ...serie(20, 20, 5000, 'complets')];
 		const c = coupuresDesNiveaux(gestes, modeles());
 		expect(c.complets).toBeNull();
@@ -110,7 +110,10 @@ describe('coupuresDesNiveaux et avecLesCoupures', () => {
 		expect(suivis.complets.etat).toBe('refuse');
 		const signaux = { cosinus: 0.5, cosinusRelatif: 0.1, cosinusZ: 0.1, bm25Relatif: 1, signalSession: 0, apriori: 0 };
 		expect(noterLaCandidate(modeles(), signaux)).toMatchObject({ accepte: true, niveau: 'sens' });
-		expect(noterLaCandidate(suivis, signaux)).toMatchObject({ accepte: false, niveau: 'sens' });
+		const coupee = noterLaCandidate(suivis, signaux)!;
+		expect(coupee).toMatchObject({ accepte: true, coupee: true, niveau: 'sens' });
+		expect(coupee.p).toBe(noterLaCandidate(modeles(), signaux)!.p);
+		expect(noterLaCandidate(modeles(), signaux)).not.toHaveProperty('coupee');
 		// rien de coupé : inchangés
 		expect(avecLesCoupures(modeles(), { complets: null, sens: null })).toEqual(modeles());
 	});

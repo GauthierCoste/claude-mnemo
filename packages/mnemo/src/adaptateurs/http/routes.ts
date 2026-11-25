@@ -1,5 +1,5 @@
 import { ENTETE_REMPLACEMENT, ROUTES } from '@mnemo/contrat';
-import type { BilanAmorceVue, ReponseEcarteesToujours, ReponseInjectionAutomatique, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseArretModeles, ReponseNiveauModeles, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
+import type { BilanAmorceVue, CoupureInjectionVue, ReponseEcarteesToujours, ReponseInjectionAutomatique, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseArretModeles, ReponseNiveauModeles, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
 import { avertissementsDe, CARACTERES_INVISIBLES, CHEMINS_LOT_MAX, demandeTout, estNiveauModeles, modelesPermis, NIVEAUX_MODELES, nomAffichable, OBJECTIF_MAX, PROFIL_TRAVAIL, SAUF_MAX } from '@mnemo/commun';
 import type { AvecAvertissements, NiveauModeles } from '@mnemo/commun';
 import { amorcer, marquerTraitees } from '../../application/amorcer.ts';
@@ -119,6 +119,23 @@ export type Requete = {
 	flux(): AsyncIterable<Uint8Array>;
 };
 
+/** L'injection automatique coupée, telle que le service l'a lue en dernier. */
+export type CoupuresConnues = { lire(): CoupureInjectionVue[]; relire(): Promise<boolean> };
+
+/** Les coupures lues dans le journal des gestes, gardées ; `relire` dit si elles ont changé. Une lecture en panne garde les précédentes. */
+export function coupuresConnues(dep: Dependances, etat: Pilotage['etat']): CoupuresConnues {
+	let connues: CoupureInjectionVue[] = [];
+	return {
+		lire: () => connues,
+		async relire() {
+			const lues = vueCoupures(await coupuresDesInjections(etat, modelesActifs(dep)));
+			const change = JSON.stringify(lues) !== JSON.stringify(connues);
+			connues = lues;
+			return change;
+		},
+	};
+}
+
 /** Ce dont les routes ont besoin : cas d'usage, pilote, et la diffusion vers les clients WebSocket. */
 export type ContexteRoutes = {
 	dep: Dependances;
@@ -153,6 +170,11 @@ export type ContexteRoutes = {
 	depotMax: number;
 	/** A priori des gestes et fiches écartées toujours, tenus en mémoire par le service ; actualisés après chaque geste. */
 	apriori: AprioriDesGestes;
+	/**
+	 * L'injection automatique coupée par le suivi, gardée par le service pour la vue des sessions ; `relire` la relit dans le
+	 * journal des gestes et rend vrai si elle a changé. Absent : lue à chaque demande, sans rediffusion.
+	 */
+	coupures?: CoupuresConnues;
 	/**
 	 * Durée du reranker estimée d'après les durées mesurées de ses appels « injection » faits par ce service, et ses appels en
 	 * cours : le hook de message ne le lance que si l'estimation est fiable, tient dans son temps et qu'aucun appel n'est en cours.
@@ -338,7 +360,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	const { dep, pil, pilote, apriori } = ctx;
 	/** Recherche complète en cours par clé de remplacement (la suivante de même clé l'abandonne). */
 	const recherchesEnCours = new Map<string, AbortController>();
-	const vue = (s: Session) => vueSession(s, pilote.enCours(s.id), apriori.suggestions(s.id));
+	const vue = (s: Session) => vueSession(s, pilote.enCours(s.id), apriori.suggestions(s.id), ctx.coupures?.lire());
 	/**
 	 * Après un geste : l'a priori relit les gestes nouveaux (et les écartées toujours si `ecartees`), puis la vue de chaque
 	 * session dont les suggestions « écartée toujours » ont changé est rediffusée. Une panne de lecture n'empêche pas le geste
@@ -356,6 +378,23 @@ export function routes(ctx: ContexteRoutes): Route[] {
 			const s = await pil.etat.lire(id).catch(() => null);
 			if (s !== null) ctx.signaler(s);
 		}
+		await apresSuivi();
+	};
+	/**
+	 * Après un écart, un rétablissement ou une réactivation : le suivi des injections est relu ; si la coupure a changé (un écart
+	 * l'a déclenchée, une réactivation l'a levée), la vue de chaque session en cours est rediffusée.
+	 */
+	const apresSuivi = async (): Promise<void> => {
+		if (ctx.coupures === undefined) return;
+		let change: boolean;
+		try {
+			change = await ctx.coupures.relire();
+		} catch (erreur) {
+			ctx.journal(`suivi des injections : relecture impossible (${messageDErreur(erreur)}).`);
+			return;
+		}
+		if (!change) return;
+		for (const s of await pil.etat.lister({ archivees: false }).catch(() => [])) ctx.signaler(s);
 	};
 	/** Les fiches écartées toujours (pas celles rétablies), avec leur titre. */
 	const ecarteesToujours = async (): Promise<Reponse> => {
@@ -655,7 +694,10 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				if (d.niveau !== undefined && d.niveau !== 'complets' && d.niveau !== 'sens') throw new ErreurHttp(400, 'niveau : « complets » ou « sens » attendu.');
 				const s = d.session === undefined ? null : await session(d.session);
 				const reactives = await reactiverInjection(dep, pil.etat, modelesActifs(dep), { session: s?.id ?? '', horodatageMs: Date.now(), ...(d.niveau === undefined ? {} : { niveau: d.niveau }) });
-				if (reactives.length > 0) ctx.journal(`injection automatique réactivée par l'utilisateur : ${reactives.join(', ')}.`);
+				if (reactives.length > 0) {
+					ctx.journal(`injection automatique réactivée par l'utilisateur : ${reactives.join(', ')}.`);
+					await apresSuivi();
+				}
 				return ok({ coupures: await coupures() } satisfies ReponseInjectionAutomatique);
 			},
 		},

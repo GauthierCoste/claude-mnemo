@@ -14,7 +14,7 @@ import type { Session } from '../../domaine/session.ts';
  * `terminal` : un terminal de ce service est attaché à la session. `suggestions` : fiches écartées par la session que la règle
  * des 3 sessions propose d'écarter toujours (champ absent s'il n'y en a pas).
  */
-export function vueSession(s: Session, terminal: boolean, suggestions: readonly SuggestionEcarteeToujours[] = []): SessionVue {
+export function vueSession(s: Session, terminal: boolean, suggestions: readonly SuggestionEcarteeToujours[] = [], coupures: readonly CoupureInjectionVue[] = []): SessionVue {
 	return {
 		id: s.id,
 		profil: s.profil,
@@ -33,6 +33,7 @@ export function vueSession(s: Session, terminal: boolean, suggestions: readonly 
 		dialogueOuvert: dialogueOuvert(s),
 		niveauModeles: s.niveauModeles ?? null,
 		...(suggestions.length === 0 ? {} : { suggestionsEcarteeToujours: suggestions.map(vueSuggestion) }),
+		...(coupures.length === 0 ? {} : { injectionCoupee: [...coupures] }),
 	};
 }
 

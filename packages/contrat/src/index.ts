@@ -35,6 +35,11 @@ export type SessionVue = {
 	 * ne plus jamais la suggérer ? ») ; jamais appliquée seule. Absent : aucune (ou un service plus ancien).
 	 */
 	suggestionsEcarteeToujours?: SuggestionEcarteeToujoursVue[];
+	/**
+	 * L'injection automatique coupée par le suivi (réglage de la machine, joint à chaque session) : la vue est rediffusée quand un
+	 * écart la coupe ou qu'une réactivation la lève. Absent : rien de coupé (ou un service plus ancien).
+	 */
+	injectionCoupee?: CoupureInjectionVue[];
 };
 
 /** Une fiche écartée dans `sessions` sessions distinctes, sur `jours` jours, sans geste positif depuis. */

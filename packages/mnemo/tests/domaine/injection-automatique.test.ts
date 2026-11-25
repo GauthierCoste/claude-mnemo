@@ -13,6 +13,7 @@ describe('injectables', () => {
 		['e', n(0.95, { pSansApriori: GARDE_APRIORI - 0.01 })],
 		['f', null],
 		['g', n(0.93)],
+		['h', n(0.98, { coupee: true })],
 	]);
 	const tout = [...notes.keys()];
 	it('accepté, au seuil, garde de l’a priori, non vue ; p décroissant', () => {

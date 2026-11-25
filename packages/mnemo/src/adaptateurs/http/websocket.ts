@@ -4,7 +4,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
 import { CODE_FERMETURE_LENT, ENTREE_MAX_OCTETS, MESSAGE_CLIENT_MAX_OCTETS, PROTOCOLE_WS } from '@mnemo/contrat';
-import type { EtatModelesVue, MessageClient, MessageServeur, SessionVue } from '@mnemo/contrat';
+import type { CoupureInjectionVue, EtatModelesVue, MessageClient, MessageServeur, SessionVue } from '@mnemo/contrat';
 import type { Pilote } from '../../application/pilote.ts';
 import type { EtatSessions } from '../../application/ports.ts';
 import type { Session } from '../../domaine/session.ts';
@@ -85,6 +85,8 @@ export function creerHub(o: {
 	versionDesLots?: () => Promise<string>;
 	/** Suggestions « écartée toujours » d'une session, jointes à sa vue (absent : aucune). */
 	suggestions?: (session: string) => readonly SuggestionEcarteeToujours[];
+	/** L'injection automatique coupée par le suivi, jointe à la vue de chaque session (absent : rien de coupé). */
+	coupures?: () => readonly CoupureInjectionVue[];
 	/** État des modèles de la machine, envoyé à l'accueil d'un client (message `modeles`) ; absent : rien n'est envoyé. */
 	etatModeles?: () => Promise<EtatModelesVue>;
 	racine: string;
@@ -167,7 +169,7 @@ export function creerHub(o: {
 	};
 
 	const signaler = (s: Session): void => {
-		const vue = vueSession(s, o.pilote.enCours(s.id), o.suggestions?.(s.id));
+		const vue = vueSession(s, o.pilote.enCours(s.id), o.suggestions?.(s.id), o.coupures?.());
 		const texte = JSON.stringify(vue);
 		const avant = diffusees.get(s.id);
 		if (avant === texte) return;
@@ -226,7 +228,7 @@ export function creerHub(o: {
 				}
 			}
 			if (c.ws.readyState !== WebSocket.OPEN) return;
-			c.ws.send(JSON.stringify({ type: 'sessions', sessions: sessions.map((s) => vueSession(s, o.pilote.enCours(s.id), o.suggestions?.(s.id))) } satisfies MessageServeur));
+			c.ws.send(JSON.stringify({ type: 'sessions', sessions: sessions.map((s) => vueSession(s, o.pilote.enCours(s.id), o.suggestions?.(s.id), o.coupures?.())) } satisfies MessageServeur));
 			if (modeles !== null) c.ws.send(JSON.stringify({ type: 'modeles', modeles } satisfies MessageServeur));
 			c.accueilli = true;
 			const enAttente = c.enAttente.splice(0);
@@ -270,7 +272,7 @@ export function creerHub(o: {
 		if (derniereModification === null) {
 			// référence : les vues actuelles, sans rien diffuser (le pilote a pu en signaler entre-temps : les siennes restent)
 			for (const s of await o.etat.lister({ archivees: true })) {
-				if (!diffusees.has(s.id)) diffusees.set(s.id, JSON.stringify(vueSession(s, o.pilote.enCours(s.id))));
+				if (!diffusees.has(s.id)) diffusees.set(s.id, JSON.stringify(vueSession(s, o.pilote.enCours(s.id), undefined, o.coupures?.())));
 				if (s.etat !== 'terminee' && !serviesConnues.has(s.id)) await sonderServi(s, true);
 			}
 		} else if (modification !== derniereModification) {

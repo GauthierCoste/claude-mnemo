@@ -14,8 +14,8 @@ export const GARDE_APRIORI = 0.7;
 export const SEUIL_JAMAIS = 100;
 
 /**
- * Les candidates injectables, `p` décroissant (à égalité, l'ordre donné) : notées par un modèle accepté (ni refusé, ni coupé
- * par le suivi, a priori lu s'il le pèse : `accepte`), toutes ses variables calculées (une note non nulle), `p ≥ seuil`
+ * Les candidates injectables, `p` décroissant (à égalité, l'ordre donné) : notées par un modèle accepté (ni refusé, a priori
+ * lu s'il le pèse : `accepte`) et pas coupé par le suivi (`coupee`), toutes ses variables calculées (une note non nulle), `p ≥ seuil`
  * (`seuilInjection`, en % ; 100 : aucune), `p_sans_apriori ≥ GARDE_APRIORI`, et pas déjà vues par la session (`vue` :
  * injectée, lue ou écrite à cette empreinte).
  */
@@ -31,7 +31,7 @@ export function injectables(
 	return candidates
 		.flatMap((chemin) => {
 			const n = note(chemin);
-			return n !== null && n !== undefined && n.accepte && n.p >= seuil && n.pSansApriori >= GARDE_APRIORI && !vue(chemin) ? [{ chemin, p: n.p }] : [];
+			return n !== null && n !== undefined && n.accepte && n.coupee !== true && n.p >= seuil && n.pSansApriori >= GARDE_APRIORI && !vue(chemin) ? [{ chemin, p: n.p }] : [];
 		})
 		.sort((a, b) => b.p - a.p || rang.get(a.chemin)! - rang.get(b.chemin)!)
 		.map((c) => c.chemin);
