@@ -2,7 +2,7 @@ import { estSourceDeDebut, estUuid } from '../../../domaine/session.ts';
 import type { EvenementHook } from '../../../domaine/session.ts';
 import { estObjet } from '../../../domaine/valeurs.ts';
 import type { EntreeHook, ReponseHook } from '../../evenements.ts';
-import type { HooksDuMoteur, LectureHook } from '../../ports.ts';
+import type { AppelHook, HooksDuMoteur } from '../../ports.ts';
 
 /** Événement Mnemo de l'argument : nom Mnemo (celui du plugin assemblé) ou nom Claude Code. */
 const EVENEMENTS: Record<string, EvenementHook> = {
@@ -63,15 +63,7 @@ function objetJson(texte: string): Record<string, unknown> | null {
  * Entrée de Claude Code traduite ; null si elle est à ignorer (`SessionEnd` de `/clear`) ou illisible hors `outil`, qui doit
  * rendre une décision : son action est alors « non lue ». Session : `MNEMO_SESSION`, sinon `session_id` ; « » sans uuid valide.
  */
-function traduire(
-	evenement: EvenementHook,
-	options: Set<string>,
-	lecture: LectureHook,
-	env: Record<string, string | undefined>,
-	maintenant: number,
-	cwdProcessus: string,
-	reel: (chemin: string) => string,
-): { entree: EntreeHook; transcription?: string } | null {
+function traduire({ evenement, options, lecture, env, maintenantMs, cwdProcessus, reel }: AppelHook): { entree: EntreeHook; transcription?: string } | null {
 	const lu = 'texte' in lecture ? objetJson(lecture.texte) : null;
 	if (lu === null && evenement !== 'outil') return null;
 	const champs = lu ?? {};
@@ -79,7 +71,7 @@ function traduire(
 	const candidates = [env.MNEMO_SESSION, champs.session_id];
 	const session = candidates.find((c): c is string => typeof c === 'string' && estUuid(c)) ?? '';
 	// Claude Code lance le hook dans son dossier courant : la meilleure position connue quand l'entrée n'en donne pas
-	const entree: EntreeHook = { evenement, session, horodatageMs: maintenant, cwd: reel(typeof champs.cwd === 'string' && champs.cwd !== '' ? champs.cwd : cwdProcessus) };
+	const entree: EntreeHook = { evenement, session, horodatageMs: maintenantMs, cwd: reel(typeof champs.cwd === 'string' && champs.cwd !== '' ? champs.cwd : cwdProcessus) };
 	if (typeof champs.prompt === 'string') entree.prompt = champs.prompt;
 	if (evenement === 'debut' && estSourceDeDebut(champs.source)) entree.source = champs.source;
 	if (typeof champs.tool_name === 'string') entree.outil = { nom: champs.tool_name, entree: estObjet(champs.tool_input) ? champs.tool_input : {} };
@@ -107,4 +99,10 @@ function lireArguments(args: string[]): { evenement: EvenementHook; options: Set
 	return { evenement, options };
 }
 
-export const HOOKS_CLAUDE_CODE: HooksDuMoteur = { lireArguments, traduire, sortie: sortieDe };
+/**
+ * `fin` : sous les 1,5 s que Claude Code laisse à `SessionEnd` ; `outil` : 1 s de marge avant les 3 s du `timeout` du plugin ;
+ * les autres sous leur `timeout` (voir `hooksJson`).
+ */
+const ECHEANCES_MS: Record<EvenementHook, number> = { debut: 900, message: 900, outil: 2000, apres_outil: 900, arret: 900, fin: 1400 };
+
+export const HOOKS_CLAUDE_CODE: HooksDuMoteur = { lireArguments, traduire, sortie: sortieDe, echeancesMs: ECHEANCES_MS };

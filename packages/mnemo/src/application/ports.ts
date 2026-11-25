@@ -612,13 +612,14 @@ export interface EtatSessions {
 	/**
 	 * Applique l'événement seulement si `horodatageMs` > `majMs` ; rend la session après (inchangée si ignoré), null si inconnue.
 	 * Le premier `message` après `bilanDemandeMs` d'une session en bilan note `bilanLuMs`. `arret` note `dernierArret`
-	 * (`complement.arret`, `stop` par défaut) ; `debut`, `message` et `outil` l'effacent.
+	 * (`complement.arret`, `stop` par défaut) ; `debut`, `message` et `outil` l'effacent. `complement.fil` (identifiant de la
+	 * session chez son moteur) est noté au premier événement qui le porte, même ignoré par ailleurs, et jamais écrasé ensuite.
 	 */
 	appliquer(
 		id: string,
 		e: EvenementHook,
 		horodatageMs: number,
-		complement?: { objectif?: string; commitDebut?: string | null; branche?: string | null; arret?: CauseArret },
+		complement?: { objectif?: string; commitDebut?: string | null; branche?: string | null; arret?: CauseArret; fil?: string },
 	): Promise<Session | null>;
 	/**
 	 * Une session `terminee` garde son `etat` et son `arretAttendu` (les autres champs restent modifiables). `niveauModeles` :
@@ -779,31 +780,42 @@ export type Lancement = { args: string[]; env: Record<string, string>; ajouts: R
 /** Entrée d'un hook sur stdin : son texte, ou la cause qui l'a empêchée d'être lue. */
 export type LectureHook = { texte: string } | { nonLue: CauseNonVerifiee };
 
+/**
+ * Ce que `traduire` reçoit : l'événement et ses options, l'entrée lue, l'environnement du hook, l'instant de l'événement, le
+ * dossier courant du processus et `reel` (chemin réel d'un dossier, liens résolus).
+ */
+export type AppelHook = {
+	evenement: EvenementHook;
+	options: Set<string>;
+	lecture: LectureHook;
+	env: Record<string, string | undefined>;
+	maintenantMs: number;
+	cwdProcessus: string;
+	reel: (chemin: string) => string;
+};
+
 /** Hooks d'un moteur : arguments de `mnemo hook`, entrée du moteur traduite en événement Mnemo, réponse traduite en sortie. */
 export type HooksDuMoteur = {
 	/** `<événement> [options]` (nom Mnemo ou nom du moteur), options permises une fois chacune ; null sinon. */
 	lireArguments(args: string[]): { evenement: EvenementHook; options: Set<string> } | null;
+	/** Entrée traduite (et le chemin de la transcription, hors de l'entrée) ; null si elle est à ignorer. */
+	traduire(appel: AppelHook): { entree: EntreeHook; transcription?: string } | null;
 	/**
-	 * Entrée traduite (et le chemin de la transcription, hors de l'entrée) ; null si elle est à ignorer. `reel` : chemin réel
-	 * d'un dossier (liens résolus).
+	 * Échéance de chaque événement depuis le démarrage du processus du hook : lecture de stdin, service, état et `servir` s'y
+	 * bornent ; sous le délai que le moteur laisse à chaque hook.
 	 */
-	traduire(
-		evenement: EvenementHook,
-		options: Set<string>,
-		lecture: LectureHook,
-		env: Record<string, string | undefined>,
-		maintenant: number,
-		cwdProcessus: string,
-		reel: (chemin: string) => string,
-	): { entree: EntreeHook; transcription?: string } | null;
+	echeancesMs: Record<EvenementHook, number>;
 	/** Sortie attendue par le moteur pour la réponse (stdout), ou « ». */
 	sortie(evenement: EvenementHook, reponse: ReponseHook): string;
 };
 
-/** Lecture de la fenêtre de contexte d'une session dans sa transcription (`chemin`, donné par les hooks) ; null : illisible ou refusée. */
-export type LectureFenetre = { lire(chemin: string, dossier?: string | null): Promise<FenetreDeContexte | null> };
+/**
+ * Lecture de la transcription d'une session (`chemin`, donné par les hooks) : sa fenêtre de contexte, et les quotas du compte
+ * si le moteur les y écrit (Claude Code : jamais, ils viennent de sa ligne d'état) ; null : illisible ou refusée.
+ */
+export type LectureFenetre = { lire(chemin: string, dossier?: string | null): Promise<{ fenetre: FenetreDeContexte; quotas?: Quotas } | null> };
 
-/** Télémétrie d'un moteur : fenêtre de contexte, et quotas du compte tirés de ce que le moteur en dit (null : illisibles). */
+/** Télémétrie d'un moteur : transcription, et quotas du compte tirés de ce que le moteur en dit ailleurs (null : illisibles). */
 export type TelemetrieDuMoteur = { fenetre: LectureFenetre; quotas(brut: unknown): Quotas | null };
 
 /**
@@ -818,6 +830,8 @@ export type Moteur = {
 	commandeParDefaut: string;
 	modeles: readonly string[];
 	trouver(env: Record<string, string | undefined>, plateforme: string): CommandeMoteur | null;
+	/** Ce que la ligne de commande d'un processus lancé pour la session `uuid` contient : de quoi le reconnaître vivant. */
+	marqueDeSession(uuid: string): string;
 	fichiersDeSession(dep: Dependances, session: Session, profil: Profil, appel: AppelPlugin): Promise<FichierPlugin[]>;
 	preparer(contexte: ContextePreparation): Lancement;
 	touches: TouchesDuMoteur;
@@ -856,7 +870,8 @@ export type Pilotage = {
 		env: Record<string, string | undefined>;
 		plateforme: string;
 		dossier(relatif: string): Promise<{ absolu: string; reel: string } | null>;
-		processus(pid: number, session: string): Promise<'mort' | 'session' | 'autre'>;
+		/** `marque` : la marque de la session dans la ligne de commande du processus (`Moteur.marqueDeSession`). */
+		processus(pid: number, marque: string): Promise<'mort' | 'session' | 'autre'>;
 		/** Démarrage de la machine (ms, à la seconde) : enregistré au lancement, comparé au nettoyage. */
 		demarrageMachineMs(): number;
 		/**

@@ -543,7 +543,8 @@ describe('mnemo hook (avec le service)', () => {
 			expect(r.code, args).toBe(0);
 			expect(r.out, args).toBe('');
 		}
-		expect((await hook(racine, 'arret --moteur codex', '{}', { MNEMO_RACINE: racine })).err).toMatch(/moteur inconnu « codex »/u);
+		expect((await hook(racine, 'arret --moteur codex', '{}', { MNEMO_RACINE: racine })).err).toMatch(/moteur sans implémentation dans cette version : « codex »/u);
+		expect((await hook(racine, 'arret --moteur gemini', '{}', { MNEMO_RACINE: racine })).err).toMatch(/moteur inconnu « gemini »/u);
 		expect(requetes).toHaveLength(2);
 	});
 

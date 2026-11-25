@@ -10,7 +10,7 @@ const OUTIL_COMMANDE = 'Bash';
 export const PREFIXE_MCP = 'mcp__mnemo__';
 
 /** Outils après lesquels Mnemo note ce que Claude a lu ou écrit : un fichier, une fiche lue ou écrite par Mnemo (rien n'est injecté). */
-export const MATCHER_APRES_OUTIL = 'Read|Edit|MultiEdit|Write|NotebookEdit|mcp__mnemo__.*';
+const MATCHER_APRES_OUTIL = 'Read|Edit|MultiEdit|Write|NotebookEdit|mcp__mnemo__.*';
 
 export const OUTILS_CLAUDE_CODE: OutilsDuMoteur = {
 	cheminsEcrits(action) {

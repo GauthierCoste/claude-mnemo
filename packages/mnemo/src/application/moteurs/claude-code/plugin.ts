@@ -1,5 +1,5 @@
 import { DOSSIERS_FIXES } from '@mnemo/commun';
-import { MATCHER_APRES_OUTIL, PREFIXE_MCP } from '../../../domaine/moteurs/claude-code/outils.ts';
+import { OUTILS_CLAUDE_CODE, PREFIXE_MCP } from '../../../domaine/moteurs/claude-code/outils.ts';
 import type { Profil } from '../../../domaine/profil.ts';
 import { EVENEMENTS_HOOK, skillPourProjet } from '../../../domaine/profil.ts';
 import { consignesVerifieesPossibles } from '../../../domaine/refus-outil.ts';
@@ -37,7 +37,7 @@ export function estInterdite(majuscules: string): boolean {
 
 /**
  * Événements Claude Code de chaque événement Mnemo, avec leur délai (secondes) et leurs options. `PreToolUse` porte le matcher
- * `*` (tous les outils), `PostToolUse` le matcher `MATCHER_APRES_OUTIL` (outils qui lisent ou écrivent un fichier ou une fiche) ;
+ * `*` (tous les outils), `PostToolUse` le matcher `motifApresOutil` des outils de Claude Code (outils qui lisent ou écrivent un fichier ou une fiche) ;
  * les autres n'en ont pas (`UserPromptSubmit`, `Stop` l'ignorent ; sans matcher, `SessionStart`, `Notification` et `SessionEnd`
  * se déclenchent dans tous les cas). `Notification` passe `--notification` : l'état distingue un dialogue ouvert (permission)
  * d'un tour fini (`Stop`). `bloquantSiConsignes` : voir `hooksJson`.
@@ -46,7 +46,7 @@ const EVENEMENTS_CLAUDE: Record<EvenementHook, readonly { nom: string; timeout: 
 	debut: [{ nom: 'SessionStart', timeout: 10 }],
 	message: [{ nom: 'UserPromptSubmit', timeout: 5 }],
 	outil: [{ nom: 'PreToolUse', timeout: 3, matcher: '*', bloquantSiConsignes: true }],
-	apres_outil: [{ nom: 'PostToolUse', timeout: 3, matcher: MATCHER_APRES_OUTIL }],
+	apres_outil: [{ nom: 'PostToolUse', timeout: 3, matcher: OUTILS_CLAUDE_CODE.motifApresOutil }],
 	arret: [
 		{ nom: 'Stop', timeout: 3 },
 		{ nom: 'Notification', timeout: 3, options: ['--notification'] },

@@ -262,7 +262,7 @@ export async function pilotageReel(
 			env,
 			plateforme,
 			dossier: (relatif) => dossierSousLaRacine(racineDossier, relatif),
-			processus: (pid, session) => etatProcessus(pid, session, plateforme),
+			processus: (pid, marque) => etatProcessus(pid, marque, plateforme),
 			demarrageMachineMs,
 			nettoyerRestes: (s) => nettoyerRestes(s, { plateforme }),
 		},

@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { creerPilote, ligneManuelle } from '../../src/application/pilote.ts';
+import { creerPilote, ErreurMoteurIndisponible, ligneManuelle } from '../../src/application/pilote.ts';
 import type { Pilote } from '../../src/application/pilote.ts';
 import type { CommandeMoteur, EtatSessions, FichierPlugin, Pilotage } from '../../src/application/ports.ts';
 import type { Session } from '../../src/domaine/session.ts';
@@ -481,6 +481,21 @@ describe('Pilote : pause et reprise', () => {
 		expect(await c.pilote.reprendre(ID_A)).toMatchObject({ etat: 'terminee' });
 		expect(c.terminaux.lances).toHaveLength(0);
 		expect(await c.pilote.reprendre('inconnue')).toBeNull();
+	});
+});
+
+describe('Pilote : moteur de la session', () => {
+	it('moteur sans implémentation ici, ou inconnu : jamais relancé (ni par Claude Code), refus avec la raison ; Claude Code sans moteur enregistré', async () => {
+		const c = await contexte({
+			sessions: [session(ID_A, { etat: 'en_pause', moteur: 'codex' }), session(ID_B, { etat: 'a_relire', moteur: 'gemini' }), session(ID_C, { etat: 'a_relire' })],
+		});
+		await expect(c.pilote.reprendre(ID_A)).rejects.toThrow(ErreurMoteurIndisponible);
+		await expect(c.pilote.reprendre(ID_B)).rejects.toThrow(/« gemini » sans implémentation/u);
+		expect(c.terminaux.lances).toHaveLength(0);
+		expect(await c.pilote.ligneDeReprise(ID_A).catch((e: Error) => e.message)).toMatch(/« codex »/u);
+		expect(await c.pilote.reprendreAuDemarrage()).toEqual([ID_C]);
+		expect(c.terminaux.lances).toHaveLength(1);
+		expect(await c.etat.lire(ID_B)).toMatchObject({ etat: 'a_relire', moteur: 'gemini' });
 	});
 });
 

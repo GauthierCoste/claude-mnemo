@@ -1,5 +1,4 @@
 import type { NiveauModeles } from '@mnemo/commun';
-import type { IdMoteur } from './moteurs/moteur.ts';
 
 export type EtatSession = 'travaille' | 'attend' | 'a_relire' | 'en_pause' | 'terminee';
 export type EvenementHook = 'debut' | 'message' | 'outil' | 'apres_outil' | 'arret' | 'fin';
@@ -55,10 +54,13 @@ export type Session = {
 	niveauModeles?: NiveauModeles;
 	/**
 	 * Moteur et modèle enregistrés au lancement : une reprise garde les siens. Absents (session d'avant les moteurs) : Claude
-	 * Code et son modèle par défaut ; `modele` « » : le modèle par défaut du moteur.
+	 * Code et son modèle par défaut ; `modele` « » : le modèle par défaut du moteur. `moteur` est gardé tel qu'enregistré,
+	 * même inconnu de ce Mnemo (`IdMoteur` quand il est connu) : une telle session ne se relance pas.
 	 */
-	moteur?: IdMoteur;
+	moteur?: string;
 	modele?: string;
+	/** Identifiant de la session chez son moteur, appris par un hook (absent : inconnu, ou le moteur reçoit déjà l'uuid). */
+	fil?: string;
 };
 
 /** Un dialogue de Claude Code (permission) attend peut-être l'utilisateur : la dernière chose vue est une `Notification`. */

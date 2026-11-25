@@ -5,7 +5,7 @@ import { dialogueOuvert, ETATS_RELANCES, objectifDe } from '../domaine/session.t
 import type { Session } from '../domaine/session.ts';
 import { CAPACITE_TAMPON, tamponCirculaire } from '../domaine/tampon.ts';
 import { ecrireEpisodeMinimal, episodesDuProjet, texteDuBilan, trouverEpisode } from './episode.ts';
-import { MOTEUR_PAR_DEFAUT } from '../domaine/moteurs/moteur.ts';
+import { estIdMoteur, MOTEUR_PAR_DEFAUT } from '../domaine/moteurs/moteur.ts';
 import type { IdMoteur } from '../domaine/moteurs/moteur.ts';
 import type { CommandeMoteur, Dependances, ModeLancement, MoteurDuService, Pilotage, Terminal } from './ports.ts';
 import { projetDeSession } from './portees.ts';
@@ -21,6 +21,7 @@ export type Pilote = {
 	 */
 	lancer(d: { profil: string; dossier: string; objectif?: string }): Promise<{ session: Session } | { session: Session; manuel: string } | { session: Session; existant: true } | { refus: string }>;
 	pause(id: string): Promise<Session | null>;
+	/** Rejette `ErreurMoteurIndisponible` si le moteur de la session n'a pas d'implémentation ici (de même bilan et `confier`). */
 	reprendre(id: string): Promise<Session | null>;
 	entree(id: string, d: string): void;
 	taille(id: string, c: number, l: number): void;
@@ -67,6 +68,17 @@ export type Pilote = {
 	 */
 	niveauModeles(id: string, niveau: NiveauModeles | null): Promise<Session | null>;
 };
+
+/** Une session dont le moteur n'a pas d'implémentation dans ce service ne se relance pas (jamais un autre moteur à sa place). */
+export class ErreurMoteurIndisponible extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'ErreurMoteurIndisponible';
+	}
+}
+
+/** Raison pour laquelle la session ne peut pas tourner avec son moteur dans ce service. */
+const moteurIndisponible = (moteur: string): string => `Moteur « ${moteur} » sans implémentation dans ce service : la session ne peut pas être relancée.`;
 
 const COLONNES = 120;
 const LIGNES = 32;
@@ -306,8 +318,16 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		return d.absolu;
 	};
 
-	/** Le moteur de la session (Claude Code pour une session d'avant les moteurs) ; null : inconnu de ce service. */
-	const moteurDe = (session: Pick<Session, 'moteur'>): MoteurDuService | null => pil.moteurs[session.moteur ?? MOTEUR_PAR_DEFAUT] ?? null;
+	/**
+	 * Le moteur de la session (Claude Code pour une session d'avant les moteurs, sans moteur enregistré) ; null : inconnu de
+	 * ce service, ou sans implémentation (jamais Claude Code à sa place).
+	 */
+	const moteurDe = (session: Pick<Session, 'moteur'>): MoteurDuService | null => {
+		const id = session.moteur ?? MOTEUR_PAR_DEFAUT;
+		return estIdMoteur(id) ? (pil.moteurs[id] ?? null) : null;
+	};
+	/** Ce que la ligne de commande d'un processus lancé pour la session contient (son uuid, à défaut de moteur connu). */
+	const marqueDe = (s: Session): string => moteurDe(s)?.moteur.marqueDeSession(s.id) ?? s.id;
 
 	const lancePossible = (moteur: IdMoteur = MOTEUR_PAR_DEFAUT): boolean => (pil.moteurs[moteur]?.commande ?? null) !== null && pil.terminaux.disponibles().ok;
 
@@ -317,7 +337,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	 */
 	const preparer = async (session: Session, mode: ModeLancement, objectif?: string) => {
 		const duService = moteurDe(session);
-		if (duService === null) throw new Error(`Moteur inconnu de ce service : « ${session.moteur} ».`);
+		if (duService === null) throw new ErreurMoteurIndisponible(moteurIndisponible(session.moteur ?? MOTEUR_PAR_DEFAUT));
 		const { moteur, commande } = duService;
 		const profil = await chargerProfil(dep, session.profil);
 		const dossierFichiers = await pil.plugin.ecrire(session.id, await moteur.fichiersDeSession(dep, session, profil, pil.plugin.appel));
@@ -401,7 +421,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	 */
 	const verifierPid = async (s: Session): Promise<'ailleurs' | 'efface' | 'libre'> => {
 		if (s.pid === null || vivants.has(s.id)) return 'libre';
-		const etat = await pil.hote.processus(s.pid, s.id);
+		const etat = await pil.hote.processus(s.pid, marqueDe(s));
 		if (etat === 'session') return 'ailleurs';
 		if (etat === 'mort') await pil.hote.nettoyerRestes(s);
 		await modifier(s.id, { pid: null });
@@ -417,7 +437,9 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	const reprendreSession = async (id: string): Promise<Session | null> => {
 		const s = await pil.etat.lire(id);
 		if (s === null || s.etat === 'terminee') return s;
-		if ((moteurDe(s)?.commande ?? null) === null || !pil.terminaux.disponibles().ok) return s;
+		const duService = moteurDe(s);
+		if (duService === null) throw new ErreurMoteurIndisponible(moteurIndisponible(s.moteur ?? MOTEUR_PAR_DEFAUT));
+		if (duService.commande === null || !pil.terminaux.disponibles().ok) return s;
 		if ((await verifierPid(s)) === 'ailleurs') return pil.etat.lire(id);
 		// un bilan d'avant (interrompu par une pause) est oublié : seul `reprendreAuDemarrage` en redemande un
 		const prete = await modifier(id, { arretAttendu: null, etat: 'attend', bilanDemandeMs: null, bilanLuMs: null });
@@ -606,7 +628,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			return pil.etat.lire(id);
 		}
 		// un processus d'un autre service, lancé pour elle : jamais signalé d'ici
-		if (s.pid !== null && (await pil.hote.processus(s.pid, s.id)) === 'session') return s;
+		if (s.pid !== null && (await pil.hote.processus(s.pid, marqueDe(s))) === 'session') return s;
 		const terminee = await modifier(id, { arretAttendu: 'abandon', etat: 'terminee', pid: null });
 		if (terminee !== null) await assurerEpisode(terminee);
 		return pil.etat.lire(id);
@@ -634,7 +656,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			if (!vivants.has(id)) {
 				// rien à arrêter ici (mode dégradé, processus fini) : la session n'est plus relancée au démarrage
 				if (s.etat === 'en_pause') return s;
-				if (s.pid !== null && (await pil.hote.processus(s.pid, s.id)) === 'session') return s;
+				if (s.pid !== null && (await pil.hote.processus(s.pid, marqueDe(s))) === 'session') return s;
 				return modifier(id, { etat: 'en_pause' });
 			}
 			await modifier(id, { arretAttendu: 'pause' });
@@ -697,7 +719,11 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 				const refaireBilan = (s.arretAttendu === 'service' || s.arretAttendu === 'bilan') && s.bilanDemandeMs !== null;
 				if (relancees.length > 0) await new Promise((r) => setTimeout(r, ESPACEMENT_RELANCES_MS));
 				const repriseMs = Date.now();
-				const apres = await reprendre(s.id);
+				// moteur sans implémentation ici : la session reste en l'état, jamais relancée par un autre moteur
+				const apres = await reprendre(s.id).catch((erreur: unknown) => {
+					if (erreur instanceof ErreurMoteurIndisponible) return null;
+					throw erreur;
+				});
 				if (apres !== null && vivants.has(s.id)) {
 					relancees.push(s.id);
 					if (refaireBilan) void suivi(redemanderBilan(s.id, repriseMs)).catch(() => {});

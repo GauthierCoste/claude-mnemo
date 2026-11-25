@@ -1,8 +1,8 @@
 import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
-import type { LectureFenetre } from '../../../application/ports.ts';
 import { fenetreDeContexte } from '../../../domaine/moteurs/claude-code/fenetre-contexte.ts';
+import type { FenetreDeContexte } from '../../../domaine/moteurs/moteur.ts';
 import { seuilDeResumeAuto } from './reglage-resume-auto.ts';
 
 /**
@@ -14,7 +14,9 @@ import { seuilDeResumeAuto } from './reglage-resume-auto.ts';
 export const OCTETS_LUS = 512 * 1024;
 
 /** Le chemin vient d'une entrée HTTP du service : seule une transcription de Claude Code (`~/.claude/projects/`) est lue. */
-export function fenetreDeTranscription(racinePermise: string = join(homedir(), '.claude', 'projects'), octetsLus: number = OCTETS_LUS, accueil: string = homedir()): LectureFenetre {
+export type LectureTranscription = { lire(chemin: string, dossier?: string | null): Promise<FenetreDeContexte | null> };
+
+export function fenetreDeTranscription(racinePermise: string = join(homedir(), '.claude', 'projects'), octetsLus: number = OCTETS_LUS, accueil: string = homedir()): LectureTranscription {
 	const racine = resolve(racinePermise);
 	return {
 		async lire(chemin, dossier = null) {

@@ -21,6 +21,7 @@ import { filDuJour } from '../../application/fil.ts';
 import { historiqueDesSessions } from '../../application/historique.ts';
 import { lireElement, motifIntrouvable } from '../../application/lire.ts';
 import { lister } from '../../application/lister.ts';
+import { ErreurMoteurIndisponible } from '../../application/pilote.ts';
 import type { Pilote } from '../../application/pilote.ts';
 import type { Dependances, DossiersRacine, MemoireClaude, Modeles, Pilotage, ProjetsClaude } from '../../application/ports.ts';
 import { ErreurFichier } from '../../application/ports.ts';
@@ -232,7 +233,7 @@ const EVENEMENTS: readonly EvenementHook[] = ['debut', 'message', 'outil', 'apre
 /** Entrée de `mnemo hook` (celle qu'il traduit de Claude Code) : forme vérifiée, sinon 400. */
 function entreeHook(brut: unknown): EntreeHook {
 	if (!estObjet(brut)) throw new ErreurHttp(400, 'Événement attendu : un objet JSON.');
-	const { evenement, session, horodatageMs, cwd, prompt, outil, arret, sansContexte, source, moteur } = brut;
+	const { evenement, session, horodatageMs, cwd, prompt, outil, arret, sansContexte, source, moteur, fil } = brut;
 	if (typeof evenement !== 'string' || !EVENEMENTS.includes(evenement as EvenementHook)) throw new ErreurHttp(400, 'Événement inconnu.');
 	if (typeof session !== 'string' || (session !== '' && !estUuid(session))) throw new ErreurHttp(400, 'Session : uuid ou « » attendu.');
 	if (typeof horodatageMs !== 'number' || !Number.isFinite(horodatageMs)) throw new ErreurHttp(400, 'Horodatage : nombre attendu.');
@@ -263,6 +264,10 @@ function entreeHook(brut: unknown): EntreeHook {
 	if (moteur !== undefined) {
 		if (!estIdMoteur(moteur)) throw new ErreurHttp(400, 'moteur : identifiant de moteur attendu.');
 		entree.moteur = moteur;
+	}
+	if (fil !== undefined) {
+		if (typeof fil !== 'string' || fil === '' || fil.length > 200) throw new ErreurHttp(400, 'fil : identifiant de session du moteur attendu.');
+		entree.fil = fil;
 	}
 	return entree;
 }
@@ -335,7 +340,10 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	/** Action du pilote sur une session existante : la session après, ou 404. */
 	const surSession = (action: (id: string) => Promise<Session | null>) => async (r: Requete) => {
 		await session(r.id);
-		const apres = await action(r.id);
+		const apres = await action(r.id).catch((erreur: unknown) => {
+			if (erreur instanceof ErreurMoteurIndisponible) throw new ErreurHttp(409, erreur.message);
+			throw erreur;
+		});
 		if (apres === null) throw new ErreurHttp(404, 'Session inconnue.');
 		return ok({ session: vue(apres) });
 	};
@@ -361,8 +369,10 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	const relireFenetre = async (session: string, chemin: string, dossier: string | null, moteur: IdMoteur | undefined): Promise<void> => {
 		const lecture = telemetrie(moteur)?.fenetre;
 		if (lecture === undefined) return;
-		const fenetre = await lecture.lire(chemin, dossier);
-		if (fenetre === null) return;
+		// les quotas éventuels de la transcription ne sont pas encore relevés ici (Claude Code n'en écrit pas)
+		const lue = await lecture.lire(chemin, dossier);
+		if (lue === null) return;
+		const { fenetre } = lue;
 		const avant = fenetres.get(session);
 		if (avant !== undefined && avant.utilises === fenetre.utilises && avant.max === fenetre.max && avant.avantResume === fenetre.avantResume) return;
 		fenetres.set(session, fenetre);

@@ -38,6 +38,8 @@ export type EntreeHook = {
 	source?: SourceDeDebut;
 	/** Moteur qui a lancé le hook, dont les outils sont lus ; absent : Claude Code. */
 	moteur?: IdMoteur;
+	/** Identifiant de la session chez son moteur, quand il le donne (noté une fois dans l'état ; Claude Code reçoit l'uuid de Mnemo). */
+	fil?: string;
 };
 
 /**
@@ -183,6 +185,7 @@ async function appliquer(pil: Pick<Pilotage, 'etat'>, entree: EntreeHook): Promi
 	const complement = {
 		...(objectif === null ? {} : { objectif }),
 		...(entree.evenement === 'arret' && entree.arret !== undefined ? { arret: entree.arret } : {}),
+		...(entree.fil === undefined ? {} : { fil: entree.fil }),
 	};
 	try {
 		return await pil.etat.appliquer(entree.session, entree.evenement, entree.horodatageMs, Object.keys(complement).length === 0 ? undefined : complement);

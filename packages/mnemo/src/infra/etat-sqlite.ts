@@ -4,7 +4,6 @@ import { estNiveauModeles } from '@mnemo/commun';
 import type { ActionSurFiche, Classe, EntreeServie, EtatSessions, Lots } from '../application/ports.ts';
 import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
 import type { RaisonMuet } from '../domaine/message-muet.ts';
-import { estIdMoteur } from '../domaine/moteurs/moteur.ts';
 import { etatApres } from '../domaine/session.ts';
 import type { ArretAttendu, CauseArret, EtatSession, EvenementHook, Session } from '../domaine/session.ts';
 
@@ -137,7 +136,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 	messages_porteurs INTEGER NOT NULL DEFAULT 0,
 	niveau_modeles TEXT,
 	moteur TEXT,
-	modele TEXT
+	modele TEXT,
+	fil TEXT
 );
 CREATE TABLE IF NOT EXISTS servis (
 	rang INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -228,9 +228,11 @@ function ligneVersSession(l: Ligne): Session {
 		dossierNonRattache: l.dossier_non_rattache === 1,
 		// une valeur qui n'est pas un niveau est ignorée : la session suit le niveau de la machine
 		...(estNiveauModeles(l.niveau_modeles) ? { niveauModeles: l.niveau_modeles } : {}),
-		// non enregistrés (session d'avant les moteurs) : absents, lus Claude Code et le modèle par défaut
-		...(estIdMoteur(l.moteur) ? { moteur: l.moteur } : {}),
+		// non enregistrés (session d'avant les moteurs) : absents, lus Claude Code et le modèle par défaut ; un moteur inconnu de
+		// ce Mnemo est gardé tel quel
+		...(typeof l.moteur === 'string' ? { moteur: l.moteur } : {}),
 		...(typeof l.modele === 'string' ? { modele: l.modele } : {}),
+		...(typeof l.fil === 'string' ? { fil: l.fil } : {}),
 	};
 }
 
@@ -327,11 +329,10 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				// 11 → 12 : le niveau des modèles propre à une session (absent : elle suit celui de la machine)
 				const colonnesSessions = (base.prepare('PRAGMA table_info(sessions)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesSessions.includes('niveau_modeles')) base.exec('ALTER TABLE sessions ADD COLUMN niveau_modeles TEXT');
-				// 12 → 13 : le moteur et le modèle de chaque session, null pour celles d'avant (lu : Claude Code, modèle par défaut) ;
-				// une table déjà au schéma courant les a
+				// 12 → 13 : le moteur, le modèle et l'identifiant chez le moteur (`fil`) de chaque session, null pour celles d'avant (lu :
+				// Claude Code, modèle par défaut, fil inconnu) ; une table déjà au schéma courant les a
 				const deSession = (base.prepare('PRAGMA table_info(sessions)').all() as Ligne[]).map((c) => c.name);
-				if (!deSession.includes('moteur')) base.exec('ALTER TABLE sessions ADD COLUMN moteur TEXT');
-				if (!deSession.includes('modele')) base.exec('ALTER TABLE sessions ADD COLUMN modele TEXT');
+				for (const colonne of ['moteur', 'modele', 'fil']) if (!deSession.includes(colonne)) base.exec(`ALTER TABLE sessions ADD COLUMN ${colonne} TEXT`);
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
 			} else if (version !== VERSION_ETAT) {
 				throw new ErreurEtat(
@@ -453,8 +454,8 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 					.prepare(
 						`INSERT INTO sessions (id, profil, dossier, position, projet, objectif, etat, creee_ms, maj_ms, arret_attendu,
 							bilan_demande_ms, commit_debut, branche, pid, ecrit_ms, demarrage_machine_ms, lance_ms, vu_vivant_ms, bilan_lu_ms, dernier_arret, episode_ms,
-							dossier_non_rattache, niveau_modeles, moteur, modele)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+							dossier_non_rattache, niveau_modeles, moteur, modele, fil)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					)
 					.run(
 						s.id,
@@ -482,6 +483,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 						estNiveauModeles(s.niveauModeles) ? s.niveauModeles : null,
 						s.moteur ?? null,
 						s.modele ?? null,
+						s.fil ?? null,
 					);
 			});
 		},
@@ -501,6 +503,11 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 			return ecrire(() => {
 				const actuelle = lire(id);
 				if (actuelle === null) return null;
+				// l'identifiant chez le moteur : noté au premier événement qui le porte, jamais écrasé
+				if (complement?.fil !== undefined && complement.fil !== '' && actuelle.fil === undefined) {
+					base.prepare('UPDATE sessions SET fil = ? WHERE id = ? AND fil IS NULL').run(complement.fil, id);
+					actuelle.fil = complement.fil;
+				}
 				if (horodatageMs <= actuelle.majMs) return actuelle;
 				const objectif = actuelle.objectif === null && e === 'message' && complement?.objectif !== undefined ? complement.objectif : actuelle.objectif;
 				const commitDebut = complement?.commitDebut !== undefined ? complement.commitDebut : actuelle.commitDebut;

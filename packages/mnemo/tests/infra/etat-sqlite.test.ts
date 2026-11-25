@@ -324,13 +324,30 @@ describe('etat.sqlite', () => {
 		expect(await etat.lire('n')).not.toHaveProperty('modele');
 	});
 
+	it('moteur inconnu de ce Mnemo : gardé tel quel', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('g', { moteur: 'gemini' }));
+		expect((await etat.lire('g'))?.moteur).toBe('gemini');
+	});
+
+	it('fil (identifiant chez le moteur) : noté au premier événement qui le porte, même ancien, jamais écrasé', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('f', { majMs: 10 }));
+		await etat.appliquer('f', 'message', 20, { objectif: 'x' });
+		expect(await etat.lire('f')).not.toHaveProperty('fil');
+		await etat.appliquer('f', 'debut', 5, { fil: 'fil-1' });
+		expect((await etat.lire('f'))?.fil).toBe('fil-1');
+		await etat.appliquer('f', 'message', 30, { fil: 'fil-2' });
+		expect(await etat.lire('f')).toMatchObject({ fil: 'fil-1', majMs: 30 });
+	});
+
 	it('migre la version 11 (sans moteur ni modèle) vers la dernière sans rien perdre', async () => {
 		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('s1', { pid: 4 }));
 		etat.fermer();
 		ouverts.pop();
 		const base = new DatabaseSync(chemin);
-		for (const colonne of ['moteur', 'modele']) base.exec(`ALTER TABLE sessions DROP COLUMN ${colonne}`);
+		for (const colonne of ['moteur', 'modele', 'fil']) base.exec(`ALTER TABLE sessions DROP COLUMN ${colonne}`);
 		base.exec('PRAGMA user_version = 11');
 		base.close();
 		const rouvert = ouvrirEtat(chemin);

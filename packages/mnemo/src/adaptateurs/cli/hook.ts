@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { EntreeHook, ReponseHook } from '../../application/evenements.ts';
+import { HOOKS_CLAUDE_CODE } from '../../application/moteurs/claude-code/hooks.ts';
 import { hooksDuMoteur } from '../../application/moteurs/hooks.ts';
 import type { EtatSessions, HooksDuMoteur, LectureHook } from '../../application/ports.ts';
 import { estIdMoteur, IDS_MOTEURS, MOTEUR_PAR_DEFAUT } from '../../domaine/moteurs/moteur.ts';
@@ -16,11 +17,8 @@ import { lireIndicateur } from '../../infra/indicateur-consignes.ts';
 import { cheminReel } from '../../infra/chemin-reel.ts';
 import { messageDErreur } from '../../domaine/texte.ts';
 
-/**
- * Échéance de chaque événement depuis le démarrage du processus : lecture de stdin, service, état et `servir` s'y bornent. `fin` :
- * sous les 1,5 s que Claude Code laisse à `SessionEnd` ; `outil` : 1 s de marge avant les 3 s du `timeout` du plugin.
- */
-export const ECHEANCES_MS: Record<EvenementHook, number> = { debut: 900, message: 900, outil: 2000, apres_outil: 900, arret: 900, fin: 1400 };
+/** Échéances des hooks de Claude Code (celles de chaque moteur : `HooksDuMoteur.echeancesMs`). */
+export const ECHEANCES_MS: Record<EvenementHook, number> = HOOKS_CLAUDE_CODE.echeancesMs;
 /** Délai maximal de la réponse du service ; le calcul local garde au moins `RESERVE_LOCALE_MS` s'il faut s'y replier. */
 const DELAI_SERVICE_MS = 300;
 const RESERVE_LOCALE_MS = 400;
@@ -199,9 +197,9 @@ function terminer(sortie: string): void {
 
 /**
  * `[--moteur <id>]` (une fois, n'importe où ; Claude Code par défaut), puis les arguments de l'événement, lus par les hooks de
- * ce moteur ; `moteur` seul : moteur inconnu ou sans implémentation.
+ * ce moteur ; `inconnu` : identifiant inconnu (vrai) ou moteur sans implémentation dans cette version (faux).
  */
-function lireArguments(args: string[]): { moteur: IdMoteur; hooks: HooksDuMoteur; evenement: EvenementHook; options: Set<string> } | { moteur: string } | null {
+function lireArguments(args: string[]): { moteur: IdMoteur; hooks: HooksDuMoteur; evenement: EvenementHook; options: Set<string> } | { moteur: string; inconnu: boolean } | null {
 	const position = args.indexOf('--moteur');
 	let moteur: string = MOTEUR_PAR_DEFAUT;
 	let reste = args;
@@ -210,8 +208,9 @@ function lireArguments(args: string[]): { moteur: IdMoteur; hooks: HooksDuMoteur
 		reste = [...args.slice(0, position), ...args.slice(position + 2)];
 		if (reste.includes('--moteur')) return null;
 	}
-	const hooks = estIdMoteur(moteur) ? hooksDuMoteur(moteur) : null;
-	if (!estIdMoteur(moteur) || hooks === null) return { moteur };
+	if (!estIdMoteur(moteur)) return { moteur, inconnu: true };
+	const hooks = hooksDuMoteur(moteur);
+	if (hooks === null) return { moteur, inconnu: false };
 	const lu = hooks.lireArguments(reste);
 	return lu === null ? null : { moteur, hooks, ...lu };
 }
@@ -223,7 +222,7 @@ function lireArguments(args: string[]): { moteur: IdMoteur; hooks: HooksDuMoteur
 async function reponse(appel: Appel, temps: { debutMs: number; echeance: number }, lectureBornee: boolean, lu: { cwd: string | null }): Promise<ReponseHook> {
 	const lecture = await lireEntree(lectureBornee ? temps.echeance - Date.now() : null);
 	// horodatage : le démarrage du processus, au plus près de l'instant de l'événement (ordre des hooks rapprochés)
-	const traduite = appel.hooks.traduire(appel.evenement, appel.options, lecture, process.env, temps.debutMs, process.cwd(), cheminReel);
+	const traduite = appel.hooks.traduire({ evenement: appel.evenement, options: appel.options, lecture, env: process.env, maintenantMs: temps.debutMs, cwdProcessus: process.cwd(), reel: cheminReel });
 	if (traduite === null) return {};
 	const { transcription } = traduite;
 	const entree: EntreeHook = { ...traduite.entree, moteur: appel.moteur };
@@ -277,8 +276,9 @@ export async function commandeHook(args: string[]): Promise<void> {
 	// le démarrage de Node et le chargement des modules comptent dans le budget
 	const debutMs = Math.floor(performance.timeOrigin);
 	const lu = lireArguments(args);
-	if (lu !== null && !('hooks' in lu)) {
-		process.stderr.write(`mnemo hook : moteur inconnu « ${lu.moteur} » (${IDS_MOTEURS.filter((id) => hooksDuMoteur(id) !== null).join(', ')}).\n`);
+	if (lu !== null && 'inconnu' in lu) {
+		const disponibles = IDS_MOTEURS.filter((id) => hooksDuMoteur(id) !== null).join(', ');
+		process.stderr.write(lu.inconnu ? `mnemo hook : moteur inconnu « ${lu.moteur} » (${disponibles}).\n` : `mnemo hook : moteur sans implémentation dans cette version : « ${lu.moteur} » (${disponibles}).\n`);
 		terminer('');
 		return;
 	}
@@ -288,7 +288,7 @@ export async function commandeHook(args: string[]): Promise<void> {
 		return;
 	}
 	const { evenement } = lu;
-	const r = await reponseAvantEcheance(lu, { debutMs, echeance: debutMs + ECHEANCES_MS[evenement] });
+	const r = await reponseAvantEcheance(lu, { debutMs, echeance: debutMs + lu.hooks.echeancesMs[evenement] });
 	const sortie = lu.hooks.sortie(evenement, r);
 	if (evenement === 'outil' && sortie !== '') process.stderr.write(`mnemo hook : action refusée : ${r.refus}\n`);
 	if (r.avis !== undefined) process.stderr.write(`mnemo hook : ${r.avis}\n`);
