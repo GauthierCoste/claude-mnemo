@@ -9,7 +9,7 @@ import {
 	MISSIONS,
 	mesurerArchiviste,
 } from '../../src/adaptateurs/cli/banc.ts';
-import type { Executer } from '../../src/adaptateurs/cli/declarer.ts';
+import type { Executer } from '../../src/application/ports.ts';
 import { ErreurCli } from '../../src/adaptateurs/cli/erreurs.ts';
 import { cle, couvre, faitsDeMemoire, lancerBancConsignes, noterContradictions, noterExtraction } from '../../src/application/banc-archiviste.ts';
 import type { CasConsigne } from '../../src/application/banc-archiviste.ts';

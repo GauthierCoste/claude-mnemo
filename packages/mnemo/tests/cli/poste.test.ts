@@ -1,7 +1,7 @@
 /** `mnemo verifier-poste` : git, Claude Code et Node, sans lancer ni le vrai `git` ni le vrai `claude`. */
 import type { PosteVerifie } from '@mnemo/contrat';
 import { describe, expect, it } from 'vitest';
-import type { Executer } from '../../src/adaptateurs/cli/declarer.ts';
+import type { Executer } from '../../src/application/ports.ts';
 import { commandeVerifierPoste, verifierPoste } from '../../src/adaptateurs/cli/poste.ts';
 
 const gitRepond = (code: number, sortie: string, erreur = ''): Executer => async (commande, args) => {

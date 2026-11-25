@@ -1,26 +1,8 @@
-import { accessSync, constants, readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { CommandeMoteur } from '../../../application/ports.ts';
 import { variable } from '../../environnement.ts';
-
-function estFichier(chemin: string): boolean {
-	try {
-		return statSync(chemin).isFile();
-	} catch {
-		return false;
-	}
-}
-
-function estExecutable(chemin: string, plateforme: NodeJS.Platform): boolean {
-	if (!estFichier(chemin)) return false;
-	if (plateforme === 'win32') return true;
-	try {
-		accessSync(chemin, constants.X_OK);
-		return true;
-	} catch {
-		return false;
-	}
-}
+import { dossiersDuPath, estExecutable, estFichier } from '../executables.ts';
 
 const SHIM = /\.(?:cmd|bat)$/iu;
 
@@ -61,15 +43,6 @@ function fichierClaude(dossier: string, extension: string): string | null {
 		if (estFichier(candidat)) return candidat;
 	}
 	return null;
-}
-
-/** Windows : dossiers du PATH, sans guillemets ni entrées vides. */
-function dossiersDuPath(env: NodeJS.ProcessEnv, plateforme: NodeJS.Platform): string[] {
-	const chemin = variable(env, 'PATH', plateforme) ?? '';
-	return chemin
-		.split(plateforme === 'win32' ? ';' : ':')
-		.map((brut) => (plateforme === 'win32' ? brut.replace(/^"(.*)"$/u, '$1') : brut))
-		.filter((d) => d !== '');
 }
 
 /**

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { commandeDeclarer } from '../../src/adaptateurs/cli/declaration.ts';
-import { commandeManuelle, declarerServeurMcp, redeclarerServeurMcp, retirerServeurMcp, type Executer } from '../../src/adaptateurs/cli/declarer.ts';
+import type { Executer } from '../../src/application/ports.ts';
+import { commandeManuelle, declarerServeurMcp, redeclarerServeurMcp, retirerServeurMcp } from '../../src/infra/moteurs/claude-code/declaration-mcp.ts';
 import { executeurReel } from '../../src/adaptateurs/cli/executeur.ts';
 
 const MAIN = '/chemin/absolu/main.ts';

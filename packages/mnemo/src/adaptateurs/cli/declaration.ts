@@ -1,8 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import type { SortieDeclarer } from '@mnemo/contrat';
-import type { CommandeMoteur } from '../../application/ports.ts';
+import type { CommandeMoteur, Executer } from '../../application/ports.ts';
 import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
-import { redeclarerServeurMcp, retirerServeurMcp, type Executer } from './declarer.ts';
+import { redeclarerServeurMcp, retirerServeurMcp } from '../../infra/moteurs/claude-code/declaration-mcp.ts';
 import { ErreurCli } from './erreurs.ts';
 import { executeurReel } from './executeur.ts';
 

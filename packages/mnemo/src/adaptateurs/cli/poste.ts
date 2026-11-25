@@ -1,7 +1,7 @@
 import type { PosteVerifie } from '@mnemo/contrat';
 import type { CommandeMoteur } from '../../application/ports.ts';
 import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
-import type { Executer } from './declarer.ts';
+import type { Executer } from '../../application/ports.ts';
 import { ErreurCli } from './erreurs.ts';
 import { executeurReel } from './executeur.ts';
 

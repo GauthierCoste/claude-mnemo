@@ -747,6 +747,57 @@ export interface Terminaux {
 /** Commande qui lance un moteur, jamais par un shell : `commande`, puis `avant`, puis les arguments de la session. */
 export type CommandeMoteur = { commande: string; avant: string[] };
 
+/**
+ * Réglages d'une exécution : dossier courant, environnement complet (remplace celui du processus), délai avant de tuer,
+ * signal d'abandon (levé : le processus est tué, la promesse rejette).
+ */
+export type OptionsExecution = { cwd?: string; env?: Record<string, string>; delaiMs?: number; signal?: AbortSignal };
+/** Lance un programme sans shell : rend son code de sortie ; rejette s'il ne se lance pas, ne répond pas à temps ou est abandonné. */
+export type Executer = (commande: string, args: string[], options?: OptionsExecution) => Promise<{ code: number; sortie: string; erreur: string }>;
+
+/** Portée d'une déclaration MCP chez Claude Code (Codex n'en a qu'une : l'utilisateur). */
+export type PorteeMcp = 'user' | 'local' | 'project';
+
+/**
+ * Déclaration du serveur `mnemo` (`declarer`). `deja` : déclaré avec cette commande ; `perime` : déclaré avec un autre Node
+ * ou un autre `main.ts` (mise à jour de Node, dépôt déplacé) — jamais retiré d'office (`remplacable` : c'est une
+ * déclaration de Mnemo de portée utilisateur, que `mnemo declarer --remplacer` refait ; `portee`, `scope` : Claude Code) ;
+ * sinon : échec, commande manuelle.
+ */
+export type ResultatDeclaration = 'declare' | 'deja' | { perime: true; manuel: string; portee?: string; scope?: PorteeMcp; remplacable?: boolean } | { manuel: string; introuvable: boolean; raison: string };
+
+/**
+ * `absent` : aucune déclaration `mnemo` (rien n'est déclaré) ; `deja` : elle lance déjà ce Node et ce `main.ts` ; `remplace` :
+ * une déclaration de Mnemo de portée utilisateur qui lançait un autre Node ou un autre `main.ts`, refaite ;
+ * `autre` : une déclaration `mnemo` qui ne lance pas Mnemo, ou d'une autre portée : laissée.
+ */
+export type ResultatRedeclaration = 'absent' | 'deja' | 'remplace' | 'autre' | { echec: string };
+/** `retire` : retirée ; `autre` : elle ne lance pas ce Mnemo (ou d'une autre portée) : laissée. */
+export type ResultatRetraitMcp = 'absent' | 'retire' | 'autre' | { echec: string };
+/**
+ * Déclaration lue, sans rien changer : `deja` : elle lance ce Node et ce `main.ts` ; `perime` : une déclaration de Mnemo de
+ * portée utilisateur qui lance un autre Node ou un autre `main.ts` (`remplacer` la refait) ; `autre` : une déclaration
+ * `mnemo` qui ne lance pas Mnemo, ou d'une autre portée.
+ */
+export type LectureDeclaration = 'absent' | 'deja' | 'perime' | 'autre' | { echec: string };
+
+/** Ce que reçoit la déclaration : l'exécuteur, le `main.ts` de Mnemo, la commande du moteur (null : introuvable), la plateforme. */
+export type AppelDeclaration = { executer: Executer; main: string; commande: CommandeMoteur | null; plateforme: string };
+
+/**
+ * Le serveur MCP `mnemo` déclaré au niveau de l'utilisateur chez un moteur, par sa propre ligne de commande : toute session
+ * de ce moteur, lancée ou non par Mnemo, lit et écrit la mémoire. Une déclaration existante n'est jamais remplacée par
+ * `declarer` ; `remplacer` ne refait qu'une déclaration de Mnemo, `retirer` ne retire que celle de ce Node et ce `main.ts`.
+ */
+export type DeclarationMcp = {
+	/** Ligne à copier-coller pour déclarer à la main (chemins cités pour POSIX ou PowerShell). */
+	manuelle(node: string, main: string, plateforme: string): string;
+	lire(a: AppelDeclaration): Promise<LectureDeclaration>;
+	declarer(a: AppelDeclaration): Promise<ResultatDeclaration>;
+	remplacer(a: AppelDeclaration): Promise<ResultatRedeclaration>;
+	retirer(a: AppelDeclaration): Promise<ResultatRetraitMcp>;
+};
+
 /** Un fichier de session du moteur (plugin de Claude Code) ; `chemin` relatif à son dossier, séparé par « / ». */
 export type FichierPlugin = { chemin: string; texte: string };
 
@@ -819,17 +870,25 @@ export type LectureFenetre = { lire(chemin: string, dossier?: string | null): Pr
 export type TelemetrieDuMoteur = { fenetre: LectureFenetre; quotas(brut: unknown): Quotas | null };
 
 /**
- * Un agent de code qui fait tourner les sessions (Claude Code ; Codex à venir) : tout ce qui en diffère. `commandeParDefaut` :
- * le nom écrit dans la ligne à coller quand il est introuvable ; `modeles` : liste indicative (saisie libre permise) ;
- * `trouver` : sa commande (null : introuvable) ; `fichiersDeSession` : ce qu'il faut écrire pour la session (plugin, réglages,
- * consigne, skills), puis `preparer` : arguments et environnement.
+ * Un agent de code sur le poste, hors des sessions : `commandeParDefaut`, le nom écrit dans une ligne à coller quand il est
+ * introuvable ; `trouver` : sa commande (null : introuvable) ; `declarationMcp` : le serveur `mnemo` déclaré chez lui.
+ * Un moteur qui n'est que cela (Codex, tant que ses hooks et ses sessions ne sont pas faits) ne lance aucune session.
  */
-export type Moteur = {
+export type MoteurDuPoste = {
 	id: IdMoteur;
 	nom: string;
 	commandeParDefaut: string;
-	modeles: readonly string[];
 	trouver(env: Record<string, string | undefined>, plateforme: string): CommandeMoteur | null;
+	declarationMcp: DeclarationMcp;
+};
+
+/**
+ * Un agent de code qui fait tourner les sessions (Claude Code) : tout ce qui en diffère. `modeles` : liste indicative (saisie
+ * libre permise) ; `fichiersDeSession` : ce qu'il faut écrire pour la session (plugin, réglages, consigne, skills), puis
+ * `preparer` : arguments et environnement.
+ */
+export type Moteur = MoteurDuPoste & {
+	modeles: readonly string[];
 	/** Ce que la ligne de commande d'un processus lancé pour la session `uuid` contient : de quoi le reconnaître vivant. */
 	marqueDeSession(uuid: string): string;
 	fichiersDeSession(dep: Dependances, session: Session, profil: Profil, appel: AppelPlugin): Promise<FichierPlugin[]>;

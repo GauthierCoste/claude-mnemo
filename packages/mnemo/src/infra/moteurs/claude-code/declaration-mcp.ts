@@ -1,29 +1,15 @@
-import type { CommandeMoteur } from '../../application/ports.ts';
-import { nodeDurable } from '../../infra/node-durable.ts';
-
-/**
- * Réglages d'une exécution : dossier courant, environnement complet (remplace celui du processus), délai avant de tuer,
- * signal d'abandon (levé : le processus est tué, la promesse rejette).
- */
-export type OptionsExecution = { cwd?: string; env?: Record<string, string>; delaiMs?: number; signal?: AbortSignal };
-export type Executer = (commande: string, args: string[], options?: OptionsExecution) => Promise<{ code: number; sortie: string; erreur: string }>;
-
-/**
- * `deja` : déclaré avec cette commande ; `perime` : déclaré avec un autre Node ou un autre `main.ts` (mise à jour de Node,
- * dépôt déplacé) — l'utilisateur retire lui-même l'ancienne déclaration (`remplacable` : c'est une déclaration de Mnemo de
- * portée utilisateur, que `mnemo declarer --remplacer` refait) ; sinon : échec, commande manuelle.
- */
-export type PorteeMcp = 'user' | 'local' | 'project';
-
-export type ResultatDeclaration = 'declare' | 'deja' | { perime: true; manuel: string; portee?: string; scope?: PorteeMcp; remplacable?: boolean } | { manuel: string; introuvable: boolean; raison: string };
-
-export function citerPosix(chemin: string): string {
-	return `'${chemin.replaceAll("'", "'\\''")}'`;
-}
-
-export function citerPowerShell(chemin: string): string {
-	return `'${chemin.replaceAll("'", "''")}'`;
-}
+import type {
+	CommandeMoteur,
+	DeclarationMcp,
+	Executer,
+	LectureDeclaration,
+	PorteeMcp,
+	ResultatDeclaration,
+	ResultatRedeclaration,
+	ResultatRetraitMcp,
+} from '../../../application/ports.ts';
+import { citerPosix, citerPowerShell } from '../../../domaine/citer.ts';
+import { nodeDurable } from '../../node-durable.ts';
 
 /** Commande à copier-coller : aucun JSON, chaque chemin entre apostrophes (POSIX ou PowerShell). */
 export function commandeManuelle(cheminNode: string, cheminMain: string, plateforme: string): string {
@@ -101,15 +87,6 @@ function porteeLue(sortie: string): PorteeMcp | null {
 	return portee === undefined ? null : porteeDe(portee);
 }
 
-/**
- * `absent` : aucune déclaration `mnemo` (rien n'est déclaré) ; `deja` : elle lance déjà ce Node et ce `main.ts` ; `remplace` :
- * une déclaration de Mnemo de portée utilisateur qui lançait un autre Node ou un autre `main.ts`, retirée puis refaite ;
- * `autre` : une déclaration `mnemo` qui ne lance pas Mnemo, ou d'une autre portée : laissée.
- */
-export type ResultatRedeclaration = 'absent' | 'deja' | 'remplace' | 'autre' | { echec: string };
-/** `retire` : retirée ; `autre` : elle ne lance pas ce Mnemo (ou d'une autre portée) : laissée. */
-export type ResultatRetraitMcp = 'absent' | 'retire' | 'autre' | { echec: string };
-
 const echecDe = (erreur: unknown): { echec: string } => {
 	const e = erreur as { code?: string; message?: string };
 	return { echec: e.code === 'ENOENT' ? '`claude` introuvable.' : raisonCourte(e.message ?? '') || 'claude ne répond pas.' };
@@ -155,3 +132,26 @@ export async function retirerServeurMcp(executer: Executer, cheminMain: string, 
 		return echecDe(erreur);
 	}
 }
+
+/** Déclaration lue par `claude mcp get mnemo`, sans rien changer (mêmes critères que `redeclarerServeurMcp`). */
+export async function lireDeclarationMcp(executer: Executer, cheminMain: string, claude: CommandeMoteur | null, plateforme: string = process.platform): Promise<LectureDeclaration> {
+	if (claude === null) return { echec: '`claude` introuvable (PATH, ou MNEMO_CLAUDE).' };
+	const node = nodeDurable(plateforme as NodeJS.Platform);
+	try {
+		const existante = await executer(claude.commande, [...claude.avant, 'mcp', 'get', 'mnemo']);
+		if (existante.code !== 0) return 'absent';
+		if (memeDeclaration(existante.sortie, node, cheminMain)) return 'deja';
+		return estDeclarationMnemo(existante.sortie) && porteeLue(existante.sortie) === 'user' ? 'perime' : 'autre';
+	} catch (erreur) {
+		return echecDe(erreur);
+	}
+}
+
+/** Claude Code : `claude mcp get | add-json --scope user | remove --scope user mnemo`. */
+export const DECLARATION_MCP_CLAUDE_CODE: DeclarationMcp = {
+	manuelle: commandeManuelle,
+	lire: (a) => lireDeclarationMcp(a.executer, a.main, a.commande, a.plateforme),
+	declarer: (a) => declarerServeurMcp(a.executer, a.main, a.commande, a.plateforme),
+	remplacer: (a) => redeclarerServeurMcp(a.executer, a.main, a.commande, a.plateforme),
+	retirer: (a) => retirerServeurMcp(a.executer, a.main, a.commande, a.plateforme),
+};

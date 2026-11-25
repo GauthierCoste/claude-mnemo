@@ -21,7 +21,7 @@ import { ecrirePlugin } from '../../infra/plugin-fichiers.ts';
 import { dossierServeurs } from '../../infra/modeles/dossier.ts';
 import { arreterServeurs, lireEtatServeurs, pidVivant } from '../../infra/modeles/serveurs.ts';
 import { appelPlugin, dependancesReelles } from '../../infra/systeme.ts';
-import type { Executer } from './declarer.ts';
+import type { Executer } from '../../application/ports.ts';
 import { AUCUNE_MEMOIRE, ErreurCli } from './erreurs.ts';
 import { executeurReel } from './executeur.ts';
 import { trouverRacine } from './racine.ts';
