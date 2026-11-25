@@ -1,7 +1,7 @@
 import { closeSync, openSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { estNiveauModeles } from '@mnemo/commun';
-import type { ActionSurFiche, Affinage, Classe, EntreeServie, EtatSessions, GesteNote, Lots, VecteurDuMessage } from '../application/ports.ts';
+import type { ActionSurFiche, Affinage, Classe, EcarteeToujours, EntreeServie, EtatSessions, GesteNote, Lots, VecteurDuMessage } from '../application/ports.ts';
 import { couperClassement } from '../domaine/couper-classement.ts';
 import { noteDeLigne, origineDe } from '../domaine/gestes.ts';
 import type { Geste, NoteDuGeste, OrigineGeste } from '../domaine/gestes.ts';
@@ -117,6 +117,20 @@ CREATE INDEX IF NOT EXISTS lots_decide ON lots (decide_ms);
 `;
 
 /**
+ * Fiches écartées toujours (« Ne plus jamais suggérer ») : sorties des candidates partout jusqu'à leur rétablissement ;
+ * `session` : celle du geste (null : fait hors session) ; `retablie_ms` : instant du dernier rétablissement (null : écartée),
+ * gardé pour que les écarts d'avant ne comptent plus. Ajoutée avec le journal des gestes (version 13).
+ */
+const SCHEMA_ECARTEES_TOUJOURS = `
+CREATE TABLE IF NOT EXISTS ecartees_toujours (
+	fiche TEXT PRIMARY KEY,
+	session TEXT,
+	horodatage_ms INTEGER NOT NULL,
+	retablie_ms INTEGER
+);
+`;
+
+/**
  * Journal durable des gestes sur les fiches (sans limite, gardé après la session) ; ajouté en version 13, avec le dernier
  * message porteur de chaque session et le rang du message des entrées servies. `note` : JSON (`{"note":0.72}`) ; `vecteur` :
  * vecteur du message (Float32 petit-boutiste), du modèle `modele_vecteur` ; null s'il n'a pas été calculé.
@@ -141,7 +155,7 @@ CREATE TABLE IF NOT EXISTS gestes (
 CREATE INDEX IF NOT EXISTS gestes_fiche ON gestes (fiche, horodatage_ms);
 CREATE INDEX IF NOT EXISTS gestes_horodatage ON gestes (horodatage_ms);
 CREATE INDEX IF NOT EXISTS gestes_session ON gestes (session);
-`;
+${SCHEMA_ECARTEES_TOUJOURS}`;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -337,6 +351,11 @@ function ligneVersGeste(l: Ligne): GesteNote {
 	};
 }
 
+function ligneVersEcarteeToujours(l: Ligne): EcarteeToujours {
+	const retablie = l.retablie_ms as number | bigint | null;
+	return { fiche: l.fiche as string, session: (l.session as string | null) ?? null, horodatageMs: Number(l.horodatage_ms), retablieMs: retablie === null ? null : Number(retablie) };
+}
+
 /** Une transaction courte, prise en écriture d'emblée : les écritures concurrentes de plusieurs processus se suivent. */
 function transaction<T>(base: DatabaseSync, attente: Attente, travail: () => T): T {
 	return reessayerSiOccupe(base, attente, () => {
@@ -422,9 +441,12 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
 			} else if (version === VERSION_ETAT) {
-				// 13 non publiée : un état déjà en 13 (développement) reçoit l'état d'affinage du classement
+				// 13 non publiée : un état déjà en 13 (développement) reçoit l'état d'affinage du classement et les écartées toujours
 				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
+				base.exec(SCHEMA_ECARTEES_TOUJOURS);
+				const colonnesEcartees = (base.prepare('PRAGMA table_info(ecartees_toujours)').all() as Ligne[]).map((c) => c.name);
+				if (!colonnesEcartees.includes('retablie_ms')) base.exec('ALTER TABLE ecartees_toujours ADD COLUMN retablie_ms INTEGER');
 			} else if (version !== VERSION_ETAT) {
 				throw new ErreurEtat(
 					`L'état des sessions (${chemin}) est en version de schéma ${version}, ce Mnemo lit la version ${VERSION_ETAT} : rien n'est effacé, mettre Mnemo à jour.`,
@@ -1002,6 +1024,10 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 				conditions.push('fiche = ?');
 				parametres.push(filtre.fiche);
 			}
+			if (filtre.depuisRang !== undefined) {
+				conditions.push('rang >= ?');
+				parametres.push(filtre.depuisRang);
+			}
 			if (filtre.depuisMs !== undefined) {
 				conditions.push('horodatage_ms >= ?');
 				parametres.push(filtre.depuisMs);
@@ -1011,6 +1037,32 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 			return reessayer(() =>
 				(base.prepare(`SELECT * FROM gestes ${ou} ORDER BY horodatage_ms DESC, rang DESC LIMIT ?`).all(...parametres, filtre.limite ?? -1) as Ligne[]).map(ligneVersGeste),
 			);
+		},
+
+		async ecarterToujours(e) {
+			return ecrire(() => {
+				// une fiche rétablie puis écartée à nouveau : la ligne repart (session et instant du nouvel écart)
+				const r = base
+					.prepare(
+						`INSERT INTO ecartees_toujours (fiche, session, horodatage_ms, retablie_ms) VALUES (?, ?, ?, NULL)
+						ON CONFLICT (fiche) DO UPDATE SET session = excluded.session, horodatage_ms = excluded.horodatage_ms, retablie_ms = NULL WHERE retablie_ms IS NOT NULL`,
+					)
+					.run(e.fiche, e.session, e.horodatageMs);
+				return Number(r.changes) > 0 ? 'ecartee' : 'deja_ecartee';
+			});
+		},
+
+		async retablirToujours(fiche, horodatageMs) {
+			return ecrire(() => {
+				const l = base.prepare('SELECT * FROM ecartees_toujours WHERE fiche = ? AND retablie_ms IS NULL').get(fiche) as Ligne | undefined;
+				if (l === undefined) return null;
+				base.prepare('UPDATE ecartees_toujours SET retablie_ms = ? WHERE fiche = ?').run(horodatageMs, fiche);
+				return { ...ligneVersEcarteeToujours(l), retablieMs: horodatageMs };
+			});
+		},
+
+		async ecarteesToujours() {
+			return reessayer(() => (base.prepare('SELECT * FROM ecartees_toujours ORDER BY horodatage_ms, fiche').all() as Ligne[]).map(ligneVersEcarteeToujours));
 		},
 
 		async derniereModificationMs() {

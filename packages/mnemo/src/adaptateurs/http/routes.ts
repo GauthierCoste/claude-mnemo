@@ -1,5 +1,5 @@
 import { ENTETE_REMPLACEMENT, ROUTES } from '@mnemo/contrat';
-import type { BilanAmorceVue, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseArretModeles, ReponseNiveauModeles, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
+import type { BilanAmorceVue, ReponseEcarteesToujours, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseArretModeles, ReponseNiveauModeles, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
 import { avertissementsDe, CARACTERES_INVISIBLES, CHEMINS_LOT_MAX, demandeTout, estNiveauModeles, NIVEAUX_MODELES, nomAffichable, OBJECTIF_MAX, PROFIL_TRAVAIL, SAUF_MAX } from '@mnemo/commun';
 import type { AvecAvertissements, NiveauModeles } from '@mnemo/commun';
 import { amorcer, marquerTraitees } from '../../application/amorcer.ts';
@@ -14,6 +14,7 @@ import { deplacer, destinationDuDeplacement } from '../../application/deplacer.t
 import { BORNES_DOCUMENTS, documentsDeLaMemoire, SANS_BORNE } from '../../application/documents.ts';
 import { ecarterDuClassement } from '../../application/ecarter.ts';
 import { noterGeste } from '../../application/gestes.ts';
+import type { AprioriDesGestes } from '../../application/apriori.ts';
 import { traiterEvenement } from '../../application/evenements.ts';
 import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
@@ -44,7 +45,7 @@ import type { EvenementHook, Session } from '../../domaine/session.ts';
 import { deposerFichier, ErreurEspaceInsuffisant, ErreurTropVolumineux, tropVolumineux, verifierDepot } from '../../infra/fichiers-dossier.ts';
 import { vueModeles } from './diffusion-modeles.ts';
 import { cheminDeVue, vueFiche, vueGraphe } from './memoire-vues.ts';
-import { titreDeFiche, titresDeLIndex as titresIndex, vueEcarte, vueServie, vueSession, vueSessionTerminee } from './vues.ts';
+import { titreDeFiche, titresDeLIndex as titresIndex, vueEcarte, vueEcarteeToujours, vueServie, vueSession, vueSessionTerminee } from './vues.ts';
 
 /** Chemin d'un dépôt (`?vers=`) selon `cheminDeDepot` du domaine ; refus lisible (400). */
 function cheminDuDepot(vers: string | null): string {
@@ -145,6 +146,8 @@ export type ContexteRoutes = {
 	journal: (message: string) => void;
 	/** Taille maximale d'un dépôt (`TAILLE_MAX_DOCUMENT` en service ; abaissée par les tests). */
 	depotMax: number;
+	/** A priori des gestes et fiches écartées toujours, tenus en mémoire par le service ; actualisés après chaque geste. */
+	apriori: AprioriDesGestes;
 };
 
 type Route = { methode: 'GET' | 'POST' | 'PUT' | 'DELETE'; chemin: string; corps?: 'json' | 'flux'; action(r: Requete): Promise<Reponse> };
@@ -309,10 +312,34 @@ function parametres(params: URLSearchParams, noms: Record<string, string>): Reco
 
 /** Les routes du service (chemins : `ROUTES` du contrat). */
 export function routes(ctx: ContexteRoutes): Route[] {
-	const { dep, pil, pilote } = ctx;
+	const { dep, pil, pilote, apriori } = ctx;
 	/** Recherche complète en cours par clé de remplacement (la suivante de même clé l'abandonne). */
 	const recherchesEnCours = new Map<string, AbortController>();
-	const vue = (s: Session) => vueSession(s, pilote.enCours(s.id));
+	const vue = (s: Session) => vueSession(s, pilote.enCours(s.id), apriori.suggestions(s.id));
+	/**
+	 * Après un geste : l'a priori relit les gestes nouveaux (et les écartées toujours si `ecartees`), puis la vue de chaque
+	 * session dont les suggestions « écartée toujours » ont changé est rediffusée. Une panne de lecture n'empêche pas le geste
+	 * d'être fait.
+	 */
+	const apresGeste = async (ecartees = false): Promise<void> => {
+		let changees: Set<string>;
+		try {
+			changees = await apriori.actualiser({ ecartees });
+		} catch (erreur) {
+			ctx.journal(`a priori des gestes : relecture impossible (${messageDErreur(erreur)}).`);
+			return;
+		}
+		for (const id of changees) {
+			const s = await pil.etat.lire(id).catch(() => null);
+			if (s !== null) ctx.signaler(s);
+		}
+	};
+	/** Les fiches écartées toujours (pas celles rétablies), avec leur titre. */
+	const ecarteesToujours = async (): Promise<Reponse> => {
+		const titres = await titresDeLIndex();
+		const actives = (await pil.etat.ecarteesToujours()).filter((e) => e.retablieMs === null);
+		return ok({ ecarteesToujours: actives.map((e) => vueEcarteeToujours(e, titres)) } satisfies ReponseEcarteesToujours);
+	};
 	const session = async (id: string): Promise<Session> => {
 		const s = estUuid(id) ? await pil.etat.lire(id) : null;
 		if (s === null) throw new ErreurHttp(404, 'Session inconnue.');
@@ -433,6 +460,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const resultat = await pil.etat.supprimer(s.id);
 				if (resultat === 'inconnue') throw new ErreurHttp(404, 'Session inconnue.');
 				if (resultat === 'non_terminee') throw new ErreurHttp(409, 'Seule une session terminée peut être retirée de l’historique.');
+				apriori.oublierSession(s.id);
 				return ok({ id: s.id });
 			},
 		},
@@ -529,6 +557,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 						...(porteur === undefined ? {} : { porteur }),
 						...(note === undefined ? {} : { note }),
 					});
+					await apresGeste();
 				}
 				return ecartesDiffuses(s.id);
 			},
@@ -547,8 +576,45 @@ export function routes(ctx: ContexteRoutes): Route[] {
 					const fiche = id.split('#')[0]!;
 					const note = noteDuPorteur(recent, fiche);
 					await noterGeste(dep, pil.etat, { geste: 'retablie', session: s.id, fiche, horodatageMs: Date.now(), vecteur: vecteurDuPorteur(recent), ...(note === undefined ? {} : { note }) });
+					await apresGeste();
 				}
 				return ecartesDiffuses(s.id);
+			},
+		},
+		{ methode: 'GET', chemin: ROUTES.ecarteesToujours, action: ecarteesToujours },
+		{
+			methode: 'POST',
+			chemin: ROUTES.ecarteesToujours,
+			corps: 'json',
+			// « Ne plus jamais suggérer » : la fiche sort des candidates partout, jusqu'à son rétablissement
+			action: async (r) => {
+				const d = champs(await r.json(), { chemin: { requis: true, max: 4096 }, session: { requis: false, max: 100 } });
+				const chemin = d.chemin!;
+				// un réglage de la fiche, pas de la session : accepté aussi depuis une session terminée (le geste y est noté)
+				const s = d.session === undefined ? null : await session(d.session);
+				if (!(await dep.index.fiches()).some((f) => f.chemin === chemin)) throw new ErreurHttp(404, `Fiche inconnue : « ${chemin} ».`);
+				const horodatageMs = Date.now();
+				const resultat = await pil.etat.ecarterToujours({ fiche: chemin, session: s?.id ?? null, horodatageMs });
+				if (resultat === 'ecartee' && s !== null) {
+					await noterGeste(dep, pil.etat, { geste: 'ecartee_toujours', session: s.id, fiche: chemin, horodatageMs, vecteur: vecteurDuPorteur(porteurs.lire(s.id)) });
+				}
+				await apresGeste(true);
+				return ecarteesToujours();
+			},
+		},
+		{
+			methode: 'DELETE',
+			chemin: ROUTES.ecarteesToujours,
+			action: async (r) => {
+				const chemin = r.params.get('chemin');
+				if (chemin === null || chemin === '') throw new ErreurHttp(400, 'Paramètre « chemin » : obligatoire.');
+				const retiree = await pil.etat.retablirToujours(chemin, Date.now());
+				if (retiree === null) throw new ErreurHttp(404, `Fiche non écartée toujours : « ${chemin} ».`);
+				// le rétablissement annule l'écart dans la session où il a été fait (son vote négatif ne compte plus)
+				const s = retiree.session === null ? null : await pil.etat.lire(retiree.session);
+				if (s !== null) await noterGeste(dep, pil.etat, { geste: 'retablie', session: s.id, fiche: chemin, horodatageMs: Date.now(), vecteur: vecteurDuPorteur(porteurs.lire(s.id)) });
+				await apresGeste(true);
+				return ecarteesToujours();
 			},
 		},
 
@@ -627,6 +693,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				}
 				if (entree.session !== '') {
 					const s = await pil.etat.lire(entree.session).catch(() => null);
+					// un message (injection à la main) ou une lecture après une carte a pu noter un geste : l'a priori le relit, hors du chemin du hook
+					if (entree.evenement === 'message' || entree.evenement === 'apres_outil') ctx.enFond(apresGeste());
 					if (s !== null) {
 						ctx.signaler(s);
 						// les fiches demandées partent au message (jamais après un outil) : l'interface voit tout de suite ➤ s'éteindre et ◆ paraître

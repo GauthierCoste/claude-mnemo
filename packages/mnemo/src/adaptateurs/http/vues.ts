@@ -1,7 +1,8 @@
-import type { EcarteVue, EntreeServieVue, SessionTermineeVue, SessionVue } from '@mnemo/contrat';
+import type { EcarteeToujoursVue, EcarteVue, EntreeServieVue, SessionTermineeVue, SessionVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
 import { estMinimal } from '../../application/episode.ts';
 import type { SessionTerminee } from '../../application/historique.ts';
-import type { Ecarte, EntreeServie } from '../../application/ports.ts';
+import type { Ecarte, EcarteeToujours, EntreeServie } from '../../application/ports.ts';
+import type { SuggestionEcarteeToujours } from '../../domaine/apriori-gestes.ts';
 import { nomDeLaFiche } from '../../domaine/chemin.ts';
 import { dialogueOuvert } from '../../domaine/session.ts';
 import { texteDossierNonRattache } from '../../domaine/rattachement.ts';
@@ -9,9 +10,10 @@ import type { Session } from '../../domaine/session.ts';
 
 /**
  * Ce que l'API montre d'une session : les champs du contrat, rien de plus (ni pid, ni trace du processus, ni arrêt attendu).
- * `terminal` : un terminal de ce service est attaché à la session.
+ * `terminal` : un terminal de ce service est attaché à la session. `suggestions` : fiches écartées par la session que la règle
+ * des 3 sessions propose d'écarter toujours (champ absent s'il n'y en a pas).
  */
-export function vueSession(s: Session, terminal: boolean): SessionVue {
+export function vueSession(s: Session, terminal: boolean, suggestions: readonly SuggestionEcarteeToujours[] = []): SessionVue {
 	return {
 		id: s.id,
 		profil: s.profil,
@@ -29,7 +31,16 @@ export function vueSession(s: Session, terminal: boolean): SessionVue {
 		terminal,
 		dialogueOuvert: dialogueOuvert(s),
 		niveauModeles: s.niveauModeles ?? null,
+		...(suggestions.length === 0 ? {} : { suggestionsEcarteeToujours: suggestions.map(vueSuggestion) }),
 	};
+}
+
+function vueSuggestion(s: SuggestionEcarteeToujours): SuggestionEcarteeToujoursVue {
+	return { chemin: s.fiche, sessions: s.sessions.length, jours: s.jours };
+}
+
+export function vueEcarteeToujours(e: EcarteeToujours, titres: ReadonlyMap<string, string>): EcarteeToujoursVue {
+	return { chemin: e.fiche, titre: titreDeFiche(e.fiche, titres), horodatageMs: e.horodatageMs };
 }
 
 /** Une session de l'historique et son épisode (titre : celui de la fiche, sinon son nom de fichier). */

@@ -30,7 +30,15 @@ export type SessionVue = {
 	dialogueOuvert: boolean;
 	/** Niveau des modèles propre à la session ; null : elle suit le niveau de la machine (le plus restrictif des deux s'applique). */
 	niveauModeles: NiveauModeles | null;
+	/**
+	 * Fiches écartées dans cette session que la règle des 3 sessions propose d'écarter toujours (« Écartée dans 3 sessions :
+	 * ne plus jamais la suggérer ? ») ; jamais appliquée seule. Absent : aucune (ou un service plus ancien).
+	 */
+	suggestionsEcarteeToujours?: SuggestionEcarteeToujoursVue[];
 };
+
+/** Une fiche écartée dans `sessions` sessions distinctes, sur `jours` jours, sans geste positif depuis. */
+export type SuggestionEcarteeToujoursVue = { chemin: string; sessions: number; jours: number };
 
 /**
  * Un profil de session qui peut être lancé : `description`, première ligne de sa consigne ; `lancement` : `projet` (dans le
@@ -254,6 +262,12 @@ export type EtatModelesVue = {
 /** Un élément écarté pour une session (« ne plus suggérer ») : une fiche emporte ses éléments. Effacé à la fin de la session. */
 export type EcarteVue = { id: string; titre: string; horodatageMs: number };
 
+/** Une fiche écartée toujours (« Ne plus jamais suggérer ») : hors des candidates partout, jusqu'à son rétablissement. */
+export type EcarteeToujoursVue = { chemin: string; titre: string; horodatageMs: number };
+
+/** Réponse de `ecarteesToujours` (GET, POST, DELETE) : toutes les fiches écartées toujours, les plus anciennes d'abord. */
+export type ReponseEcarteesToujours = { ecarteesToujours: EcarteeToujoursVue[] };
+
 /** Du service vers le client (WebSocket). */
 export type MessageServeur =
 	| { type: 'session'; session: SessionVue }
@@ -301,6 +315,10 @@ export type MessageClient =
  * - `ecartes` GET → `{ ecartes: EcarteVue[] }` ; POST `{ id }` (un id des classements récents de la session : 404 sinon ; 409
  *   session terminée) écarte cet élément des prochains calculs de la session ; DELETE `?id=` le rétablit (409 session
  *   terminée) ; les deux rendent `{ ecartes }` et diffusent `ecartes` (aussi diffusé vide quand la session se termine) ;
+ * - `ecarteesToujours` GET → `ReponseEcarteesToujours` ; POST `{ chemin, session? }` (une fiche indexée : 404 sinon ; `session` :
+ *   celle du geste, 404 inconnue ; une session terminée est acceptée : c'est un réglage de la fiche) écarte la fiche toujours :
+ *   hors des candidates partout, geste `ecartee_toujours` noté dans la session ; DELETE `?chemin=` la rétablit (404 si elle ne l'était pas ; geste `retablie` noté dans la session
+ *   de l'écart) ; les deux rendent `ReponseEcarteesToujours` ;
  * - `aServir` GET → `ReponseAServir` ; POST `{ chemin }` (une fiche indexée : 404 sinon ; 409 session terminée) → `ReponseAServir` ; DELETE `?chemin=` → `ReponseAServir` : fiches injectées entières au prochain message de la session (message `aServir` diffusé) ;
  * - `fenetres` GET → `ReponseFenetres` : la fenêtre de contexte connue de chaque session (message `fenetre` à chaque changement) ;
  * - `quotas` GET → `ReponseQuotas` ; POST `{ rate_limits }` (de `mnemo ligne-etat`, tel que Claude Code le donne à sa ligne
@@ -402,6 +420,7 @@ export const ROUTES = {
 	servis: '/api/sessions/:id/servis',
 	ecartes: '/api/sessions/:id/ecartes',
 	aServir: '/api/sessions/:id/a-servir',
+	ecarteesToujours: '/api/ecartees-toujours',
 	fenetres: '/api/fenetres',
 	quotas: '/api/quotas',
 	modeles: '/api/modeles',

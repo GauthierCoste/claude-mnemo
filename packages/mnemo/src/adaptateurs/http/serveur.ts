@@ -34,6 +34,7 @@ import { ENTETES_SECURITE, hoteValide, jetonDeLEntete, jetonDuWebSocket, jetonVa
 import { dossierInterface, servirInterface } from './statique.ts';
 import { racineAffichee, titresDeLIndex } from './vues.ts';
 import { creerHub } from './websocket.ts';
+import { aprioriDesGestes } from '../../application/apriori.ts';
 import { diffuserModeles, vueModeles } from './diffusion-modeles.ts';
 import { routesLots } from './lots.ts';
 import { versionMnemo } from '../../infra/version.ts';
@@ -298,7 +299,11 @@ export async function demarrerService(options: {
 	);
 
 	const modeles = options.modeles ?? modelesLocaux(racine);
+	// a priori des gestes entre sessions : lu une fois en arrière-plan, puis seulement les gestes nouveaux
+	const apriori = aprioriDesGestes(pil.etat, { chemins: async () => (await dep.index.titres()).map((t) => t.chemin), journal });
+	enFond(apriori.actualiser({ ecartees: true }));
 	const hub = creerHub({
+		suggestions: (session) => apriori.suggestions(session),
 		etatModeles: async () => vueModeles(await modeles.etat()),
 		pilote,
 		etat: pil.etat,
@@ -348,6 +353,7 @@ export async function demarrerService(options: {
 			projetsClaude: projetsClaude(racine, () => dossiersAAmorcer(dossiers), { dossierClaude }),
 			journal,
 			depotMax,
+			apriori,
 		}),
 		...routesProfils(dep, () => hub.diffuser({ type: 'memoire', modifieeMs: Date.now() })),
 		...routesLots(dep, hub.diffuser),
