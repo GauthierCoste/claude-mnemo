@@ -101,7 +101,9 @@ async function contexte(sessions: Session[] = []): Promise<Contexte> {
 async function lancee(c: Contexte): Promise<Session> {
 	const r = await c.pilote.lancer({ profil: 'travail', dossier: 'alpha', objectif: 'Refaire le catalogue' });
 	if (!('session' in r) || 'manuel' in r) throw new Error('lancement attendu');
-	return r.session;
+	// les événements simulés sont horodatés jusqu'à 20 ms dans le passé : le lancement noté une seconde avant, ils le suivent
+	// comme de vrais hooks (un dialogue d'avant le lancement est fermé, `dialogueOuvert`)
+	return (await c.etat.modifier(r.session.id, { lanceMs: Date.now() - 1000 })) ?? r.session;
 }
 
 describe('Pilote.terminer (terminaux simulés)', () => {

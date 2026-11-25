@@ -7,7 +7,7 @@ import { noteDeLigne, origineDe } from '../domaine/gestes.ts';
 import type { Geste, NoteDuGeste, OrigineGeste } from '../domaine/gestes.ts';
 import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
 import type { RaisonMuet } from '../domaine/message-muet.ts';
-import { etatApres } from '../domaine/session.ts';
+import { etatApres, messageApresSonDebut } from '../domaine/session.ts';
 import type { ArretAttendu, CauseArret, EtatSession, EvenementHook, Session } from '../domaine/session.ts';
 
 /** Version du schéma (`PRAGMA user_version`). L'état n'est pas jetable : une autre version est une erreur, jamais un effacement. */
@@ -640,7 +640,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 					base.prepare('UPDATE sessions SET fil = ? WHERE id = ? AND fil IS NULL').run(complement.fil, id);
 					actuelle.fil = complement.fil;
 				}
-				if (horodatageMs <= actuelle.majMs) return actuelle;
+				if (horodatageMs <= actuelle.majMs && !(e === 'message' && messageApresSonDebut(actuelle, horodatageMs))) return actuelle;
 				const objectif = actuelle.objectif === null && e === 'message' && complement?.objectif !== undefined ? complement.objectif : actuelle.objectif;
 				const commitDebut = complement?.commitDebut !== undefined ? complement.commitDebut : actuelle.commitDebut;
 				const branche = complement?.branche !== undefined ? complement.branche : actuelle.branche;
@@ -653,7 +653,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 				const dernierArret = e === 'arret' ? (complement?.arret ?? 'stop') : e === 'fin' ? (actuelle.dernierArret ?? null) : null;
 				base
 					.prepare('UPDATE sessions SET etat = ?, maj_ms = ?, objectif = ?, commit_debut = ?, branche = ?, bilan_lu_ms = ?, dernier_arret = ?, ecrit_ms = ? WHERE id = ?')
-					.run(etatApres(actuelle, e), horodatageMs, objectif, commitDebut, branche, bilanLu, dernierArret, Date.now(), id);
+					.run(etatApres(actuelle, e), Math.max(horodatageMs, actuelle.majMs), objectif, commitDebut, branche, bilanLu, dernierArret, Date.now(), id);
 				oublierEcartesSiTerminee(id);
 				return lire(id);
 			});

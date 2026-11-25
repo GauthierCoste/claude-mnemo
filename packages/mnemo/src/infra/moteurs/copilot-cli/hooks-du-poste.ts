@@ -1,5 +1,6 @@
 import type { AppelHooksDuPoste, HooksDuPoste, LectureHooksDuPoste, ResultatInstallationHooks, ResultatRemplacementHooks, ResultatRetraitHooks } from '../../../application/ports.ts';
-import { etatDuFichierDeHooks, fichierDeHooksAttendu, fichierSansCetteInstallation, texteDuFichierDeHooks } from '../../../domaine/moteurs/copilot-cli/hooks-installes.ts';
+import { etatDuFichierDeHooks, fichierDeHooksAttendu, fichierSansCetteInstallation } from '../../../domaine/moteurs/copilot-cli/hooks-installes.ts';
+import { sansBom, texteJsonReecrit } from '../../../domaine/moteurs/json-texte.ts';
 import { estObjet, objetJson } from '../../../domaine/valeurs.ts';
 import { ecrireConfiguration, lireConfiguration, supprimerConfiguration } from '../../fichier-de-configuration.ts';
 import type { ConfigurationLue } from '../../fichier-de-configuration.ts';
@@ -10,7 +11,7 @@ async function lireFichier(chemin: string): Promise<{ lu: ConfigurationLue; raci
 	const lu = await lireConfiguration(chemin);
 	if ('echec' in lu) return lu;
 	if (lu.texte === null) return { lu, racine: null };
-	const racine = objetJson(lu.texte);
+	const racine = objetJson(sansBom(lu.texte));
 	if (racine === null || !estObjet(racine)) return { echec: `${chemin} : JSON illisible ; corrigez-le, Mnemo ne le réécrit pas.` };
 	return { lu, racine };
 }
@@ -40,7 +41,7 @@ async function installer(a: AppelHooksDuPoste): Promise<ResultatInstallationHook
 	if (etat === 'a_jour') return 'deja';
 	if (personnels.length > 0) return refusPersonnels(chemin, personnels);
 	if (autres) return { echec: `${chemin} porte des hooks de Mnemo d’une autre installation (autre Node ou autre Mnemo) : lancez « mnemo declarer --moteur copilot-cli --remplacer » pour les reprendre.`, perime: true };
-	const echec = await ecrireConfiguration(chemin, f.lu, texteDuFichierDeHooks(fichierDeHooksAttendu(a.node, a.main)));
+	const echec = await ecrireConfiguration(chemin, f.lu, texteJsonReecrit(fichierDeHooksAttendu(a.node, a.main), f.lu.texte));
 	return echec ?? (etat === 'absent' ? 'installe' : 'mis_a_jour');
 }
 
@@ -52,21 +53,27 @@ async function remplacer(a: AppelHooksDuPoste): Promise<ResultatRemplacementHook
 	const { etat, personnels } = etatDuFichierDeHooks(f.racine, a.node, a.main);
 	if (etat !== 'perime') return etat === 'a_jour' ? 'deja' : 'absent';
 	if (personnels.length > 0) return refusPersonnels(chemin, personnels);
-	return (await ecrireConfiguration(chemin, f.lu, texteDuFichierDeHooks(fichierDeHooksAttendu(a.node, a.main)))) ?? 'mis_a_jour';
+	return (await ecrireConfiguration(chemin, f.lu, texteJsonReecrit(fichierDeHooksAttendu(a.node, a.main), f.lu.texte))) ?? 'mis_a_jour';
 }
 
 /**
  * Retire les commandes de ce Node et ce `main.ts` : le fichier est supprimé s'il ne lui reste rien, sinon réécrit sans elles
- * (une autre installation, ou ce qu'un utilisateur y a mis, gardés) ; jamais rien d'autre.
+ * (les commandes d'une autre installation de Mnemo gardées). Un fichier qui porte ce que Mnemo n'écrit pas : refus motivé,
+ * rien n'est réécrit ni supprimé.
  */
 async function retirer(a: AppelHooksDuPoste): Promise<ResultatRetraitHooks> {
 	const chemin = cheminHooksCopilot(a.env);
 	const f = await lireFichier(chemin);
 	if ('echec' in f) return f;
-	const { etat, deCetteInstallation } = etatDuFichierDeHooks(f.racine, a.node, a.main);
+	const { etat, deCetteInstallation, personnels } = etatDuFichierDeHooks(f.racine, a.node, a.main);
 	if (f.racine === null || !deCetteInstallation) return etat === 'absent' ? 'absent' : 'autre';
+	if (personnels.length > 0) {
+		return {
+			echec: `${chemin} porte ce que Mnemo n’écrit pas (${personnels.join(', ')}) : Mnemo ne le réécrit ni ne le supprime ; retirez-en à la main les commandes de Mnemo (« hook … --moteur copilot-cli »), ou déplacez le reste dans un autre fichier de ce dossier puis relancez.`,
+		};
+	}
 	const reste = fichierSansCetteInstallation(f.racine, a.node, a.main);
-	const echec = reste === null ? await supprimerConfiguration(chemin, f.lu) : await ecrireConfiguration(chemin, f.lu, texteDuFichierDeHooks(reste));
+	const echec = reste === null ? await supprimerConfiguration(chemin, f.lu) : await ecrireConfiguration(chemin, f.lu, texteJsonReecrit(reste, f.lu.texte));
 	return echec ?? 'retire';
 }
 

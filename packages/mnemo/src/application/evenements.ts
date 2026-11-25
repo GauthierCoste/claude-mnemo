@@ -226,7 +226,6 @@ async function verifierOutil(dep: Dependances, pil: Pick<Pilotage, 'etat'>, sess
 		(async () => {
 			try {
 				const outils = outilsDuMoteur(entree.moteur ?? MOTEUR_PAR_DEFAUT);
-				if (outils === null) throw new Error(`Moteur sans implémentation : « ${entree.moteur} ».`);
 				const position = await positionDe(dep, pil, session, entree, reglages, true);
 				return await verifierAction(dep, position, action, { racine, cwd: entree.cwd ?? racine, sansCasse: reglages.sansCasse ?? false, outils });
 			} catch (erreur) {
@@ -369,8 +368,9 @@ async function servirEvenement(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 			}
 			return {};
 		case 'apres_outil':
-			// rien n'est calculé ni servi après un outil : seule la fiche lue ou écrite est notée
-			if (session !== null) await noterFicheTouchee(dep, pil, session, entree, reglages);
+			// rien n'est calculé ni servi après un outil : seule la fiche lue ou écrite est notée (pas pour un `apres_outil` que le
+			// profil ne demande pas, qui ne tient que l'état : `apresOutilDEtat`)
+			if (session !== null && entree.sansContexte !== true) await noterFicheTouchee(dep, pil, session, entree, reglages);
 			return {};
 		case 'message':
 			return entree.sansContexte === true ? {} : servirAuMessage(dep, pil, session, entree, reglages);
@@ -386,7 +386,7 @@ async function servirEvenement(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 async function noterFicheTouchee(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session: Session, entree: EntreeHook, reglages: ReglagesEvenement): Promise<void> {
 	const appel = entree.outil !== undefined && 'nom' in entree.outil ? entree.outil : null;
 	const outils = outilsDuMoteur(entree.moteur ?? MOTEUR_PAR_DEFAUT);
-	const touchee = appel === null || outils === null ? null : ficheTouchee(appel, outils);
+	const touchee = appel === null ? null : ficheTouchee(appel, outils);
 	if (touchee === null) return;
 	const empreinte = touchee.action === 'lue' ? ((await dep.index.fiches().catch(() => [])).find((f) => f.chemin === touchee.chemin)?.empreinte ?? null) : null;
 	await pil.etat.noterFicheServieLueOuEcrite(session.id, { chemin: touchee.chemin, action: touchee.action, horodatageMs: entree.horodatageMs, empreinte }).catch(() => {});

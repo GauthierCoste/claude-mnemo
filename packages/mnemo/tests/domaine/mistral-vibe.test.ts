@@ -101,6 +101,8 @@ describe('hooks de Mnemo dans hooks.toml', () => {
 		const elements = elementsDuTableau(entreesToml(texte)!, 'hooks')!.elements.map((e) => e.valeurs);
 		expect(elements).toHaveLength(1 + HOOKS_MISTRAL_VIBE_INSTALLES.length);
 		expect(elements.map((e) => e['type'])).toEqual(['session_start', 'session_start', 'pre_agent', 'pre_tool', 'post_tool', 'post_agent', 'notification', 'session_end']);
+		// pre_tool : 10 s, loin de l'échéance de Mnemo (2 s) ; un délai dépassé laisserait passer l'outil
+		expect(elements[3]).toMatchObject({ name: 'mnemo-pre_tool', timeout: { texte: '10' } });
 		expect(elements[2]).toMatchObject({ name: 'mnemo-pre_agent', match: 'main', command: `[ "$MNEMO_MOTEUR" = mistral-vibe ] || exit 0; '${NODE}' '${MAIN}' hook message --moteur mistral-vibe` });
 		expect(elements[3]).not.toHaveProperty('strict');
 		expect(elements[6]!['command']).toContain('hook arret --notification --moteur mistral-vibe');

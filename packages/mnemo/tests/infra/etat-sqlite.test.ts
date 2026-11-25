@@ -158,6 +158,20 @@ describe('etat.sqlite', () => {
 		expect((await etat.appliquer('s1', 'arret', 3))?.etat).toBe('travaille');
 	});
 
+	it('un message horodaté avant le debut de ce lancement qui le précède (lancés ensemble) n’est jamais ignoré ; majMs ne recule pas', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('s1', { lanceMs: 100, arretAttendu: 'bilan', bilanDemandeMs: 50 }));
+		await etat.appliquer('s1', 'debut', 120);
+		const apres = await etat.appliquer('s1', 'message', 110, { objectif: 'but' });
+		expect(apres).toMatchObject({ etat: 'travaille', majMs: 120, objectif: 'but', bilanLuMs: 110 });
+		// d'avant ce lancement, ou après autre chose qu'un debut : ignoré comme tout événement plus ancien
+		await etat.creer(session('s2', { lanceMs: 100 }));
+		await etat.appliquer('s2', 'debut', 120);
+		expect(await etat.appliquer('s2', 'message', 90)).toMatchObject({ etat: 'attend', majMs: 120 });
+		await etat.appliquer('s2', 'arret', 130);
+		expect(await etat.appliquer('s2', 'message', 125)).toMatchObject({ etat: 'attend', majMs: 130 });
+	});
+
 	it('applique fin selon l\'arrêt attendu', async () => {
 		const { etat } = await ouvrir();
 		await etat.creer(session('s1'));

@@ -111,11 +111,12 @@ describe('hooks de GitHub Copilot CLI', () => {
 		reel: (c) => c,
 	});
 
-	it('arguments : noms Mnemo ou événements de Copilot ; permissionRequest : un dialogue ouvert', () => {
+	it('arguments : noms Mnemo ou événements de Copilot ; notification : arret --notification ; permissionRequest : inconnu', () => {
 		expect(hooksDuMoteur('copilot-cli')).toBe(HOOKS_COPILOT_CLI);
 		expect(HOOKS_COPILOT_CLI.lireArguments(['sessionStart'])).toEqual({ evenement: 'debut', options: new Set() });
 		expect(HOOKS_COPILOT_CLI.lireArguments(['preToolUse'])?.evenement).toBe('outil');
-		expect(HOOKS_COPILOT_CLI.lireArguments(['permissionRequest'])).toEqual({ evenement: 'arret', options: new Set(['--notification']) });
+		expect(HOOKS_COPILOT_CLI.lireArguments(['notification'])).toEqual({ evenement: 'arret', options: new Set(['--notification']) });
+		expect(HOOKS_COPILOT_CLI.lireArguments(['permissionRequest'])).toBeNull();
 		expect(HOOKS_COPILOT_CLI.lireArguments(['arret', '--notification'])).toEqual({ evenement: 'arret', options: new Set(['--notification']) });
 		expect(HOOKS_COPILOT_CLI.lireArguments(['preMcpToolCall'])).toBeNull();
 	});
@@ -133,12 +134,23 @@ describe('hooks de GitHub Copilot CLI', () => {
 			entree: { input: '*** Begin Patch\n*** Add File: a.md\n+x\n*** End Patch' },
 		});
 		expect(HOOKS_COPILOT_CLI.traduire(appel('arret', { transcriptPath: '/c/session-state/x/events.jsonl', stopReason: 'end_turn' }))).toMatchObject({ entree: { arret: 'stop' }, transcription: '/c/session-state/x/events.jsonl' });
-		expect(HOOKS_COPILOT_CLI.traduire(appel('arret', { toolName: 'create', toolInput: { path: '/p/a.md' } }, ['--notification']))?.entree.arret).toBe('notification');
-		// un outil de Mnemo permis d'avance : Copilot évalue sa permission sans rien afficher (mesuré)
-		expect(HOOKS_COPILOT_CLI.traduire(appel('arret', { toolName: 'mnemo/lire', toolInput: {} }, ['--notification']))).toBeNull();
-		expect(HOOKS_COPILOT_CLI.traduire(appel('arret', { toolName: 'mnemo/deplacer', toolInput: {} }, ['--notification']))?.entree.arret).toBe('notification');
+		// la notification d'une demande d'approbation affichée (mesuré) : un dialogue ouvert ; une autre notification : ignorée
+		const notification = (type: string) => ({ hook_event_name: 'Notification', notification_type: type, title: 'Permission needed', message: 'Run command: touch a' });
+		expect(HOOKS_COPILOT_CLI.traduire(appel('arret', notification('permission_prompt'), ['--notification']))?.entree.arret).toBe('notification');
+		expect(HOOKS_COPILOT_CLI.traduire(appel('arret', notification('elicitation_dialog'), ['--notification']))?.entree.arret).toBe('notification');
+		expect(HOOKS_COPILOT_CLI.traduire(appel('arret', notification('agent_completed'), ['--notification']))).toBeNull();
+		// `permissionRequest` reçu par la commande `arret --notification` d'un fichier d'avant : appelé pour tout outil évalué,
+		// dialogue affiché ou non (mesuré) ; jamais un dialogue
+		expect(HOOKS_COPILOT_CLI.traduire(appel('arret', { hookName: 'permissionRequest', toolName: 'bash', toolInput: { command: 'ls' }, permissionSuggestions: [] }, ['--notification']))).toBeNull();
 		// sans cwd : le dossier du processus
 		expect(HOOKS_COPILOT_CLI.traduire({ ...appel('message'), lecture: { texte: '{"sessionId":"x"}' } })?.entree.cwd).toBe('/q');
+	});
+
+	it('apres_outil que le profil ne demande pas : l’état seulement (il efface le dialogue ouvert), sans contexte ni fiche notée ; outil non demandé : rien', () => {
+		const sansApresOutil = { ...ENV, MNEMO_HOOKS: 'debut,message,arret,fin' };
+		expect(HOOKS_COPILOT_CLI.traduire(appel('apres_outil', { toolName: 'bash', toolArgs: { command: 'ls' } }, [], sansApresOutil))?.entree).toMatchObject({ evenement: 'apres_outil', sansContexte: true });
+		expect(HOOKS_COPILOT_CLI.traduire(appel('outil', { toolName: 'bash', toolArgs: { command: 'ls' } }, [], sansApresOutil))).toBeNull();
+		expect(HOOKS_COPILOT_CLI.traduire(appel('apres_outil', { toolName: 'bash', toolArgs: { command: 'ls' } }, [], { ...ENV, MNEMO_HOOKS: 'debut,message,apres_outil,arret,fin' }))?.entree.sansContexte).toBeUndefined();
 	});
 
 	it('fins : user_exit et complete comptent, clear est ignorée ; inerte hors d’une session GitHub Copilot CLI de Mnemo', () => {

@@ -1,11 +1,12 @@
 /** GitHub Copilot CLI sur le poste : sa commande, sa déclaration MCP et ses hooks dans un COPILOT_HOME jetable, sa télémétrie, ses modèles, sa version ; jamais le vrai `copilot`. */
-import { chmod, mkdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { commandeDeclarer } from '../../src/adaptateurs/cli/declaration.ts';
 import { commandeVerifierPoste } from '../../src/adaptateurs/cli/poste.ts';
 import type { AppelDeclaration, AppelHooksDuPoste, Executer } from '../../src/application/ports.ts';
-import { fichierDeHooksAttendu, texteDuFichierDeHooks } from '../../src/domaine/moteurs/copilot-cli/hooks-installes.ts';
+import { fichierDeHooksAttendu } from '../../src/domaine/moteurs/copilot-cli/hooks-installes.ts';
+import { texteJsonReecrit } from '../../src/domaine/moteurs/json-texte.ts';
 import { executeurReel } from '../../src/infra/executeur.ts';
 import { MOTEUR_COPILOT_CLI } from '../../src/infra/moteurs/copilot-cli.ts';
 import { DECLARATION_MCP_COPILOT_CLI } from '../../src/infra/moteurs/copilot-cli/declaration-mcp.ts';
@@ -135,7 +136,7 @@ describe('hooks de Mnemo pour GitHub Copilot CLI (hooks/mnemo.json)', () => {
 		expect(await HOOKS_DU_POSTE_COPILOT_CLI.lire(appelHooks(home))).toEqual({ etat: 'absent', chemin });
 		expect(await HOOKS_DU_POSTE_COPILOT_CLI.remplacer(appelHooks(home))).toBe('absent');
 		expect(await HOOKS_DU_POSTE_COPILOT_CLI.installer(appelHooks(home))).toBe('installe');
-		expect(await readFile(chemin, 'utf8')).toBe(texteDuFichierDeHooks(fichierDeHooksAttendu(NODE, MAIN)));
+		expect(await readFile(chemin, 'utf8')).toBe(texteJsonReecrit(fichierDeHooksAttendu(NODE, MAIN), null));
 		expect(await HOOKS_DU_POSTE_COPILOT_CLI.lire(appelHooks(home))).toEqual({ etat: 'a_jour', chemin });
 		expect(await HOOKS_DU_POSTE_COPILOT_CLI.installer(appelHooks(home))).toBe('deja');
 		expect(await HOOKS_DU_POSTE_COPILOT_CLI.retirer(appelHooks(home, '/autre/node'))).toBe('autre');
@@ -144,14 +145,14 @@ describe('hooks de Mnemo pour GitHub Copilot CLI (hooks/mnemo.json)', () => {
 		expect(await HOOKS_DU_POSTE_COPILOT_CLI.retirer(appelHooks(home))).toBe('absent');
 		// une autre installation
 		await mkdir(join(home, 'hooks'), { recursive: true });
-		await writeFile(chemin, texteDuFichierDeHooks(fichierDeHooksAttendu('/vieux/node', MAIN)));
+		await writeFile(chemin, texteJsonReecrit(fichierDeHooksAttendu('/vieux/node', MAIN), null));
 		expect(await HOOKS_DU_POSTE_COPILOT_CLI.lire(appelHooks(home))).toEqual({ etat: 'perime', chemin });
 		expect(await HOOKS_DU_POSTE_COPILOT_CLI.installer(appelHooks(home))).toMatchObject({ perime: true, echec: expect.stringContaining('--moteur copilot-cli --remplacer') });
 		expect(await HOOKS_DU_POSTE_COPILOT_CLI.remplacer(appelHooks(home))).toBe('mis_a_jour');
 		expect(await HOOKS_DU_POSTE_COPILOT_CLI.lire(appelHooks(home))).toEqual({ etat: 'a_jour', chemin });
 	});
 
-	it('ce que Mnemo n’écrit pas dans son fichier : jamais réécrit ; retrait sans perte ; JSON illisible : échec, fichier intact', async () => {
+	it('ce que Mnemo n’écrit pas dans son fichier : jamais réécrit ni supprimé, retrait refusé avec son motif ; JSON illisible : échec, fichier intact', async () => {
 		const home = await dossierTemporaire();
 		const chemin = join(home, 'hooks', 'mnemo.json');
 		await mkdir(join(home, 'hooks'));
@@ -159,13 +160,29 @@ describe('hooks de Mnemo pour GitHub Copilot CLI (hooks/mnemo.json)', () => {
 		const perso = { ...attendu, hooks: { ...attendu.hooks, agentStop: [...attendu.hooks['agentStop']!, { type: 'command', bash: 'echo fin' }] } };
 		await writeFile(chemin, JSON.stringify(perso));
 		expect(await HOOKS_DU_POSTE_COPILOT_CLI.installer(appelHooks(home))).toEqual({ echec: expect.stringContaining('hooks.agentStop[1]') });
-		expect(await HOOKS_DU_POSTE_COPILOT_CLI.retirer(appelHooks(home))).toBe('retire');
-		expect(JSON.parse(await readFile(chemin, 'utf8'))).toEqual({ version: 1, hooks: { agentStop: [{ type: 'command', bash: 'echo fin' }] } });
+		const texte = await readFile(chemin, 'utf8');
+		expect(await HOOKS_DU_POSTE_COPILOT_CLI.retirer(appelHooks(home))).toEqual({ echec: expect.stringMatching(/hooks\.agentStop\[1\].*ne le réécrit ni ne le supprime/u) });
+		expect(await readFile(chemin, 'utf8')).toBe(texte);
 		await writeFile(chemin, '{');
 		for (const action of [HOOKS_DU_POSTE_COPILOT_CLI.lire, HOOKS_DU_POSTE_COPILOT_CLI.installer, HOOKS_DU_POSTE_COPILOT_CLI.remplacer, HOOKS_DU_POSTE_COPILOT_CLI.retirer]) {
 			expect(await action(appelHooks(home))).toEqual({ echec: expect.stringContaining('JSON illisible') });
 		}
 		expect(await readFile(chemin, 'utf8')).toBe('{');
+	});
+
+	it('lien symbolique : réécrit à sa cible, retiré en supprimant le lien lui-même, jamais sa cible ; BOM lu et gardé', async () => {
+		const home = await dossierTemporaire();
+		const ailleurs = join(await dossierTemporaire(), 'mes-hooks.json');
+		await mkdir(join(home, 'hooks'));
+		const chemin = join(home, 'hooks', 'mnemo.json');
+		await writeFile(ailleurs, `\uFEFF${texteJsonReecrit(fichierDeHooksAttendu('/vieux/node', MAIN), null)}`);
+		await symlink(ailleurs, chemin);
+		expect(await HOOKS_DU_POSTE_COPILOT_CLI.lire(appelHooks(home))).toMatchObject({ etat: 'perime' });
+		expect(await HOOKS_DU_POSTE_COPILOT_CLI.remplacer(appelHooks(home))).toBe('mis_a_jour');
+		expect(await readFile(ailleurs, 'utf8')).toBe(`\uFEFF${texteJsonReecrit(fichierDeHooksAttendu(NODE, MAIN), null)}`);
+		expect(await HOOKS_DU_POSTE_COPILOT_CLI.retirer(appelHooks(home))).toBe('retire');
+		await expect(lstat(chemin)).rejects.toThrow();
+		expect((await stat(ailleurs)).isFile()).toBe(true);
 	});
 });
 
@@ -174,7 +191,7 @@ describe('mnemo declarer --moteur copilot-cli et verifier-poste', () => {
 		const home = await dossierTemporaire();
 		await writeFile(join(home, 'mcp-config.json'), JSON.stringify({ mcpServers: { mnemo: entree('/vieux/node') } }));
 		await mkdir(join(home, 'hooks'));
-		await writeFile(join(home, 'hooks', 'mnemo.json'), texteDuFichierDeHooks(fichierDeHooksAttendu('/vieux/node', MAIN)));
+		await writeFile(join(home, 'hooks', 'mnemo.json'), texteJsonReecrit(fichierDeHooksAttendu('/vieux/node', MAIN), null));
 		const lignes: string[] = [];
 		const copilot = () => COPILOT;
 		await commandeDeclarer(['--moteur', 'copilot-cli', '--remplacer', '--json'], { trouver: { 'copilot-cli': copilot }, main: MAIN, env: { COPILOT_HOME: home } }, (l) => lignes.push(l));

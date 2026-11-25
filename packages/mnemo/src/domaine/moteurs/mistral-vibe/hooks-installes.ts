@@ -11,15 +11,16 @@ import { OUTILS_MISTRAL_VIBE } from './outils.ts';
  * - `pre_agent` et `post_agent` : `match = "main"`, l'agent de la session seulement (son alias, mesuré avec `--agent
  *   mnemo-<uuid>`) ; jamais un sous-agent, dont le tour n'est ni un message de l'utilisateur ni la fin du tour ;
  * - `pre_tool` sans `match` (tous les outils, sous-agents compris), sans `strict` : un hook qui dépasse son délai laisse
- *   passer l'outil, comme chez Claude Code et Codex ; Mnemo décide lui-même sous son échéance (`refusDelai`), et une panne
- *   de Mnemo ne bloque pas chaque outil de la session ;
+ *   passer l'outil, comme chez Claude Code et Codex ; 10 s, loin de l'échéance de Mnemo (`refusDelai`, 2 s, comptée depuis
+ *   le démarrage du hook : un Node lent à démarrer ne fait pas passer l'outil), qui décide lui-même : une panne de Mnemo ne
+ *   bloque pas chaque outil de la session ;
  * - `notification` : `arret --notification`, son type dit s'il ouvre un dialogue ;
  * - `session_end` : 2 s au plus (Vibe n'attend pas plus, à la fermeture, l'ensemble des hooks en cours).
  */
 export const HOOKS_MISTRAL_VIBE_INSTALLES: readonly { type: string; args: readonly string[]; timeout: number; match?: string }[] = [
 	{ type: 'session_start', args: ['debut'], timeout: 10 },
 	{ type: 'pre_agent', args: ['message'], timeout: 5, match: 'main' },
-	{ type: 'pre_tool', args: ['outil'], timeout: 3 },
+	{ type: 'pre_tool', args: ['outil'], timeout: 10 },
 	{ type: 'post_tool', args: ['apres_outil'], timeout: 3, match: OUTILS_MISTRAL_VIBE.motifApresOutil },
 	{ type: 'post_agent', args: ['arret'], timeout: 3, match: 'main' },
 	{ type: 'notification', args: ['arret', '--notification'], timeout: 3 },

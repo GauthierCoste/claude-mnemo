@@ -16,6 +16,9 @@ const OPTIONS: Partial<Record<EvenementHook, readonly string[]>> = { arret: ['--
  *   du moteur qui valent `arret --notification` (un dialogue est ouvert) ;
  * - `raisonsIgnorees` : raisons d'une fin de conversation qui ne termine pas la session (`/clear`…) ;
  * - `arret` : ce qu'est un arrêt d'après son entrée (null : ignoré) ; par défaut, `notification` sur `--notification` ;
+ * - `apresOutilDEtat` : `apres_outil` tient aussi l'état quand le profil ne le demande pas (l'état seulement, `sansContexte`) :
+ *   il efface un dialogue ouvert une fois l'outil approuvé passé (GitHub Copilot CLI : aucun autre hook ne le fait avant la
+ *   fin du tour) ;
  * - `dialogueDuParent` : un dialogue ouvert (`arret` `notification`) porte `parent_session_id`, l'identifiant de la session
  *   quand il vient d'un agent qu'elle a lancé (son approbation s'affiche dans le terminal de la session) : il compte pour elle ;
  * - `champs` : l'entrée lue ramenée à la forme commune (`session_id`, `cwd`, `prompt`, `source`, `tool_name`, `tool_input`,
@@ -30,6 +33,7 @@ export type ReglagesHooksGardes = {
 	raisonsIgnorees: ReadonlySet<string>;
 	arret?(champs: Record<string, unknown>, options: ReadonlySet<string>): 'notification' | 'stop' | null;
 	dialogueDuParent?: boolean;
+	apresOutilDEtat?: boolean;
 	sortie(evenement: EvenementHook, reponse: ReponseHook): string;
 	echeancesMs: Record<EvenementHook, number>;
 	finIgnoreeSiVivante: boolean;
@@ -60,7 +64,8 @@ export function hooksGardes(r: ReglagesHooksGardes): HooksDuMoteur {
 		if (session === null) return null;
 		// hooks communs à toutes les sessions : le profil de celle-ci dit ce que chacun fait (`MNEMO_HOOKS`, posée au lancement)
 		const demandes = hooksDuTexte(env.MNEMO_HOOKS);
-		const effet = demandes === null ? 'actif' : effetDuHook(evenement, demandes);
+		const demande = demandes === null ? 'actif' : effetDuHook(evenement, demandes);
+		const effet = demande === 'absent' && evenement === 'apres_outil' && r.apresOutilDEtat === true ? 'sans_contexte' : demande;
 		if (effet === 'absent') return null;
 		const lu = 'texte' in lecture ? objetJson(lecture.texte) : null;
 		if (lu === null && evenement !== 'outil') return null;

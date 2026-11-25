@@ -68,7 +68,8 @@ describe('dépôt durable : chaque document déposé a sa fiche source « à tra
 		const c = await serviceFaux();
 		const archiviste = await lancerArchiviste(c);
 		const terminal = terminalDe(c, archiviste.id);
-		await c.etat.appliquer(archiviste.id, 'arret', Date.now(), { arret: 'notification' });
+		// après le lancement (`lanceMs`), comme un vrai hook : un dialogue d'avant le lancement est fermé
+		await c.etat.appliquer(archiviste.id, 'arret', Date.now() + 1, { arret: 'notification' });
 		expect((await api(c).deposer('docs/lent.txt')).statut).toBe(201);
 		const debut = Date.now();
 		const fin = await api(c).post(ROUTES.depotTraiter, { chemins: ['docs/lent.txt'] });

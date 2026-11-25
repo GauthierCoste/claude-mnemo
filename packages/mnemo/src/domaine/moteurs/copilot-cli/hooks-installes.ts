@@ -1,29 +1,32 @@
 import { estObjet } from '../../valeurs.ts';
 import { commandeGardee, estCommandeDeHookMnemo, lanceCeNodeEtCeMain } from '../commande-de-hook.ts';
-import { OUTILS_COPILOT_CLI } from './outils.ts';
 
 /**
  * Hooks de Mnemo chez GitHub Copilot CLI : un fichier propre à Mnemo, `hooks/mnemo.json` (`{ "version": 1, "hooks": { … } }`,
  * lu par Copilot avec tout fichier `*.json` de ce dossier, sans approbation), une commande par événement Copilot (noms en
  * camelCase : entrée en camelCase, mesuré), `mnemo hook <événement> --moteur copilot-cli`, `timeoutSec` en secondes :
- * - `preToolUse` sans `matcher` (tous les outils, sous-agents compris) : un hook qui dépasse son délai laisse passer l'outil
- *   (mesuré) ; Mnemo décide lui-même sous son échéance (`refusDelai`), une panne de Mnemo ne bloque pas chaque outil ;
- * - `postToolUse` : `matcher`, expression qui couvre tout le nom de l'outil (`motifApresOutil`) ;
- * - `permissionRequest` : `arret --notification`, un dialogue d'approbation s'ouvre ;
+ * - `preToolUse` sans `matcher` (tous les outils, sous-agents compris ; un par appel, appels parallèles d'une même réponse
+ *   compris, mesuré) : un hook qui dépasse son délai laisse passer l'outil (mesuré) ; 10 s, loin de l'échéance de Mnemo
+ *   (`refusDelai`, 2 s), qui décide lui-même : une panne de Mnemo ne bloque pas chaque outil ;
+ * - `postToolUse` sans `matcher` : après chaque outil, il efface le dialogue ouvert (l'outil approuvé a tourné), même pour
+ *   un profil qui ne demande pas `apres_outil` (l'état seulement : `apresOutilDEtat`) ; seuls les outils de Mnemo y notent
+ *   une fiche lue ou écrite ;
+ * - `notification` : `arret --notification`, son type dit s'il montre un dialogue (`permission_prompt`) ; jamais
+ *   `permissionRequest`, appelé pour tout outil évalué, dialogue affiché ou non (mesuré) ;
  * - `userPromptSubmitted` seulement (pas `userPromptTransformed`, qui suit le même message) ; `sessionStart` n'arrive qu'avec
  *   le premier message d'un lancement (mesuré), en même temps que lui.
  */
-export const HOOKS_COPILOT_CLI_INSTALLES: readonly { evenement: string; args: readonly string[]; timeoutSec: number; matcher?: string }[] = [
+export const HOOKS_COPILOT_CLI_INSTALLES: readonly { evenement: string; args: readonly string[]; timeoutSec: number }[] = [
 	{ evenement: 'sessionStart', args: ['debut'], timeoutSec: 10 },
 	{ evenement: 'userPromptSubmitted', args: ['message'], timeoutSec: 5 },
-	{ evenement: 'preToolUse', args: ['outil'], timeoutSec: 3 },
-	{ evenement: 'postToolUse', args: ['apres_outil'], timeoutSec: 3, matcher: OUTILS_COPILOT_CLI.motifApresOutil },
+	{ evenement: 'preToolUse', args: ['outil'], timeoutSec: 10 },
+	{ evenement: 'postToolUse', args: ['apres_outil'], timeoutSec: 3 },
 	{ evenement: 'agentStop', args: ['arret'], timeoutSec: 3 },
-	{ evenement: 'permissionRequest', args: ['arret', '--notification'], timeoutSec: 3 },
+	{ evenement: 'notification', args: ['arret', '--notification'], timeoutSec: 3 },
 	{ evenement: 'sessionEnd', args: ['fin'], timeoutSec: 3 },
 ];
 
-/** Clés d'une commande que Mnemo écrit ; une autre (`env`, `cwd`, `windows`…) vient de l'utilisateur. */
+/** Clés d'une commande que Mnemo écrit (`matcher` : dans un fichier d'avant) ; une autre (`env`, `cwd`, `windows`…) vient de l'utilisateur. */
 const CLES_D_UNE_COMMANDE = new Set(['type', 'bash', 'powershell', 'timeoutSec', 'matcher']);
 /** Clés du fichier que Mnemo écrit. */
 const CLES_DU_FICHIER = new Set(['version', 'hooks']);
@@ -39,14 +42,11 @@ export function commandesDuHook(node: string, main: string, args: readonly strin
 /** Contenu attendu de `hooks/mnemo.json` pour ce Node et ce `main.ts`. */
 export function fichierDeHooksAttendu(node: string, main: string): { version: 1; hooks: Record<string, unknown[]> } {
 	const hooks: Record<string, unknown[]> = {};
-	for (const { evenement, args, timeoutSec, matcher } of HOOKS_COPILOT_CLI_INSTALLES) {
-		hooks[evenement] = [{ type: 'command', ...commandesDuHook(node, main, args), ...(matcher === undefined ? {} : { matcher }), timeoutSec }];
+	for (const { evenement, args, timeoutSec } of HOOKS_COPILOT_CLI_INSTALLES) {
+		hooks[evenement] = [{ type: 'command', ...commandesDuHook(node, main, args), timeoutSec }];
 	}
 	return { version: 1, hooks };
 }
-
-/** Texte écrit : JSON indenté de deux espaces, fin de ligne `\n` (un fichier de Mnemo). */
-export const texteDuFichierDeHooks = (racine: unknown): string => `${JSON.stringify(racine, null, 2)}\n`;
 
 /** Une commande de hook posée par Mnemo pour Copilot (n'importe quelle installation) : `bash` le dit, `powershell` aussi s'il est là. */
 function estCommandeMnemo(commande: unknown): commande is Record<string, unknown> & { bash: string } {

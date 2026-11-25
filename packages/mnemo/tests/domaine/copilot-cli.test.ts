@@ -1,7 +1,8 @@
 /** GitHub Copilot CLI, calcul pur : outils, déclaration MCP, hooks de `hooks/mnemo.json`, modèles, télémétrie, version, touches. */
 import { describe, expect, it } from 'vitest';
 import { commandeManuelleCopilotCli, declarationDansConfig, desactiveDansReglages, entreeAColler, texteAvecDeclaration } from '../../src/domaine/moteurs/copilot-cli/declaration.ts';
-import { commandesDuHook, etatDuFichierDeHooks, fichierDeHooksAttendu, fichierSansCetteInstallation, HOOKS_COPILOT_CLI_INSTALLES, texteDuFichierDeHooks } from '../../src/domaine/moteurs/copilot-cli/hooks-installes.ts';
+import { commandesDuHook, etatDuFichierDeHooks, fichierDeHooksAttendu, fichierSansCetteInstallation, HOOKS_COPILOT_CLI_INSTALLES } from '../../src/domaine/moteurs/copilot-cli/hooks-installes.ts';
+import { texteJsonReecrit } from '../../src/domaine/moteurs/json-texte.ts';
 import { modelesDeLAide } from '../../src/domaine/moteurs/copilot-cli/modeles.ts';
 import { OUTILS_COPILOT_CLI } from '../../src/domaine/moteurs/copilot-cli/outils.ts';
 import { fenetreDansLeJournal } from '../../src/domaine/moteurs/copilot-cli/telemetrie.ts';
@@ -92,12 +93,15 @@ describe('déclaration MCP dans mcp-config.json', () => {
 });
 
 describe('hooks de Mnemo dans hooks/mnemo.json', () => {
-	it('fichier attendu : une commande gardée par événement de Copilot, bash et powershell, délais ; matcher de postToolUse', () => {
+	it('fichier attendu : une commande gardée par événement de Copilot, bash et powershell, délais ; aucun matcher ; notification, jamais permissionRequest', () => {
 		const attendu = fichierDeHooksAttendu(NODE, MAIN);
 		expect(attendu.version).toBe(1);
-		expect(Object.keys(attendu.hooks)).toEqual(['sessionStart', 'userPromptSubmitted', 'preToolUse', 'postToolUse', 'agentStop', 'permissionRequest', 'sessionEnd']);
-		expect(attendu.hooks['preToolUse']).toEqual([{ type: 'command', ...commandesDuHook(NODE, MAIN, ['outil']), timeoutSec: 3 }]);
-		expect(attendu.hooks['postToolUse']![0]).toMatchObject({ matcher: OUTILS_COPILOT_CLI.motifApresOutil });
+		expect(Object.keys(attendu.hooks)).toEqual(['sessionStart', 'userPromptSubmitted', 'preToolUse', 'postToolUse', 'agentStop', 'notification', 'sessionEnd']);
+		// 10 s : Copilot laisse passer l'outil à son délai ; Mnemo décide en 2 s
+		expect(attendu.hooks['preToolUse']).toEqual([{ type: 'command', ...commandesDuHook(NODE, MAIN, ['outil']), timeoutSec: 10 }]);
+		// après chaque outil : le dialogue ouvert est effacé
+		expect(attendu.hooks['postToolUse']).toEqual([{ type: 'command', ...commandesDuHook(NODE, MAIN, ['apres_outil']), timeoutSec: 3 }]);
+		expect(attendu.hooks['notification']).toEqual([{ type: 'command', ...commandesDuHook(NODE, MAIN, ['arret', '--notification']), timeoutSec: 3 }]);
 		expect(commandesDuHook(NODE, MAIN, ['arret', '--notification']).bash).toBe(`[ "$MNEMO_MOTEUR" = copilot-cli ] || exit 0; '${NODE}' '${MAIN}' hook arret --notification --moteur copilot-cli`);
 		expect(commandesDuHook(NODE, MAIN, ['fin']).powershell).toMatch(/^if \(\$env:MNEMO_MOTEUR -ne 'copilot-cli'\) \{ exit 0 \}; & /u);
 		expect(HOOKS_COPILOT_CLI_INSTALLES.every((h) => h.timeoutSec >= 3)).toBe(true);
@@ -107,7 +111,7 @@ describe('hooks de Mnemo dans hooks/mnemo.json', () => {
 		const attendu = fichierDeHooksAttendu(NODE, MAIN);
 		expect(etatDuFichierDeHooks(null, NODE, MAIN).etat).toBe('absent');
 		expect(etatDuFichierDeHooks({}, NODE, MAIN).etat).toBe('absent');
-		expect(etatDuFichierDeHooks(JSON.parse(texteDuFichierDeHooks(attendu)), NODE, MAIN)).toEqual({ etat: 'a_jour', autres: false, deCetteInstallation: true, personnels: [] });
+		expect(etatDuFichierDeHooks(JSON.parse(texteJsonReecrit(attendu, null)), NODE, MAIN)).toEqual({ etat: 'a_jour', autres: false, deCetteInstallation: true, personnels: [] });
 		const autre = fichierDeHooksAttendu('/autre/node', MAIN);
 		expect(etatDuFichierDeHooks(autre, NODE, MAIN)).toEqual({ etat: 'perime', autres: true, deCetteInstallation: false, personnels: [] });
 		// une commande de l'utilisateur, une clé ajoutée : personnelles

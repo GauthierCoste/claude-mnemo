@@ -16,6 +16,8 @@ import { chargerProfil } from './profil.ts';
 import { refusDuMoteur } from '../domaine/profil.ts';
 import { DOSSIER_MEMOIRE } from '../domaine/dossier-memoire.ts';
 import { citerPosix, citerPowerShell } from '../domaine/citer.ts';
+import { commencee, voieDeLaLigne } from './premier-message.ts';
+import type { SuiteDeReprise, VoieDeLaLigne } from './premier-message.ts';
 
 export type Pilote = {
 	/**
@@ -26,8 +28,9 @@ export type Pilote = {
 	pause(id: string): Promise<Session | null>;
 	/**
 	 * Rejette `ErreurMoteurIndisponible` si le moteur de la session n'a pas d'implémentation ici, `ErreurRepriseImpossible` s'il
-	 * ne sait pas la reprendre (de même bilan, `confier`, `ligneDeReprise`, et `pause` d'une session qui tourne) ; bilan et
-	 * `confier` rejettent `ErreurSessionNonCommencee` pour une session qui tourne sans avoir commencé chez son moteur.
+	 * ne sait pas la reprendre (de même bilan, `confier`, `ligneDeReprise`, et `pause` d'une session qui tourne) ; bilan,
+	 * `confier` et `taper` rejettent `ErreurSessionNonCommencee` pour une session qui tourne sans avoir commencé chez son
+	 * moteur et ne peut pas être relancée avec la ligne (`VoieDeLaLigne` `refusee`).
 	 */
 	reprendre(id: string): Promise<Session | null>;
 	entree(id: string, d: string): void;
@@ -45,21 +48,25 @@ export type Pilote = {
 	motifSansReprise(s: Session): string | null;
 	/**
 	 * Termine une session. `bilan` : l'agent rédige l'épisode (consigne tapée dans le terminal ; une session qui ne tourne pas
-	 * est d'abord reprise), puis la session est arrêtée à son premier `arret` ; rend la session dès la consigne tapée. Sans
-	 * bilan : abandonnée et arrêtée (épisode minimal).
+	 * est d'abord reprise ; chez un moteur `debutAuPremierMessage`, la consigne part avec la reprise, et une session qui tourne
+	 * sans avoir commencé est d'abord arrêtée par signaux : `voieDeLaLigne`), puis la session est arrêtée à son premier `arret` ;
+	 * rend la session dès la consigne tapée ou partie. Sans bilan : abandonnée et arrêtée (épisode minimal).
 	 */
 	terminer(id: string, options: { bilan: boolean }): Promise<Session | null>;
 	/**
 	 * Tape une ligne (puis Entrée) dans le terminal de la session, s'il est tenu ici. Un dialogue de permission peut être ouvert
 	 * (dernier arrêt : `Notification`) : Échap d'abord, puis le `Stop` qui suit est attendu brièvement ; jamais d'Échap sinon, ni
 	 * deux fois pour le même état (un dialogue déjà fermé, ou une ligne pas encore vue par les hooks). Les écritures d'une même
-	 * session (lignes, frappes, arrêt) passent l'une après l'autre.
+	 * session (lignes, frappes, arrêt) passent l'une après l'autre. Une session tenue qui n'a pas encore commencé chez son
+	 * moteur reçoit la ligne comme par `confier` (relancée avec elle, ou refus).
 	 */
 	taper(id: string, ligne: string): Promise<void>;
 	/**
 	 * Confie une ligne à une session : reprise d'abord si elle ne tourne pas (son `debut` attendu, 30 s au plus), puis tapée
-	 * comme par `taper` ; chez un moteur `debutAuPremierMessage`, la ligne part avec la reprise, comme son premier message. Rend
-	 * la session ; rien n'est tapé si elle ne peut pas tourner ici (mode dégradé, reprise impossible).
+	 * comme par `taper` ; chez un moteur `debutAuPremierMessage`, la ligne part avec la reprise, comme son premier message, et
+	 * une session qui tourne sans avoir commencé est d'abord arrêtée par signaux (`voieDeLaLigne`). Rend la session ; rien n'est
+	 * tapé si elle ne peut pas tourner ici (mode dégradé, reprise impossible). Rejette `ErreurConsigneNonTransmise` si la
+	 * reprise qui devait porter la ligne n'a pas été lancée (déjà en cours, ligne à coller, service qui s'arrête).
 	 */
 	confier(id: string, ligne: string): Promise<Session | null>;
 	/**
@@ -99,9 +106,8 @@ export class ErreurRepriseImpossible extends Error {
 }
 
 /**
- * Une session qui tourne mais n'a pas encore commencé chez son moteur (Codex : aucun `debut` reçu, son `fil` inconnu) : son
- * écran pose peut-être une question à l'utilisateur (approbation du dossier, « Trust and continue » choisi par défaut), à
- * laquelle une ligne tapée répondrait. Rien n'y est tapé.
+ * Une session qui tourne mais n'a pas encore commencé chez son moteur (`commencee`) et ne peut pas être relancée avec la
+ * ligne : son écran pose peut-être une question à l'utilisateur, à laquelle une ligne tapée répondrait. Rien n'y est tapé.
  */
 export class ErreurSessionNonCommencee extends Error {
 	constructor(message: string) {
@@ -111,7 +117,15 @@ export class ErreurSessionNonCommencee extends Error {
 }
 
 const NON_COMMENCEE =
-	'la session n\'a pas encore commencé chez son moteur (aucun hook `debut` reçu : une question attend peut-être l\'utilisateur dans son terminal, comme l\'approbation du dossier par Codex, ou aucun message n\'a encore été envoyé) ; rien n\'y est tapé';
+	'la session n\'a pas encore commencé chez son moteur (aucun hook reçu de lui depuis son lancement : une question attend peut-être l\'utilisateur dans son terminal, comme la confiance accordée au dossier) ; rien n\'y est tapé : réponds à cette question dans son terminal, puis réessaie';
+
+/** La reprise qui devait porter une ligne comme premier message n'a pas été lancée : la ligne n'est pas partie. */
+export class ErreurConsigneNonTransmise extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'ErreurConsigneNonTransmise';
+	}
+}
 
 /** Raison pour laquelle la session ne peut pas tourner avec son moteur dans ce service. */
 /** Motif d'une session dont le moteur n'a pas d'implémentation ici (sans point final : repris dans une phrase). */
@@ -152,12 +166,6 @@ type Vivant = {
 	/** Instant du lancement du processus : un hook reçu depuis le montre commencé (`debutAuPremierMessage`). */
 	lanceMs: number;
 };
-
-/**
- * Ce qui part avec une reprise, comme premier message du moteur (`debutAuPremierMessage`) : une `ligne` confiée, ou le bilan
- * demandé à `bilanDemandeMs` (la session est alors en bilan dès son lancement).
- */
-type SuiteDeReprise = { ligne: string } | { bilanDemandeMs: number };
 
 const NOM_DE_VARIABLE = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 
@@ -203,9 +211,10 @@ type Champs = Parameters<Pilotage['etat']['modifier']>[1];
  * un pseudo-terminal), pause, reprise, relance au démarrage, arrêt de tout. Une session n'a jamais deux processus : un terminal tenu,
  * un lancement en cours, ou un `pid` enregistré vivant et lancé pour elle (processus d'un autre service, jamais signalé)
  * bloquent la reprise. Un pid enregistré mort peut laisser des restes dans son groupe (plantage du service) : ceux qui sont
- * prouvés (nés pendant sa vie, d'après sa trace et son battement) sont tués avant toute relance. `battementMs` : tests.
+ * prouvés (nés pendant sa vie, d'après sa trace et son battement) sont tués avant toute relance. `battementMs`,
+ * `attenteArretBilanMs` : tests.
  */
-export function creerPilote(dep: Dependances, pil: Pilotage, options: { battementMs?: number } = {}): Pilote {
+export function creerPilote(dep: Dependances, pil: Pilotage, options: { battementMs?: number; attenteArretBilanMs?: number } = {}): Pilote {
 	const vivants = new Map<string, Vivant>();
 	/**
 	 * Une file par session pour tout ce qui écrit dans son terminal (ligne tapée, frappes, arrêt) : chaque action attend la fin
@@ -484,7 +493,9 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		vivants.set(session.id, vivant);
 		demarrerBattement();
 		// trace du processus : de quoi reconnaître ses restes après un plantage du service
-		await modifier(session.id, { pid: terminal.pid, lanceMs, demarrageMachineMs: pil.hote.demarrageMachineMs(), vuVivantMs: Date.now() });
+		// l'identifiant chez le moteur, quand Mnemo l'impose au lancement (`filImpose`) : connu avant tout hook
+		const fil = moteur.filImpose === true && session.fil === undefined ? { fil: session.id } : {};
+		await modifier(session.id, { pid: terminal.pid, lanceMs, demarrageMachineMs: pil.hote.demarrageMachineMs(), vuVivantMs: Date.now(), ...fil });
 		// arrêt du service pendant le lancement : rien ne doit lui survivre
 		if (arrete) {
 			await marquerArretService(session.id);
@@ -493,13 +504,8 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		return { terminal };
 	};
 
-	/**
-	 * La session tenue n'a pas encore commencé chez son moteur : il ne sait pas encore la reprendre (Codex : `fil` inconnu tant
-	 * qu'aucun `debut` n'est reçu), ou, chez un moteur `debutAuPremierMessage`, aucun hook n'est reçu depuis ce lancement (son
-	 * écran pose peut-être une question, à laquelle une ligne tapée répondrait). État illisible : tenue pour commencée.
-	 */
-	const nonCommencee = (v: Vivant, s: Session | null): boolean =>
-		s !== null && (v.moteur.motifSansReprise(s) !== null || (v.moteur.debutAuPremierMessage === true && s.majMs <= v.lanceMs));
+	/** La session tenue n'a pas encore commencé chez son moteur (`commencee`). */
+	const nonCommencee = (v: Vivant, s: Session | null): boolean => !commencee(v.moteur, s, v.lanceMs);
 
 	/**
 	 * Arrête le terminal tenu, à son tour dans la file de la session ; un dialogue de permission peut être ouvert (dernier arrêt
@@ -538,34 +544,42 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		return 'efface';
 	};
 
-	const reprendre = (id: string, suite?: SuiteDeReprise): Promise<Session | null> => {
-		if (vivants.has(id) || enLancement.has(id) || arrete) return pil.etat.lire(id);
+	/** Reprise de la session ; `lancee` : un terminal a été lancé par cette reprise (la `suite` est partie avec lui). */
+	type Reprise = { session: Session | null; lancee: boolean };
+
+	const reprendreAvec = (id: string, suite?: SuiteDeReprise): Promise<Reprise> => {
+		if (vivants.has(id) || enLancement.has(id) || arrete) return pil.etat.lire(id).then((session) => ({ session, lancee: false }));
 		const liberer = marquer(id);
 		return suivi(reprendreSession(id, suite).finally(liberer));
 	};
+	const reprendre = async (id: string, suite?: SuiteDeReprise): Promise<Session | null> => (await reprendreAvec(id, suite)).session;
 
-	const reprendreSession = async (id: string, suite?: SuiteDeReprise): Promise<Session | null> => {
+	const reprendreSession = async (id: string, suite?: SuiteDeReprise): Promise<Reprise> => {
+		const nonLancee = (session: Session | null): Reprise => ({ session, lancee: false });
 		const s = await pil.etat.lire(id);
-		if (s === null || s.etat === 'terminee') return s;
+		if (s === null || s.etat === 'terminee') return nonLancee(s);
 		const duService = moteurDe(s);
 		if (duService === null) throw new ErreurMoteurIndisponible(moteurIndisponible(s.moteur ?? MOTEUR_PAR_DEFAUT));
 		const sansReprise = duService.moteur.motifSansReprise(s);
 		if (sansReprise !== null) throw new ErreurRepriseImpossible(repriseImpossible(sansReprise));
-		if (duService.commande === null || !pil.terminaux.disponibles().ok) return s;
-		if ((await verifierPid(s)) === 'ailleurs') return pil.etat.lire(id);
+		if (duService.commande === null || !pil.terminaux.disponibles().ok) return nonLancee(s);
+		if ((await verifierPid(s)) === 'ailleurs') return nonLancee(await pil.etat.lire(id));
 		// un bilan d'avant (interrompu par une pause) est oublié : seul `reprendreAuDemarrage` en redemande un, ou la suite
 		const bilanDemandeMs = suite !== undefined && 'bilanDemandeMs' in suite ? suite.bilanDemandeMs : null;
 		const prete = await modifier(id, { arretAttendu: bilanDemandeMs === null ? null : 'bilan', etat: 'attend', bilanDemandeMs, bilanLuMs: null });
-		if (prete === null) return null;
+		if (prete === null) return nonLancee(null);
 		const premierMessage = suite === undefined ? undefined : 'ligne' in suite ? suite.ligne : texteDuBilan(prete);
+		let r: Awaited<ReturnType<typeof demarrer>>;
 		try {
-			await demarrer(prete, 'reprise', premierMessage);
+			r = await demarrer(prete, 'reprise', premierMessage);
 		} catch {
 			// plugin ou dossier en défaut : rien ne tourne, la session reste à relire (le bilan la reprendra)
 			await arreterSession(id).catch(() => {});
-			return modifier(id, { etat: 'a_relire', arretAttendu: null, bilanDemandeMs: null });
+			return nonLancee(await modifier(id, { etat: 'a_relire', arretAttendu: null, bilanDemandeMs: null }));
 		}
-		return pil.etat.lire(id);
+		// rien ne tourne (la ligne est à coller) : aucun bilan n'est en cours
+		if ('manuel' in r) return nonLancee(bilanDemandeMs === null ? await pil.etat.lire(id) : await modifier(id, { arretAttendu: null, bilanDemandeMs: null }));
+		return { session: await pil.etat.lire(id), lancee: true };
 	};
 
 	/** Lancement raté à mi-chemin : la session est abandonnée (jamais reprise), son terminal éventuel arrêté. */
@@ -663,7 +677,9 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	 * Surveille un bilan : la session est arrêtée (`fin` → `terminee`) au premier `Stop` qui suit la consigne du bilan soumise
 	 * (`bilanLuMs`, noté par l'état au premier `message` après la demande) : `attend`, dernier événement après `bilanLuMs`. Un
 	 * `arret` sans ce `message` (fin du tour en cours) n'arrête rien. Filet : 10 minutes après la demande, arrêtée quand même
-	 * (épisode minimal si l'agent n'a rien écrit). Si elle cesse de tourner, la surveillance s'arrête.
+	 * (épisode minimal si l'agent n'a rien écrit) ; chez un moteur `debutAuPremierMessage`, 10 minutes après le premier hook de
+	 * ce lancement : avant, la question de son écran attend l'utilisateur, et le bilan n'est pas encore parti. Si elle cesse de
+	 * tourner, la surveillance s'arrête.
 	 */
 	const surveillerBilan = (id: string, depuisMs: number): void => {
 		bilans.get(id)?.();
@@ -672,12 +688,23 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			actif = false;
 		};
 		bilans.set(id, arreter);
+		const attenteMs = options.attenteArretBilanMs ?? ATTENTE_ARRET_BILAN_MS;
 		void (async () => {
+			let filetMs = depuisMs;
+			const v = vivants.get(id);
+			if (v !== undefined && v.moteur.debutAuPremierMessage === true) {
+				const commence = await attendreEtat(id, (s) => !actif || s.majMs > v.lanceMs, Number.POSITIVE_INFINITY);
+				filetMs = Math.max(depuisMs, Date.now());
+				if (!commence) {
+					if (bilans.get(id) === arreter) bilans.delete(id);
+					return;
+				}
+			}
 			// un `Stop` (tour fini) : une `Notification` ou une `PermissionRequest` (l'agent demande une permission) ne termine pas le bilan
 			const lu = (s: Session) =>
 				s.arretAttendu === 'bilan' && (s.bilanLuMs ?? null) !== null && s.etat === 'attend' && s.dernierArret === 'stop' && s.majMs > s.bilanLuMs!;
-			const vu = await attendreEtat(id, (s) => !actif || lu(s), depuisMs + ATTENTE_ARRET_BILAN_MS - Date.now());
-			const aTerme = !vu && actif && !arrete && vivants.has(id) && Date.now() >= depuisMs + ATTENTE_ARRET_BILAN_MS;
+			const vu = await attendreEtat(id, (s) => !actif || lu(s), filetMs + attenteMs - Date.now());
+			const aTerme = !vu && actif && !arrete && vivants.has(id) && Date.now() >= filetMs + attenteMs;
 			if (bilans.get(id) === arreter) bilans.delete(id);
 			if (actif && !arrete && (vu || aTerme)) await suivi(arreterSession(id)).catch(() => {});
 		})();
@@ -726,6 +753,28 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		if (nonCommencee(v, await pil.etat.lire(id).catch(() => null))) throw new ErreurSessionNonCommencee(`${quoi} : ${NON_COMMENCEE}.`);
 	};
 
+	/** Comment une ligne parvient à la session (`voieDeLaLigne`) ; `refusee` lève `ErreurSessionNonCommencee`. */
+	const voieDe = async (s: Session, quoi: string): Promise<Exclude<VoieDeLaLigne, 'refusee'>> => {
+		const v = vivants.get(s.id);
+		const voie = voieDeLaLigne({
+			tourne: v !== undefined,
+			commencee: v === undefined || !nonCommencee(v, await pil.etat.lire(s.id).catch(() => null)),
+			debutAuPremierMessage: moteurDe(s)?.moteur.debutAuPremierMessage === true,
+			reprisePossible: motifSansReprise(s) === null,
+		});
+		if (voie === 'refusee') throw new ErreurSessionNonCommencee(`${quoi} : ${NON_COMMENCEE}.`);
+		return voie;
+	};
+
+	/**
+	 * La session tenue n'a pas commencé (`relance`) : arrêtée par signaux (aucune touche), en pause, pour être reprise aussitôt
+	 * avec la ligne. Elle n'a encore reçu aucun message de ce lancement : rien n'est perdu.
+	 */
+	const arreterPourRelancer = async (id: string): Promise<void> => {
+		await modifier(id, { arretAttendu: 'pause' });
+		await arreterSession(id);
+	};
+
 	/** Une session qui ne tourne pas est reprise, et son `debut` attendu (30 s au plus) ; vrai si elle tourne ici ensuite. */
 	const assurerVivante = async (id: string): Promise<boolean> => {
 		if (!vivants.has(id)) {
@@ -743,11 +792,11 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	 */
 	const ligneAvecLaReprise = (s: Session): boolean => !vivants.has(s.id) && moteurDe(s)?.moteur.debutAuPremierMessage === true;
 
-	/** Bilan demandé avec la reprise (`ligneAvecLaReprise`), puis surveillé comme les autres ; rien si la session ne tourne pas ensuite. */
+	/** Bilan demandé avec la reprise (`avec_la_reprise`), puis surveillé comme les autres ; rien si aucune reprise n'est lancée. */
 	const bilanAvecLaReprise = async (id: string): Promise<Session | null> => {
 		const bilanDemandeMs = Date.now();
-		const apres = await reprendre(id, { bilanDemandeMs });
-		if (!vivants.has(id) || apres?.bilanDemandeMs !== bilanDemandeMs) return pil.etat.lire(id);
+		const { session: apres, lancee } = await reprendreAvec(id, { bilanDemandeMs });
+		if (!lancee || !vivants.has(id)) return pil.etat.lire(id);
 		surveillerBilan(id, bilanDemandeMs);
 		return apres;
 	};
@@ -757,7 +806,9 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		await enLancement.get(id);
 		const s = await pil.etat.lire(id);
 		if (s === null || s.etat === 'terminee') return s;
-		if (ligneAvecLaReprise(s)) return bilanAvecLaReprise(id);
+		const voie = await voieDe(s, 'Bilan impossible');
+		if (voie === 'relance') await arreterPourRelancer(id);
+		if (voie !== 'tapee') return bilanAvecLaReprise(id);
 		if (!(await assurerVivante(id))) return pil.etat.lire(id);
 		await pasAvantDebut(id, 'Bilan impossible');
 		const bilanDemandeMs = Date.now();
@@ -772,8 +823,10 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		await enLancement.get(id);
 		const s = await pil.etat.lire(id);
 		if (s === null || s.etat === 'terminee') return s;
-		if (ligneAvecLaReprise(s)) {
-			await reprendre(id, { ligne });
+		const voie = await voieDe(s, 'Consigne non transmise');
+		if (voie === 'relance') await arreterPourRelancer(id);
+		if (voie !== 'tapee') {
+			if (!(await reprendreAvec(id, { ligne })).lancee) throw new ErreurConsigneNonTransmise('Consigne non transmise : la reprise qui devait la porter comme premier message n’a pas été lancée.');
 			return pil.etat.lire(id);
 		}
 		if (await assurerVivante(id)) {
@@ -936,9 +989,15 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 
 		motifSansReprise,
 
-		taper(id, ligne) {
-			if (arrete) return Promise.resolve();
-			return suivi(taper(id, ligne));
+		async taper(id, ligne) {
+			if (arrete) return;
+			const v = vivants.get(id);
+			// pas encore commencée : la ligne n'est jamais tapée dans la question de son écran (relancée avec elle, ou refus)
+			if (v !== undefined && nonCommencee(v, await pil.etat.lire(id).catch(() => null))) {
+				await suivi(confier(id, ligne));
+				return;
+			}
+			await suivi(taper(id, ligne));
 		},
 
 		confier(id, ligne) {

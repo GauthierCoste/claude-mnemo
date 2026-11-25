@@ -89,8 +89,22 @@ export function evenementEtranger(session: Pick<Session, 'moteur' | 'fil'>, even
 	return session.fil !== undefined && evenement.fil !== undefined && evenement.fil !== session.fil;
 }
 
-/** Un dialogue de Claude Code (permission) attend peut-être l'utilisateur : la dernière chose vue est une `Notification`. */
-export const dialogueOuvert = (s: Pick<Session, 'etat' | 'dernierArret'>): boolean => s.etat === 'attend' && s.dernierArret === 'notification';
+/**
+ * Un dialogue du moteur (permission) attend peut-être l'utilisateur : la dernière chose vue est une `Notification`, reçue
+ * depuis le dernier lancement du processus (`lanceMs` : un dialogue d'avant une reprise est fermé avec son processus). Seule
+ * règle, pour l'interface comme pour le pilote.
+ */
+export const dialogueOuvert = (s: Pick<Session, 'etat' | 'dernierArret' | 'majMs' | 'lanceMs'>): boolean =>
+	s.etat === 'attend' && s.dernierArret === 'notification' && ((s.lanceMs ?? null) === null || s.majMs > s.lanceMs!);
+
+/**
+ * Un `message` horodaté avant le dernier événement appliqué, mais après le lancement du processus, quand ce dernier événement
+ * est le `debut` de ce lancement (`attend`, aucun arrêt depuis, `majMs` après `lanceMs`) : appliqué quand même. GitHub Copilot
+ * CLI lance `sessionStart` et `userPromptSubmitted` ensemble (mesuré) : le `debut` peut être horodaté après le message qu'il
+ * précède, et le message, ignoré, ne serait jamais vu (objectif, bilan lu, session au travail).
+ */
+export const messageApresSonDebut = (s: Pick<Session, 'etat' | 'dernierArret' | 'majMs' | 'lanceMs'>, horodatageMs: number): boolean =>
+	s.etat === 'attend' && (s.dernierArret ?? null) === null && (s.lanceMs ?? null) !== null && s.majMs > s.lanceMs! && horodatageMs > s.lanceMs!;
 
 /** États dans lesquels une session est relancée (`claude --resume`) au redémarrage du service. */
 export const ETATS_RELANCES: readonly EtatSession[] = ['travaille', 'attend', 'a_relire'];

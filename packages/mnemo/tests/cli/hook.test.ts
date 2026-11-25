@@ -707,7 +707,7 @@ describe('mnemo hook --moteur mistral-vibe', () => {
 describe('mnemo hook --moteur copilot-cli', () => {
 	const copilot = (racine: string, champs: Record<string, unknown>) => JSON.stringify({ sessionId: ID, timestamp: 1795634385845, cwd: racine, ...champs });
 
-	it('session Mnemo : entrée en camelCase, refus et contexte au format de Copilot, fil = sessionId, permissionRequest = dialogue ouvert', async () => {
+	it('session Mnemo : entrée en camelCase, refus et contexte au format de Copilot, fil = sessionId, notification permission_prompt = dialogue ouvert', async () => {
 		const racine = await dossierVerifie({ moteur: 'copilot-cli' });
 		await writeFile(join(racine, '_mnemo', 'consignes', 'env.md'), `${entete('consigne', 'portee: globale\nniveau: verifiee\nregle: { type: chemins_interdits, motifs: ["**/.env"] }\n')}# E\n\nJamais de .env.\n`);
 		await attendu(racine, '');
@@ -724,8 +724,10 @@ describe('mnemo hook --moteur copilot-cli', () => {
 		const { requetes } = await fauxService(racine, (_req, corps) => (JSON.parse(corps).evenement === 'message' ? { contexte: 'Contexte du service.' } : {}));
 		const m = await hook(racine, 'message --moteur copilot-cli', copilot(racine, { prompt: 'Bonjour' }), env);
 		expect(m.out).toBe(`${JSON.stringify({ additionalContext: 'Contexte du service.' })}\n`);
-		await hook(racine, 'permissionRequest --moteur copilot-cli', copilot(racine, { toolName: 'mnemo/lire', toolInput: {} }), env);
-		await hook(racine, 'permissionRequest --moteur copilot-cli', copilot(racine, { toolName: 'create', toolInput: { path: join(racine, 'a.md') } }), env);
+		// `permissionRequest` (tout outil évalué, mesuré) reçu par la commande d'un fichier d'avant : ignoré ; la notification d'un dialogue affiché : ouvert
+		await hook(racine, 'arret --notification --moteur copilot-cli', copilot(racine, { hookName: 'permissionRequest', toolName: 'create', toolInput: { path: join(racine, 'a.md') }, permissionSuggestions: [] }), env);
+		await hook(racine, 'notification --moteur copilot-cli', copilot(racine, { hook_event_name: 'Notification', notification_type: 'permission_prompt', title: 'Permission needed', message: 'Create a.md' }), env);
+		await hook(racine, 'notification --moteur copilot-cli', copilot(racine, { hook_event_name: 'Notification', notification_type: 'agent_completed', message: 'fini' }), env);
 		await hook(racine, 'arret --moteur copilot-cli', copilot(racine, { transcriptPath: '/c/session-state/x/events.jsonl', stopReason: 'end_turn' }), env);
 		expect(requetes.map((q) => JSON.parse(q.corps) as Record<string, unknown>)).toEqual([
 			expect.objectContaining({ evenement: 'message', session: ID, fil: ID, moteur: 'copilot-cli', prompt: 'Bonjour' }),

@@ -1,3 +1,4 @@
+import { CATALOGUE_MOTEURS } from '../../domaine/moteurs/catalogue.ts';
 import { HOOKS_COPILOT_CLI } from '../../application/moteurs/copilot-cli/hooks.ts';
 import { fichiersDeSessionCopilotCli, preparerCopilotCli } from '../../application/moteurs/copilot-cli/session.ts';
 import type { Moteur } from '../../application/ports.ts';
@@ -24,10 +25,10 @@ import { versionParCommande } from './version-par-commande.ts';
  */
 export const MOTEUR_COPILOT_CLI: Moteur = {
 	id: 'copilot-cli',
-	nom: 'GitHub Copilot CLI',
+	nom: CATALOGUE_MOTEURS['copilot-cli'].nom,
 	commandeParDefaut: 'copilot',
 	installation: {
-		optionInit: '--copilot',
+		optionInit: CATALOGUE_MOTEURS['copilot-cli'].optionInit,
 		facultatif: { bloc: 'copilot', etape: 'copilot', etapeHooks: 'copilot_hooks' },
 		recherche: 'commande copilot absente du PATH, de Homebrew et de ~/.npm-global/bin, ou MNEMO_COPILOT invalide',
 		desactivation: '"mnemo" dans disabledMcpServers de settings.json',
@@ -46,6 +47,7 @@ export const MOTEUR_COPILOT_CLI: Moteur = {
 	marqueDeSession: (uuid) => uuid,
 	motifSansReprise: () => null,
 	debutAuPremierMessage: true,
+	filImpose: true,
 	fichiersDeSession: fichiersDeSessionCopilotCli,
 	preparer: preparerCopilotCli,
 	touches: TOUCHES_COPILOT_CLI,
