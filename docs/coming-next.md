@@ -1,12 +1,22 @@
 # Coming next
 
-> **Next work item: open Mnemo to other coding agents.** Each agent profile chooses its engine (Claude Code, Codex…) and
-> its model; a session launched with that profile takes its engine. Codex comes first: memory over MCP, context and
-> reminders through its hooks, then sessions launched from the interface. The work item of 24/11/2026 (one search score,
-> deduplication, archivist tools) is built and its weights are tuned on the bench.
+> **Next work item: connect Mistral's terminal coding agent and GitHub Copilot CLI.** Each one starts with a round 0 of
+> measurements, as Codex did: MCP declaration, hooks (events, inputs, approval), resuming a session, and where the context
+> window and the quotas can be read. Then each becomes an implementation of the `Moteur` port (launch, keys, hooks, tools,
+> telemetry, MCP declaration), so that the pilot, the hooks and the interface stay as they are. Opening Mnemo to Codex
+> (25/11/2026) is done.
 
 ## Done
 
+- **Open Mnemo to other coding agents (Codex first).** Each profile chooses its engine (Claude Code or Codex) and its
+  model (empty: the engine's default); a session keeps both, resume included. A `Moteur` port holds what differs between
+  engines. Codex 0.171 or later: memory over MCP in every Codex session (`mnemo init --codex`, `mnemo declarer --moteur
+  codex`), Mnemo hooks installed once in `~/.codex/hooks.json` and approved in Codex (`/hooks`), inert outside a Mnemo
+  session; context and reminders, checked instructions (`Bash` commands, `apply_patch` paths); sessions started, resumed
+  (`codex resume`), wrapped up and stopped (`/quit`) from the interface, skills listed in the instruction and read with
+  `lire`; context gauge and ChatGPT quotas read from the transcript, shown next to the Claude ones. `verifier-poste` and
+  Settings › Système › Moteurs show the state of each engine and the command that fixes it. See
+  [installation.md](installation.md#codex) and [usage.md](usage.md#codex-sessions).
 - **One score for search**: `score = base + Σ weights` (position + 0.10, confidence − 0.05 × (1 − c), memory + 0.05,
   freshness + 0.05 × 2^(−age/365); settings `recherche.poids…`, 0 to 0.5). The base spreads results (bm25 gap kept); the
   recall threshold (`seuil_rappel`, 0.4) applies to the relevance, so a weight never lets a result in. Each result shows
@@ -27,6 +37,11 @@
 
 ## Left to do
 
+- **Archivist on any engine.** The archivist and its benches run on Claude Code (`claude -p`); make its engine a setting.
+- **Import Codex's own memory**, as `mnemo amorce` imports Claude Code's.
+- **Reasoning tokens in the Codex context gauge.** The gauge counts `input_tokens + output_tokens` of the last
+  `token_count`; `reasoning_output_tokens` was 0 in every measured event, so whether it is included in `output_tokens` is
+  unknown. Measure again on a session with reasoning.
 - **Keep the reranker's gap in the base.** Weights tuned on 25/11/2026 with the real models (confidence 0.10 → 0.05,
   the others unchanged; default chain 45 of 56 in the top 5, MRR 0.718). No confidence weight passes both the
   `saturation` case (a relevant fact at 51 % must beat sure facts off topic) and the `confiance` case (a sure fact must

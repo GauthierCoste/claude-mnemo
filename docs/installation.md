@@ -1,8 +1,8 @@
 # Installing Mnemo
 
-Mnemo gives a folder a structured, versioned memory (Markdown files in a git repository) and injects it into Claude Code
-sessions. It runs entirely on your machine: a small local service (HTTP API and web interface on `127.0.0.1`), a command
-line tool (`mnemo`), and optional local models for search by meaning.
+Mnemo gives a folder a structured, versioned memory (Markdown files in a git repository) and injects it into coding
+agent sessions: Claude Code, and Codex if you want it. It runs entirely on your machine: a small local service (HTTP
+API and web interface on `127.0.0.1`), a command line tool (`mnemo`), and optional local models for search by meaning.
 
 The interface and the command line messages are in French; this guide is in English.
 
@@ -13,6 +13,7 @@ The interface and the command line messages are in French; this guide is in Engl
 | Node.js | 24 or later (`node --version`). |
 | git | Any recent version; the memory is a git repository. |
 | Claude Code | The official `claude` command line tool, signed in with your own subscription. Mnemo never uses an API key. |
+| Codex | Optional: 0.171 or later, signed in with your ChatGPT subscription. See [Codex](#codex). |
 | pnpm | Only to install from the sources: `npm install -g pnpm` (Node.js 25 and later no longer ship corepack). |
 | Build tools | None on macOS and Windows: the session terminals (`node-pty`) come prebuilt. On Linux, node-pty is compiled at install time (`python3`, `make`, a C++ compiler); without them, Mnemo still works in a degraded mode where you paste the `claude …` command into your own terminal. |
 | Browser | Any recent browser for the interface. Chrome, Edge or Brave can open it as an app window. |
@@ -29,7 +30,7 @@ file permissions do not protect the local token there, the profile's access righ
 
 | | Minimum | Recommended | Comfortable |
 | --- | --- | --- | --- |
-| RAM | 4 GB, without the local models | 8 GB, with the local models | 16 GB, several Claude Code sessions at once with the local models |
+| RAM | 4 GB, without the local models | 8 GB, with the local models | 16 GB, several agent sessions at once with the local models |
 | Disk | about 300 MB (program and dependencies) plus your memory | plus about 1.3 GB for the local models | |
 
 Details:
@@ -39,7 +40,7 @@ Details:
 - **Local models** (optional): about 1.3 GB in a cache outside the folder: llama.cpp engine 12 MB, meaning model
   bge-m3 about 605 MB, reranker bge-reranker-v2-m3 about 606 MB.
 - **Service**: about 130 MB of RAM when idle on a fresh memory (measured on macOS); a larger memory and open sessions add
-  to it (estimate: under 250 MB for the service itself). Each Claude Code session is a separate `claude` process with its
+  to it (estimate: under 250 MB for the service itself). Each session is a separate `claude` or `codex` process with its
   own memory use.
 - **Local models while running**: about 1.6 GB of RAM for both servers together once loaded (measured on macOS, about
   0.8 GB each, even when idle); about 1.7 GB measured under load. One set of servers serves the whole machine, however
@@ -84,8 +85,9 @@ If `~/.local/bin` is not in your `PATH`, it prints the line to add. After a Node
 ### Updating
 
 After an update (`git pull`, then `pnpm installer`), restart what was already running: stop the service (`mnemo arreter`,
-from the Mnemo folder), then open Mnemo again, and restart the Claude Code sessions opened before the update. Until then,
-they run the old code, and only one set of models should run for the machine.
+from the Mnemo folder), then open Mnemo again, and restart the Claude Code and Codex sessions opened before the update.
+Until then, they run the old code, and only one set of models should run for the machine. If you use Codex, run
+`mnemo verifier-poste`: when the update changed the Mnemo hooks, approve them again in Codex (`/hooks`).
 
 ## The questions of `mnemo init`
 
@@ -115,8 +117,9 @@ the MCP declaration, the command and the application: this is also how an existi
 plug a new installation into a memory you already have (give its folder at the first question). If Claude Code already
 declares a Mnemo MCP server pointing to another copy of Mnemo, `init` leaves it and prints the two commands that replace
 it (`claude mcp remove mnemo --scope user`, then `claude mcp add …`); `mnemo declarer --remplacer` does both at once.
-Explicit options (`--mcp`, `--sans-modeles`…) decide a step without asking, and `--json` gives one JSON line per event,
-for a program that drives the installation; `mnemo verifier-poste` checks git and Claude Code first (see
+`--codex` also declares the MCP server to Codex and installs the Mnemo hooks there (see [Codex](#codex)); without it,
+Codex is never touched. Explicit options (`--mcp`, `--sans-modeles`…) decide a step without asking, and `--json` gives one JSON line per event,
+for a program that drives the installation; `mnemo verifier-poste` checks git, Claude Code and Codex first (see
 [usage.md](usage.md#command-line)).
 
 ## First opening
@@ -134,6 +137,42 @@ mnemo jeton
 
 (the same address with `#jeton=…`). The browser keeps the token for this address; afterwards the plain address is enough.
 `Ctrl-C` stops the service; sessions resume at the next start.
+
+## Codex
+
+Codex is optional. Mnemo needs **Codex 0.171 or later** (`codex --version`), signed in with your ChatGPT subscription; it
+never uses an API key (`CODEX_API_KEY` is removed from the environment of the sessions). Mnemo looks for `codex` in
+`MNEMO_CODEX`, then in the `PATH`, then, on macOS, in the copy that comes with the ChatGPT app.
+
+1. **Declare.** From the Mnemo folder:
+
+   ```sh
+   mnemo init --codex
+   ```
+
+   It declares the Mnemo MCP server to Codex at user level (`codex mcp add`), so every Codex session reads and writes the
+   memory, even one started outside Mnemo. It also installs the Mnemo hooks in `~/.codex/hooks.json` (or
+   `$CODEX_HOME/hooks.json`), keeping the other entries of that file. The hooks do nothing outside a session started by
+   Mnemo.
+2. **Approve the hooks once.** Codex runs a hook only after you have approved it: open Codex, type `/hooks` and approve
+   the Mnemo hooks. Do it again after `mnemo declarer --moteur codex --remplacer` or an update that changes them.
+3. **Trust each folder.** The first time Codex starts in a folder, it asks « Trust this folder? » in the terminal of the
+   session. Answer it yourself: Mnemo shows the terminal but never answers for you. Until the first message of the
+   session has reached the Mnemo hooks, the session can only be abandoned: no pause, wrap-up or resume.
+4. **Check.** `mnemo verifier-poste` prints a Codex line: where it was found, its version, the MCP declaration, the hooks
+   and whether they are approved. The interface shows the same in **Settings › Système › Moteurs**, with the command to
+   run, or the action to take in Codex, when something is missing.
+
+A Mnemo declaration made for another Node.js or another copy of Mnemo is not rewritten by `init`:
+`mnemo declarer --moteur codex --remplacer` rewrites the declaration and the hooks of this installation. Your own
+settings are never overwritten either: a Mnemo declaration turned off in Codex (`enabled = false`), or one that carries
+settings Mnemo does not write (tool approvals, environment, enabled or disabled tools in `[mcp_servers.mnemo]` of
+`config.toml`), is left as it is, and the command says what to change by hand. Sessions started by Mnemo still get the
+memory, since they pass the server and its tool approvals on the command line; a `[Mnemo] …` line at the top of their
+terminal says when your own settings may change what they get.
+
+To remove both the declaration and the hooks: `mnemo declarer --moteur codex --retirer`. It removes only what runs this
+Node.js and this Mnemo.
 
 ## Claude app (Claude Desktop)
 
@@ -153,7 +192,8 @@ Open the interface and click the gear at the bottom of the left rail (shortcut: 
 next to M on a US keyboard), then the **Système** tab (the **Profils** tab manages session profiles, see
 [usage.md](usage.md#managing-profiles); the **App Claude** tab, the MCP servers of the Claude app, see
 [usage.md](usage.md#connecting-the-claude-app)). The groups are listed on the left, by how often you will use them: injected
-context, memory, archivist, search, projects, models, service, interface. Each setting shows a one-line explanation, its default, and "Rétablir le défaut" (reset to
+context, memory, archivist, search, projects, models, service, interface; the last one, **Moteurs** (engines), is read-only
+and shows the state of Claude Code and Codex on this computer. Each setting shows a one-line explanation, its default, and "Rétablir le défaut" (reset to
 default); changes are saved only when you click "Enregistrer" (save; leaving the page with unsaved changes asks first).
 They are stored in `.mnemo/reglages.json` (only the values that differ from the defaults). A missing or invalid value
 falls back to its default with a warning, never a crash.
@@ -203,7 +243,8 @@ version) are kept, and so are invalid entries you did not touch (they stay liste
 3. Remove the launcher and the command: `mnemo lanceur --retirer` and `mnemo commande --retirer` (each removes only
    what Mnemo created).
 4. Remove the installed web app, if any: in its window menu, "Uninstall Mnemo".
-5. Remove the MCP declaration: `claude mcp remove mnemo --scope user`.
+5. Remove the MCP declaration: `claude mcp remove mnemo --scope user`; for Codex, the declaration and the hooks:
+   `mnemo declarer --moteur codex --retirer`.
 6. Delete the models cache (models, engine, and the state and level of the servers): `~/Library/Caches/mnemo` on macOS,
    `~/.cache/mnemo` (or `$XDG_CACHE_HOME/mnemo`) on Linux, or the folder named by `MNEMO_MODELES`.
 7. Delete the local state of each Mnemo folder: its `.mnemo/` folder (index, settings, token, logs).
