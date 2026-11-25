@@ -6,7 +6,7 @@ import type { Dependances, EtatSessions, Reranker, Sens } from './ports.ts';
  * Le sens et le reranker vus d'une session : un modèle que le niveau propre de la session exclut n'est ni appelé ni démarré
  * (null tout de suite, l'étape saute : la recherche se fait par les mots). Le niveau est relu à chaque appel, car
  * l'utilisateur peut le changer en cours de session ; null (lecture échouée, session inconnue, aucun niveau propre) : rien
- * n'est retiré ici. Le niveau de la machine est appliqué par les modèles enveloppés eux-mêmes : la session a donc le plus
+ * n'est retiré ici. Choix : une lecture échouée suit le niveau de la machine (une panne de l'état ne coupe pas les modèles). Le niveau de la machine est appliqué par les modèles enveloppés eux-mêmes : la session a donc le plus
  * restrictif des deux (`niveauEffectif`). `modele()` (identité du modèle installé, pour le cache des vecteurs) reste tel quel.
  */
 export function modelesDeSession(modeles: { sens: Sens; reranker: Reranker }, niveauPropre: () => Promise<NiveauModeles | null>): { sens: Sens; reranker: Reranker } {

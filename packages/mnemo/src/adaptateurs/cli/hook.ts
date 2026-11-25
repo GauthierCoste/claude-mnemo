@@ -231,8 +231,9 @@ async function traiterIci(racine: string, entree: EntreeHook, temps: { debutMs: 
 	const dep = dependancesReelles(racine, { attenteVerrou: ATTENTE_VERROU_FIN, ...indexEnLecture });
 	const depot = depotGit(racine, { delaiMs: DELAI_GIT_FIN_MS });
 	const etatDuHook = uneFois(etat);
-	// les modèles de la session bornés par son niveau, relu à chaque appel (état en panne : ceux de la machine)
-	const depDuHook = entree.session === '' ? dep : dependancesDeSession(dep, etatDuHook, entree.session);
+	// les modèles de la session bornés par son niveau, relu à chaque appel ; ses lectures ont leur propre coupe-circuit : un
+	// échec n'arrête qu'elles (la session suit alors la machine), jamais l'état du reste du hook
+	const depDuHook = entree.session === '' ? dep : dependancesDeSession(dep, uneFois(etat), entree.session);
 	try {
 		return await traiterEvenement(depDuHook, { etat: etatDuHook, depot }, entree, { froid: 'si-budget', racine, sansCasse: SANS_CASSE, delaiGitMs: DELAI_GIT_FIN_MS, ...temps });
 	} finally {
