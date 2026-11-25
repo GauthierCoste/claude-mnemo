@@ -227,6 +227,13 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(items[0]!.textContent).toBe('seuil d’injection 90\u00a0%');
 		expect(items[1]!.getAttribute('data-id')).toBe('d.md');
 		expect(separateurs()).toHaveLength(1);
+		cleanup();
+		// ordre seul, rien d'injecté : le filet gris, sous l'en-tête (rien de vu encore)
+		monter({ entrees: [entree(A(14, 34), [v('d.md', 'Delta', 1, null, { pNonCalibree: 0.5 })], { calibree: false })] });
+		await act(async () => {});
+		const premier = liste().firstElementChild!;
+		expect(premier.querySelector('[data-genre]')?.getAttribute('data-genre')).toBe('filet');
+		expect(separateurs()).toHaveLength(1);
 	});
 
 	it('pas de ligne qui rappelle le message ; « affinage… » dans le bouton des modèles pendant l’affinage, puis l’icône seule', async () => {

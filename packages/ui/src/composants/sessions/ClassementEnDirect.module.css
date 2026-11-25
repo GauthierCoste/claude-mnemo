@@ -229,7 +229,7 @@
 	align-items: center;
 	gap: 6px;
 	min-height: 13px;
-	margin: 4px 0;
+	margin: 6px 0;
 	font: 500 9.5px var(--mono);
 	color: var(--dim);
 	cursor: help;
@@ -238,7 +238,8 @@
 .separateur::before {
 	content: '';
 	flex: 1;
-	border-top: 1px solid var(--bd2);
+	/* visible même seul sous l'en-tête (rien de vu encore) : plus marqué qu'une bordure */
+	border-top: 1px solid color-mix(in srgb, var(--dim) 55%, transparent);
 }
 
 .separateur[data-genre='seuil'] {
