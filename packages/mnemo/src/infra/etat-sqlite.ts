@@ -7,11 +7,11 @@ import { noteDeLigne, origineDe } from '../domaine/gestes.ts';
 import type { Geste, NoteDuGeste, OrigineGeste } from '../domaine/gestes.ts';
 import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
 import type { RaisonMuet } from '../domaine/message-muet.ts';
-import { etatApres } from '../domaine/session.ts';
+import { autreOutilQueLeDialogue, etatApres } from '../domaine/session.ts';
 import type { ArretAttendu, CauseArret, EtatSession, EvenementHook, Session } from '../domaine/session.ts';
 
 /** Version du schéma (`PRAGMA user_version`). L'état n'est pas jetable : une autre version est une erreur, jamais un effacement. */
-export const VERSION_ETAT = 14;
+export const VERSION_ETAT = 15;
 /** Migration 3 → 4 : les sessions terminées depuis plus longtemps n'entrent plus dans le rattrapage des épisodes. */
 const RATTRAPAGE_MAX_MS = 7 * 86_400_000;
 const ATTENTE_VERROU_MS = 2000;
@@ -189,7 +189,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 	moteur TEXT,
 	modele TEXT,
 	fil TEXT,
-	dernier_message TEXT
+	dernier_message TEXT,
+	dialogue_outil TEXT
 );
 CREATE TABLE IF NOT EXISTS servis (
 	rang INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -280,6 +281,7 @@ function ligneVersSession(l: Ligne): Session {
 		vuVivantMs: (l.vu_vivant_ms as number | null) ?? null,
 		bilanLuMs: (l.bilan_lu_ms as number | null) ?? null,
 		dernierArret: (l.dernier_arret as CauseArret | null) ?? null,
+		dialogueOutil: (l.dialogue_outil as string | null) ?? null,
 		episodeMs: (l.episode_ms as number | null) ?? null,
 		dossierNonRattache: l.dossier_non_rattache === 1,
 		// une valeur qui n'est pas un niveau est ignorée : la session suit le niveau de la machine
@@ -412,8 +414,8 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				// (3 → 4), la demande et le classement des entrées servies et les écartés (4 → 5), le dossier non rattaché
 				// (5 → 6), les fiches servies, lues ou écrites par chaque session (6 → 7), les cartes proposées, le journal des actions et le journal servi enrichi (7 → 8), l'empreinte lue des fiches (8 → 9), les injections à la main et le
 				// compteur de messages porteurs (9 → 10), les lots d'informations (10 → 11), le niveau des modèles d'une session (11 → 12),
-				// le moteur et le modèle de chaque session (12 → 13), le journal durable des gestes et le classement vivant (13 → 14)
-				// s'ajoutent, rien n'est perdu
+				// le moteur et le modèle de chaque session (12 → 13), le journal durable des gestes et le classement vivant (13 → 14),
+				// l'outil d'un dialogue ouvert (14 → 15) s'ajoutent, rien n'est perdu
 				if (version === 1) for (const colonne of ['demarrage_machine_ms', 'lance_ms', 'vu_vivant_ms']) base.exec(`ALTER TABLE sessions ADD COLUMN ${colonne} INTEGER`);
 				if (version <= 2) base.exec('ALTER TABLE sessions ADD COLUMN bilan_lu_ms INTEGER');
 				if (version <= 3) {
@@ -465,6 +467,8 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				for (const [colonne, type] of [['rang_message', 'INTEGER'], ['affinage', 'TEXT'], ['ms_service', 'INTEGER'], ['calibree', 'INTEGER']] as const) {
 					if (!colonnesServis.includes(colonne)) base.exec(`ALTER TABLE servis ADD COLUMN ${colonne} ${type}`);
 				}
+				// 14 → 15 : l'outil dont le dialogue est ouvert (null : inconnu)
+				if (!deSession.includes('dialogue_outil')) base.exec('ALTER TABLE sessions ADD COLUMN dialogue_outil TEXT');
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
 			} else if (version !== VERSION_ETAT) {
 				throw new ErreurEtat(
@@ -586,8 +590,8 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 					.prepare(
 						`INSERT INTO sessions (id, profil, dossier, position, projet, objectif, etat, creee_ms, maj_ms, arret_attendu,
 							bilan_demande_ms, commit_debut, branche, pid, ecrit_ms, demarrage_machine_ms, lance_ms, vu_vivant_ms, bilan_lu_ms, dernier_arret, episode_ms,
-							dossier_non_rattache, niveau_modeles, moteur, modele, fil)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+							dossier_non_rattache, niveau_modeles, moteur, modele, fil, dialogue_outil)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					)
 					.run(
 						s.id,
@@ -616,6 +620,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 						s.moteur ?? null,
 						s.modele ?? null,
 						s.fil ?? null,
+						s.dialogueOutil ?? null,
 					);
 			});
 		},
@@ -649,11 +654,14 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 					e === 'message' && actuelle.arretAttendu === 'bilan' && actuelle.bilanDemandeMs !== null && horodatageMs > actuelle.bilanDemandeMs && (actuelle.bilanLuMs ?? null) === null
 						? horodatageMs
 						: (actuelle.bilanLuMs ?? null);
+				// un dialogue ouvert pour un outil nommé : l'après-outil d'un autre outil (lancé en parallèle) ne le ferme pas
+				if (e === 'apres_outil' && autreOutilQueLeDialogue(actuelle, complement?.outil)) return actuelle;
 				// cause du dernier arrêt : notée par `arret` (Stop par défaut), effacée par ce qui montre Claude au travail ou au départ
 				const dernierArret = e === 'arret' ? (complement?.arret ?? 'stop') : e === 'fin' ? (actuelle.dernierArret ?? null) : null;
+				const dialogueOutil = dernierArret === 'notification' ? (e === 'arret' ? (complement?.outil ?? null) : (actuelle.dialogueOutil ?? null)) : null;
 				base
-					.prepare('UPDATE sessions SET etat = ?, maj_ms = ?, objectif = ?, commit_debut = ?, branche = ?, bilan_lu_ms = ?, dernier_arret = ?, ecrit_ms = ? WHERE id = ?')
-					.run(etatApres(actuelle, e), horodatageMs, objectif, commitDebut, branche, bilanLu, dernierArret, Date.now(), id);
+					.prepare('UPDATE sessions SET etat = ?, maj_ms = ?, objectif = ?, commit_debut = ?, branche = ?, bilan_lu_ms = ?, dernier_arret = ?, dialogue_outil = ?, ecrit_ms = ? WHERE id = ?')
+					.run(etatApres(actuelle, e), horodatageMs, objectif, commitDebut, branche, bilanLu, dernierArret, dialogueOutil, Date.now(), id);
 				oublierEcartesSiTerminee(id);
 				return lire(id);
 			});
@@ -679,6 +687,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 					projet: 'projet',
 					dossierNonRattache: 'dossier_non_rattache',
 					niveauModeles: 'niveau_modeles',
+					fil: 'fil',
 				};
 				// un niveau des modèles invalide est ignoré (null : retiré, la session suit le niveau de la machine)
 				if (champs.niveauModeles !== undefined && champs.niveauModeles !== null && !estNiveauModeles(champs.niveauModeles)) delete colonnes.niveauModeles;

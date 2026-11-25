@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { CONTRAT_DES_FACULTATIFS, MOTEURS_FACULTATIFS } from '../../src/adaptateurs/cli/moteurs-facultatifs.ts';
 import { hooksDuMoteur } from '../../src/application/moteurs/hooks.ts';
+import { IDS_MOTEURS } from '@mnemo/commun';
+import { CATALOGUE_MOTEURS } from '../../src/domaine/moteurs/catalogue.ts';
 import { outilsDuMoteur } from '../../src/domaine/moteurs/outils.ts';
-import { MOTEURS } from '../../src/infra/moteurs/moteurs.ts';
+import { MOTEURS, MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 
 describe('moteurs : un seul registre de vérité', () => {
 	it('les hooks et les outils de chaque moteur sont ceux des registres purs', () => {
@@ -10,6 +13,15 @@ describe('moteurs : un seul registre de vérité', () => {
 			expect(m.hooks, m.id).toBe(hooksDuMoteur(m.id));
 			expect(m.outils, m.id).toBe(outilsDuMoteur(m.id));
 		}
+	});
+
+	it('moteurs de sessions et du poste dans l’ordre des identifiants ; facultatifs du catalogue = ceux qui ont leur bloc et leurs étapes dans le contrat', () => {
+		expect(MOTEURS.map((m) => m.id)).toEqual([...IDS_MOTEURS]);
+		for (const id of IDS_MOTEURS) expect(MOTEURS_DU_POSTE[id].id).toBe(id);
+		expect(IDS_MOTEURS.filter((id) => CATALOGUE_MOTEURS[id].facultatif)).toEqual(Object.keys(CONTRAT_DES_FACULTATIFS));
+		expect(MOTEURS_FACULTATIFS.map((m) => [m.id, m.nom, m.optionInit, m.moteur.id])).toEqual(
+			IDS_MOTEURS.filter((id) => CATALOGUE_MOTEURS[id].facultatif).map((id) => [id, CATALOGUE_MOTEURS[id].nom, CATALOGUE_MOTEURS[id].optionInit, id]),
+		);
 	});
 
 	it('Claude Code : sa marque de session est l’uuid de Mnemo', () => {

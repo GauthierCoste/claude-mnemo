@@ -1,8 +1,8 @@
 import { homedir } from 'node:os';
-import { realpath } from 'node:fs/promises';
-import { extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fenetreDeContexte } from '../../../domaine/moteurs/claude-code/fenetre-contexte.ts';
 import type { FenetreDeContexte } from '../../../domaine/moteurs/moteur.ts';
+import { cheminReelPermis, racinesReelles } from '../../chemin-permis.ts';
 import { lignesDeLaFin } from '../../fin-de-fichier.ts';
 import { seuilDeResumeAuto } from './reglage-resume-auto.ts';
 
@@ -32,10 +32,6 @@ export function fenetreDeTranscription(racinePermise: string = join(homedir(), '
  * format) ou illisible.
  */
 async function lireFin(racinePermise: string, chemin: string, octetsLus: number): Promise<string[] | null> {
-	if (extname(chemin) !== '.jsonl') return null;
-	const [racine, reel] = await Promise.all([realpath(racinePermise).catch(() => null), realpath(chemin).catch(() => null)]);
-	if (racine === null || reel === null || extname(reel) !== '.jsonl') return null;
-	const relatif = relative(racine, reel);
-	if (relatif === '' || relatif.startsWith('..') || isAbsolute(relatif)) return null;
-	return lignesDeLaFin(reel, octetsLus);
+	const reel = await cheminReelPermis(chemin, await racinesReelles([racinePermise]), '.jsonl');
+	return reel === null ? null : lignesDeLaFin(reel, octetsLus);
 }

@@ -1,9 +1,10 @@
 /**
- * Données fictives du mode démo (`?demo`, en développement seulement) : un dossier de projets, huit sessions sur quatre
- * dossiers (plus l'archiviste et une session terminée), une petite mémoire au format des fiches, le fil du jour et les
+ * Données fictives du mode démo (`?demo`, en développement seulement) : un dossier de projets, neuf sessions sur quatre
+ * dossiers (plus l'archiviste et une session terminée), sur les trois moteurs, une petite mémoire au format des fiches, le fil du jour et les
  * sorties de terminal. Jamais dans la construction.
  */
 import { ACCENT_PAR_DEFAUT, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
+import type { IdMoteur } from '@mnemo/commun';
 import type { ChampReglageVue, EtatSessionVue, RaisonCarteVue } from '@mnemo/contrat';
 
 /** Dossier des projets dans la mémoire fictive de la démo : la position d'une session de démo est `<ce dossier>/<dossier>`. */
@@ -35,7 +36,7 @@ export type SessionDemo = {
 	/** Faux : session suivie sans terminal dans Mnemo (vrai par défaut). */
 	terminal?: boolean;
 	/** Moteur et modèle de la session (absents : Claude Code, modèle par défaut). */
-	moteur?: 'claude-code' | 'codex';
+	moteur?: IdMoteur;
 	modele?: string;
 	/** Pourquoi elle ne peut être ni mise en pause ni reprise (Codex dont aucun hook n'est arrivé). */
 	sansReprise?: string;
@@ -250,6 +251,29 @@ export const SESSIONS_DEMO: SessionDemo[] = [
 		branche: 'main',
 		servis: [],
 		ecran: [['u', 'Range les composants du kit par famille.']],
+	},
+	{
+		id: '3c7e9a15-2d4b-4f68-a0b9-8e1d5c2f7a46',
+		profil: 'veille-technique',
+		dossier: 'api-facturation',
+		objectif: 'Résumer les changements des bibliothèques PDF',
+		etat: 'attend',
+		moteur: 'mistral-vibe',
+		modele: 'mistral-medium-3.5',
+		ageMin: 26,
+		calmeMin: 2,
+		branche: 'main',
+		servis: ['projets/api-facturation/api-facturation.md'],
+		ecran: [
+			['u', 'Quelles bibliothèques PDF du projet ont une nouvelle version majeure ? Résume ce qui casse.'],
+			['m', 'Mnemo : fiche injectée (api-facturation)'],
+			['t', 'Ran composer outdated --direct'],
+			['r', '2 paquets avec une version majeure'],
+			['t', 'Called mnemo_lire(projets/api-facturation/api-facturation.md)'],
+			['r', 'fiche lue'],
+			['a', 'Deux mises à jour majeures. La première change la signature de render(), la seconde abandonne PHP 8.2.'],
+			['q', 'Je prépare une branche pour la première, ou tu veux d’abord le détail de la seconde ?'],
+		],
 	},
 ];
 

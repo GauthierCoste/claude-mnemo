@@ -1,4 +1,4 @@
-import { OBJECTIF_MAX, PROFIL_ARCHIVISTE } from '@mnemo/commun';
+import { NOMS_MOTEURS, OBJECTIF_MAX, PROFIL_ARCHIVISTE } from '@mnemo/commun';
 import type { NiveauModeles } from '@mnemo/commun';
 import { validerDossier } from './dossiers.ts';
 import { dialogueOuvert, ETATS_RELANCES, objectifDe } from '../domaine/session.ts';
@@ -89,7 +89,7 @@ export class ErreurMoteurIndisponible extends Error {
 	}
 }
 
-/** Une session que son moteur ne sait pas reprendre (Codex : son identifiant chez Codex encore inconnu) : rien n'est lancé. */
+/** Une session que son moteur ne sait pas reprendre (Codex, Mistral Vibe : son identifiant chez le moteur encore inconnu) : rien n'est lancé. */
 export class ErreurRepriseImpossible extends Error {
 	constructor(message: string) {
 		super(message);
@@ -409,7 +409,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	};
 
 	/**
-	 * Avertissements à écrire en tête du terminal d'une session : hooks de Mnemo installés pour tout le poste (Codex) qu'elle
+	 * Avertissements à écrire en tête du terminal d'une session : hooks de Mnemo installés pour tout le poste (Codex, Mistral Vibe) qu'elle
 	 * n'exécutera pas (absents, d'une autre installation, non approuvés) ; réglages de la déclaration MCP de l'utilisateur qui
 	 * s'appliquent aussi à elle. Lus sans bloquer : au-delà de `DELAI_AVERTISSEMENTS_MS`, rien n'est dit.
 	 */
@@ -417,9 +417,9 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		const hooks = async (): Promise<string | null> => {
 			if (moteur.hooksDuPoste === undefined) return null;
 			const lu = await moteur.hooksDuPoste.lire({ node: pil.plugin.appel.node, main: pil.plugin.appel.main, env: pil.hote.env }).catch((erreur: unknown) => ({ echec: (erreur as Error).message }));
-			return avertissementDesHooks(moteur.nom, moteur.id, lu);
+			return avertissementDesHooks(moteur, lu);
 		};
-		const mcp = async (): Promise<string | null> => (moteur.reglagesMcp === undefined ? null : avertissementDesReglagesMcp(moteur.nom, await moteur.reglagesMcp(pil.hote.env)));
+		const mcp = async (): Promise<string | null> => (moteur.reglagesMcp === undefined ? null : avertissementDesReglagesMcp(NOMS_MOTEURS[moteur.id], await moteur.reglagesMcp(pil.hote.env)));
 		const borne = (p: Promise<string | null>): Promise<string | null> => {
 			let minuteur: ReturnType<typeof setTimeout> | undefined;
 			const delai = new Promise<null>((r) => {
@@ -576,12 +576,12 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		const refus = refusDuMoteur(profil);
 		if (refus !== null) return { refus: `Le profil « ${profil.nom} » ne peut pas être lancé : ${refus.motif}.` };
 		// le moteur du profil doit être implémenté ici ; introuvable sur le poste, la ligne à coller est rendue (mode dégradé),
-		// sauf pour un moteur dont la ligne ne lancerait rien (Codex) : refusé
+		// sauf pour un moteur dont la ligne ne lancerait rien (`sansCommande: 'refus'` : Codex, Mistral Vibe) : refusé
 		const duService = moteurDe(profil);
 		if (duService === null) return { refus: `Le profil « ${profil.nom} » utilise le moteur « ${profil.moteur} », pas encore pris en charge par ce service.` };
 		const { moteur: duProfil, commande } = duService;
 		if (commande === null && duProfil.sansCommande === 'refus') {
-			return { refus: `Le profil « ${profil.nom} » utilise ${duProfil.nom}, introuvable sur ce poste (commande « ${duProfil.commandeParDefaut} ») : installe-le, puis relance le service.` };
+			return { refus: `Le profil « ${profil.nom} » utilise ${NOMS_MOTEURS[duProfil.id]}, introuvable sur ce poste (commande « ${duProfil.commandeParDefaut} ») : installe-le, puis relance le service.` };
 		}
 		// une version trop ancienne du moteur est refusée ; illisible, elle n'empêche rien
 		if (commande !== null && duProfil.version !== undefined && duProfil.refusDeVersion !== undefined) {

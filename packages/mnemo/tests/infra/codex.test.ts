@@ -10,7 +10,8 @@ import { DECLARATION_MCP_CODEX } from '../../src/infra/moteurs/codex/declaration
 import { trouverCodex } from '../../src/infra/moteurs/codex/trouver-codex.ts';
 import { DELAI_MODELES_MS, modelesCodex } from '../../src/infra/moteurs/codex/modeles.ts';
 import { reglagesMcpCodex } from '../../src/infra/moteurs/codex/reglages-mcp.ts';
-import { DELAI_VERSION_MS, versionCodex } from '../../src/infra/moteurs/codex/version.ts';
+import { versionCodex } from '../../src/infra/moteurs/codex/version.ts';
+import { DELAI_VERSION_MS } from '../../src/infra/moteurs/version-par-commande.ts';
 import { executeurReel } from '../../src/infra/executeur.ts';
 import { MOTEURS, MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
@@ -309,12 +310,12 @@ describe('mnemo declarer --moteur codex (faux codex par MNEMO_CODEX)', () => {
 		vi.stubEnv('MNEMO_CODEX', join(d, 'faux-codex.mjs'));
 		const lignes: string[] = [];
 		const claude = vi.fn(() => null);
-		await commandeDeclarer(['--moteur', 'codex', '--remplacer', '--json'], { claude, main: MAIN, env: { CODEX_HOME: d } }, (l) => lignes.push(l));
+		await commandeDeclarer(['--moteur', 'codex', '--remplacer', '--json'], { trouver: { 'claude-code': claude }, main: MAIN, env: { CODEX_HOME: d } }, (l) => lignes.push(l));
 		expect(JSON.parse(lignes[0]!)).toEqual({ resultat: 'remplace', message: 'Codex : Déclaration MCP refaite avec ce Node et ce Mnemo.', hooks: { resultat: 'absent', message: 'Codex : Aucun hook de Mnemo dans hooks.json : rien à faire.' } });
 		expect(JSON.parse(await readFile(join(d, 'etat.json'), 'utf8'))).toEqual({ command: process.execPath, args: [MAIN, 'mcp'] });
-		await commandeDeclarer(['--retirer', '--moteur', 'codex', '--json'], { claude, main: MAIN, env: { CODEX_HOME: d } }, (l) => lignes.push(l));
+		await commandeDeclarer(['--retirer', '--moteur', 'codex', '--json'], { trouver: { 'claude-code': claude }, main: MAIN, env: { CODEX_HOME: d } }, (l) => lignes.push(l));
 		expect(JSON.parse(lignes[1]!)).toMatchObject({ resultat: 'retire' });
-		await commandeDeclarer(['--moteur', 'codex', '--retirer'], { claude, main: MAIN, env: { CODEX_HOME: d } }, (l) => lignes.push(l));
+		await commandeDeclarer(['--moteur', 'codex', '--retirer'], { trouver: { 'claude-code': claude }, main: MAIN, env: { CODEX_HOME: d } }, (l) => lignes.push(l));
 		expect(lignes.slice(2)).toEqual(['Codex : Aucune déclaration MCP « mnemo » : rien à faire.', 'Codex : Aucun hook de Mnemo dans hooks.json : rien à faire.']);
 		expect(claude).not.toHaveBeenCalled();
 		expect((await readFile(join(d, 'appels.log'), 'utf8')).trim().split('\n')).toEqual([

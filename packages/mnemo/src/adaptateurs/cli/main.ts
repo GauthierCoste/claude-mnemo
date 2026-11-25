@@ -6,18 +6,37 @@ if (majeure === undefined || majeure < 24) {
 }
 
 const { DOSSIER_MEMOIRE } = await import('../../domaine/dossier-memoire.ts');
+const { FICHES_MOTEURS } = await import('../../domaine/moteurs/catalogue.ts');
+
+/** Une entrée de l'aide : la commande, puis sa description repliée à 120 colonnes, en retrait de 20. */
+function entree(commande: string, description: string): string {
+	const lignes: string[] = [];
+	let ligne = '';
+	for (const mot of description.split(' ')) {
+		if (ligne !== '' && 20 + ligne.length + 1 + mot.length > 120) {
+			lignes.push(ligne);
+			ligne = mot;
+		} else ligne = ligne === '' ? mot : `${ligne} ${mot}`;
+	}
+	lignes.push(ligne);
+	return `  ${commande.padEnd(18)}${lignes.join(`\n${' '.repeat(20)}`)}`;
+}
+/** « a, b et c ». */
+const enumeration = (noms: readonly string[]): string => (noms.length < 2 ? noms.join('') : `${noms.slice(0, -1).join(', ')} et ${noms.at(-1)}`);
+const FACULTATIFS = FICHES_MOTEURS.filter((m) => m.facultatif);
+const IDS = FICHES_MOTEURS.map((m) => m.id).join('|');
+const NOMS = FICHES_MOTEURS.map((m) => m.nom);
 
 const USAGE = `Usage : mnemo [dossier] | mnemo <commande>
 
   mnemo [dossier]   service local (API et interface) du dossier Mnemo ; sans argument : celui du dossier courant
 
 Commandes :
-  init [dossier]    crée la mémoire (dossier ${DOSSIER_MEMOIRE}/) ; dans un terminal, guide pas à pas (dossier, projets,
-                    déclaration MCP à Claude Code, modèles, commande, lanceur) [--oui : les défauts, sans question]
-                    [--mcp|--sans-mcp] [--modeles|--sans-modeles] [--commande|--sans-commande] [--lanceur|--sans-lanceur] :
-                    l'étape faite ou sautée sans question ; [--codex] : déclare aussi le serveur MCP à Codex et y installe les hooks ;
-                    [--json] : une ligne JSON par événement, sans question
-  verifier-poste    git, Claude Code, Codex (facultatif, avec sa déclaration MCP et ses hooks) et Node sur ce poste [--json]
+${entree(
+	'init [dossier]',
+	`crée la mémoire (dossier ${DOSSIER_MEMOIRE}/) ; dans un terminal, guide pas à pas (dossier, projets, déclaration MCP à Claude Code, modèles, commande, lanceur) [--oui : les défauts, sans question] [--mcp|--sans-mcp] [--modeles|--sans-modeles] [--commande|--sans-commande] [--lanceur|--sans-lanceur] : l'étape faite ou sautée sans question ; ${FACULTATIFS.map((m) => `[${m.optionInit}]`).join(' ')} : chacune déclare aussi le serveur MCP à son moteur (${FACULTATIFS.map((m) => m.nom).join(', ')}) et y installe les hooks ; [--json] : une ligne JSON par événement, sans question`,
+)}
+${entree('verifier-poste', `git, Claude Code, ${enumeration(FACULTATIFS.map((m) => m.nom))} (facultatifs, avec leur déclaration MCP et leurs hooks) et Node sur ce poste [--json]`)}
   lit <chemin>      affiche une fiche, chemin relatif à ${DOSSIER_MEMOIRE}/
   liste [dossier]   liste le contenu d'un dossier de la mémoire
   cherche <texte>   cherche dans la mémoire [--dossier <chemin>] [--tout] [--limite N] [--contexte]
@@ -37,10 +56,9 @@ Commandes :
   arreter [dossier] arrête le service du dossier (comme Ctrl-C ; pour un service démarré par « ouvrir »)
   lanceur           crée ~/Applications/Mnemo.app (macOS), qui fait « mnemo ouvrir » pour ce dossier [--retirer]
   commande          installe la commande « mnemo » dans ~/.local/bin (macOS, Linux) [--retirer]
-  declarer          déclaration MCP existante (Codex : et ses hooks) : --remplacer (sur ce Node et ce Mnemo) | --retirer
-                    [--moteur claude-code|codex] (claude-code par défaut) [--json]
-  mcp               serveur MCP pour Claude Code et Codex (stdio)
-  hook <événement>  hook de session (debut, message, outil, apres_outil, arret, fin) [--moteur claude-code|codex], entrée JSON sur stdin
+${entree('declarer', `déclaration MCP existante (${FACULTATIFS.map((m) => m.nom).join(', ')} : et leurs hooks) : --remplacer (sur ce Node et ce Mnemo) | --retirer [--moteur ${IDS}] (claude-code par défaut) [--json]`)}
+${entree('mcp', `serveur MCP pour ${enumeration(NOMS)} (stdio)`)}
+${entree('hook <événement>', `hook de session (debut, message, outil, apres_outil, arret, fin) [--moteur ${IDS}], entrée JSON sur stdin`)}
   ligne-etat        ligne d'état des sessions Mnemo : transmet les quotas du compte au service, entrée JSON sur stdin
   sessions          sessions en cours (service lancé)
   session <action>  lancer <dossier> [--profil p] [--objectif t] | terminer <id> [--sans-bilan] | voir <id>

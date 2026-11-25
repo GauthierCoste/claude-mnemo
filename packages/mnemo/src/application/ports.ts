@@ -731,17 +731,20 @@ export interface EtatSessions {
 	/**
 	 * Applique l'événement seulement si `horodatageMs` > `majMs` ; rend la session après (inchangée si ignoré), null si inconnue.
 	 * Le premier `message` après `bilanDemandeMs` d'une session en bilan note `bilanLuMs`. `arret` note `dernierArret`
-	 * (`complement.arret`, `stop` par défaut) ; `debut`, `message` et `outil` l'effacent. `complement.fil` (identifiant de la
-	 * session chez son moteur) est noté au premier événement qui le porte, même ignoré par ailleurs, et jamais écrasé ensuite.
+	 * (`complement.arret`, `stop` par défaut) ; `debut`, `message` et `outil` l'effacent ; un dialogue ouvert note l'outil
+	 * qu'il nomme (`complement.outil`, `dialogueOutil`), et un `apres_outil` d'un autre outil nommé est alors ignoré
+	 * (`autreOutilQueLeDialogue`). `complement.fil` (identifiant de la session chez son moteur) est noté au premier événement
+	 * qui le porte, même ignoré par ailleurs, et jamais écrasé ensuite.
 	 */
 	appliquer(
 		id: string,
 		e: EvenementHook,
 		horodatageMs: number,
-		complement?: { objectif?: string; commitDebut?: string | null; branche?: string | null; arret?: CauseArret; fil?: string },
+		complement?: { objectif?: string; commitDebut?: string | null; branche?: string | null; arret?: CauseArret; fil?: string; outil?: string },
 	): Promise<Session | null>;
 	/**
-	 * Une session `terminee` garde son `etat` et son `arretAttendu` (les autres champs restent modifiables). `niveauModeles` :
+	 * Une session `terminee` garde son `etat` et son `arretAttendu` (les autres champs restent modifiables). `fil` : remplacé
+	 * (après `/clear` chez un moteur qui change alors d'identifiant). `niveauModeles` :
 	 * null le retire (la session suit le niveau de la machine) ; une valeur qui n'est pas un niveau est ignorée.
 	 */
 	modifier(
@@ -749,7 +752,7 @@ export interface EtatSessions {
 		champs: Partial<
 			Pick<
 				Session,
-				'etat' | 'arretAttendu' | 'pid' | 'bilanDemandeMs' | 'bilanLuMs' | 'commitDebut' | 'branche' | 'demarrageMachineMs' | 'lanceMs' | 'vuVivantMs' | 'episodeMs' | 'position' | 'projet' | 'dossierNonRattache'
+				'etat' | 'arretAttendu' | 'pid' | 'bilanDemandeMs' | 'bilanLuMs' | 'commitDebut' | 'branche' | 'demarrageMachineMs' | 'lanceMs' | 'vuVivantMs' | 'episodeMs' | 'position' | 'projet' | 'dossierNonRattache' | 'fil'
 			>
 		> & { niveauModeles?: NiveauModeles | null },
 	): Promise<Session | null>;
@@ -1002,6 +1005,8 @@ export type ResultatRetraitHooks = 'absent' | 'retire' | 'autre' | { echec: stri
  * de ce Node et ce `main.ts`.
  */
 export type HooksDuPoste = {
+	/** Le fichier des hooks visé, pour les messages (`hooks.json` de Codex, `hooks.toml` de Mistral Vibe). */
+	chemin(env: Record<string, string | undefined>): string;
 	lire(a: AppelHooksDuPoste): Promise<LectureHooksDuPoste>;
 	installer(a: AppelHooksDuPoste): Promise<ResultatInstallationHooks>;
 	remplacer(a: AppelHooksDuPoste): Promise<ResultatRemplacementHooks>;
@@ -1063,7 +1068,7 @@ export type HooksDuMoteur = {
 	lireArguments(args: string[]): { evenement: EvenementHook; options: Set<string> } | null;
 	/**
 	 * Vrai : le hook ne fait rien dans cet environnement — entrée lue puis écartée, sortie vide, code 0, aucun appel au
-	 * service, aucun effet (Codex : hooks installés pour tout le poste, hors d'une session Mnemo).
+	 * service, aucun effet (Codex, Mistral Vibe : hooks installés pour tout le poste, hors d'une session Mnemo).
 	 */
 	inerte(env: Record<string, string | undefined>): boolean;
 	/** Entrée traduite (et le chemin de la transcription, hors de l'entrée) ; null si elle est à ignorer. */
@@ -1104,16 +1109,31 @@ export type TelemetrieDuMoteur = {
 };
 
 /**
+ * Ce que Mnemo dit d'un moteur sur le poste (`mnemo init`, `verifier-poste`, `declarer`, Réglages › Système, avertissements de
+ * session) ; les commandes `mnemo` qui y remédient en sont tirées (`remedesDuMoteur`, avec l'option de `mnemo init` du
+ * catalogue). `recherche` : où sa commande est cherchée (dit quand elle est introuvable) ; `desactivation` : le réglage qui éteint sa
+ * déclaration MCP ; `retraitManuel` : comment retirer une déclaration « mnemo » qui ne lance pas Mnemo ; `approbation` : ce
+ * qu'il faut faire pour qu'il lance des hooks installés (`commande` à taper dans le moteur, `consigne` à dire) ; null : il
+ * les lance sans approbation.
+ */
+export type InstallationDuMoteur = {
+	recherche: string;
+	desactivation: string;
+	retraitManuel: string;
+	approbation: { commande: string; consigne: string } | null;
+};
+
+/**
  * Un agent de code sur le poste, hors des sessions : `commandeParDefaut`, le nom écrit dans une ligne à coller quand il est
  * introuvable ; `trouver` : sa commande (null : introuvable) ; `declarationMcp` : le serveur `mnemo` déclaré chez lui.
  */
 export type MoteurDuPoste = {
 	id: IdMoteur;
-	nom: string;
 	commandeParDefaut: string;
+	installation: InstallationDuMoteur;
 	trouver(env: Record<string, string | undefined>, plateforme: string): CommandeMoteur | null;
 	declarationMcp: DeclarationMcp;
-	/** Hooks installés pour tout le poste (Codex) ; absent : le moteur les prend des fichiers de chaque session (Claude Code). */
+	/** Hooks installés pour tout le poste (Codex, Mistral Vibe) ; absent : le moteur les prend des fichiers de chaque session (Claude Code). */
 	hooksDuPoste?: HooksDuPoste;
 	/** Version du moteur (`--version`, en cache ; `relire` : sans le cache) ; null : illisible. Absent : non lue. */
 	version?(commande: CommandeMoteur, env: Record<string, string | undefined>, executer?: Executer, options?: { relire?: boolean }): Promise<string | null>;
@@ -1140,7 +1160,7 @@ export type Moteur = MoteurDuPoste & {
 	 * `[mcp_servers.mnemo]` dans `config.toml`, lu seulement) ; absent : le moteur n'en garde pas qui comptent pour une session.
 	 */
 	reglagesMcp?(env: Record<string, string | undefined>): Promise<string[]>;
-	/** Pourquoi la session ne peut pas être reprise par ce moteur (Codex : son `fil` encore inconnu) ; null : elle le peut. */
+	/** Pourquoi la session ne peut pas être reprise par ce moteur (Codex, Mistral Vibe : son `fil` encore inconnu) ; null : elle le peut. */
 	motifSansReprise(session: Session): string | null;
 	fichiersDeSession(dep: Dependances, session: Session, profil: Profil, appel: AppelPlugin): Promise<FichierPlugin[]>;
 	/** Lève si la session ne peut pas être lancée ainsi (identifiant, modèle ou `fil` refusés). */

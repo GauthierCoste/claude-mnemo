@@ -3,6 +3,7 @@
  * (détail, enregistrement avec empreinte, duplication, suppression, aperçu), pour voir Réglages › Profils sans service.
  */
 import { PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
+import type { IdMoteur } from '@mnemo/commun';
 import type { ApercuProfilVue, BlocApercuVue, EvenementHookVue, PluginInstalleVue, ProfilDetailVue, ProfilEditableVue, ReponseEcritureProfil, ReponseProfils, SkillVue } from '@mnemo/contrat';
 import { ErreurApi } from './api.ts';
 
@@ -29,6 +30,19 @@ const SKILLS_MEMOIRE: SkillVue[] = [
 	{ nom: 'relecture', description: 'Relire un courrier avant envoi.' },
 ];
 
+/** Ce que lit, hors Mnemo, un moteur sans plugins de session (ses skills sont listées dans la consigne), comme le service. */
+type ElementApercuVue = NonNullable<BlocApercuVue['elements']>[number];
+const HORS_MNEMO_SANS_PLUGINS: Partial<Record<IdMoteur, readonly ElementApercuVue[]>> = {
+	codex: [
+		{ nom: 'AGENTS.md', detail: 'instructions de l’utilisateur et du projet, lues par Codex', actif: true },
+		{ nom: 'Skills de Codex', detail: 'skills du dépôt et de l’utilisateur (~/.agents/skills/), lues par Codex', actif: true },
+	],
+	'mistral-vibe': [
+		{ nom: 'AGENTS.md', detail: 'instructions de l’utilisateur (~/.vibe/AGENTS.md) et du projet, lues par Mistral Vibe', actif: true },
+		{ nom: 'Skills de Mistral Vibe', detail: 'skills du projet (.vibe/skills/) et de l’utilisateur (~/.vibe/skills/, ~/.agents/skills/), lues par Mistral Vibe', actif: true },
+	],
+};
+
 const HOOKS_TOUS: EvenementHookVue[] = ['debut', 'message', 'outil', 'apres_outil', 'arret', 'fin'];
 
 type Etat = { editable: ProfilEditableVue; consigneParDefaut: string; ecrit: boolean; version: number };
@@ -41,6 +55,15 @@ export function creerProfilsDemo() {
 			'redaction',
 			{
 				editable: { avatar: { forme: 'renard', couleur: 'ambre' }, consigne: 'Rédige les courriers aux clients, au ton de la maison.', lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: ['relecture'], plugins: ['superpowers@superpowers-marketplace', 'ancien@marketplace'], moteur: 'claude-code', modele: '' },
+				consigneParDefaut: CONSIGNE_TRAVAIL,
+				ecrit: true,
+				version: 1,
+			},
+		],
+		[
+			'veille-technique',
+			{
+				editable: { avatar: { forme: 'pingouin', couleur: 'rouge' }, consigne: 'Fais la veille des bibliothèques du projet et résume ce qui change.', lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: 'tous', plugins: [], moteur: 'mistral-vibe', modele: 'mistral-medium-3.5' },
 				consigneParDefaut: CONSIGNE_TRAVAIL,
 				ecrit: true,
 				version: 1,
@@ -139,34 +162,30 @@ export function creerProfilsDemo() {
 			const e = etat(nom);
 			const d = e.editable;
 			const retenue = (s: string) => d.skillsMemoire === 'tous' || d.skillsMemoire.includes(s);
-			const codex = d.moteur === 'codex';
+			const horsMnemo = HORS_MNEMO_SANS_PLUGINS[d.moteur];
+			const sansPlugins = horsMnemo !== undefined;
 			const titreConsigne = d.consigne === null ? 'Consigne du profil (par défaut)' : 'Consigne du profil (personnalisée)';
-			// Codex : la consigne reçue porte la liste des skills, lues par l'outil `lire` (comme le service)
+			// sans plugins (Codex, Mistral Vibe) : la consigne reçue porte la liste des skills, lues par l'outil `lire` (comme le service)
 			const listeSkills = SKILLS_MEMOIRE.filter((s) => retenue(s.nom)).map((s) => `- ${s.nom} : ${s.description} (\`skills/${s.nom}/SKILL.md\`)`);
-			const texteCodex = [consigne(e).trim(), '', '## Skills de Mnemo', '', 'Ces skills sont dans la mémoire Mnemo, pas sur le disque du projet. Quand l’une s’applique à ta tâche, lis d’abord son `SKILL.md` avec l’outil `lire` de Mnemo (identifiant entre parenthèses), puis suis-la.', '', ...listeSkills, ''].join('\n');
+			const texteAvecSkills = [consigne(e).trim(), '', '## Skills de Mnemo', '', 'Ces skills sont dans la mémoire Mnemo, pas sur le disque du projet. Quand l’une s’applique à ta tâche, lis d’abord son `SKILL.md` avec l’outil `lire` de Mnemo (identifiant entre parenthèses), puis suis-la.', '', ...listeSkills, ''].join('\n');
 			const blocs: BlocApercuVue[] = [
-				codex
-					? { origine: 'profil', titre: `${titreConsigne}, avec la liste des skills`, reglable: true, texte: texteCodex }
+				sansPlugins
+					? { origine: 'profil', titre: `${titreConsigne}, avec la liste des skills`, reglable: true, texte: texteAvecSkills }
 					: { origine: 'profil', titre: titreConsigne, reglable: true, texte: `${consigne(e)}\n` },
 				{ origine: 'mnemo', titre: 'Instructions du serveur MCP Mnemo', reglable: false, texte: 'Consigne et contexte injectés par la session Mnemo.' },
 				{ origine: 'mnemo', titre: 'Hooks de Mnemo', reglable: true, elements: d.hooks.map((h) => ({ nom: h, detail: '', actif: true })) },
 				{
 					origine: 'memoire',
-					titre: codex ? 'Skills de la mémoire (listées dans la consigne, lues par l’outil lire)' : 'Skills de la mémoire',
+					titre: sansPlugins ? 'Skills de la mémoire (listées dans la consigne, lues par l’outil lire)' : 'Skills de la mémoire',
 					reglable: true,
 					elements: SKILLS_MEMOIRE.map((s) => ({ nom: s.nom, detail: retenue(s.nom) ? s.description : `${s.description} — non retenue par le profil`, actif: retenue(s.nom) })),
 				},
-				...(codex ? [] : [{ origine: 'plugin', titre: 'Plugins Claude Code', reglable: true, elements: PLUGINS.map((p) => ({ nom: p.id, detail: `version ${p.version}`, actif: d.plugins.includes(p.id) })) } satisfies BlocApercuVue]),
+				...(sansPlugins ? [] : [{ origine: 'plugin', titre: 'Plugins Claude Code', reglable: true, elements: PLUGINS.map((p) => ({ nom: p.id, detail: `version ${p.version}`, actif: d.plugins.includes(p.id) })) } satisfies BlocApercuVue]),
 				{
 					origine: 'hors_mnemo',
 					titre: 'Hors Mnemo',
 					reglable: false,
-					elements: codex
-						? [
-								{ nom: 'AGENTS.md', detail: 'instructions de l’utilisateur et du projet, lues par Codex', actif: true },
-								{ nom: 'Skills de Codex', detail: 'skills du dépôt et de l’utilisateur (~/.agents/skills/), lues par Codex', actif: true },
-							]
-						: [{ nom: 'CLAUDE.md', detail: 'instructions de l’utilisateur et du projet, lues par Claude Code', actif: true }],
+					elements: horsMnemo !== undefined ? [...horsMnemo] : [{ nom: 'CLAUDE.md', detail: 'instructions de l’utilisateur et du projet, lues par Claude Code', actif: true }],
 				},
 				{ origine: 'systeme', titre: 'Consigne du bilan', reglable: false, texte: 'Mnemo : bilan de fin de session. Rédige l’épisode de cette session avec l’outil proposer, genre « episode »…' },
 			];

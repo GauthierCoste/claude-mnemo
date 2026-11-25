@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { avertissementNonCherchable, consigneATraiter } from '@mnemo/commun';
-import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EtatModelesVue, type EntreeServieVue, type ReponseDocuments, type ReponseEcarteesToujours, type ReponseServis, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseProfils, type ReponseValidationLot, type SessionTermineeVue, type SessionVue } from '@mnemo/contrat';
+import { avertissementNonCherchable, consigneATraiter, estIdMoteur, IDS_MOTEURS, NOMS_MOTEURS } from '@mnemo/commun';
+import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EtatModelesVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseEcarteesToujours, type ReponseServis, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseMoteurs, type ReponseProfils, type ReponseQuotas, type ReponseValidationLot, type SessionTermineeVue, type SessionVue } from '@mnemo/contrat';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ErreurApi } from '../../src/client/api.ts';
@@ -22,7 +22,7 @@ describe('mode démo', () => {
 		expect(await within(screen.getByRole('banner')).findByText('~/Developer')).toBeTruthy();
 		const nav = screen.getByRole('navigation');
 		await screen.findByText('service connecté');
-		expect(within(nav).getByRole('button', { name: /Sessions/ }).textContent).toContain('3');
+		expect(within(nav).getByRole('button', { name: /Sessions/ }).textContent).toContain('4');
 		expect(screen.getByText('données fictives')).toBeTruthy();
 	});
 
@@ -125,11 +125,11 @@ describe('mode démo', () => {
 	it('données cohérentes : sessions de chaque état, graphe, fiche, fil', async () => {
 		const { api } = creerClientDemo();
 		const { sessions } = await api.lire<{ sessions: SessionVue[] }>(ROUTES.sessions);
-		expect(sessions.map((s) => s.etat).sort()).toEqual(['a_relire', 'a_relire', 'attend', 'attend', 'attend', 'en_pause', 'en_pause', 'terminee', 'travaille', 'travaille']);
+		expect(sessions.map((s) => s.etat).sort()).toEqual(['a_relire', 'a_relire', 'attend', 'attend', 'attend', 'attend', 'en_pause', 'en_pause', 'terminee', 'travaille', 'travaille']);
 		expect(sessions.filter((s) => s.profil === 'archiviste')).toHaveLength(1);
-		// La grille de démonstration : 8 sessions sur 4 dossiers, erp-saas en premier (ordre de création).
+		// La grille de démonstration : 9 sessions sur 4 dossiers, erp-saas en premier (ordre de création).
 		const groupes = grouperSessions(sessions, 'Developer');
-		expect(groupes.map((g) => [g.cle, g.sessions.length])).toEqual([['erp-saas', 4], ['api-facturation', 2], ['agent-maison', 1], ['site-vitrine', 1]]);
+		expect(groupes.map((g) => [g.cle, g.sessions.length])).toEqual([['erp-saas', 4], ['api-facturation', 3], ['agent-maison', 1], ['site-vitrine', 1]]);
 		expect(sessions.some((s) => !s.terminal)).toBe(true);
 
 		const graphe = await api.lire<DonneesGraphe>(ROUTES.graphe);
@@ -148,6 +148,28 @@ describe('mode démo', () => {
 		expect(fil.commits.length).toBeGreaterThan(0);
 		expect(fil.aConfirmer.length).toBeGreaterThan(0);
 		expect(fil.montees.length).toBe(2);
+	});
+
+	it('moteurs : les trois du catalogue dans /api/moteurs, chaque profil et chaque session sur un moteur connu, avec un modèle proposé ; sans quotas pour Vibe', async () => {
+		const { api } = creerClientDemo();
+		const { moteurs } = await api.lire<ReponseMoteurs>(ROUTES.moteurs, { poste: '1' });
+		expect(moteurs.map((m) => m.id)).toEqual([...IDS_MOTEURS]);
+		for (const m of moteurs) {
+			expect(m.nom).toBe(NOMS_MOTEURS[m.id]);
+			expect(m.poste?.length).toBeGreaterThan(0);
+		}
+		const { profils } = await api.lire<ReponseProfils>(ROUTES.profils);
+		const proposes = (id: string) => moteurs.find((m) => m.id === id)!.modeles;
+		for (const p of profils) if (p.modele !== '') expect(proposes(p.moteur)).toContain(p.modele);
+		expect(new Set(profils.map((p) => p.moteur))).toEqual(new Set(IDS_MOTEURS));
+		const { sessions } = await api.lire<{ sessions: SessionVue[] }>(ROUTES.sessions);
+		for (const x of sessions) {
+			expect(estIdMoteur(x.moteur ?? 'claude-code')).toBe(true);
+			if (x.modele !== undefined) expect(proposes(x.moteur!)).toContain(x.modele);
+		}
+		expect(sessions.some((x) => x.moteur === 'mistral-vibe')).toBe(true);
+		const quotas = await api.lire<ReponseQuotas>(ROUTES.quotas);
+		expect(Object.keys(quotas.moteurs ?? {}).sort()).toEqual(['claude-code', 'codex']);
 	});
 
 	it('actions de session : l’état change et un message `session` est diffusé ; nouvelle session → une session', async () => {

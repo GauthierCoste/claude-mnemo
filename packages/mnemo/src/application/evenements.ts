@@ -1,5 +1,5 @@
 import type { CauseArret, EvenementHook, Session, SourceDeDebut } from '../domaine/session.ts';
-import { evenementEtranger, objectifDe } from '../domaine/session.ts';
+import { evenementEtranger, filApresClear, objectifDe } from '../domaine/session.ts';
 import { ecrireEpisodeMinimal } from './episode.ts';
 import type { Classe, Dependances, Pilotage, VecteurDuMessage } from './ports.ts';
 import { noteDeLigne } from '../domaine/gestes.ts';
@@ -231,7 +231,6 @@ async function verifierOutil(dep: Dependances, pil: Pick<Pilotage, 'etat'>, sess
 		(async () => {
 			try {
 				const outils = outilsDuMoteur(entree.moteur ?? MOTEUR_PAR_DEFAUT);
-				if (outils === null) throw new Error(`Moteur sans implémentation : « ${entree.moteur} ».`);
 				const position = await positionDe(dep, pil, session, entree, reglages, true);
 				return await verifierAction(dep, position, action, { racine, cwd: entree.cwd ?? racine, sansCasse: reglages.sansCasse ?? false, outils });
 			} catch (erreur) {
@@ -255,6 +254,8 @@ async function appliquer(pil: Pick<Pilotage, 'etat'>, entree: EntreeHook): Promi
 		...(objectif === null ? {} : { objectif }),
 		...(entree.evenement === 'arret' && entree.arret !== undefined ? { arret: entree.arret } : {}),
 		...(entree.fil === undefined ? {} : { fil: entree.fil }),
+		// l'outil d'un dialogue ouvert, et celui d'un après-outil : seul l'après-outil de cet outil ferme le dialogue
+		...(((entree.evenement === 'arret' && entree.arret === 'notification') || entree.evenement === 'apres_outil') && entree.outil !== undefined && 'nom' in entree.outil ? { outil: entree.outil.nom } : {}),
 	};
 	try {
 		return await pil.etat.appliquer(entree.session, entree.evenement, entree.horodatageMs, Object.keys(complement).length === 0 ? undefined : complement);
@@ -304,15 +305,23 @@ async function finDeSession(dep: Dependances, pil: Pick<Pilotage, 'etat' | 'depo
  * La session de l'événement, s'il vient d'un autre moteur que celui de la session ou d'un autre fil (`evenementEtranger`) ; null
  * sinon. Lu avant d'appliquer quoi que ce soit ; session inconnue ou illisible : null (rien ne sera appliqué à une session inconnue).
  */
-async function sessionEtrangere(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil'>): Promise<Session | null> {
+async function sessionEtrangere(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil' | 'evenement' | 'source'>): Promise<Session | null> {
 	if (entree.session === '') return null;
 	const session = await pil.etat.lire(entree.session).catch(() => null);
 	return session !== null && evenementEtranger(session, entree) ? session : null;
 }
 
 /** L'événement est-il étranger à sa session (`sessionEtrangere`) ? */
-export async function estEtranger(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil'>): Promise<boolean> {
+export async function estEtranger(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil' | 'evenement' | 'source'>): Promise<boolean> {
 	return (await sessionEtrangere(pil, entree)) !== null;
+}
+
+/** Après `/clear` chez un moteur qui change alors l'identifiant de la session (`filApresClear`) : le nouveau `fil` est noté (reprise). */
+async function noterFilApresClear(pil: Pick<Pilotage, 'etat'>, entree: EntreeHook): Promise<void> {
+	if (entree.session === '' || entree.evenement !== 'debut' || entree.source !== 'clear') return;
+	const session = await pil.etat.lire(entree.session).catch(() => null);
+	const fil = session === null ? null : filApresClear(session, entree);
+	if (fil !== null) await pil.etat.modifier(entree.session, { fil }).catch(() => null);
 }
 
 /**
@@ -332,6 +341,7 @@ export async function traiterEvenement(dep: Dependances, pil: Pick<Pilotage, 'et
 		const { rattachee: _rattachee, ...sansRattachement } = reglages;
 		return verifierOutil(dep, pil, etrangere, entree, sansRattachement);
 	}
+	await noterFilApresClear(pil, entree);
 	const session = await appliquer(pil, entree);
 	if (entree.evenement === 'fin') {
 		const tache = finDeSession(dep, pil, session, entree, reglages).catch(() => {});
@@ -366,8 +376,9 @@ async function servirEvenement(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 			}
 			return {};
 		case 'apres_outil':
-			// rien n'est calculé ni servi après un outil : seule la fiche lue ou écrite est notée
-			if (session !== null) await noterFicheTouchee(dep, pil, session, entree, reglages);
+			// rien n'est calculé ni servi après un outil : seule la fiche lue ou écrite est notée (pas pour un `apres_outil` que le
+			// profil ne demande pas, qui ne tient que l'état : `apresOutilDEtat`)
+			if (session !== null && entree.sansContexte !== true) await noterFicheTouchee(dep, pil, session, entree, reglages);
 			return {};
 		case 'message':
 			return entree.sansContexte === true ? {} : servirAuMessage(dep, pil, session, entree, reglages);
@@ -383,7 +394,7 @@ async function servirEvenement(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 async function noterFicheTouchee(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session: Session, entree: EntreeHook, reglages: ReglagesEvenement): Promise<void> {
 	const appel = entree.outil !== undefined && 'nom' in entree.outil ? entree.outil : null;
 	const outils = outilsDuMoteur(entree.moteur ?? MOTEUR_PAR_DEFAUT);
-	const touchee = appel === null || outils === null ? null : ficheTouchee(appel, outils);
+	const touchee = appel === null ? null : ficheTouchee(appel, outils);
 	if (touchee === null) return;
 	const empreinte = touchee.action === 'lue' ? ((await dep.index.fiches().catch(() => [])).find((f) => f.chemin === touchee.chemin)?.empreinte ?? null) : null;
 	await pil.etat.noterFicheServieLueOuEcrite(session.id, { chemin: touchee.chemin, action: touchee.action, horodatageMs: entree.horodatageMs, empreinte }).catch(() => {});

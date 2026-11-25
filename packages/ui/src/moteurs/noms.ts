@@ -1,16 +1,15 @@
 /** Noms des moteurs (agents de code) dans l'interface, et ce qu'on montre du moteur et du modèle d'une session. */
-import { estIdMoteur, MOTEUR_PAR_DEFAUT } from '@mnemo/commun';
-import type { IdMoteur } from '@mnemo/commun';
+import { estIdMoteur, MOTEUR_PAR_DEFAUT, NOMS_MOTEURS } from '@mnemo/commun';
 import type { SessionVue } from '@mnemo/contrat';
 
-export const NOMS_MOTEURS: Readonly<Record<IdMoteur, string>> = { 'claude-code': 'Claude Code', codex: 'Codex' };
+export { NOMS_MOTEURS };
 
 /** Nom d'un moteur ; absent : Claude Code (session ou profil d'avant les moteurs) ; inconnu de l'interface : son identifiant. */
 export const nomDuMoteur = (id: string | undefined): string => (id === undefined ? NOMS_MOTEURS[MOTEUR_PAR_DEFAUT] : estIdMoteur(id) ? NOMS_MOTEURS[id] : id);
 
-/** « Codex · gpt-6.2-sol », « Claude Code · modèle par défaut ». */
+/** « Codex (gpt-6.2-sol) », « Claude Code (modèle par défaut) ». */
 export function moteurEtModele(s: Pick<SessionVue, 'moteur' | 'modele'>): string {
-	return `${nomDuMoteur(s.moteur)} · ${s.modele === undefined || s.modele === '' ? 'modèle par défaut' : s.modele}`;
+	return `${nomDuMoteur(s.moteur)} (${s.modele === undefined || s.modele === '' ? 'modèle par défaut' : s.modele})`;
 }
 
 /**

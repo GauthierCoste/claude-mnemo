@@ -7,3 +7,8 @@ export function citerPosix(chemin: string): string {
 export function citerPowerShell(chemin: string): string {
 	return `'${chemin.replace(/['‘’‚‛]/gu, '$&$&')}'`;
 }
+
+/** Un chemin entre guillemets pour `cmd.exe` (un chemin Windows ne contient jamais de guillemet). */
+export function citerCmd(chemin: string): string {
+	return `"${chemin}"`;
+}

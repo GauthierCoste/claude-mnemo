@@ -24,8 +24,13 @@ export const marqueCodex = (uuid: string): string => `mnemo_session='${uuid}'`;
  */
 export const MOTEUR_CODEX: Moteur = {
 	id: 'codex',
-	nom: 'Codex',
 	commandeParDefaut: 'codex',
+	installation: {
+		recherche: 'commande codex absente du PATH et de ChatGPT.app, ou MNEMO_CODEX invalide',
+		desactivation: 'enabled = false',
+		retraitManuel: '`codex mcp remove mnemo`',
+		approbation: { commande: '/hooks', consigne: 'approuvez-les une fois dans Codex (/hooks) : sans approbation, Codex ne les lance pas.' },
+	},
 	modeles: modelesCodex(),
 	sansCommande: 'refus',
 	trouver: (env, plateforme) => trouverCodex(env, plateforme as NodeJS.Platform),

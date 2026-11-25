@@ -1,10 +1,13 @@
-import { citerPosix, citerPowerShell } from '../../citer.ts';
 import { estObjet } from '../../valeurs.ts';
+import { commandeGardee, estCommandeDeHookMnemo, lanceCeNodeEtCeMain } from '../commande-de-hook.ts';
+import { sansBom } from './json-texte.ts';
 import { OUTILS_CODEX } from './outils.ts';
 
 /**
  * Hooks de Mnemo dans `hooks.json` de Codex : un groupe par événement Codex, une commande `mnemo hook <événement> --moteur
- * codex`. `timeout` en secondes ; `SessionEnd` : 3 s au plus chez Codex. `PreToolUse` sans `matcher` : tous les outils.
+ * codex`. `timeout` en secondes ; `SessionEnd` : 3 s au plus chez Codex. `PreToolUse` sans `matcher` : tous les outils ; 3 s
+ * (Mnemo décide en 2 s depuis le démarrage du hook), gardées : chez Mistral Vibe, 10 s, mais changer une
+ * commande déjà approuvée la fait redemander par Codex (`/hooks`) sur chaque poste, et les hooks non approuvés ne tournent pas.
  */
 export const HOOKS_CODEX_INSTALLES: readonly { evenement: string; args: readonly string[]; timeout: number; matcher?: string }[] = [
 	{ evenement: 'SessionStart', args: ['debut'], timeout: 10 },
@@ -20,19 +23,12 @@ export const HOOKS_CODEX_INSTALLES: readonly { evenement: string; args: readonly
 type Groupe = Record<string, unknown> & { hooks: unknown[] };
 
 /**
- * Commande d'un hook. Codex lance `command` par le shell de connexion de l'utilisateur, `<shell> -c` (mesuré, Codex 0.171 :
- * `/bin/zsh -c`, même avec `SHELL=/bin/bash`) : chemins entre apostrophes POSIX. `commandWindows` : PowerShell (Codex exige
- * PowerShell pour les hooks sous Windows) : opérateur d'appel `&`, chemins entre apostrophes PowerShell. Une garde sort
- * d'emblée (code 0) hors d'une session Codex de Mnemo (`MNEMO_MOTEUR` n'est pas `codex`) : un Node désinstallé ou un dépôt
- * déplacé ne fait pas échouer chaque événement des autres sessions Codex du poste. Les arguments après `main.ts` sont des
- * mots simples, jamais cités.
+ * Commande d'un hook (`commandeGardee`). Codex lance `command` par le shell de connexion de l'utilisateur, `<shell> -c`
+ * (mesuré, Codex 0.171 : `/bin/zsh -c`, même avec `SHELL=/bin/bash`) ; `commandWindows` par PowerShell (Codex l'exige pour
+ * les hooks sous Windows).
  */
 export function commandesDuHook(node: string, main: string, args: readonly string[]): { command: string; commandWindows: string } {
-	const suite = ['hook', ...args, '--moteur', 'codex'].join(' ');
-	return {
-		command: `[ "$MNEMO_MOTEUR" = codex ] || exit 0; ${citerPosix(node)} ${citerPosix(main)} ${suite}`,
-		commandWindows: `if ($env:MNEMO_MOTEUR -ne 'codex') { exit 0 }; & ${citerPowerShell(node)} ${citerPowerShell(main)} ${suite}`,
-	};
+	return { command: commandeGardee('codex', 'posix', node, main, args), commandWindows: commandeGardee('codex', 'powershell', node, main, args) };
 }
 
 /** Groupes attendus, par événement Codex, pour ce Node et ce `main.ts`. */
@@ -44,33 +40,28 @@ export function hooksAttendus(node: string, main: string): Map<string, Groupe> {
 	return attendus;
 }
 
-/**
- * `… adaptateurs/cli/main.ts['] hook <événement> [--notification] --moteur codex`, ancré en fin de commande : une commande de
- * Mnemo, quel que soit son chemin et qu'elle ait sa garde ou non.
- */
-const COMMANDE_MNEMO = /adaptateurs[\\/]cli[\\/]main\.ts'?[ \t]+hook[ \t]+[a-z_]+(?:[ \t]+--notification)?[ \t]+--moteur[ \t]+codex[ \t]*$/u;
-
 /** Une commande de hook posée par Mnemo (n'importe quelle installation) ; jamais celle d'un autre outil. */
 export function estHookMnemo(commande: unknown): boolean {
-	return estObjet(commande) && commande.type === 'command' && typeof commande.command === 'string' && COMMANDE_MNEMO.test(commande.command);
+	return estObjet(commande) && commande.type === 'command' && typeof commande.command === 'string' && estCommandeDeHookMnemo(commande.command, 'codex');
 }
 
 /** Une commande de Mnemo qui lance ce Node et ce `main.ts` (cette installation), quels que soient sa garde et son événement. */
 export function estHookDe(commande: unknown, node: string, main: string): boolean {
-	return estHookMnemo(commande) && (commande as { command: string }).command.includes(`${citerPosix(node)} ${citerPosix(main)} hook `);
+	return estHookMnemo(commande) && lanceCeNodeEtCeMain((commande as { command: string }).command, node, main);
 }
 
 const estGroupe = (g: unknown): g is Groupe => estObjet(g) && Array.isArray(g.hooks);
 
 /**
- * Texte de `hooks.json` lu (null : absent) : sa racine, ou pourquoi on n'y touche pas. Seuls la racine et `hooks` doivent
+ * Texte de `hooks.json` lu (null : absent ; BOM retiré) : sa racine, ou pourquoi on n'y touche pas. Seuls la racine et `hooks` doivent
  * être des tables, et chaque événement une liste ; le reste est gardé tel quel, sans être interprété.
  */
 export function lireHooksJson(texte: string | null): { racine: Record<string, unknown> } | { echec: string } {
-	if (texte === null || texte.trim() === '') return { racine: {} };
+	const json = texte === null ? '' : sansBom(texte);
+	if (json.trim() === '') return { racine: {} };
 	let brut: unknown;
 	try {
-		brut = JSON.parse(texte);
+		brut = JSON.parse(json);
 	} catch (erreur) {
 		return { echec: `JSON illisible (${erreur instanceof Error ? erreur.message : String(erreur)})` };
 	}
@@ -158,6 +149,3 @@ export function remplacerHooks(racine: Record<string, unknown>, attendus: Map<st
 	for (const [evenement, attendu] of attendus) if (!places.has(evenement)) hooks[evenement] = [attendu];
 	return { ...racine, hooks };
 }
-
-/** Texte écrit : JSON indenté de deux espaces, fin de ligne `\n`. */
-export const texteHooksJson = (racine: Record<string, unknown>): string => `${JSON.stringify(racine, null, 2)}\n`;

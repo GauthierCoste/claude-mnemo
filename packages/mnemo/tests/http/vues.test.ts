@@ -27,6 +27,9 @@ describe('vueSession', () => {
 		expect(vueSession(archiviste({ dernierArret: null }), true).dialogueOuvert).toBe(false);
 		expect(vueSession(archiviste({ dernierArret: 'notification' }), true).dialogueOuvert).toBe(true);
 		expect(vueSession(archiviste({ etat: 'travaille', dernierArret: 'notification' }), true).dialogueOuvert).toBe(false);
+		// un dialogue d'avant le dernier lancement est fermé avec son processus
+		expect(vueSession(archiviste({ dernierArret: 'notification', majMs: 10, lanceMs: 20 }), true).dialogueOuvert).toBe(false);
+		expect(vueSession(archiviste({ dernierArret: 'notification', majMs: 30, lanceMs: 20 }), true).dialogueOuvert).toBe(true);
 	});
 
 	it('niveauModeles : celui de la session, null si elle suit le niveau de la machine', () => {

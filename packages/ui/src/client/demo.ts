@@ -76,7 +76,7 @@ import {
 	type ReponseFenetres,
 	type ReponseQuotas,
 } from '@mnemo/contrat';
-import { A_TRAITER_MAX, avecAvertissements, consigneATraiter, demandeTout, DOCUMENTS_MAX, estNiveauModeles, ECHANTILLON_NATURE, motifSiNonCherchable, plier, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL, TAILLE_MAX_DOCUMENT, tailleLisible } from '@mnemo/commun';
+import { A_TRAITER_MAX, avecAvertissements, consigneATraiter, demandeTout, DOCUMENTS_MAX, estIdMoteur, estNiveauModeles, ECHANTILLON_NATURE, motifSiNonCherchable, plier, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL, TAILLE_MAX_DOCUMENT, tailleLisible } from '@mnemo/commun';
 
 const MINUTE = 60_000;
 const LATENCE_MS = 90;
@@ -552,7 +552,7 @@ function creerConnexionDemo(monde: Monde): FausseConnexion {
 		if (s && s.etat !== 'travaille') changerEtat(s.id, 'travaille');
 		const [reflexion, reponseCommune] = REPONSES_TERMINAL_DEMO;
 		const reponseFinale = (s?.profil === PROFIL_ARCHIVISTE ? REPONSES_ARCHIVISTE_DEMO[texte.trim()] : undefined) ?? reponseCommune;
-		const moteur = s?.moteur === 'codex' ? 'codex' : 'claude-code';
+		const moteur = s?.moteur !== undefined && estIdMoteur(s.moteur) ? s.moteur : 'claude-code';
 		sortie(session, `${effacerInvite(indicateurs.delete(session))}${messageUtilisateur(texte, moteur)}${NL}${NL}${indicateur(reflexion, moteur)}`);
 		setTimeout(() => sortie(session, `${EFFACER_LIGNE}${outil('memoire_chercher', `« ${texte.slice(0, 40)} »`, '2 fiches injectées', moteur)}${NL}${NL}${indicateur(reflexion, moteur)}`), 600);
 		setTimeout(() => {
@@ -951,7 +951,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			case ROUTES.reglages:
 				return reglagesDemo();
 			case ROUTES.sante:
-				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.6.2' } satisfies SanteVue;
+				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.7.0' } satisfies SanteVue;
 			case ROUTES.graphe:
 				return graphe(monde.memoire);
 			case ROUTES.fiche:

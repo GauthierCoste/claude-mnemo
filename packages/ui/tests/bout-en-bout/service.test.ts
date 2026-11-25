@@ -3,6 +3,7 @@
  * et `WebSocket`, contre le vrai service lancé par la CLI (faux `claude`, `HOME` temporaire, aucun modèle, aucun navigateur).
  * Les étapes se suivent et partagent le même service (et le même dossier Mnemo).
  */
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -262,6 +263,8 @@ describe('interface de bout en bout, contre le vrai service', () => {
 		expect(avant?.titre).toBe('Clients');
 		const fiche = await api.lire<FicheVue>(ROUTES.fiche, { chemin: 'clients/clients.md' });
 		const memoiresAvant = principal.messages.filter((m) => m.type === 'memoire').length;
+		const dernierCommit = () => execFileSync('git', ['log', '-1', '--format=%H %s'], { cwd: join(dossier, '_mnemo'), encoding: 'utf8' }).trim();
+		const commitAvant = dernierCommit();
 
 		const texte = fiche.brut.replace('# Clients', '# Clients et partenaires');
 		expect(texte).not.toBe(fiche.brut);
@@ -269,14 +272,11 @@ describe('interface de bout en bout, contre le vrai service', () => {
 		expect(r.statut).toBe('ecrit');
 
 		expect(await jusqua(() => principal.messages.filter((m) => m.type === 'memoire').length > memoiresAvant)).toBe(true);
-		let relu: DonneesGraphe | null = null;
-		expect(
-			await jusqua(async () => {
-				relu = await api.lire<DonneesGraphe>(ROUTES.graphe);
-				return relu.fiches.find((f) => f.chemin === 'clients/clients.md')?.titre === 'Clients et partenaires';
-			}),
-		).toBe(true);
-		expect(relu!.modifieeMs).toBeGreaterThan(graphe.modifieeMs);
+		expect(await jusqua(async () => (await api.lire<DonneesGraphe>(ROUTES.graphe)).fiches.find((f) => f.chemin === 'clients/clients.md')?.titre === 'Clients et partenaires')).toBe(true);
+		// l'écriture est un commit de plus, qui nomme la fiche (`modifieeMs` du graphe, à la seconde, ne le prouve pas)
+		const commitApres = dernierCommit();
+		expect(commitApres.split(' ')[0]).not.toBe(commitAvant.split(' ')[0]);
+		expect(commitApres).toMatch(/^\S+ mnemo: .*clients\/clients\.md/u);
 
 		const conflit = await api.envoyer(ROUTES.brut, { chemin: fiche.chemin, texte: `${fiche.brut}\nAutre.\n`, empreinte: fiche.empreinte }).catch((e: unknown) => e);
 		expect(conflit).toBeInstanceOf(ErreurApi);

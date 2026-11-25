@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { commandesDuHook, estHookDe, estHookMnemo, etatDesHooks, HOOKS_CODEX_INSTALLES, hooksAttendus, lireHooksJson, nomDansLaCle, remplacerHooks, texteHooksJson } from '../../src/domaine/moteurs/codex/hooks-installes.ts';
+import { commandesDuHook, estHookDe, estHookMnemo, etatDesHooks, HOOKS_CODEX_INSTALLES, hooksAttendus, lireHooksJson, nomDansLaCle, remplacerHooks } from '../../src/domaine/moteurs/codex/hooks-installes.ts';
+import { texteJsonReecrit } from '../../src/domaine/moteurs/codex/json-texte.ts';
 
 const NODE = '/opt/node/bin/node';
 const MAIN = "/maison/a/Mes projets/l'outil/packages/mnemo/src/adaptateurs/cli/main.ts";
@@ -53,7 +54,7 @@ describe('hooks.json de Codex', () => {
 		const racine = remplacerHooks(lire(null), attendus);
 		expect(etatDesHooks(racine, NODE, MAIN)).toEqual({ etat: 'a_jour', autres: false, cles: ['session_start:0:0', 'user_prompt_submit:0:0', 'pre_tool_use:0:0', 'post_tool_use:0:0', 'stop:0:0', 'permission_request:0:0', 'session_end:0:0'] });
 		expect(etatDesHooks(lire(''), NODE, MAIN)).toEqual({ etat: 'absent', autres: false, cles: [] });
-		expect(texteHooksJson(racine).endsWith('}\n')).toBe(true);
+		expect(texteJsonReecrit(racine, null).endsWith('}\n')).toBe(true);
 	});
 
 	it('JSON illisible ou de forme inattendue : échec motivé', () => {

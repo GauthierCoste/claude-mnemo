@@ -44,6 +44,11 @@ export type Session = {
 	bilanLuMs?: number | null;
 	/** Cause du dernier `arret`, effacée par `debut`, `message` et `outil` (null : aucun arrêt depuis). */
 	dernierArret?: CauseArret | null;
+	/**
+	 * Outil dont le dialogue est ouvert (`arret` `notification` qui le nomme : Codex, Mistral Vibe) : seul un `apres_outil` de
+	 * ce même outil le ferme ; null : inconnu (Claude Code), n'importe quel `apres_outil` le ferme.
+	 */
+	dialogueOutil?: string | null;
 	/** Instant où l'épisode de la session a été écrit ou constaté (rattrapage au démarrage : déjà fait au-delà). */
 	episodeMs?: number | null;
 	/** Vrai si aucune fiche ne couvre le dossier de la session (`dossier_projet`) : sa position est alors la racine. */
@@ -64,17 +69,45 @@ export type Session = {
 	fil?: string;
 };
 
+/** Ce qu'un événement de hook dit de sa session chez son moteur. */
+type EvenementDeFil = { moteur?: string; fil?: string; evenement?: string; source?: string };
+
+const memeMoteur = (session: Pick<Session, 'moteur'>, evenement: EvenementDeFil): boolean => (session.moteur ?? MOTEUR_PAR_DEFAUT) === (evenement.moteur ?? MOTEUR_PAR_DEFAUT);
+
+/**
+ * `/clear` dans la session, chez un moteur qui en change l'identifiant (Mistral Vibe : non mesuré) : un `debut` de source
+ * `clear`, du même moteur, portant un autre `fil` que celui appris ; rend ce nouveau `fil`, à noter ; null sinon.
+ */
+export function filApresClear(session: Pick<Session, 'moteur' | 'fil'>, evenement: EvenementDeFil): string | null {
+	if (evenement.evenement !== 'debut' || evenement.source !== 'clear' || !memeMoteur(session, evenement)) return null;
+	return session.fil !== undefined && evenement.fil !== undefined && evenement.fil !== '' && evenement.fil !== session.fil ? evenement.fil : null;
+}
+
 /**
  * Un événement de hook qui n'est pas de cette session : envoyé par un autre moteur que le sien (un `codex` lancé depuis une
- * session Claude Code hérite de `MNEMO_SESSION`), ou portant un autre `fil` que celui déjà appris. Sans effet.
+ * session Claude Code hérite de `MNEMO_SESSION`), ou portant un autre `fil` que celui déjà appris, sauf après `/clear`
+ * (`filApresClear`). Sans effet.
  */
-export function evenementEtranger(session: Pick<Session, 'moteur' | 'fil'>, evenement: { moteur?: string; fil?: string }): boolean {
-	if ((session.moteur ?? MOTEUR_PAR_DEFAUT) !== (evenement.moteur ?? MOTEUR_PAR_DEFAUT)) return true;
+export function evenementEtranger(session: Pick<Session, 'moteur' | 'fil'>, evenement: EvenementDeFil): boolean {
+	if (!memeMoteur(session, evenement)) return true;
+	if (filApresClear(session, evenement) !== null) return false;
 	return session.fil !== undefined && evenement.fil !== undefined && evenement.fil !== session.fil;
 }
 
-/** Un dialogue de Claude Code (permission) attend peut-être l'utilisateur : la dernière chose vue est une `Notification`. */
-export const dialogueOuvert = (s: Pick<Session, 'etat' | 'dernierArret'>): boolean => s.etat === 'attend' && s.dernierArret === 'notification';
+/**
+ * Un dialogue du moteur (permission) attend peut-être l'utilisateur : la dernière chose vue est une `Notification`, reçue
+ * depuis le dernier lancement du processus (`lanceMs` : un dialogue d'avant une reprise est fermé avec son processus). Seule
+ * règle, pour l'interface comme pour le pilote.
+ */
+export const dialogueOuvert = (s: Pick<Session, 'etat' | 'dernierArret' | 'majMs' | 'lanceMs'>): boolean =>
+	s.etat === 'attend' && s.dernierArret === 'notification' && ((s.lanceMs ?? null) === null || s.majMs > s.lanceMs!);
+
+/**
+ * Un `apres_outil` de l'outil `outil` pendant un dialogue ouvert pour un autre outil nommé : il ne le ferme pas (outils lancés
+ * en parallèle). Faux si l'un des deux noms est inconnu : l'après-outil ferme alors le dialogue, comme avant.
+ */
+export const autreOutilQueLeDialogue = (s: Pick<Session, 'dernierArret' | 'dialogueOutil'>, outil: string | undefined): boolean =>
+	s.dernierArret === 'notification' && (s.dialogueOutil ?? null) !== null && outil !== undefined && outil !== s.dialogueOutil;
 
 /** États dans lesquels une session est relancée (`claude --resume`) au redémarrage du service. */
 export const ETATS_RELANCES: readonly EtatSession[] = ['travaille', 'attend', 'a_relire'];

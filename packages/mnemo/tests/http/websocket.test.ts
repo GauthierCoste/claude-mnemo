@@ -376,6 +376,14 @@ describe('WebSocket : messages', () => {
 		await apresOutil('Read', { file_path: '/a.php' }, 2000);
 		await new Promise((r) => setTimeout(r, 300));
 		expect(client.recus.filter((m) => m.type === 'lues')).toHaveLength(1);
+		// un après-outil que le profil ne demande pas (l'état seul) : ni lecture notée, ni `lues` diffusé
+		await appeler(c.service.port, 'POST', ROUTES.hook, {
+			jeton: c.service.jeton,
+			corps: { evenement: 'apres_outil', session: UUID, horodatageMs: 3000, cwd: join(c.racine, 'alpha'), outil: { nom: 'mcp__mnemo__lire', entree: { id: 'projets/beta/beta.md' } }, sansContexte: true },
+		});
+		await new Promise((r) => setTimeout(r, 300));
+		expect(client.recus.filter((m) => m.type === 'lues')).toHaveLength(1);
+		expect(await c.etat.lire(UUID)).toMatchObject({ majMs: 3000 });
 	});
 
 	it('client parti (ne répond plus aux pings) : oublié au ping suivant ; un client vivant reste', async () => {

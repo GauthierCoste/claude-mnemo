@@ -12,10 +12,14 @@ import { NOMS_MOTEURS } from '../../../moteurs/noms.ts';
 import { Bouton } from '../../commun/Bouton.tsx';
 import s from './Profils.module.css';
 
-/** Ce que change le moteur pour la session, dit sur la ligne de chaque choix. */
+/**
+ * Ce que change le moteur pour la session, dit sur la ligne de chaque choix : ce qu'il apporte et ce qui lui manque (quotas de
+ * l'abonnement lus ou non).
+ */
 const EFFETS: Record<IdMoteur, string> = {
-	'claude-code': 'skills et hooks par un plugin de session, plugins Claude Code au choix',
-	codex: 'skills listées dans la consigne et lues par l’outil lire ; pas de plugins',
+	'claude-code': 'skills et hooks par un plugin de session, plugins Claude Code au choix, quotas de l’abonnement lus',
+	codex: 'skills listées dans la consigne et lues par l’outil lire, hooks à approuver une fois dans Codex, quotas de l’abonnement lus ; pas de plugins',
+	'mistral-vibe': 'skills listées dans la consigne et lues par l’outil lire ; ni plugins, ni quotas de l’abonnement',
 };
 
 /** Ligne d'état d'un moteur sur ce poste : sa version, ou pourquoi ses sessions ne se lanceront pas ici. */
@@ -49,14 +53,26 @@ export function ChoixMoteur(p: { profil: string; moteur: IdMoteur; modele: strin
 						// la description hors du libellé : lue une fois, comme description (aria-describedby), pas aussi dans le nom
 						<div key={m} className={s.choix} data-desactive={reserve || undefined}>
 							<label className={s.case}>
-								<input type="radio" name={`${id}-moteur`} checked={p.moteur === m} disabled={reserve} aria-describedby={`${id}-${m}`} onChange={() => p.surMoteur(m)} />
+								<input type="radio" name={`${id}-moteur`} checked={p.moteur === m} disabled={reserve} aria-describedby={reserve ? `${id}-${m}` : `${id}-${m}-etat ${id}-${m}-effet`} onChange={() => p.surMoteur(m)} />
 								<span>
 									{NOMS_MOTEURS[m]} {etat.manque && <span className={s.inactif}>indisponible</span>}
 								</span>
 							</label>
-							<span id={`${id}-${m}`} className={s.detailChoix}>
-								{reserve ? 'Réservé : l’archiviste reste sur Claude Code.' : `${etat.texte} — ${EFFETS[m]}`}
-							</span>
+							{reserve ? (
+								<span id={`${id}-${m}`} className={s.detailChoix}>
+									Réservé : l’archiviste reste sur Claude Code.
+								</span>
+							) : (
+								// l'état sur ce poste, puis l'effet : deux lignes, lues l'une après l'autre comme description
+								<span>
+									<span id={`${id}-${m}-etat`} className={s.detailChoix}>
+										{etat.texte}
+									</span>
+									<span id={`${id}-${m}-effet`} className={s.detailChoix}>
+										{EFFETS[m]}
+									</span>
+								</span>
+							)}
 						</div>
 					);
 				})}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HOOKS_CODEX } from '../../src/application/moteurs/codex/hooks.ts';
-import { argumentsCodex, CONSIGNE_MAX, consigneCodex, LIGNE_ARGUMENTS_MAX, longueurSurLaLigne, environnementCodex, fichiersDeSessionCodex, motifSansRepriseCodex, preparerCodex } from '../../src/application/moteurs/codex/session.ts';
+import { consigneAvecSkills } from '../../src/application/moteurs/consigne-avec-skills.ts';
+import { argumentsCodex, CONSIGNE_MAX, LIGNE_ARGUMENTS_MAX, longueurSurLaLigne, environnementCodex, fichiersDeSessionCodex, motifSansRepriseCodex, preparerCodex } from '../../src/application/moteurs/codex/session.ts';
 import type { AppelHook, ContextePreparation } from '../../src/application/ports.ts';
 import { CONSIGNE_TRAVAIL_PAR_DEFAUT, SKILLS_PAR_DEFAUT } from '../../src/application/profil.ts';
 import { PROFILS_PAR_DEFAUT } from '../../src/domaine/profil.ts';
@@ -110,12 +111,12 @@ describe('consigne et fichiers de session de Codex', () => {
 			{ nom: 'revue', dossier: 'skills/revue', texte: '---\ndescription: |\n  Relire\n  un texte\n---\nRelis.\n' },
 			{ nom: 'brute', dossier: 'profils/redaction/skills/brute', texte: 'Sans frontmatter.\n' },
 		];
-		const consigne = consigneCodex({ consigne: '  Rédige.\n' }, skills);
+		const consigne = consigneAvecSkills({ consigne: '  Rédige.\n' }, skills);
 		expect(consigne.startsWith('Rédige.\n\n## Skills de Mnemo\n')).toBe(true);
 		expect(consigne).toContain('avec l\'outil `lire` de Mnemo');
 		expect(consigne).toContain('- revue : Relire un texte (`skills/revue/SKILL.md`)\n');
 		expect(consigne).toContain('- brute (`profils/redaction/skills/brute/SKILL.md`)\n');
-		expect(consigneCodex({ consigne: 'Rédige.' }, [])).toBe('Rédige.\n');
+		expect(consigneAvecSkills({ consigne: 'Rédige.' }, [])).toBe('Rédige.\n');
 	});
 
 	it('fichiers de session : la consigne seule ; skills du profil (par défaut déposées), puis celles de la mémoire retenues pour le projet', async () => {
@@ -144,7 +145,7 @@ describe('consigne et fichiers de session de Codex', () => {
 			fichiers: [{ chemin: 'consigne.md', texte: 'Consigne avec skills.\n' }],
 			racine: RACINE,
 			appel: APPEL,
-			env: { PATH: '/bin', OPENAI_API_KEY: 'sk', CODEX_API_KEY: 'k' },
+			env: { PATH: '/bin', OPENAI_API_KEY: 'sk', CODEX_API_KEY: 'k', ANTHROPIC_API_KEY: 'sk-ant', CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli', MISTRAL_API_KEY: 'm', COPILOT_GITHUB_TOKEN: 'gho', GH_TOKEN: 'ghp' },
 		};
 		const l = preparerCodex(c);
 		expect(configs(l.args).get('developer_instructions')).toBe("'''Consigne avec skills.\n'''");
@@ -152,8 +153,10 @@ describe('consigne et fichiers de session de Codex', () => {
 		expect(l.env).toMatchObject({ PATH: '/bin', MNEMO_MOTEUR: 'codex', MNEMO_SESSION: ID });
 		expect(l.env).not.toHaveProperty('CODEX_API_KEY');
 		expect(l.env).toHaveProperty('OPENAI_API_KEY', 'sk');
+		expect(l.env).toHaveProperty('GH_TOKEN', 'ghp');
+		for (const v of ['ANTHROPIC_API_KEY', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'MISTRAL_API_KEY', 'COPILOT_GITHUB_TOKEN']) expect(l.env).not.toHaveProperty(v);
 		expect(l.ajouts).toEqual({ MNEMO_SESSION: ID, MNEMO_MOTEUR: 'codex', MNEMO_PROJET: 'alpha', MNEMO_RACINE: RACINE, MNEMO_HOOKS: PROFIL.hooks.join(',') });
-		expect(l.retirees).toEqual(['CODEX_API_KEY']);
+		expect(l.retirees).toEqual(['CODEX_API_KEY', 'ANTHROPIC_API_KEY', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'MISTRAL_API_KEY', 'COPILOT_GITHUB_TOKEN']);
 	});
 });
 
@@ -168,12 +171,12 @@ describe('hooks de Codex selon le profil de la session (MNEMO_HOOKS)', () => {
 		reel: (c) => c,
 	});
 
-	it('debut et message non demandés : l’état seulement (sans contexte) ; outil et apres_outil non demandés : ignorés ; arret et fin toujours', () => {
+	it('debut, message et apres_outil non demandés : l’état seulement (sans contexte ; apres_outil efface le dialogue ouvert) ; outil non demandé : ignoré ; arret et fin toujours', () => {
 		const hooks = 'arret,fin';
 		expect(HOOKS_CODEX.traduire(appel('debut', hooks))?.entree).toMatchObject({ evenement: 'debut', session: ID, fil: FIL, sansContexte: true });
 		expect(HOOKS_CODEX.traduire(appel('message', hooks, { prompt: 'Bonjour' }))?.entree).toMatchObject({ evenement: 'message', prompt: 'Bonjour', sansContexte: true });
 		expect(HOOKS_CODEX.traduire(appel('outil', hooks, { tool_name: 'Bash', tool_input: { command: 'ls' } }))).toBeNull();
-		expect(HOOKS_CODEX.traduire(appel('apres_outil', hooks, { tool_name: 'apply_patch' }))).toBeNull();
+		expect(HOOKS_CODEX.traduire(appel('apres_outil', hooks, { tool_name: 'apply_patch' }))?.entree).toMatchObject({ evenement: 'apres_outil', sansContexte: true });
 		expect(HOOKS_CODEX.traduire(appel('arret', hooks))?.entree).toMatchObject({ evenement: 'arret', arret: 'stop' });
 		expect(HOOKS_CODEX.traduire(appel('arret', hooks))?.entree.sansContexte).toBeUndefined();
 	});

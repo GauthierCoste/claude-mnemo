@@ -1,82 +1,27 @@
-import { randomBytes } from 'node:crypto';
-import { lstat, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { realpath } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import type { AppelHooksDuPoste, HooksDuPoste, LectureHooksDuPoste, ResultatInstallationHooks, ResultatRemplacementHooks, ResultatRetraitHooks } from '../../../application/ports.ts';
 import { approbationDesHooks } from '../../../domaine/moteurs/codex/approbation-hooks.ts';
-import { estHookDe, etatDesHooks, hooksAttendus, lireHooksJson, remplacerHooks, texteHooksJson } from '../../../domaine/moteurs/codex/hooks-installes.ts';
+import { estHookDe, etatDesHooks, hooksAttendus, lireHooksJson, remplacerHooks } from '../../../domaine/moteurs/codex/hooks-installes.ts';
+import { texteJsonReecrit } from '../../../domaine/moteurs/codex/json-texte.ts';
+import { ecrireConfiguration, lireConfiguration } from '../../fichier-de-configuration.ts';
+import type { ConfigurationLue } from '../../fichier-de-configuration.ts';
 import { dossierCodex, lireConfigCodex } from './dossier-codex.ts';
 
 /** `hooks.json` de l'utilisateur chez Codex : `$CODEX_HOME/hooks.json`, sinon `~/.codex/hooks.json`. */
 export const cheminHooksJson = (env: Record<string, string | undefined>): string => join(dossierCodex(env), 'hooks.json');
 
-/** Texte d'un fichier ; null s'il n'existe pas ; une autre erreur remonte. */
-async function texteOuAbsent(chemin: string): Promise<string | null> {
-	try {
-		return await readFile(chemin, 'utf8');
-	} catch (erreur) {
-		if ((erreur as { code?: string }).code === 'ENOENT') return null;
-		throw erreur;
-	}
-}
-
-const message = (erreur: unknown): string => (erreur instanceof Error ? erreur.message : String(erreur));
-
-/**
- * Le fichier lu : son chemin réel (un lien est suivi, jamais remplacé), son texte (null : absent) et sa racine, ou l'échec.
- * Un lien dont la cible manque est un échec : écrire à sa place remplacerait le lien.
- */
+/** Le fichier lu : son chemin réel, son texte (null : absent) et sa racine JSON, ou l'échec. */
 async function lireFichier(chemin: string): Promise<{ reel: string; texte: string | null; racine: Record<string, unknown> } | { echec: string }> {
-	let reel = chemin;
-	const lien = await lstat(chemin).then(
-		(s) => s.isSymbolicLink(),
-		() => false,
-	);
-	try {
-		reel = await realpath(chemin);
-	} catch (erreur) {
-		if (lien) return { echec: `${chemin} est un lien symbolique dont la cible est introuvable (${message(erreur)}) : rétablissez sa cible ou retirez le lien ; Mnemo ne le remplace pas.` };
-		// absent : écrit à son chemin
-	}
-	let texte: string | null;
-	try {
-		texte = await texteOuAbsent(reel);
-	} catch (erreur) {
-		return { echec: `${chemin} illisible : ${message(erreur)}` };
-	}
-	const lu = lireHooksJson(texte);
-	if ('echec' in lu) return { echec: `${chemin} : ${lu.echec} ; corrigez-le, Mnemo ne le réécrit pas.` };
-	return { reel, texte, racine: lu.racine };
+	const lu = await lireConfiguration(chemin);
+	if ('echec' in lu) return lu;
+	const json = lireHooksJson(lu.texte);
+	if ('echec' in json) return { echec: `${chemin} : ${json.echec} ; corrigez-le, Mnemo ne le réécrit pas.` };
+	return { ...lu, racine: json.racine };
 }
 
-/**
- * Écrit `texte` à la place de `reel` : provisoire dans le même dossier (droits du fichier remplacé, sinon 0644), puis renommé.
- * Le fichier est relu juste avant : changé depuis la lecture (`attendu`), rien n'est écrit.
- */
-async function ecrireAtomique(reel: string, attendu: string | null, texte: string): Promise<void> {
-	await mkdir(dirname(reel), { recursive: true });
-	const mode = await stat(reel).then(
-		(s) => s.mode & 0o777,
-		() => 0o644,
-	);
-	const provisoire = join(dirname(reel), `.${basename(reel)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`);
-	try {
-		await writeFile(provisoire, texte, { mode, flag: 'wx' });
-		if ((await texteOuAbsent(reel)) !== attendu) throw new Error(`${reel} a changé pendant l’écriture : relancez la commande.`);
-		await rename(provisoire, reel);
-	} finally {
-		await rm(provisoire, { force: true });
-	}
-}
-
-/** Écrit la racine à la place du fichier lu ; l'échec dit pourquoi. */
-async function ecrire(chemin: string, lu: { reel: string; texte: string | null }, racine: Record<string, unknown>): Promise<{ echec: string } | null> {
-	try {
-		await ecrireAtomique(lu.reel, lu.texte, texteHooksJson(racine));
-		return null;
-	} catch (erreur) {
-		return { echec: `écriture de ${chemin} impossible : ${message(erreur)}` };
-	}
-}
+/** Écrit la racine à la place du fichier lu (son indentation, ses fins de ligne et son BOM gardés) ; l'échec dit pourquoi. */
+const ecrire = (chemin: string, lu: ConfigurationLue, racine: Record<string, unknown>): Promise<{ echec: string } | null> => ecrireConfiguration(chemin, lu, texteJsonReecrit(racine, lu.texte));
 
 async function lire(a: AppelHooksDuPoste): Promise<LectureHooksDuPoste> {
 	const chemin = cheminHooksJson(a.env);
@@ -136,4 +81,4 @@ async function retirer(a: AppelHooksDuPoste): Promise<ResultatRetraitHooks> {
 }
 
 /** Codex : `~/.codex/hooks.json` (ou `$CODEX_HOME`), approbation lue dans `config.toml`, jamais écrit par Mnemo. */
-export const HOOKS_DU_POSTE_CODEX: HooksDuPoste = { lire, installer, remplacer, retirer };
+export const HOOKS_DU_POSTE_CODEX: HooksDuPoste = { chemin: cheminHooksJson, lire, installer, remplacer, retirer };

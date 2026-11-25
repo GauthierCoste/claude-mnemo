@@ -259,12 +259,12 @@ describe('vue Sessions', () => {
 	it('moteur et modèle dans le panneau ; Codex sans identifiant : pause et bilan indisponibles avec la raison (focus gardé, clic sans effet), abandon possible', async () => {
 		const faux = await monter();
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
-		expect(within(contexte).getByText('Claude Code · modèle par défaut')).toBeTruthy();
+		expect(within(contexte).getByText('Claude Code (modèle par défaut)')).toBeTruthy();
 		expect(within(carte('s1')).queryByTitle(/^Moteur/u)).toBeNull();
 		const raison = 'session Codex dont l’identifiant chez Codex est inconnu : elle ne peut pas être reprise';
 		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'codex', modele: 'gpt-a', sansReprise: raison } }));
-		expect(within(contexte).getByText('Codex · gpt-a')).toBeTruthy();
-		expect(within(carte('s1')).getByTitle('Moteur : Codex · gpt-a').textContent).toBe('Codex · gpt-a');
+		expect(within(contexte).getByText('Codex (gpt-a)')).toBeTruthy();
+		expect(within(carte('s1')).getByTitle('Moteur : Codex (gpt-a)').textContent).toBe('Codex (gpt-a)');
 		const pause = within(contexte).getByRole('button', { name: 'Mettre en pause' }) as HTMLButtonElement;
 		expect(pause.disabled).toBe(false);
 		expect(pause.getAttribute('aria-disabled')).toBe('true');
@@ -282,6 +282,25 @@ describe('vue Sessions', () => {
 		expect(bilan.textContent).toContain('impossible pour l’instant');
 		await act(async () => bilan.click());
 		expect(faux.api.envoyer).not.toHaveBeenCalled();
+	});
+
+	it('quotas : absents dits en clair pour Mistral Vibe ; rien pour Claude Code et Codex (barre de titre)', async () => {
+		const faux = await monter();
+		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
+		const quotas = () => within(contexte).queryByText('Quotas');
+		expect(quotas()).toBeNull();
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'codex' } }));
+		expect(quotas()).toBeNull();
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'mistral-vibe', modele: 'mistral-medium-3.5' } }));
+		expect(quotas()?.nextElementSibling?.textContent).toBe('non communiqués par Mistral Vibe');
+		expect(within(contexte).getByText('Mistral Vibe (mistral-medium-3.5)')).toBeTruthy();
+		expect(within(carte('s1')).getByTitle('Moteur : Mistral Vibe (mistral-medium-3.5)')).toBeTruthy();
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'mistral-vibe' } }));
+		expect(quotas()?.nextElementSibling?.textContent).toBe('non communiqués par Mistral Vibe');
+		expect(within(carte('s1')).getByTitle('Moteur : Mistral Vibe (modèle par défaut)').textContent).toBe('Mistral Vibe');
+		// un moteur inconnu de l'interface : rien n'est affirmé
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'autre-agent' } }));
+		expect(quotas()).toBeNull();
 	});
 
 	it('« Abandonner » demande une confirmation', async () => {

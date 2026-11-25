@@ -3,6 +3,9 @@ import type { ActionOutil } from '../regles-verifiees.ts';
 export { estIdMoteur, IDS_MOTEURS, MOTEUR_PAR_DEFAUT } from '@mnemo/commun';
 export type { IdMoteur } from '@mnemo/commun';
 
+/** Une commande que l'outil fait exécuter sans qu'elle se lise (saisie envoyée à un processus déjà lancé). */
+export type CommandeIllisible = { illisible: true };
+
 /**
  * Outils d'un moteur, tels que ses hooks les nomment : ce que les consignes vérifiées (`chemins_interdits`,
  * `commandes_interdites`) et le contexte servi (`apres_outil`, fiches lues ou écrites) en lisent.
@@ -13,12 +16,18 @@ export type OutilsDuMoteur = {
 	 * `illisible` : il en écrit, mais ses chemins ne se lisent pas (refus s'il y a des chemins interdits).
 	 */
 	cheminsEcrits(action: ActionOutil): string[] | null | 'illisible';
-	/** Ligne de commande de l'outil de commande (« » s'il n'en porte pas) ; null : un autre outil. */
-	commande(action: ActionOutil): string | null;
+	/**
+	 * Ligne de commande de l'outil de commande (« » s'il n'en porte pas) ; null : un autre outil ; `{ illisible: true }` : il
+	 * en fait exécuter une, mais elle ne se lit pas (refus s'il y a des commandes interdites).
+	 */
+	commande(action: ActionOutil): string | null | CommandeIllisible;
 	/** Préfixe des outils du serveur MCP `mnemo` chez ce moteur. */
 	prefixeMcp: string;
-	/** Motif (`matcher`) des outils après lesquels `apres_outil` est appelé : un fichier, une fiche lus ou écrits. */
-	motifApresOutil: string;
+	/**
+	 * Motif (`matcher`) des outils après lesquels `apres_outil` est appelé : un fichier, une fiche lus ou écrits ; absent : le
+	 * moteur l'installe pour tous les outils (Mistral Vibe : il efface aussi le dialogue ouvert).
+	 */
+	motifApresOutil?: string;
 };
 
 /**

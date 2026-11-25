@@ -28,6 +28,9 @@ async function choisirProfil(nom: string): Promise<HTMLElement> {
 const moteur = (editeur: HTMLElement) => within(editeur).getByRole('radiogroup', { name: 'Moteur' });
 const modele = (editeur: HTMLElement) => within(editeur).getByRole('combobox', { name: 'Modèle' }) as HTMLInputElement;
 
+/** Les lignes de description d'un choix, dans l'ordre de son `aria-describedby`. */
+const lignes = (choix: HTMLElement): HTMLElement[] => (choix.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)!);
+
 describe('Réglages › Profils : moteur et modèle', () => {
 	it('profil Codex : Codex coché avec sa version, son modèle, ses modèles proposés ; pas de plugins Claude Code ; aperçu avec les skills dans la consigne', async () => {
 		const editeur = await choisirProfil('revue-code');
@@ -42,12 +45,47 @@ describe('Réglages › Profils : moteur et modèle', () => {
 		expect(within(editeur).getByText('Skills de la mémoire (listées dans la consigne, lues par l’outil lire)')).toBeTruthy();
 	});
 
-	it('chaque choix : son nom seul comme libellé, sa ligne d’état et d’effet comme description (lue une fois)', async () => {
+	it('chaque choix : son nom seul comme libellé, sa ligne d’état puis sa ligne d’effet comme description (aria-describedby : les deux, lues une fois)', async () => {
 		const editeur = await choisirProfil('revue-code');
 		const codex = within(moteur(editeur)).getByRole('radio', { name: 'Codex' });
-		const description = document.getElementById(codex.getAttribute('aria-describedby')!)!;
-		expect(description.closest('label')).toBeNull();
-		expect(description.textContent).toMatch(/^version 0\.171\.0-alpha\.13 — skills listées/u);
+		// la description se complète quand les moteurs sont chargés (version) : attendue, sans course
+		const description = () => lignes(codex);
+		await waitFor(() => expect(description()[0]?.textContent).toBe('version 0.171.0-alpha.13'));
+		expect(description()).toHaveLength(2);
+		expect(description()[1]?.textContent).toMatch(/^skills listées dans la consigne/u);
+		for (const l of description()) {
+			expect(l.textContent).not.toMatch(/[—·]/u);
+			expect(l.closest('label')).toBeNull();
+		}
+	});
+
+	it('Mistral Vibe : sa version, ses effets (ce qui lui manque compris), ses modèles proposés ; un profil Vibe les montre', async () => {
+		const editeur = await choisirProfil('veille-technique');
+		const groupe = moteur(editeur);
+		expect((within(groupe).getByRole('radio', { name: 'Mistral Vibe' }) as HTMLInputElement).checked).toBe(true);
+		const description = (nom: string) => lignes(within(groupe).getByRole('radio', { name: nom }));
+		await waitFor(() => expect(description('Mistral Vibe')[0]?.textContent).toBe('version 3.1.5'));
+		expect(description('Mistral Vibe')[1]?.textContent).toMatch(/ni plugins, ni quotas de l’abonnement$/u);
+		expect(modele(editeur).value).toBe('mistral-medium-3.5');
+		const proposes = await within(editeur).findByRole('group', { name: 'Modèles proposés par Mistral Vibe' });
+		expect(within(proposes).getAllByRole('button').map((b) => b.textContent)).toEqual(['mistral-large-4-0', 'mistral-medium-3.5']);
+		expect(within(editeur).queryByText('Plugins Claude Code')).toBeNull();
+		expect(await within(editeur).findByText('Skills de Mistral Vibe')).toBeTruthy();
+		// passer à Codex : modèle par défaut, ses modèles proposés, l'aperçu suit une fois enregistré
+		await act(async () => within(groupe).getByRole('radio', { name: 'Codex' }).click());
+		expect(modele(editeur).value).toBe('');
+		expect(modele(editeur).placeholder).toBe('par défaut de Codex');
+		const deCodex = await within(editeur).findByRole('group', { name: 'Modèles proposés par Codex' });
+		expect(within(deCodex).getAllByRole('button').map((b) => b.textContent)).toEqual(['gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-terra']);
+	});
+
+	it('archiviste : Mistral Vibe réservé, comme Codex', async () => {
+		const archiviste = await choisirProfil('archiviste');
+		for (const nom of ['Codex', 'Mistral Vibe']) {
+			const radio = within(moteur(archiviste)).getByRole('radio', { name: nom }) as HTMLInputElement;
+			expect(radio.disabled).toBe(true);
+			expect(document.getElementById(radio.getAttribute('aria-describedby')!)?.textContent).toBe('Réservé : l’archiviste reste sur Claude Code.');
+		}
 	});
 
 	it('aller-retour de moteur : le modèle saisi pour chacun est gardé pendant l’édition', async () => {
@@ -123,6 +161,18 @@ describe('Réglages › Système › Moteurs', () => {
 		// groupe en lecture seule : pas de pied Enregistrer / Annuler
 		expect(within(page).queryByRole('button', { name: 'Enregistrer' })).toBeNull();
 		expect(within(page).queryByRole('button', { name: 'Annuler les modifications' })).toBeNull();
+	});
+
+	it('Mistral Vibe : un groupe, tous ses points satisfaits, sans approbation des hooks', async () => {
+		await ouvrirReglages();
+		await act(async () => screen.getByRole('tab', { name: 'Système' }).click());
+		const page = await screen.findByRole('form', { name: 'Réglages système' });
+		await act(async () => within(within(page).getByRole('navigation', { name: 'Groupes de réglages' })).getByRole('button', { name: /^Moteurs/u }).click());
+		const vibe = await within(page).findByRole('group', { name: 'Mistral Vibe' });
+		expect(within(vibe).getByText('sessions possibles')).toBeTruthy();
+		expect(within(vibe).getAllByRole('img', { name: 'satisfait' })).toHaveLength(4);
+		// aucun point d'approbation chez lui : rien à approuver dans le moteur
+		expect(within(vibe).queryByText('Approbation des hooks')).toBeNull();
 	});
 
 	it('« Relire » : désactivé, section occupée et « Vérification… » pendant chaque lecture ; redémarrage proposé en deux commandes', async () => {

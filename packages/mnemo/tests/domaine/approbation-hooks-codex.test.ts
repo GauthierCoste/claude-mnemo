@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { approbationDesHooks, etatsDansConfig, segmentsDeCle } from '../../src/domaine/moteurs/codex/approbation-hooks.ts';
+import { approbationDesHooks, etatsDansConfig } from '../../src/domaine/moteurs/codex/approbation-hooks.ts';
+import { entreesToml } from '../../src/domaine/moteurs/toml-lecture.ts';
 
 const CHEMIN = '/maison/a/.codex/hooks.json';
 const CLES = ['stop:0:0', 'session_end:1:0'];
 const approuve = (cle: string, chemin = CHEMIN) => `[hooks.state."${chemin}:${cle}"]\ntrusted_hash = "sha256:abc"\n`;
 
 describe('clés TOML', () => {
+	const cle = (texte: string) => entreesToml(`${texte} = 1\n`)?.[0]?.cle ?? null;
 	it('segments nus, entre guillemets (échappements) ou apostrophes, points dans les chaînes', () => {
-		expect(segmentsDeCle('hooks.state."/a/hooks.json:stop:0:0"')).toEqual(['hooks', 'state', '/a/hooks.json:stop:0:0']);
-		expect(segmentsDeCle(` hooks . 'state' . "C:\\\\u\\\\.codex\\\\hooks.json:stop:0:0" `)).toEqual(['hooks', 'state', 'C:\\u\\.codex\\hooks.json:stop:0:0']);
-		expect(segmentsDeCle('"a\\u00e9"')).toEqual(['aé']);
-		expect(segmentsDeCle('a..b')).toBeNull();
-		expect(segmentsDeCle('"ouvert')).toBeNull();
+		expect(cle('hooks.state."/a/hooks.json:stop:0:0"')).toEqual(['hooks', 'state', '/a/hooks.json:stop:0:0']);
+		expect(cle(` hooks . 'state' . "C:\\\\u\\\\.codex\\\\hooks.json:stop:0:0" `)).toEqual(['hooks', 'state', 'C:\\u\\.codex\\hooks.json:stop:0:0']);
+		expect(cle('"a\\u00e9"')).toEqual(['aé']);
+		expect(cle('a..b')).toBeNull();
+		expect(cle('"ouvert')).toBeNull();
 	});
 });
 
@@ -60,9 +62,22 @@ describe('approbation des hooks de Mnemo dans config.toml', () => {
 		expect(approbationDesHooks(texte, [CHEMIN], CLES).etat).toBe('approuves');
 	});
 
-	it('config.toml illisible, ou hooks.state en table en ligne : état inconnu', () => {
+	it('config.toml illisible ou TOML non suivi : état inconnu ; hooks.state en table en ligne : lu', () => {
 		expect(approbationDesHooks(null, [CHEMIN], CLES).etat).toBe('inconnu');
-		expect(approbationDesHooks(`[hooks]\nstate = { "${CHEMIN}:stop:0:0" = { trusted_hash = "x" } }\n`, [CHEMIN], CLES).etat).toBe('inconnu');
+		expect(approbationDesHooks('[hooks.state."ouvert]\n', [CHEMIN], CLES).etat).toBe('inconnu');
 		expect(etatsDansConfig('[hooks.state."ouvert]\n').illisible).toBe(true);
+		const enLigne = `[hooks]\nstate = { ${CLES.map((c, i) => `"${CHEMIN}:${c}" = { trusted_hash = "sha256:${i}" }`).join(', ')} }\n`;
+		expect(approbationDesHooks(enLigne, [CHEMIN], CLES).etat).toBe('approuves');
+	});
+
+	it('un TOML que Mnemo ne lit pas ailleurs dans config.toml : hooks.state relu ligne à ligne, l’approbation reste lue', () => {
+		const ailleurs = '[profiles.a]\nliste = [1,\n';
+		expect(etatsDansConfig(ailleurs).illisible).toBe(false);
+		expect(approbationDesHooks(`model = "x"\n${approuve(CLES[0]!)}${approuve(CLES[1]!)}${ailleurs}`, [CHEMIN], CLES).etat).toBe('approuves');
+		expect(approbationDesHooks(`${ailleurs}${approuve(CLES[0]!)}`, [CHEMIN], CLES)).toEqual({ etat: 'a_approuver', motif: expect.stringMatching(/^1 hook\(s\) de Mnemo sur 2/u) });
+		expect(approbationDesHooks(`${ailleurs}${approuve(CLES[0]!)}enabled = false\n${approuve(CLES[1]!)}`, [CHEMIN], CLES).etat).toBe('a_approuver');
+		expect(approbationDesHooks(`${ailleurs}[hooks.state."${CHEMIN}:${CLES[0]!}"]\ntrusted_hash = 'sha256:a'\n[hooks.state.'${CHEMIN}:${CLES[1]!}']\ntrusted_hash = "sha256:b"\n`, [CHEMIN], CLES).etat).toBe('approuves');
+		// une table en ligne de hooks.state dans un tel fichier : non suivie, inconnu
+		expect(approbationDesHooks(`${ailleurs}[hooks]\nstate = { "${CHEMIN}:${CLES[0]!}" = { trusted_hash = "x" } }\n`, [CHEMIN], CLES).etat).toBe('inconnu');
 	});
 });

@@ -25,11 +25,17 @@ async function ouvrir(): Promise<{ etat: EtatSessions; chemin: string; dossier: 
 	return { etat, chemin, dossier };
 }
 
+/** Retire ce que la version 15 a ajouté (outil d'un dialogue ouvert). */
+function sansVersion15(base: DatabaseSync): void {
+	base.exec('ALTER TABLE sessions DROP COLUMN dialogue_outil');
+}
+
 /**
  * Retire ce que la version 14 a ajouté (journal durable des gestes, écartées toujours, dernier message porteur, rang du
  * message, affinage, durée vue du service et calibration des entrées servies) : un état tel que la 1.6.1 l'écrit.
  */
 function sansVersion14(base: DatabaseSync): void {
+	sansVersion15(base);
 	base.exec('DROP TABLE gestes');
 	base.exec('DROP TABLE ecartees_toujours');
 	base.exec('ALTER TABLE sessions DROP COLUMN dernier_message');
@@ -121,6 +127,7 @@ describe('etat.sqlite', () => {
 			vuVivantMs: 3000,
 			bilanLuMs: 6,
 			dernierArret: 'notification',
+			dialogueOutil: 'bash',
 			episodeMs: 7,
 			dossierNonRattache: true,
 		});
@@ -518,7 +525,7 @@ describe('etat.sqlite', () => {
 		expect(await etat.lire('f')).toMatchObject({ fil: 'fil-1', majMs: 30 });
 	});
 
-	it('migre la version 12 (niveau des modèles, sans moteur ni modèle ni fil) vers la 14 en passant par la 13 : le niveau de la session est gardé', async () => {
+	it('migre la version 12 (niveau des modèles, sans moteur ni modèle ni fil) vers la dernière en passant par la 13 : le niveau de la session est gardé', async () => {
 		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('n1', { pid: 7, niveauModeles: 'sens' }));
 		etat.fermer();
@@ -537,7 +544,24 @@ describe('etat.sqlite', () => {
 		expect((await rouvert.lire('n1'))?.fil).toBe('fil-codex');
 		expect(await rouvert.gestes({ limite: null })).toEqual([]);
 		const verif = new DatabaseSync(chemin);
-		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: 14 });
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
+		verif.close();
+	});
+
+	it('migre la version 14 (sans l’outil d’un dialogue ouvert) vers la 15 : la session est gardée, son dialogue sans outil', async () => {
+		const { etat, chemin } = await ouvrir();
+		await etat.creer(session('d1', { moteur: 'mistral-vibe', dernierArret: 'notification', fil: 'f' }));
+		etat.fermer();
+		ouverts.pop();
+		const base = new DatabaseSync(chemin);
+		sansVersion15(base);
+		base.exec('PRAGMA user_version = 14');
+		base.close();
+		const rouvert = ouvrirEtat(chemin);
+		ouverts.push(rouvert);
+		expect(await rouvert.lire('d1')).toMatchObject({ moteur: 'mistral-vibe', dernierArret: 'notification', dialogueOutil: null, fil: 'f' });
+		const verif = new DatabaseSync(chemin);
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: 15 });
 		verif.close();
 	});
 
@@ -962,6 +986,26 @@ describe('etat.sqlite', () => {
 		expect(await etat.appliquer('s', 'fin', 20)).toMatchObject({ dernierArret: 'notification' });
 	});
 
+	it('dialogue ouvert pour un outil nommé : seul l’après-outil de cet outil le ferme ; un outil inconnu d’un côté ou de l’autre le ferme', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('s', { majMs: 10 }));
+		expect(await etat.appliquer('s', 'arret', 11, { arret: 'notification', outil: 'bash' })).toMatchObject({ etat: 'attend', dernierArret: 'notification', dialogueOutil: 'bash' });
+		// l'après-outil d'un autre outil, lancé en parallèle : ignoré, le dialogue reste ouvert
+		expect(await etat.appliquer('s', 'apres_outil', 12, { outil: 'read_file' })).toMatchObject({ etat: 'attend', dernierArret: 'notification', dialogueOutil: 'bash', majMs: 11 });
+		expect(await etat.appliquer('s', 'apres_outil', 13, { outil: 'bash' })).toMatchObject({ etat: 'travaille', dernierArret: null, dialogueOutil: null });
+		// sans nom d'outil au dialogue (Claude Code) ou à l'après-outil : il le ferme
+		await etat.appliquer('s', 'arret', 14, { arret: 'notification' });
+		expect(await etat.appliquer('s', 'apres_outil', 15, { outil: 'read_file' })).toMatchObject({ dernierArret: null });
+		await etat.appliquer('s', 'arret', 16, { arret: 'notification', outil: 'bash' });
+		expect(await etat.appliquer('s', 'apres_outil', 17)).toMatchObject({ dernierArret: null, dialogueOutil: null });
+		// un arrêt Stop ou un autre événement efface l'outil avec le dialogue ; fin le garde
+		await etat.appliquer('s', 'arret', 18, { arret: 'notification', outil: 'bash' });
+		expect(await etat.appliquer('s', 'fin', 19)).toMatchObject({ dernierArret: 'notification', dialogueOutil: 'bash' });
+		await etat.creer(session('t', { majMs: 10 }));
+		await etat.appliquer('t', 'arret', 11, { arret: 'notification', outil: 'bash' });
+		expect(await etat.appliquer('t', 'arret', 12, { arret: 'stop', outil: 'bash' })).toMatchObject({ dernierArret: 'stop', dialogueOutil: null });
+	});
+
 	it('episodeMs : absent à la création, posé par modifier', async () => {
 		const { etat } = await ouvrir();
 		await etat.creer(session('s'));
@@ -1012,7 +1056,7 @@ describe('etat.sqlite', () => {
 		expect(await rouvert.noterMessagePorteur('s1', 'la suite')).toBe(2);
 		const verif = new DatabaseSync(chemin);
 		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
-		expect(VERSION_ETAT).toBe(14);
+		expect(VERSION_ETAT).toBe(15);
 		verif.close();
 	});
 
@@ -1039,12 +1083,12 @@ describe('etat.sqlite', () => {
 		expect((await rouvert.servis('s1', 1))[0]).toMatchObject({ calibree: true, rangMessage: 1 });
 		expect(await rouvert.ecarterToujours({ fiche: 'a.md', session: 's1', horodatageMs: 30 })).toBe('ecartee');
 		const verif = new DatabaseSync(chemin);
-		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: 14 });
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
 		expect(verif.prepare("SELECT 1 AS un FROM sqlite_master WHERE type = 'index' AND name = 'gestes_sorte'").get()).toEqual({ un: 1 });
 		verif.close();
 	});
 
-	it('état en 13 de développement (classement vivant en partie, sans écartées toujours, affinage ni calibration) : complété en 14, rien perdu', async () => {
+	it('état en 13 de développement (classement vivant en partie, sans écartées toujours, affinage ni calibration) : complété jusqu’à la dernière, rien perdu', async () => {
 		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('s1'));
 		await etat.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche: 'a.md', empreinte: null, horodatageMs: 5 });
@@ -1064,7 +1108,7 @@ describe('etat.sqlite', () => {
 		expect(await rouvert.ecarterToujours({ fiche: 'a.md', session: 's1', horodatageMs: 10 })).toBe('ecartee');
 		expect(await rouvert.ecarteesToujours()).toEqual([{ fiche: 'a.md', session: 's1', horodatageMs: 10, retablieMs: null }]);
 		const verif = new DatabaseSync(chemin);
-		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: 14 });
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
 		verif.close();
 	});
 

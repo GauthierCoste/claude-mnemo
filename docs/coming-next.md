@@ -1,10 +1,8 @@
 # Coming next
 
-> **Next work item: connect Mistral's terminal coding agent and GitHub Copilot CLI.** Each one starts with a round 0 of
-> measurements, as Codex did: MCP declaration, hooks (events, inputs, approval), resuming a session, and where the context
-> window and the quotas can be read. Then each becomes an implementation of the `Moteur` port (launch, keys, hooks, tools,
-> telemetry, MCP declaration), so that the pilot, the hooks and the interface stay as they are. Opening Mnemo to Codex
-> (25/11/2026) is done.
+> **Next work item: measure Mistral Vibe with a real account.** It is connected (25/11/2026), but it was measured
+> without an account, against a local fake model: each point below marked "not measured" needs a real session before it
+> is called done. Then Windows, for the two optional engines.
 
 ## Done
 
@@ -28,6 +26,11 @@
   `lire`; context gauge and ChatGPT quotas read from the transcript, shown next to the Claude ones. `verifier-poste` and
   Settings › Système › Moteurs show the state of each engine and the command that fixes it. See
   [installation.md](installation.md#codex) and [usage.md](usage.md#codex-sessions).
+- **Mistral Vibe as an engine.** One more implementation of the `Moteur` port, next to Claude Code and Codex. Mistral
+  Vibe 3.1.5 or later (`mnemo init --mistral`): MCP block and `mnemo-…` hooks in `~/.vibe`, instruction and skills in an
+  agent profile of the session, resume with `vibe --resume`; context and reminders, checked instructions, context gauge,
+  state in Settings › Système › Moteurs, profiles and sessions in the interface; no readable quotas. See
+  [installation.md](installation.md#mistral-vibe) and [usage.md](usage.md#mistral-vibe-sessions).
 - **One score for search**: `score = base + Σ weights` (position + 0.10, confidence − 0.05 × (1 − c), memory + 0.05,
   freshness + 0.05 × 2^(−age/365); settings `recherche.poids…`, 0 to 0.5). The base spreads results (bm25 gap kept); the
   recall threshold (`seuil_rappel`, 0.4) applies to the relevance, so a weight never lets a result in. Each result shows
@@ -51,7 +54,28 @@
 - **Learn the confidence score on real judgements.** The defaults shipped with Mnemo have learned nothing, so the ranking
   stays in « ordre seul » and nothing is injected automatically. Judge real messages (`mnemo banc contexte --extraire`,
   then `--juger`) until `--apprendre` accepts a model for each level, then check on real sessions that the thresholds
-  (90 % to inject, 30 % for leads) and the watch of automatic injection hold; adjust them with the report if they do not.
+  (90 % to inject, 10 % for leads) and the watch of automatic injection hold; adjust them with the report if they do not.
+- **Mistral Vibe with a real account.** Measured so far against a local fake model, without an account. To measure
+  with a real Mistral account: the real list of models and the default model, the real context window, the screens
+  after sign-in, and the points still marked "not measured": `process.start`, `question_asked` and `turn_failed`, the
+  `post_tool` of `file_system.edit`, the approval asked by a sub-agent and its `post_tool`, `/clear` (and `/clear` typed
+  in a `vibe` started from a session); `VIBE_HOME` written with `~`. Also, with a real account:
+  - **Vibe with a real Mistral model** (the decisive point): whether `search_tool_functions` and `run_typescript` show up
+    and how Mnemo should treat them; `--agent` together with the approval policy and `enabled_agents`; the reasoning
+    tokens in the context gauge.
+  - **Windows**: a `%` in a command quoted by `citerCmd`.
+- **Windows for the optional engines.** Not measured: `vibe.exe` and its hooks run by `cmd.exe` (or by PowerShell or Git
+  Bash when Vibe is set so, where the `MNEMO_MOTEUR` guard is not read), the Codex hooks under a non-POSIX login shell.
+- **A dialog that stays shown after its answer.** After an approved command, Codex keeps showing « Attend ta réponse »
+  while the command runs, until its next hook (the next tool, a message or the end of the turn): its `PostToolUse` hook
+  only covers patches and Mnemo tools, and changing it makes every user approve the hooks again.
+- **A dialog closed by the wrong tool.** A dialog is closed only by the after-tool hook of the tool it names (Vibe
+  `approval_requested`, Codex `PermissionRequest`). Not measured: whether both hooks give the same tool name (Codex
+  `apply_patch`, Vibe tools of a sub-agent).
+- **Quotas of Mistral.** Vibe does not write them where Mnemo can read them (outside its API); shown as « non
+  communiqués » until it does.
+- **The desktop app** may add the engine `mistral-vibe` and the `init` steps `mistral` and `mistral_hooks` at its next
+  upgrade of the contract; nothing is required.
 - **Archivist on any engine.** The archivist and its benches run on Claude Code (`claude -p`); make its engine a setting.
 - **Import Codex's own memory**, as `mnemo amorce` imports Claude Code's.
 - **Reasoning tokens in the Codex context gauge.** The gauge counts `input_tokens + output_tokens` of the last

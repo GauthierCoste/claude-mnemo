@@ -1,42 +1,25 @@
 import { environnementPermisCodex } from '../../../application/moteurs/codex/session.ts';
 import type { AppelModeles } from '../../../application/ports.ts';
 import { modelesDuCatalogue } from '../../../domaine/moteurs/codex/modeles.ts';
-import { avecDelaiGaranti, MARGE_DELAI_MS } from '../../delai-garanti.ts';
+import { lectureEnCache } from '../lecture-en-cache.ts';
 
 /** Délai de `codex debug models` : la liste n'est qu'indicative, le modèle par défaut reste toujours possible. */
 export const DELAI_MODELES_MS = 5000;
-/** Une liste lue sert ce temps ; un échec, moins longtemps (Codex peut être installé ou connecté entre-temps). */
-const GARDE_MS = 10 * 60_000;
-const GARDE_ECHEC_MS = 60_000;
-
-type EnCache = { jusquaMs: number; modeles: Promise<readonly string[]> };
 
 /**
  * Modèles de Codex lus par `codex debug models` (catalogue en JSON : visibilité `list`, par priorité), sous `DELAI_MODELES_MS`,
- * gardés en cache par commande et par `CODEX_HOME` (délai garanti par un minuteur). Introuvable, en échec ou illisible : aucun (le modèle par défaut de
- * Codex). `maintenant` : tests.
+ * gardés en cache 10 minutes par commande et par `CODEX_HOME` (un échec, une minute). Introuvable, en échec ou illisible :
+ * aucun (le modèle par défaut de Codex). `maintenant` : tests.
  */
 export function modelesCodex(maintenant: () => number = Date.now): (a: AppelModeles) => Promise<readonly string[]> {
-	const cache = new Map<string, EnCache>();
+	const lire = lectureEnCache<readonly string[]>({ gardeMs: 10 * 60_000, gardeEchecMs: 60_000, delaiMs: DELAI_MODELES_MS, repli: [], estEchec: (m) => m.length === 0, maintenant });
 	return (a) => {
 		const { commande } = a;
 		if (commande === null) return Promise.resolve([]);
-		const cle = JSON.stringify([commande.commande, commande.avant, a.env.CODEX_HOME ?? '']);
-		const garde = cache.get(cle);
-		if (garde !== undefined && garde.jusquaMs > maintenant()) return garde.modeles;
 		// le même environnement que les sessions : sans les variables interdites à Codex
 		const env = environnementPermisCodex(a.env);
-		const entree: EnCache = { jusquaMs: maintenant() + GARDE_MS, modeles: Promise.resolve([]) };
-		const lus = a
-			.executer(commande.commande, [...commande.avant, 'debug', 'models'], { env, delaiMs: DELAI_MODELES_MS })
-			.then((r) => (r.code === 0 ? modelesDuCatalogue(r.sortie) : []))
-			.catch((): string[] => []);
-		// le délai tenu même si l'exécuteur ne tient pas le sien
-		entree.modeles = avecDelaiGaranti<readonly string[]>(lus, DELAI_MODELES_MS + MARGE_DELAI_MS, []).then((modeles) => {
-			if (modeles.length === 0) entree.jusquaMs = Math.min(entree.jusquaMs, maintenant() + GARDE_ECHEC_MS);
-			return modeles;
-		});
-		cache.set(cle, entree);
-		return entree.modeles;
+		return lire(JSON.stringify([commande.commande, commande.avant, a.env.CODEX_HOME ?? '']), () =>
+			a.executer(commande.commande, [...commande.avant, 'debug', 'models'], { env, delaiMs: DELAI_MODELES_MS }).then((r) => (r.code === 0 ? modelesDuCatalogue(r.sortie) : [])),
+		);
 	};
 }

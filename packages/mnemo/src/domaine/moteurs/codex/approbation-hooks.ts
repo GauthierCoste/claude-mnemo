@@ -1,3 +1,6 @@
+import { entreesToml, LitteralToml } from '../toml-lecture.ts';
+import type { ValeurToml } from '../toml-lecture.ts';
+
 /**
  * Approbation des hooks par l'utilisateur dans Codex (`/hooks`), lue dans `config.toml` sans l'écrire : Codex 0.171 y note
  * `[hooks.state."<chemin de hooks.json>:<événement>:<groupe>:<commande>"]` avec `trusted_hash = "sha256:…"` (chaîne de base
@@ -6,56 +9,13 @@
  */
 export type ApprobationHooks = { etat: 'approuves' | 'a_approuver' | 'inconnu'; motif: string };
 
-/** Clé TOML pointée (`a."b.c".'d'`) en segments ; null si elle est mal formée. */
-export function segmentsDeCle(texte: string): string[] | null {
-	const segments: string[] = [];
-	let i = 0;
-	const blancs = () => {
-		while (i < texte.length && (texte[i] === ' ' || texte[i] === '\t')) i++;
-	};
-	for (;;) {
-		blancs();
-		const c = texte[i];
-		if (c === '"') {
-			let s = '';
-			i++;
-			for (;;) {
-				const d = texte[i];
-				if (d === undefined) return null;
-				i++;
-				if (d === '"') break;
-				if (d !== '\\') {
-					s += d;
-					continue;
-				}
-				const e = texte[i++];
-				const simples: Record<string, string> = { '"': '"', '\\': '\\', b: '\b', t: '\t', n: '\n', f: '\f', r: '\r' };
-				if (e !== undefined && Object.hasOwn(simples, e)) s += simples[e];
-				else if (e === 'u' || e === 'U') {
-					const n = e === 'u' ? 4 : 8;
-					const hex = texte.slice(i, i + n);
-					if (!/^[0-9a-fA-F]+$/u.test(hex) || hex.length !== n) return null;
-					s += String.fromCodePoint(Number.parseInt(hex, 16));
-					i += n;
-				} else return null;
-			}
-			segments.push(s);
-		} else if (c === "'") {
-			const fin = texte.indexOf("'", i + 1);
-			if (fin === -1) return null;
-			segments.push(texte.slice(i + 1, fin));
-			i = fin + 1;
-		} else {
-			const nu = /^[A-Za-z0-9_-]+/u.exec(texte.slice(i));
-			if (nu === null) return null;
-			segments.push(nu[0]);
-			i += nu[0].length;
-		}
-		blancs();
-		if (i === texte.length) return segments;
-		if (texte[i] !== '.') return null;
-		i++;
-	}
+type EtatDeHook = { approuve: boolean; desactive: boolean };
+
+/** Chaque valeur feuille de `valeur` (tables en ligne parcourues), sous son chemin complet. */
+function* feuilles(chemin: string[], valeur: ValeurToml): Generator<[string[], ValeurToml]> {
+	if (typeof valeur === 'object' && !Array.isArray(valeur) && !(valeur instanceof LitteralToml)) {
+		for (const [cle, v] of Object.entries(valeur)) yield* feuilles([...chemin, cle], v);
+	} else yield [chemin, valeur];
 }
 
 /** Position du premier `stop` hors des chaînes de `ligne`, ou -1. */
@@ -72,21 +32,19 @@ function horsChaines(ligne: string, stop: string): number {
 	return -1;
 }
 
-type EtatDeHook = { approuve: boolean; desactive: boolean };
+/** Clé TOML pointée (`a."b.c".'d'`) en segments ; null si elle est mal formée. */
+const segmentsDeCle = (texte: string): string[] | null => {
+	const [entree] = entreesToml(`${texte} = 1\n`) ?? [];
+	return entree?.genre === 'valeur' ? entree.cle : null;
+};
 
 /**
- * `hooks.state` de `config.toml`, par clé de hook ; `illisible` : une forme que cette lecture par lignes ne suit pas (table
- * en ligne `state = { … }`, en-tête mal formé), l'état est alors inconnu.
+ * `hooks.state` lu ligne à ligne, quand le reste de `config.toml` est un TOML que `entreesToml` refuse (lecture de la 1.6.1) :
+ * `illisible` seulement pour une forme de `hooks.state` que cette lecture ne suit pas (table en ligne, en-tête mal formé).
  */
-export function etatsDansConfig(texte: string): { illisible: boolean; etats: Map<string, EtatDeHook> } {
-	const etats = new Map<string, EtatDeHook>();
+function etatsParLignes(texte: string, etat: (cle: string) => EtatDeHook): boolean {
 	let illisible = false;
 	let table: string[] = [];
-	const etat = (cle: string): EtatDeHook => {
-		const e = etats.get(cle) ?? { approuve: false, desactive: false };
-		etats.set(cle, e);
-		return e;
-	};
 	// chaîne sur plusieurs lignes en cours (`"""` ou `'''`) : ses lignes ne sont ni des en-têtes ni des clés
 	let multiligne: string | null = null;
 	for (const brute of texte.split(/\r?\n/u)) {
@@ -97,14 +55,11 @@ export function etatsDansConfig(texte: string): { illisible: boolean; etats: Map
 		const ligne = brute.trim();
 		if (ligne === '' || ligne.startsWith('#')) continue;
 		if (ligne.startsWith('[')) {
-			const double = ligne.startsWith('[[');
-			const interieur = ligne.slice(double ? 2 : 1);
+			const interieur = ligne.slice(ligne.startsWith('[[') ? 2 : 1);
 			const fin = horsChaines(interieur, ']');
 			const segments = fin === -1 ? null : segmentsDeCle(interieur.slice(0, fin));
-			if (segments === null) {
-				illisible = true;
-				table = [];
-			} else table = segments;
+			if (segments === null) illisible = true;
+			table = segments ?? [];
 			continue;
 		}
 		const egal = horsChaines(ligne, '=');
@@ -121,7 +76,36 @@ export function etatsDansConfig(texte: string): { illisible: boolean; etats: Map
 		if (chemin[3] === 'trusted_hash' && /^(?:"[^"]+"|'[^']+')/u.test(valeur)) etat(chemin[2]!).approuve = true;
 		if (chemin[3] === 'enabled' && /^false\b/u.test(valeur)) etat(chemin[2]!).desactive = true;
 	}
-	return { illisible, etats };
+	return illisible;
+}
+
+/**
+ * `hooks.state` de `config.toml`, par clé de hook (en-têtes, clés pointées et tables en ligne). Un TOML que la lecture par
+ * entrées refuse (ailleurs dans le fichier) est relu ligne à ligne (`etatsParLignes`) ; `illisible` : une forme de
+ * `hooks.state` qu'aucune des deux ne suit, l'état est alors inconnu.
+ */
+export function etatsDansConfig(texte: string): { illisible: boolean; etats: Map<string, EtatDeHook> } {
+	const etats = new Map<string, EtatDeHook>();
+	const etat = (cle: string): EtatDeHook => {
+		const e = etats.get(cle) ?? { approuve: false, desactive: false };
+		etats.set(cle, e);
+		return e;
+	};
+	const entrees = entreesToml(texte);
+	if (entrees === null) return { illisible: etatsParLignes(texte, etat), etats };
+	let table: string[] = [];
+	for (const e of entrees) {
+		if (e.genre !== 'valeur') {
+			table = e.cle;
+			continue;
+		}
+		for (const [chemin, valeur] of feuilles([...table, ...e.cle], e.valeur)) {
+			if (chemin.length !== 4 || chemin[0] !== 'hooks' || chemin[1] !== 'state') continue;
+			if (chemin[3] === 'trusted_hash' && typeof valeur === 'string' && valeur !== '') etat(chemin[2]!).approuve = true;
+			if (chemin[3] === 'enabled' && valeur === false) etat(chemin[2]!).desactive = true;
+		}
+	}
+	return { illisible: false, etats };
 }
 
 const AVERTISSEMENT = 'Mnemo ne peut pas recalculer l’empreinte de Codex : si l’entrée a changé depuis l’approbation, Codex la redemande (/hooks)';

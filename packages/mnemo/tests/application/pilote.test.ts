@@ -633,7 +633,8 @@ describe('Pilote : sessions Codex', () => {
 		const m = await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' });
 		if (!('manuel' in m)) throw new Error('manuel attendu');
 		expect(m.manuel).toMatch(/MNEMO_MOTEUR='codex' .*'\/usr\/bin\/node' '\/aides\/faux-codex\.mjs' '-c' 'mnemo_session='\\''/u);
-		expect(m.manuel).toMatch(/^cd '\/racine\/alpha' && env -u CODEX_API_KEY /u);
+		expect(m.manuel).toMatch(/^cd '\/racine\/alpha' && env -u ANTHROPIC_API_KEY -u CLAUDECODE /u);
+		expect(m.manuel).toContain('-u CODEX_API_KEY ');
 	});
 
 	it('Codex trop ancien : lancement refusé avec sa version ; version illisible : lancé', async () => {

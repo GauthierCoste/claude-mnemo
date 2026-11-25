@@ -1,9 +1,12 @@
+import { NOMS_MOTEURS } from '@mnemo/commun';
 import { fileURLToPath } from 'node:url';
-import type { EtatHooksVerifie, EtatMcpVerifie, PosteVerifie } from '@mnemo/contrat';
-import type { CommandeMoteur, Executer } from '../../application/ports.ts';
-import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
-import { MOTEUR_CODEX } from '../../infra/moteurs/codex.ts';
-import { versionCodex } from '../../infra/moteurs/codex/version.ts';
+import type { EtatHooksVerifie, EtatMcpVerifie, MoteurVerifie, PosteVerifie } from '@mnemo/contrat';
+import type { CommandeMoteur, Executer, MoteurDuPoste } from '../../application/ports.ts';
+import { remedesDuMoteur } from '../../application/moteurs/remedes.ts';
+import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
+import { MOTEURS_DU_POSTE } from '../../infra/moteurs/moteurs.ts';
+import { MOTEURS_FACULTATIFS } from './moteurs-facultatifs.ts';
+import type { MoteurFacultatif } from './moteurs-facultatifs.ts';
 import { nodeDurable } from '../../infra/node-durable.ts';
 import { ErreurCli } from './erreurs.ts';
 import { executeurReel } from '../../infra/executeur.ts';
@@ -13,48 +16,66 @@ const DELAI_GIT_MS = 10_000;
 const MAIN = fileURLToPath(new URL('./main.ts', import.meta.url));
 
 /**
- * Ce que lit la vérification ; remplaçable (tests : ni vrai `git`, ni vrai `claude`, ni vrai `codex`). `main` : le `main.ts`
- * que la déclaration MCP doit lancer ; `plateforme` : celle du poste (Node durable de la déclaration) ; `env` : celui de
- * l'utilisateur (`CODEX_HOME`).
+ * Ce que lit la vérification ; remplaçable (tests : ni vrai `git`, ni vrai moteur). `trouver` : la commande d'un moteur (par
+ * défaut, celle que son `trouver` cherche) ; `main` : le `main.ts` que la déclaration MCP doit lancer ; `plateforme` : celle du
+ * poste (Node durable de la déclaration) ; `env` : celui de l'utilisateur (`CODEX_HOME`, `VIBE_HOME`).
  */
-export type DependancesPoste = { executer: Executer; claude: () => CommandeMoteur | null; codex: () => CommandeMoteur | null; versionNode: string; main: string; plateforme: string; env: Record<string, string | undefined> };
-
-/** Délai de `codex mcp get` (lecture seule de la configuration), comme celui de `git --version`. */
-const DELAI_CODEX_MS = 10_000;
-const MOTIF_DESACTIVE = 'désactivée dans Codex (enabled = false) : Mnemo ne la réactive pas ; réactivez-la dans Codex pour que ses sessions lisent la mémoire.';
-
-const ETATS_MCP: Record<Exclude<EtatMcpVerifie['etat'], 'echec' | 'desactive'>, string> = {
-	deja: 'serveur MCP déclaré',
-	absent: 'serveur MCP non déclaré (mnemo init --codex)',
-	perime: 'serveur MCP déclaré pour un autre Node ou un autre Mnemo (mnemo declarer --moteur codex --remplacer)',
-	autre: 'une déclaration MCP « mnemo » qui ne lance pas Mnemo',
+export type DependancesPoste = {
+	executer: Executer;
+	trouver: Partial<Record<IdMoteur, () => CommandeMoteur | null>>;
+	versionNode: string;
+	main: string;
+	plateforme: string;
+	env: Record<string, string | undefined>;
 };
 
-/** Codex : facultatif ; trouvé, sa version (`codex --version`), sa déclaration MCP (`codex mcp get`) et ses hooks de Mnemo (`hooks.json`, `config.toml`) sont lus, sans rien changer. */
-async function verifierCodex(d: DependancesPoste): Promise<PosteVerifieComplet['codex']> {
-	const commande = d.codex();
-	if (commande === null) return { ok: false, motif: 'Codex introuvable (commande codex absente du PATH et de ChatGPT.app, ou MNEMO_CODEX invalide).' };
-	const lu = await MOTEUR_CODEX.declarationMcp.lire({ executer: d.executer, main: d.main, commande, plateforme: d.plateforme, env: d.env, delaiMs: DELAI_CODEX_MS });
-	const mcp: EtatMcpVerifie = typeof lu !== 'string' ? { etat: 'echec', motif: lu.echec } : lu === 'desactive' ? { etat: lu, motif: MOTIF_DESACTIVE } : { etat: lu };
-	const hooks = await MOTEUR_CODEX.hooksDuPoste!.lire({ node: nodeDurable(d.plateforme as NodeJS.Platform), main: d.main, env: d.env });
-	const etatHooks: EtatHooksVerifie = 'echec' in hooks ? { etat: 'echec', motif: hooks.echec } : { etat: hooks.etat, ...(hooks.approbation === undefined ? {} : { approbation: hooks.approbation }) };
-	// lue à chaque vérification (sans le cache des sessions)
-	const version = await versionCodex()(commande, d.env, d.executer);
-	return { ok: true, chemin: commande.avant[0] ?? commande.commande, ...(version === null ? {} : { version }), mcp, hooks: etatHooks };
+/** Délai de la lecture de la déclaration MCP (`codex mcp get` : lecture seule de la configuration), comme celui de `git --version`. */
+const DELAI_DECLARATION_MS = 10_000;
+
+const motifDesactive = (moteur: MoteurDuPoste): string =>
+	`désactivée dans ${NOMS_MOTEURS[moteur.id]} (${moteur.installation.desactivation}) : Mnemo ne la réactive pas ; réactivez-la dans ${NOMS_MOTEURS[moteur.id]} pour que ses sessions lisent la mémoire.`;
+
+function etatMcp(moteur: MoteurDuPoste, etat: Exclude<EtatMcpVerifie['etat'], 'echec' | 'desactive'>): string {
+	const r = remedesDuMoteur(moteur);
+	if (etat === 'deja') return 'serveur MCP déclaré';
+	if (etat === 'absent') return `serveur MCP non déclaré (${r.declarer})`;
+	if (etat === 'perime') return `serveur MCP déclaré pour un autre Node ou un autre Mnemo (${r.remplacer})`;
+	return 'une déclaration MCP « mnemo » qui ne lance pas Mnemo';
 }
 
-const ETATS_HOOKS: Record<Exclude<EtatHooksVerifie['etat'], 'echec'>, string> = {
-	a_jour: 'hooks installés',
-	perime: 'hooks installés pour un autre Node ou un autre Mnemo (mnemo declarer --moteur codex --remplacer)',
-	absent: 'hooks non installés (mnemo init --codex)',
-};
-const APPROBATIONS: Record<NonNullable<EtatHooksVerifie['approbation']>['etat'], string> = { approuves: 'approuvés', a_approuver: 'à approuver dans Codex (/hooks)', inconnu: 'approbation inconnue' };
+/**
+ * Un moteur facultatif : trouvé, sa version (`--version`, sans cache), sa déclaration MCP et ses hooks de Mnemo pour tout le
+ * poste sont lus, sans rien changer.
+ */
+async function verifierMoteur(moteur: MoteurDuPoste, commande: CommandeMoteur | null, d: DependancesPoste): Promise<MoteurVerifie> {
+	if (commande === null) return { ok: false, motif: `${NOMS_MOTEURS[moteur.id]} introuvable (${moteur.installation.recherche}).` };
+	const lu = await moteur.declarationMcp.lire({ executer: d.executer, main: d.main, commande, plateforme: d.plateforme, env: d.env, delaiMs: DELAI_DECLARATION_MS });
+	const mcp: EtatMcpVerifie = typeof lu !== 'string' ? { etat: 'echec', motif: lu.echec } : lu === 'desactive' ? { etat: lu, motif: motifDesactive(moteur) } : { etat: lu };
+	const hooks = await moteur.hooksDuPoste?.lire({ node: nodeDurable(d.plateforme as NodeJS.Platform), main: d.main, env: d.env });
+	const etatHooks: EtatHooksVerifie | undefined =
+		hooks === undefined ? undefined : 'echec' in hooks ? { etat: 'echec', motif: hooks.echec } : { etat: hooks.etat, ...(hooks.approbation === undefined ? {} : { approbation: hooks.approbation }) };
+	const version = moteur.version === undefined ? null : await moteur.version(commande, d.env, d.executer, { relire: true }).catch(() => null);
+	return { ok: true, chemin: commande.avant[0] ?? commande.commande, ...(version === null ? {} : { version }), mcp, ...(etatHooks === undefined ? {} : { hooks: etatHooks }) };
+}
 
-/** Ligne des hooks de Codex : leur état, puis leur approbation et son motif. */
-function ligneHooks(hooks: EtatHooksVerifie): string {
+/** Ligne des hooks d'un moteur : leur état, puis leur approbation et son motif. */
+function ligneHooks(moteur: MoteurDuPoste, hooks: EtatHooksVerifie): string {
 	if (hooks.etat === 'echec') return `hooks illisibles : ${hooks.motif ?? ''}`;
-	const approbation = hooks.approbation === undefined ? '' : `, ${APPROBATIONS[hooks.approbation.etat]} (${hooks.approbation.motif})`;
-	return `${ETATS_HOOKS[hooks.etat]}${approbation}`;
+	const r = remedesDuMoteur(moteur);
+	const etats = { a_jour: 'hooks installés', perime: `hooks installés pour un autre Node ou un autre Mnemo (${r.remplacer})`, absent: `hooks non installés (${r.declarer})` };
+	const approbations = { approuves: 'approuvés', a_approuver: `à approuver dans ${NOMS_MOTEURS[moteur.id]}${moteur.installation.approbation === null ? '' : ` (${moteur.installation.approbation.commande})`}`, inconnu: 'approbation inconnue' };
+	const approbation = hooks.approbation === undefined ? '' : `, ${approbations[hooks.approbation.etat]} (${hooks.approbation.motif})`;
+	return `${etats[hooks.etat]}${approbation}`;
+}
+
+/** Ligne d'un moteur facultatif : son chemin, sa version (trop ancienne : dit), sa déclaration MCP, ses hooks ; ou son absence. */
+function ligneMoteur(moteur: MoteurDuPoste, v: MoteurVerifie): string {
+	if (!v.ok) return `${NOMS_MOTEURS[moteur.id]} : absent (facultatif) ; ${v.motif}`;
+	const mcp = v.mcp === undefined ? '' : ` ; ${v.mcp.etat === 'echec' ? `déclaration MCP illisible : ${v.mcp.motif ?? ''}` : v.mcp.etat === 'desactive' ? `serveur MCP ${motifDesactive(moteur)}` : etatMcp(moteur, v.mcp.etat)}`;
+	const hooks = v.hooks === undefined ? '' : ` ; ${ligneHooks(moteur, v.hooks)}`;
+	// trop ancienne : le motif du refus, qui la dit
+	const version = v.version === undefined ? '' : ` (${moteur.refusDeVersion?.(v.version) ?? v.version})`;
+	return `${NOMS_MOTEURS[moteur.id]} : ${v.chemin}${version}${mcp}${hooks}`;
 }
 
 /** Version lue dans « git version 2.50.1 (Apple Git-155) » ; toute la ligne si elle n'a pas cette forme. */
@@ -64,13 +85,22 @@ function versionGit(sortie: string): string {
 }
 
 /**
- * Ce dont Mnemo a besoin sur le poste : `git` (lancé, `git --version` ; sous macOS sans les outils de développement, le
- * `git` du système répond en erreur), le `claude` que lanceront les sessions (`trouverClaude`), la version de Node ; et
- * Codex, facultatif (trouvé ou non, et sa déclaration MCP).
+ * Le poste vu par ce Mnemo : un bloc par moteur facultatif, toujours écrit (facultatifs dans le contrat, pour un Mnemo plus
+ * ancien), sous son nom dans le contrat (`CONTRAT_DES_FACULTATIFS`).
  */
-/** Le poste vu par ce Mnemo : le bloc `codex` y est toujours (facultatif dans le contrat, pour un Mnemo plus ancien). */
-export type PosteVerifieComplet = PosteVerifie & { codex: NonNullable<PosteVerifie['codex']> };
+export type PosteVerifieComplet = Required<PosteVerifie>;
 
+/** Le bloc d'un moteur facultatif dans le poste vérifié. */
+const blocDuPoste = (poste: PosteVerifieComplet, m: MoteurFacultatif): MoteurVerifie => poste[m.bloc];
+
+/** La commande d'un moteur : celle des dépendances, sinon celle que son `trouver` cherche. */
+const commandeDe = (moteur: MoteurDuPoste, d: DependancesPoste): CommandeMoteur | null => (d.trouver[moteur.id] ?? (() => moteur.trouver(d.env, d.plateforme)))();
+
+/**
+ * Ce dont Mnemo a besoin sur le poste : `git` (lancé, `git --version` ; sous macOS sans les outils de développement, le
+ * `git` du système répond en erreur), le `claude` que lanceront les sessions, la version de Node ; et
+ * les moteurs facultatifs (Codex, Mistral Vibe : trouvés ou non, leur déclaration MCP et leurs hooks).
+ */
 export async function verifierPoste(d: DependancesPoste): Promise<PosteVerifieComplet> {
 	let git: PosteVerifie['git'];
 	try {
@@ -81,24 +111,25 @@ export async function verifierPoste(d: DependancesPoste): Promise<PosteVerifieCo
 		const code = (erreur as { code?: unknown } | null)?.code;
 		git = { ok: false, motif: code === 'ENOENT' ? 'git introuvable dans le PATH.' : `git ne se lance pas : ${erreur instanceof Error ? erreur.message : String(erreur)}` };
 	}
-	const commande = d.claude();
+	const claudeCode = MOTEURS_DU_POSTE['claude-code'];
+	const commande = commandeDe(claudeCode, d);
 	const claude: PosteVerifie['claude'] =
-		commande === null ? { ok: false, motif: 'Claude Code introuvable (commande claude absente du PATH, ou MNEMO_CLAUDE invalide).' } : { ok: true, chemin: commande.avant[0] ?? commande.commande };
-	return { git, claude, codex: await verifierCodex(d), node: { version: d.versionNode } };
+		commande === null ? { ok: false, motif: `${NOMS_MOTEURS[claudeCode.id]} introuvable (${claudeCode.installation.recherche}).` } : { ok: true, chemin: commande.avant[0] ?? commande.commande };
+	const facultatifs = await Promise.all(MOTEURS_FACULTATIFS.map(async (m) => [m.bloc, await verifierMoteur(m.moteur, commandeDe(m.moteur, d), d)] as const));
+	return { git, claude, ...(Object.fromEntries(facultatifs) as Omit<PosteVerifieComplet, 'git' | 'claude' | 'node'>), node: { version: d.versionNode } };
 }
 
 /**
- * `mnemo verifier-poste [--json]` : git, Claude Code, Codex et Node. `--json` : un objet `PosteVerifie` (`@mnemo/contrat`)
- * sur une ligne, code de sortie 0 ; sans `--json` : une ligne par élément, code 1 s'il manque git ou Claude Code (Codex est
- * facultatif).
+ * `mnemo verifier-poste [--json]` : git, Claude Code, Codex, Mistral Vibe et Node. `--json` : un objet
+ * `PosteVerifie` (`@mnemo/contrat`) sur une ligne, code de sortie 0 ; sans `--json` : une ligne par élément, code 1 s'il
+ * manque git ou Claude Code (Codex et Mistral Vibe sont facultatifs).
  */
 export async function commandeVerifierPoste(args: string[], partiel: Partial<DependancesPoste> = {}, ecrire: (ligne: string) => void = (ligne) => console.log(ligne)): Promise<void> {
 	const inconnue = args.find((a) => a !== '--json');
 	if (inconnue !== undefined) throw new ErreurCli(`${inconnue.startsWith('-') ? `Option inconnue : « ${inconnue} ».\n` : ''}${USAGE}`, 2);
 	const poste = await verifierPoste({
 		executer: partiel.executer ?? executeurReel(),
-		claude: partiel.claude ?? (() => trouverClaude(process.env, process.platform)),
-		codex: partiel.codex ?? (() => MOTEUR_CODEX.trouver(process.env, process.platform)),
+		trouver: partiel.trouver ?? {},
 		versionNode: partiel.versionNode ?? process.versions.node,
 		main: partiel.main ?? MAIN,
 		plateforme: partiel.plateforme ?? process.platform,
@@ -108,15 +139,9 @@ export async function commandeVerifierPoste(args: string[], partiel: Partial<Dep
 		ecrire(JSON.stringify(poste));
 		return;
 	}
-	ecrire(poste.git.ok ? `git : ${poste.git.version}` : `git : absent — ${poste.git.motif}`);
-	ecrire(poste.claude.ok ? `Claude Code : ${poste.claude.chemin}` : `Claude Code : absent — ${poste.claude.motif}`);
-	const { codex } = poste;
-	if (codex !== undefined) {
-		const mcp = codex.mcp === undefined ? '' : ` — ${codex.mcp.etat === 'echec' ? `déclaration MCP illisible : ${codex.mcp.motif ?? ''}` : codex.mcp.etat === 'desactive' ? `serveur MCP ${MOTIF_DESACTIVE}` : ETATS_MCP[codex.mcp.etat]}`;
-		const hooks = codex.hooks === undefined ? '' : ` — ${ligneHooks(codex.hooks)}`;
-		const version = codex.version === undefined ? '' : ` (${codex.version}${MOTEUR_CODEX.refusDeVersion!(codex.version) === null ? '' : ', trop ancien : 0.171 ou plus requis'})`;
-		ecrire(codex.ok ? `Codex : ${codex.chemin}${version}${mcp}${hooks}` : `Codex : absent (facultatif) — ${codex.motif}`);
-	}
+	ecrire(poste.git.ok ? `git : ${poste.git.version}` : `git : absent ; ${poste.git.motif}`);
+	ecrire(poste.claude.ok ? `Claude Code : ${poste.claude.chemin}` : `Claude Code : absent ; ${poste.claude.motif}`);
+	for (const m of MOTEURS_FACULTATIFS) ecrire(ligneMoteur(m.moteur, blocDuPoste(poste, m)));
 	ecrire(`Node : ${poste.node.version}`);
 	if (!poste.git.ok || !poste.claude.ok) throw new ErreurCli('Poste incomplet : installez ce qui manque, puis relancez « mnemo verifier-poste ».', 1);
 }

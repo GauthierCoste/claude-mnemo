@@ -9,7 +9,7 @@ Commands, messages and the interface are in French; this page gives their meanin
 
 Node 24 or later is required. The `mnemo` command (see [installation.md](installation.md) to make it available):
 
-- `mnemo init [folder] [--oui] [--json] [--mcp | --sans-mcp] [--codex] [--modeles | --sans-modeles]
+- `mnemo init [folder] [--oui] [--json] [--mcp | --sans-mcp] [--codex] [--mistral] [--modeles | --sans-modeles]
   [--commande | --sans-commande] [--lanceur | --sans-lanceur]`: creates the memory (`_mnemo/`, with `SCHEMA.md`, the note of the `travail`
   profile and a first git commit; no folder is imposed); does nothing if it already exists. In a terminal, on a fresh folder, it guides you step by step:
   folder (`~/…` accepted; absolute path shown and confirmed before creation), declaration to Claude Code, local models
@@ -24,7 +24,9 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   `--sans-commande` (the `mnemo` command in `~/.local/bin`), `--lanceur` / `--sans-lanceur` (the macOS launcher). Giving
   both options of a pair is a usage error (exit code 2). `--codex` also declares the MCP server to Codex and installs
   the Mnemo hooks in `~/.codex/hooks.json` (or `$CODEX_HOME`); without it Codex is never touched, and
-  `MNEMO_SANS_MCP=1` skips both (see [installation.md](installation.md#codex)). A failing step outside the memory (MCP, models, command,
+  `MNEMO_SANS_MCP=1` skips both (see [installation.md](installation.md#codex)). `--mistral` does the same
+  for Mistral Vibe (`~/.vibe/config.toml` and `hooks.toml`, or `$VIBE_HOME`): see
+  [installation.md](installation.md#mistral-vibe). A failing step outside the memory (MCP, models, command,
   launcher) does not stop the next ones: it is reported, and the exit code is 1.
 
   `--json` (for a program that drives the installation): no question, and standard output carries only JSON lines,
@@ -42,8 +44,8 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   {"fin":true,"racine":"/path","ok":false}
   ```
 
-  `etape` is `memoire`, `mcp`, `codex`, `codex_hooks`, `modeles`, `commande` or `lanceur` (`codex` and `codex_hooks`
-  only with `--codex`). A step that runs gives `debut` then `fait` or `echec`, or `laisse` when it deliberately leaves
+  `etape` is `memoire`, `mcp`, `codex`, `codex_hooks`, `mistral`, `mistral_hooks`, `modeles`, `commande` or
+  `lanceur` (the steps of an engine only with its option). A step that runs gives `debut` then `fait` or `echec`, or `laisse` when it deliberately leaves
   things as they are (a declaration turned off in Codex with `enabled = false`: not a failure, no exit code 1);
   a step left aside gives a single `saute` line. Download progress (`piece`: `moteur`, `sens` or `reranker`; `total` is
   `null` when the size is unknown) comes at most once per second and per piece. The last line is `fin`; `ok` is false
@@ -52,19 +54,20 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   of Mnemo, the failure line also carries `"motif":"perime"` (`mnemo declarer --remplacer` then rewrites it). The
   types are `LigneInit` and `PosteVerifie` in `@mnemo/contrat`.
 - `mnemo verifier-poste [--json]` (check this computer): `git` (runs `git --version`), Claude Code (the `claude` the
-  sessions will run), Codex (optional: where it is, its version, the MCP declaration, the Mnemo hooks and whether Codex
-  has approved them) and the Node version. Nothing is changed. Without `--json`, one line each, exit code 1 if git or
-  Claude Code is missing (never for Codex); with `--json`, one line, exit code 0:
+  sessions will run), Codex and Mistral Vibe (optional: where each is, its version, the MCP
+  declaration, the Mnemo hooks and, for Codex, whether it has approved them) and the Node version. Nothing is changed.
+  Without `--json`, one line each, exit code 1 if git or Claude Code is missing (never for an optional engine); with
+  `--json`, one line, exit code 0 (the block `mistral` has the form of `codex`):
   `{"git":{"ok":true,"version":"2.50.1"},"claude":{"ok":false,"motif":"…"},"codex":{"ok":true,"chemin":"…","version":"…","mcp":{"etat":"deja"},"hooks":{"etat":"a_jour","approbation":{"etat":"a_approuver","motif":"…"}}},"node":{"version":"26.13.1"}}`.
-- `mnemo declarer (--remplacer | --retirer) [--moteur claude-code|codex] [--json]` (declare): looks after an existing MCP
-  declaration of Mnemo to Claude Code (default) or Codex, of user scope; it never declares anew, which is
-  `mnemo init --mcp` (or `--codex`). `--remplacer` (replace): a Mnemo declaration that runs another Node.js or another copy of Mnemo is
+- `mnemo declarer (--remplacer | --retirer) [--moteur claude-code|codex|mistral-vibe] [--json]` (declare):
+  looks after an existing MCP declaration of Mnemo to Claude Code (default) or another engine, of user scope; it never
+  declares anew, which is `mnemo init --mcp` (or `--codex`, `--mistral`). `--remplacer` (replace): a Mnemo declaration that runs another Node.js or another copy of Mnemo is
   removed and made again with this Node.js and this Mnemo; `--retirer` (remove): the declaration is removed only if it
   runs this Node.js and this Mnemo. A declaration named `mnemo` that does not run Mnemo, or of another scope, is left
-  alone. With `--moteur codex`, the Mnemo hooks of `~/.codex/hooks.json` follow the same way (those of another
-  installation of Mnemo are left by `--retirer`), and a Codex declaration that is turned off or carries your own settings
-  is never rewritten: the message says what to change by hand. With `--json`, one line `{"resultat":"…","message":"…"}`
-  (plus `"hooks":{"resultat":"…","message":"…"}` for Codex), `resultat` being `absent` (nothing declared), `deja`
+  alone. With another engine, its Mnemo hooks follow the same way (`~/.codex/hooks.json`, `~/.vibe/hooks.toml`; those
+  of another installation of Mnemo are left by `--retirer`), and a declaration that
+  is turned off or carries your own settings is never rewritten: the message says what to change by hand. With `--json`,
+  one line `{"resultat":"…","message":"…"}` (plus `"hooks":{"resultat":"…","message":"…"}` for an engine with hooks), `resultat` being `absent` (nothing declared), `deja`
   (already up to date), `remplace`, `retire`, `autre` (left alone) or `echec` (type `SortieDeclarer` in
   `@mnemo/contrat`). Exit code 1 on a failure (`claude` not found, for example), 2 on a usage error.
 - `mnemo lit <path>` (read): prints a note (path relative to `_mnemo/`, for example `clients/acme/acme.md`).
@@ -269,9 +272,9 @@ at each start). If the port is taken by another program (or by Mnemo for another
 never another port silently. In a terminal it prints the first-opening address, `http://127.0.0.1:4747/#jeton=<token>`,
 and opens it in the browser when the interface is built (`MNEMO_SANS_NAVIGATEUR=1` prevents that). Ctrl-C (or SIGTERM,
 or closing the terminal, or `mnemo arreter [folder]` for a service without a terminal) stops the sessions cleanly; they
-resume with `claude --resume` or `codex resume` at the next start. After a crash of the service, its sessions become
+resume at the next start (`claude --resume`, `codex resume`, `vibe --resume`). After a crash of the service, its sessions become
 "à relire" (to review, minimal episode written), then are relaunched (a Codex session that never reached its first
-message stays "à relire").
+message, or a Mistral Vibe session that never sent its first hook, stays "à relire").
 
 **Token and browser.** The service token is created once and kept in `.mnemo/jeton` (readable by you only). At the first
 opening of the address with the token in a browser, the interface stores the token in the `localStorage` of its origin,
@@ -330,6 +333,8 @@ bars with the reset time; another click folds them.
 - **ChatGPT** quotas come from the transcript of the Codex sessions launched by Mnemo, read by the service after a hook
   (Codex has no status line). A window Codex does not report is not shown (some plans report the week only). A reading
   older than an hour is ignored.
+- Mistral Vibe reports no quotas Mnemo can read: the Contexte panel of its sessions says
+  « Quotas : non communiqués par … » (not reported) instead.
 
 The left rail has two views: **Sessions** (its badge: sessions waiting for your answer) and **Mémoire** (its badge: items
 to process).
@@ -358,8 +363,8 @@ inside a terminal.
 Without the interface, sessions are driven from the command line, with the service running:
 
 - `mnemo sessions`: running sessions (id, state, profile, folder, objective);
-- `mnemo session lancer <folder> [--profil p] [--objectif t]`: starts the engine of the profile (`claude` or `codex`) in
-  this folder (relative to the root);
+- `mnemo session lancer <folder> [--profil p] [--objectif t]`: starts the engine of the profile (`claude`, `codex`
+  or `vibe`) in this folder (relative to the root);
 - `mnemo session terminer <id> [--sans-bilan]`: wrap-up (the agent writes the episode, then the session stops), or
   abandon;
 - `mnemo session voir <id>`: the terminal of the session inside yours; Ctrl-] to quit.
@@ -384,6 +389,12 @@ second, 2 s for the action check, 1.4 s for the end; exit code 0 even on failure
 instructions, the action check is declared so that Claude Code refuses the action if the hook itself fails or times out. `claude` is started without a shell, with your subscription only: `ANTHROPIC_API_KEY`,
 `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` and the `CLAUDE_CODE_USE_*` provider selectors are removed from its
 environment. `MNEMO_CLAUDE` names another `claude` binary.
+
+Whatever its engine, a session never receives the keys and tokens of another provider: `CLAUDECODE`, `CLAUDE_CODE_*` and
+`ANTHROPIC_*` outside Claude Code, `CODEX_API_KEY` and `OPENAI_API_KEY` outside Codex, `MISTRAL_API_KEY` outside Mistral
+Vibe; the token of GitHub's coding agent is never passed either. `GH_TOKEN` and `GITHUB_TOKEN` are passed to every
+engine (`gh` and git use them).
+
 
 Mnemo keeps a log of the gestures made on the notes it proposes: a note you inject by hand, set aside with ✗ (for the
 session or for good) or restore, a note Mnemo injects by itself, a note Claude reads with `lire` after a lead proposed it,
@@ -413,6 +424,10 @@ profile.
 - **Resume.** Mnemo learns the identity of the Codex session from that first hook, and resumes it with `codex resume`.
   A session whose hooks are not approved never sends it: it can be neither paused nor resumed, and neither wrapped up;
   only abandoned. The interface greys these actions out and says why.
+- **Permissions.** When Codex asks you to approve a tool, the session shows « Attend ta réponse » (waiting for your
+  answer). After you approve a patch or a Mnemo tool, it goes back to work; after you approve a command, it keeps
+  showing the question while the command runs, until the next hook arrives (the next tool, your next message, or the end
+  of the turn): changing the installed hooks to see it sooner would make you approve them again.
 - **Stop.** Mnemo stops a Codex session by typing `/quit` (before the first hook, it stops the process without typing
   anything).
 - **One conversation per session.** Do not use `/new` or `/resume` inside a session started by Mnemo: the session keeps
@@ -423,6 +438,26 @@ profile.
   `$CODEX_HOME`) after a hook: how full the context window is, and the ChatGPT quotas of the title bar.
 - **Not found.** Without `codex`, or with a version older than 0.171, a Codex session is not started (there is no command
   line to paste, unlike Claude Code); the launch says why, and so does the engine's line in Settings › Profiles.
+
+### Mistral Vibe sessions
+
+A profile whose engine is Mistral Vibe starts `vibe` (3.1.5 or later; `MNEMO_VIBE` names another binary) in the terminal
+of the session, without a shell, with the sign-in of your own `vibe`. The hooks are those installed once for the
+machine by `mnemo init --mistral`: see [installation.md](installation.md#mistral-vibe). They act only in a session
+started by Mnemo, and follow the hooks of the profile.
+
+- **What it receives.** The instruction of the profile, followed by the list of its skills, goes into an agent profile
+  of the session (`--agent mnemo-<session>`), kept in the session folder of Mnemo; the Mnemo MCP server and its tools,
+  allowed in advance, are passed through the environment. Nothing is written into the project folder or into `~/.vibe`.
+  Vibe still reads its own `AGENTS.md` and skills.
+- **Resume.** Vibe sends its first hook when it opens the session; Mnemo learns the identity of the Vibe session from it
+  and resumes it with `vibe --resume=<id>`.
+- **Stop.** Mnemo stops a Vibe session by typing `/exit`.
+- **Permissions.** When Vibe asks you to approve a tool, the session shows « Attend ta réponse » (waiting for your
+  answer) until the tool has run.
+- **`/clear`** starts a new conversation in the same session; Mnemo follows the new one (not measured yet).
+- **Context gauge.** Read from the session log of Vibe (`~/.vibe/logs/session/`) after a hook. No quotas.
+- **Not found.** Without `vibe`, or with a version older than 3.1.5, a session is not started; the launch says why.
 
 ### Injected context
 
@@ -758,8 +793,8 @@ Mnemo get no Claude Code plugin.
 
 Without node-pty, Mnemo cannot open a terminal; nor can it for a Claude Code session when `claude` cannot be found.
 Everything else works: service, API, hooks, memory, search. Starting a session then returns a complete command line to
-paste into your own terminal (`claude …` or `codex …`; a Codex that cannot be found is refused instead, see
-[Codex sessions](#codex-sessions)). The session is followed through its hooks, without a terminal in Mnemo. The meaning
+paste into your own terminal (`claude …`, `codex …` or `vibe …`; a Codex or a Mistral Vibe that cannot be found is
+refused instead, see [Codex sessions](#codex-sessions) and [Mistral Vibe sessions](#mistral-vibe-sessions)). The session is followed through its hooks, without a terminal in Mnemo. The meaning
 models are another, independent option: without them, search works by words.
 
 node-pty is an optional dependency. On macOS and Windows it comes prebuilt (Node-API: it survives Node.js upgrades),

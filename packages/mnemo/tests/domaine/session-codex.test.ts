@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { cheminsDuPatch, OUTILS_CODEX } from '../../src/domaine/moteurs/codex/outils.ts';
 import { modelesDuCatalogue } from '../../src/domaine/moteurs/codex/modeles.ts';
 import { TOUCHES_CODEX } from '../../src/domaine/moteurs/codex/touches.ts';
-import { chaineToml, listeToml, listeValeursToml, valeurToml } from '../../src/domaine/moteurs/codex/toml.ts';
-import { refusDeVersionCodex, versionDeCodex } from '../../src/domaine/moteurs/codex/version.ts';
+import { chaineToml, listeToml, listeValeursToml, valeurToml } from '../../src/domaine/moteurs/toml.ts';
+import { refusDeVersionCodex } from '../../src/domaine/moteurs/codex/version.ts';
+import { versionDans } from '../../src/domaine/moteurs/version.ts';
 import { effetDuHook, hooksDuTexte, texteDesHooks } from '../../src/domaine/moteurs/hooks-du-profil.ts';
 
 describe('chaînes TOML des -c de Codex', () => {
@@ -97,11 +99,11 @@ describe('valeurs TOML sans guillemet double (PowerShell 5.1)', () => {
 
 describe('version de Codex', () => {
 	it('lue dans la sortie de codex --version ; illisible : null', () => {
-		expect(versionDeCodex('codex-cli 0.171.0-alpha.13\n')).toBe('0.171.0-alpha.13');
-		expect(versionDeCodex('codex-cli 0.172.1')).toBe('0.172.1');
-		expect(versionDeCodex('v1.2.3')).toBe('1.2.3');
-		expect(versionDeCodex('codex-cli dev')).toBeNull();
-		expect(versionDeCodex('')).toBeNull();
+		expect(versionDans('codex-cli 0.171.0-alpha.13\n')).toBe('0.171.0-alpha.13');
+		expect(versionDans('codex-cli 0.172.1')).toBe('0.172.1');
+		expect(versionDans('v1.2.3')).toBe('1.2.3');
+		expect(versionDans('codex-cli dev')).toBeNull();
+		expect(versionDans('')).toBeNull();
 	});
 
 	it('refusée sous 0.171.0 (une préversion compte comme sa version) ; illisible ou inconnue : rien n’est refusé', () => {
@@ -113,5 +115,17 @@ describe('version de Codex', () => {
 		expect(refusDeVersionCodex('1.0.0')).toBeNull();
 		expect(refusDeVersionCodex(null)).toBeNull();
 		expect(refusDeVersionCodex('dev')).toBeNull();
+	});
+});
+
+describe('patch apply_patch de Codex', () => {
+	it('chemins des en-têtes, sans doublon ; illisible : absent, ou du contenu sans en-tête ; vide : rien', () => {
+		const patch = '*** Begin Patch\n*** Add File: a.md\n+x\n*** Update File: b.md\n*** Move to: c.md\n*** Delete File: a.md\n*** End Patch';
+		const ecrits = (entree: Record<string, unknown>) => OUTILS_CODEX.cheminsEcrits({ nom: 'apply_patch', entree });
+		expect(cheminsDuPatch(patch)).toEqual(['a.md', 'b.md', 'c.md']);
+		expect(ecrits({ command: patch })).toEqual(['a.md', 'b.md', 'c.md']);
+		expect(ecrits({})).toBe('illisible');
+		expect(ecrits({ command: 'rm -rf /' })).toBe('illisible');
+		expect(ecrits({ command: '*** Begin Patch\n*** End Patch\n' })).toEqual([]);
 	});
 });
