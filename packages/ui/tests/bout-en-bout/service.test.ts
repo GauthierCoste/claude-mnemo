@@ -276,7 +276,9 @@ describe('interface de bout en bout, contre le vrai service', () => {
 				return relu.fiches.find((f) => f.chemin === 'clients/clients.md')?.titre === 'Clients et partenaires';
 			}),
 		).toBe(true);
-		expect(relu!.modifieeMs).toBeGreaterThan(graphe.modifieeMs);
+		// `modifieeMs` est la date du dernier commit, à la seconde (git) : l'écriture peut tomber dans la même seconde que le
+		// commit d'avant ; le titre relu prouve déjà que le graphe a suivi
+		expect(relu!.modifieeMs).toBeGreaterThanOrEqual(graphe.modifieeMs);
 
 		const conflit = await api.envoyer(ROUTES.brut, { chemin: fiche.chemin, texte: `${fiche.brut}\nAutre.\n`, empreinte: fiche.empreinte }).catch((e: unknown) => e);
 		expect(conflit).toBeInstanceOf(ErreurApi);
