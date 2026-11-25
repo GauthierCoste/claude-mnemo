@@ -6,7 +6,7 @@ import { libelleRaison } from '@mnemo/commun';
 import { ficheDePosition } from './chercher.ts';
 import { aujourdhui, consignesIndexees } from './commun.ts';
 import { calculerCartes, fichesAEncadrer } from './cartes.ts';
-import { sansFaitsBarres } from '../domaine/sans-faits-barres.ts';
+import { sansFaitsInactifs } from '../domaine/sans-faits-inactifs.ts';
 import type { Carte, CartesCalculees, DemandeCartes, FicheDePositionServie } from './cartes.ts';
 import { liensDeLaMemoire } from './liens.ts';
 import type { LiensResolus } from './liens.ts';
@@ -131,7 +131,7 @@ async function fichesDemandees(dep: Dependances, chemins: readonly string[], pos
 	const fiches: FicheDePositionServie[] = [];
 	for (const chemin of presentes) {
 		const texte = await dep.coffre.lire(chemin);
-		if (texte !== null) fiches.push({ chemin, titre: titreDe.get(chemin) ?? chemin, texte: sansFaitsBarres(texte, aujourdhui(dep)), empreinte: empreintes.get(chemin) ?? '', encadree: encadrees.has(chemin) });
+		if (texte !== null) fiches.push({ chemin, titre: titreDe.get(chemin) ?? chemin, texte: sansFaitsInactifs(texte, aujourdhui(dep)), empreinte: empreintes.get(chemin) ?? '', encadree: encadrees.has(chemin) });
 	}
 	return fiches;
 }

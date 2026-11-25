@@ -4,7 +4,7 @@ import { diagnostiquer } from '../../src/application/diagnostiquer.ts';
 import { proposer } from '../../src/application/proposer.ts';
 import { elementsDeFiche } from '../../src/domaine/elements.ts';
 import { lireFiche } from '../../src/domaine/fiche.ts';
-import { sansFaitsBarres } from '../../src/domaine/sans-faits-barres.ts';
+import { sansFaitsInactifs } from '../../src/domaine/sans-faits-inactifs.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
 
 // Le faux système est au 2026-11-22 : une fiche périmée le 2026-11-22 ne l'est plus ce jour-là (fin exclue).
@@ -42,12 +42,12 @@ describe('fiches temporaires et informations expirées', () => {
 
 	it('injection : les informations expirées sont omises avec leur citation, les autres gardées', () => {
 		const texte = `# A\n\n## Informations\n${ligne('Expirée', 'f-0001', ' | valide [,2026-11-22)')}\n  > « citée »\n${ligne('Gardée', 'f-0002', ' | valide [,2026-11-22]')}\n${ligne('Sans fin', 'f-0003')}\n`;
-		const injecte = sansFaitsBarres(texte, '2026-11-22');
+		const injecte = sansFaitsInactifs(texte, '2026-11-22');
 		expect(injecte).not.toContain('Expirée');
 		expect(injecte).not.toContain('citée');
 		expect(injecte).toContain('Gardée');
 		expect(injecte).toContain('Sans fin');
-		expect(sansFaitsBarres(texte)).toBe(texte);
+		expect(sansFaitsInactifs(texte)).toBe(texte);
 	});
 
 	it('proposer : perime_le se pose à la création (donnees) et par une modification ; une date invalide est refusée ; « » le retire', async () => {

@@ -18,7 +18,7 @@ import { estExpire } from '../domaine/elements.ts';
 import type { ElementIndexe } from '../domaine/elements.ts';
 import { estDocument } from '../domaine/regles.ts';
 import { expressionFts } from '../domaine/requete.ts';
-import { sansFaitsBarres } from '../domaine/sans-faits-barres.ts';
+import { sansFaitsInactifs } from '../domaine/sans-faits-inactifs.ts';
 import { normaliser } from '../domaine/sens.ts';
 import { ficheDePosition } from './chercher.ts';
 import { aujourdhui } from './commun.ts';
@@ -209,7 +209,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 	if (d.servirPosition && positionFiche !== null && !d.ecartes.includes(positionFiche) && d.dejaServies.get(positionFiche) !== (empreintes.get(positionFiche) ?? null)) {
 		const brut = await dep.coffre.lire(positionFiche);
 		// les faits barrés restent dans la fiche mais ne sont pas injectés
-		const texte = brut === null ? null : sansFaitsBarres(brut, jour);
+		const texte = brut === null ? null : sansFaitsInactifs(brut, jour);
 		if (texte !== null) {
 			if (texte.length <= TAILLE_POSITION_MAX) {
 				position = { chemin: positionFiche, titre: titre(positionFiche), texte, empreinte: empreintes.get(positionFiche) ?? '', encadree: false };

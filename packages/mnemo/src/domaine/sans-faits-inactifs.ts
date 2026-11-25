@@ -23,7 +23,7 @@ function faitExpire(ligne: string, aujourdhui: string | undefined): boolean {
  * validité est passée, ni les lignes qui les suivent : citations (`  > « … »`) et corroborations (`  + src: …`). Le reste du
  * texte est rendu tel quel, à l'octet près. Le fait reste dans la fiche : seule l'injection l'omet ; `lire` rend la fiche entière.
  */
-export function sansFaitsBarres(texte: string, aujourdhui?: string): string {
+export function sansFaitsInactifs(texte: string, aujourdhui?: string): string {
 	const lignes = texte.split('\n');
 	const gardees: string[] = [];
 	let dansInformations = false;
