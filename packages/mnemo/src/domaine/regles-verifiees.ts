@@ -1,5 +1,4 @@
 import type { Regle } from './consigne.ts';
-import { OUTILS_CLAUDE_CODE } from './moteurs/claude-code/outils.ts';
 import type { OutilsDuMoteur } from './moteurs/moteur.ts';
 import type { CauseNonVerifiee } from './refus-outil.ts';
 
@@ -79,7 +78,7 @@ function relatif(chemin: { prefixe: string; segments: string[] }, racine: { pref
  * « / » ; un chemin hors de la racine est rendu absolu (« /etc/x », « D:/x »). null : outil non concerné. `sansCasse` :
  * la racine se reconnaît à la casse près (macOS ; un disque à lettre l'est toujours).
  */
-export function cheminsTouches(action: ActionOutil, racine: string, cwd: string, sansCasse = false, outils: OutilsDuMoteur = OUTILS_CLAUDE_CODE): string[] | null {
+export function cheminsTouches(action: ActionOutil, outils: OutilsDuMoteur, racine: string, cwd: string, sansCasse = false): string[] | null {
 	const bruts = outils.cheminsEcrits(action);
 	if (bruts === null) return null;
 	const base = absolu(racine, '/');
@@ -235,7 +234,7 @@ function decouperCommandes(ligne: string): string[] {
 }
 
 /** Commandes simples de l'entrée de l'outil de commande du moteur ; null pour un autre outil. */
-export function commandesDe(action: ActionOutil, outils: OutilsDuMoteur = OUTILS_CLAUDE_CODE): string[] | null {
+export function commandesDe(action: ActionOutil, outils: OutilsDuMoteur): string[] | null {
 	const commande = outils.commande(action);
 	return commande === null ? null : decouperCommandes(commande);
 }
@@ -391,14 +390,14 @@ function motifDeChemin(motif: string): string {
 	return net.replace(RE_LECTEUR, (_, lecteur: string, fin: string) => `${lecteur.toUpperCase()}:${fin}`);
 }
 
-/** Racine du dossier Mnemo, dossier courant de l'action, disque sans casse ; `outils` : ceux du moteur (Claude Code par défaut). */
-export type ContexteVerification = { racine: string; cwd: string; sansCasse: boolean; outils?: OutilsDuMoteur };
+/** Racine du dossier Mnemo, dossier courant de l'action, disque sans casse ; `outils` : ceux du moteur de la session. */
+export type ContexteVerification = { racine: string; cwd: string; sansCasse: boolean; outils: OutilsDuMoteur };
 
 /** Motif de la règle qui correspond, null si aucun ; la cause si la correspondance ne peut pas être calculée. */
 type Correspondance = { motif: string } | { cause: CauseNonVerifiee } | null;
 
 function motifDeChemins(regle: Regle, action: ActionOutil, contexte: ContexteVerification, outils: OutilsDuMoteur): Correspondance {
-	const chemins = cheminsTouches(action, contexte.racine, contexte.cwd, contexte.sansCasse, outils);
+	const chemins = cheminsTouches(action, outils, contexte.racine, contexte.cwd, contexte.sansCasse);
 	if (chemins === null) return null;
 	const racine = absolu(contexte.racine, '/');
 	for (const chemin of chemins) {
@@ -433,7 +432,7 @@ function motifDeCommandes(regle: Regle, action: ActionOutil, outils: OutilsDuMot
  * pour être comparée ne se vérifient pas : refus avec la cause. Sans aucune consigne, l'action est permise.
  */
 export function verifier(consignes: { texte: string; regle: Regle }[], action: ActionOutil | ActionNonLue, contexte: ContexteVerification): Verdict {
-	const outils = contexte.outils ?? OUTILS_CLAUDE_CODE;
+	const { outils } = contexte;
 	for (const { texte, regle } of consignes) {
 		const invalide = motifRegleInvalide(regle);
 		if (invalide !== null) return { refus: true, cause: 'consigne_illisible', detail: `« ${texte} » : ${invalide}` };

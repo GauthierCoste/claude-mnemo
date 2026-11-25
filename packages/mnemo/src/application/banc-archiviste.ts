@@ -4,7 +4,8 @@ import type { Fait } from '../domaine/fait.ts';
 import { lireFiche } from '../domaine/fiche.ts';
 import { MOTS_VIDES } from '../domaine/requete.ts';
 import { typeSourcePersonnel } from '../domaine/regles.ts';
-import type { ActionOutil } from '../domaine/regles-verifiees.ts';
+import type { ActionOutil, ContexteVerification } from '../domaine/regles-verifiees.ts';
+import { OUTILS_CLAUDE_CODE } from '../domaine/moteurs/claude-code/outils.ts';
 import { descripteurDeSource } from '../domaine/source.ts';
 import { ecrireEtCommiter, lienDeMention, sousVerrou } from './commun.ts';
 import type { Dependances } from './ports.ts';
@@ -247,8 +248,8 @@ export async function deposerFiches(dep: Dependances, fiches: { chemin: string; 
 	return sousVerrou(dep, () => ecrireEtCommiter(dep, fiches, message));
 }
 
-/** Racine et dossier courant fictifs des actions rejouées (la vérification ne touche pas au disque). */
-export const CONTEXTE_CONSIGNES = { racine: '/banc', cwd: '/banc/code/heron', sansCasse: false };
+/** Racine et dossier courant fictifs des actions rejouées (la vérification ne touche pas au disque) ; outils de Claude Code, le moteur des bancs. */
+export const CONTEXTE_CONSIGNES: ContexteVerification = { racine: '/banc', cwd: '/banc/code/heron', sansCasse: false, outils: OUTILS_CLAUDE_CODE };
 const SOURCE_BANC: SourceProposee = { ref: 'utilisateur banc de consignes', type: 'utilisateur' };
 /** Le banc mesure ce qui est servi, pas la latence d'un hook : `servir` a tout son temps. */
 const ECHEANCE_SERVIR_MS = 10_000;

@@ -1,6 +1,5 @@
 /** Ce qu'un appel d'outil de la session dit pour le contexte servi : la fiche lue ou écrite. */
 import { cheminValide } from './chemin.ts';
-import { OUTILS_CLAUDE_CODE } from './moteurs/claude-code/outils.ts';
 import type { OutilsDuMoteur } from './moteurs/moteur.ts';
 import { estObjet } from './valeurs.ts';
 
@@ -15,8 +14,8 @@ function cheminDeFiche(brut: string | null): string | null {
 	return chemin !== null && chemin.endsWith('.md') ? chemin : null;
 }
 
-/** `outils` : ceux du moteur de la session (préfixe de ses outils MCP ; Claude Code par défaut). */
-export function ficheTouchee(appel: AppelOutil, outils: Pick<OutilsDuMoteur, 'prefixeMcp'> = OUTILS_CLAUDE_CODE): FicheTouchee | null {
+/** `outils` : ceux du moteur de la session (préfixe de ses outils MCP). */
+export function ficheTouchee(appel: AppelOutil, outils: Pick<OutilsDuMoteur, 'prefixeMcp'>): FicheTouchee | null {
 	if (!appel.nom.startsWith(outils.prefixeMcp)) return null;
 	const outil = appel.nom.slice(outils.prefixeMcp.length);
 	if (outil === 'lire' || outil === 'voisins') {

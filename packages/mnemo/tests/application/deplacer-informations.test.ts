@@ -5,6 +5,7 @@ import { demandeDEntretien } from '../../src/application/validation.ts';
 import type { Fait } from '../../src/domaine/fait.ts';
 import { lireFiche } from '../../src/domaine/fiche.ts';
 import { ficheTouchee } from '../../src/domaine/outil-de-session.ts';
+import { OUTILS_CLAUDE_CODE as CC } from '../../src/domaine/moteurs/claude-code/outils.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
 
 const fiche = (type: string, titre: string, corps = '', extra = '') =>
@@ -266,6 +267,6 @@ describe('deplacer_informations : outil', () => {
 	});
 
 	it('ficheTouchee : la fiche qui reçoit les informations', () => {
-		expect(ficheTouchee({ nom: 'mcp__mnemo__entretenir', entree: { action: 'deplacer_informations', id: 'notes/a.md', ancres: ['f-0001'], dans: 'notes/b.md' } })).toEqual({ chemin: 'notes/b.md', action: 'ecrite' });
+		expect(ficheTouchee({ nom: 'mcp__mnemo__entretenir', entree: { action: 'deplacer_informations', id: 'notes/a.md', ancres: ['f-0001'], dans: 'notes/b.md' } }, CC)).toEqual({ chemin: 'notes/b.md', action: 'ecrite' });
 	});
 });

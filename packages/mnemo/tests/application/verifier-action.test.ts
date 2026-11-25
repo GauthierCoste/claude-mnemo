@@ -9,9 +9,10 @@ import type { ActionNonLue, ActionOutil } from '../../src/domaine/regles-verifie
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { DEPOT_ABSENT, fauxPorts } from '../aides/faux-ports.ts';
+import { OUTILS_CLAUDE_CODE } from '../../src/domaine/moteurs/claude-code/outils.ts';
 
 const RACINE = '/r';
-const ctx = { racine: RACINE, cwd: '/r/code/vela', sansCasse: false };
+const ctx = { racine: RACINE, cwd: '/r/code/vela', sansCasse: false, outils: OUTILS_CLAUDE_CODE };
 const consigne = (texte: string, portee: string, niveau: string, regle: string) =>
 	`---\nid: C\ntype: consigne\nupdated: 2026-11-01\nportee: ${portee}\nniveau: ${niveau}\nrepetitions: []\nregle: ${regle}\n---\n# C\n\n${texte}\n`;
 
