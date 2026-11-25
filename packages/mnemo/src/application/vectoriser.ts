@@ -18,7 +18,8 @@ export type OptionsVectoriser = {
 	progression?: (faits: number, total: number) => void;
 	/**
 	 * `false` : le reste n'est pas compté à la fin (`restants` : null), pour un appelant qui ne le lit pas (un comptage parcourt
-	 * l'index). Le total d'une passe qui a à faire est compté une fois quand même : l'avancement affiché porte sur lui.
+	 * l'index). Le total d'une passe de plus d'un lot est compté une fois quand même, après le premier lot réussi : l'avancement
+	 * affiché porte sur lui (une passe d'un seul lot, le cas d'une recherche, ne compte rien).
 	 */
 	compter?: boolean;
 };
@@ -43,13 +44,13 @@ export async function vectoriser(dep: Dependances, options: OptionsVectoriser): 
 		const lot = await dep.index.aVectoriser(modele, LOT);
 		if (lot.length === 0) return { faits, restants: 0 };
 		if (lot.some((a) => calcules.has(a.id))) return { faits, restants: await restants() };
-		// compté une fois par passe, s'il y a à faire : l'avancement affiché et la progression portent sur la passe entière
-		if (total === null) total = faits + (await dep.index.nombreAVectoriser(modele));
+		// total de la passe compté une fois, après un premier lot réussi (avant : inconnu) ; l'avancement affiché porte sur lui
+		if (total === null && faits > 0) total = faits + (await dep.index.nombreAVectoriser(modele));
 		const reste = fin - Date.now();
 		if (reste <= 0) return { faits, restants: await restants() };
 		const vecteurs = await dep.sens.vecteurs(
 			lot.map((a) => a.texte),
-			{ budgetMs: Math.min(reste, APPEL_MAX_MS), demarrer: options.demarrer, activite: { operation: 'vectorisation', avancement: { faits, total: Math.max(total, faits) } } },
+			{ budgetMs: Math.min(reste, APPEL_MAX_MS), demarrer: options.demarrer, activite: { operation: 'vectorisation', avancement: { faits, total: total === null ? null : Math.max(total, faits) } } },
 		);
 		// Absent, trop lent ou réponse inutilisable (nombre ou dimensions incohérents) : la recherche se fera par les mots.
 		const dimension = vecteurs?.[0]?.length ?? 0;
@@ -63,6 +64,9 @@ export async function vectoriser(dep: Dependances, options: OptionsVectoriser): 
 		);
 		for (const a of lot) calcules.add(a.id);
 		faits += lot.length;
-		options.progression?.(faits, Math.max(total, faits));
+		if (options.progression !== undefined) {
+			total ??= faits + (await dep.index.nombreAVectoriser(modele));
+			options.progression(faits, Math.max(total, faits));
+		}
 	}
 }

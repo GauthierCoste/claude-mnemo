@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, stat, utimes, writeFile } from 'node:fs/promi
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { avecActivite, dossierActivite, lireActivites, REPRISE_MS } from '../../src/infra/modeles/activite.ts';
+import { avecActivite, dossierActivite, lireActivites, MARGE_ECHEANCE_MS, REPRISE_MS } from '../../src/infra/modeles/activite.ts';
 import type { DescriptionActivite } from '../../src/infra/modeles/activite.ts';
 import { piecesPourPlateforme } from '../../src/infra/modeles/catalogue.ts';
 import { rerankerLlama, sensLlama } from '../../src/infra/modeles/client-llama.ts';
@@ -27,15 +27,23 @@ async function attendreQue(condition: () => Promise<boolean> | boolean, delaiMs 
 	throw new Error('condition jamais remplie');
 }
 
-/** Fichiers d'activité présents, et leur contenu. */
+/** Fichiers d'activité présents, et leur contenu (un fichier retiré pendant la lecture n'est pas compté). */
 async function fichiers(serveurs: string): Promise<{ nom: string; contenu: Record<string, unknown> }[]> {
 	const ici = dossierActivite(serveurs);
 	if (!existsSync(ici)) return [];
 	const noms = (await readdir(ici)).filter((n) => n.endsWith('.json'));
-	return Promise.all(noms.map(async (nom) => ({ nom, contenu: JSON.parse(await readFile(join(ici, nom), 'utf8')) as Record<string, unknown> })));
+	const lus = await Promise.all(
+		noms.map(async (nom) => {
+			const texte = await readFile(join(ici, nom), 'utf8').catch(() => null);
+			return texte === null ? [] : [{ nom, contenu: JSON.parse(texte) as Record<string, unknown> }];
+		}),
+	);
+	return lus.flat();
 }
 
-const RECHERCHE: DescriptionActivite = { operation: 'recherche', dossier: '/racine', session: 's1', avancement: null };
+const RECHERCHE: DescriptionActivite = { operation: 'recherche', dossier: '/racine', session: 's1', jusqueMs: Date.now() + 60_000, avancement: null };
+/** Retrait fait sans être attendu : vu peu après. */
+const retire = (serveurs: string) => attendreQue(async () => (await fichiers(serveurs)).length === 0);
 
 describe('fichiers d’activité', () => {
 	it('écrit autour de l’action (0600, dossier 0700, sans texte), retiré à la fin, même en échec', async () => {
@@ -52,10 +60,10 @@ describe('fichiers d’activité', () => {
 		expect(pendant).toHaveLength(1);
 		expect(pendant[0]!.nom).toMatch(new RegExp(`^${process.pid}-\\d+\\.json$`, 'u'));
 		const { depuisMs, ...reste } = pendant[0]!.contenu;
-		expect(reste).toEqual({ operation: 'recherche', dossier: '/racine', session: 's1', avancement: null });
+		expect(reste).toEqual({ operation: 'recherche', dossier: '/racine', session: 's1', jusqueMs: RECHERCHE.jusqueMs, avancement: null });
 		expect(typeof depuisMs).toBe('number');
 		if (process.platform !== 'win32') expect(droits).toEqual([0o700, 0o600]);
-		expect(await fichiers(serveurs)).toEqual([]);
+		await retire(serveurs);
 		// en échec : l'erreur passe, le fichier est retiré
 		await expect(
 			avecActivite(serveurs, RECHERCHE, async () => {
@@ -63,21 +71,21 @@ describe('fichiers d’activité', () => {
 				throw new Error('panne');
 			}),
 		).rejects.toThrow('panne');
-		expect(await fichiers(serveurs)).toEqual([]);
+		await retire(serveurs);
 		expect((await readdir(dossierActivite(serveurs))).filter((n) => n.includes('.tmp-'))).toEqual([]);
 	});
 
 	it('vectorisation : un seul fichier pour la passe, avancement réécrit au plus une fois par seconde, retiré après la reprise', async () => {
 		const serveurs = await dossierTemporaire();
 		const lot = (faits: number) =>
-			avecActivite(serveurs, { operation: 'vectorisation', dossier: '/racine', session: null, avancement: { faits, total: 640 } }, async () => {
+			avecActivite(serveurs, { operation: 'vectorisation', dossier: '/racine', session: null, jusqueMs: Date.now() + 120_000, avancement: { faits, total: faits === 0 ? null : 640 } }, async () => {
 				await attendre(20);
 			});
 		for (let faits = 0; faits < 320; faits += 64) await lot(faits);
 		const premiers = await fichiers(serveurs);
 		expect(premiers).toHaveLength(1);
 		// lots rapides : seul le premier avancement est écrit
-		expect(premiers[0]!.contenu['avancement']).toEqual({ faits: 0, total: 640 });
+		expect(premiers[0]!.contenu['avancement']).toEqual({ faits: 0, total: null });
 		await attendre(REPRISE_MS - 300);
 		await lot(320);
 		await attendre(400);
@@ -87,14 +95,33 @@ describe('fichiers d’activité', () => {
 		expect(apres.map((f) => f.nom)).toEqual([premiers[0]!.nom]);
 		expect(apres[0]!.contenu['avancement']).toEqual({ faits: 384, total: 640 });
 		expect(apres[0]!.contenu['depuisMs']).toBe(premiers[0]!.contenu['depuisMs']);
+		// une nouvelle passe qui reprend le fichier (dans la seconde) : son propre début, écrit aussitôt
+		await attendre(50);
+		await lot(0);
+		const nouvelle = await fichiers(serveurs);
+		expect(nouvelle.map((f) => f.nom)).toEqual([premiers[0]!.nom]);
+		expect(nouvelle[0]!.contenu['depuisMs']).toBeGreaterThan(premiers[0]!.contenu['depuisMs'] as number);
+		expect(nouvelle[0]!.contenu['avancement']).toEqual({ faits: 0, total: null });
 		await attendreQue(async () => (await fichiers(serveurs)).length === 0, REPRISE_MS + 1000);
+	});
+
+	it('échéance dépassée (pid réutilisé) : ignoré et retiré même d’un pid vivant ; dans la marge : gardé', async () => {
+		const serveurs = await dossierTemporaire();
+		const ici = dossierActivite(serveurs);
+		await mkdir(ici, { recursive: true });
+		const activite = (jusqueMs: number) => JSON.stringify({ operation: 'recherche', dossier: '/r', session: null, depuisMs: 1, jusqueMs, avancement: null });
+		await writeFile(join(ici, `${process.pid}-801.json`), activite(Date.now() - MARGE_ECHEANCE_MS - 1000));
+		await writeFile(join(ici, `${process.pid}-802.json`), activite(Date.now() - 1000));
+		expect(await lireActivites(serveurs)).toHaveLength(1);
+		expect(await readdir(ici)).toEqual([`${process.pid}-802.json`]);
 	});
 
 	it('lecture : triées par début ; pid mort ignoré et retiré ; illisible ou trop vieux (pid vivant) ignoré sans être retiré', async () => {
 		const serveurs = await dossierTemporaire();
 		const ici = dossierActivite(serveurs);
 		await mkdir(ici, { recursive: true });
-		const activite = (depuisMs: number, operation = 'recherche') => JSON.stringify({ operation, dossier: '/r', session: null, depuisMs, avancement: null });
+		const jusqueMs = Date.now() + 60_000;
+		const activite = (depuisMs: number, operation = 'recherche') => JSON.stringify({ operation, dossier: '/r', session: null, depuisMs, jusqueMs, avancement: null });
 		await writeFile(join(ici, `${process.pid}-901.json`), activite(2000, 'injection'));
 		await writeFile(join(ici, `${process.pid}-902.json`), activite(1000));
 		await writeFile(join(ici, `${process.pid}-903.json`), '{');
@@ -107,8 +134,8 @@ describe('fichiers d’activité', () => {
 		await writeFile(join(ici, `${mort}-1.json`), activite(10));
 		await writeFile(join(ici, `${mort}-2.json.tmp-abc`), activite(10));
 		expect(await lireActivites(serveurs)).toEqual([
-			{ operation: 'recherche', dossier: '/r', session: null, depuisMs: 1000, avancement: null },
-			{ operation: 'injection', dossier: '/r', session: null, depuisMs: 2000, avancement: null },
+			{ operation: 'recherche', dossier: '/r', session: null, depuisMs: 1000, jusqueMs, avancement: null },
+			{ operation: 'injection', dossier: '/r', session: null, depuisMs: 2000, jusqueMs, avancement: null },
 		]);
 		expect((await readdir(ici)).sort()).toEqual([`${process.pid}-901.json`, `${process.pid}-902.json`, `${process.pid}-903.json`, `${process.pid}-904.json`, `${process.pid}-905.json`]);
 		expect(await lireActivites(await dossierTemporaire())).toEqual([]);
@@ -162,9 +189,12 @@ describe('activité des appels aux modèles', () => {
 		await attendreQue(async () => (await fichiers(b.serveurs)).length === 1, 15_000);
 		const [pendant] = await fichiers(b.serveurs);
 		expect(pendant!.contenu).toMatchObject({ operation: 'vectorisation', dossier: b.racine, session: null, avancement: null });
+		// échéance : la fin du budget de l'appel
+		expect(pendant!.contenu['jusqueMs']).toBeGreaterThan(Date.now());
+		expect(pendant!.contenu['jusqueMs']).toBeLessThanOrEqual(Date.now() + 15_000);
 		expect(JSON.stringify(pendant!.contenu)).not.toMatch(/"a"|"b"/u);
 		expect(await appel).toHaveLength(2);
-		expect(await fichiers(b.serveurs)).toEqual([]);
+		await retire(b.serveurs);
 		// activité nommée par l'appelant : reprise telle quelle
 		const reranker = rerankerLlama(b.racine, { env: b.env }).noter('question secrète', ['texte'], { budgetMs: 5000, demarrer: true, activite: { operation: 'injection', session: 's9' } });
 		await attendreQue(async () => (await fichiers(b.serveurs)).length === 1);
@@ -172,7 +202,7 @@ describe('activité des appels aux modèles', () => {
 		expect(noter!.contenu).toMatchObject({ operation: 'injection', session: 's9' });
 		expect(JSON.stringify(noter!.contenu)).not.toContain('secrète');
 		expect(await reranker).toHaveLength(1);
-		expect(await fichiers(b.serveurs)).toEqual([]);
+		await retire(b.serveurs);
 	}, 30_000);
 
 	it('appel en échec (HTTP 500) : null, et le fichier est retiré', async () => {
@@ -181,7 +211,7 @@ describe('activité des appels aux modèles', () => {
 		await attendreQue(async () => (await fichiers(b.serveurs)).length === 1, 15_000);
 		expect((await fichiers(b.serveurs))[0]!.contenu['operation']).toBe('recherche');
 		expect(await appel).toBeNull();
-		expect(await fichiers(b.serveurs)).toEqual([]);
+		await retire(b.serveurs);
 	}, 30_000);
 
 	it('modèle exclu par le niveau, ou serveur pas prêt sans démarrer : rien d’écrit', async () => {

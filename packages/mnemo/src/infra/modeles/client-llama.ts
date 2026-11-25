@@ -147,7 +147,7 @@ async function appeler<T>(lieu: ReturnType<typeof lieuDesServeurs>, type: TypeSe
 		if (serveur === null) return null;
 		await toucher(dossier);
 		const a = options.activite;
-		const description = { operation: a?.operation ?? operation, dossier: lieu.racine, session: a?.session ?? null, avancement: a?.avancement ?? null };
+		const description = { operation: a?.operation ?? operation, dossier: lieu.racine, session: a?.session ?? null, jusqueMs: finMs, avancement: a?.avancement ?? null };
 		const resultat = await avecActivite(dossier, description, () => appel(serveur, finMs));
 		if (typeof resultat !== 'string') return resultat;
 		if (!resultat.startsWith('délai')) oublierServeur(serveur);

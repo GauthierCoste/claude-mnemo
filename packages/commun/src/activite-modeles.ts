@@ -7,5 +7,8 @@ export type OperationModele = (typeof OPERATIONS_MODELES)[number];
 
 export const estOperationModele = (v: unknown): v is OperationModele => typeof v === 'string' && (OPERATIONS_MODELES as readonly string[]).includes(v);
 
-/** Avancement d'une vectorisation : vecteurs calculés, et total à calculer, sur l'ensemble de la passe. */
-export type AvancementModele = { faits: number; total: number };
+/**
+ * Avancement d'une vectorisation : vecteurs calculés, et total à calculer, sur l'ensemble de la passe ; `total` null : pas
+ * encore compté (premier lot d'une passe).
+ */
+export type AvancementModele = { faits: number; total: number | null };

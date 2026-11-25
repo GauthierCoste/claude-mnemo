@@ -142,10 +142,10 @@ export async function preparerModeles(dep: Dependances): Promise<{ sens: boolean
 	let sens = false;
 	if (dep.sens.modele() !== null) {
 		await vectoriser(dep, { budgetMs: Infinity, demarrer: true, compter: false });
-		const essai = await dep.sens.vecteurs(['essai'], { budgetMs: BUDGET_SENS_MS, demarrer: true }).catch(() => null);
+		const essai = await dep.sens.vecteurs(['essai'], { budgetMs: BUDGET_SENS_MS, demarrer: true, activite: { operation: 'vectorisation' } }).catch(() => null);
 		sens = essai !== null && essai.length === 1;
 	}
-	const notes = await dep.reranker.noter('essai', ['essai'], { budgetMs: BUDGET_RERANKER_MS, demarrer: true }).catch(() => null);
+	const notes = await dep.reranker.noter('essai', ['essai'], { budgetMs: BUDGET_RERANKER_MS, demarrer: true, activite: { operation: 'recherche' } }).catch(() => null);
 	return { sens, reranker: notes !== null && notes.length === 1 };
 }
 

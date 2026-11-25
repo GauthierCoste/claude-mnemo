@@ -82,7 +82,7 @@ describe('vectoriser', () => {
 		expect(sens.appels[0]!.options.demarrer).toBe(false);
 	});
 
-	it('compter: false : le reste n\'est jamais compté (ni au budget, ni en panne), le total de la passe une fois', async () => {
+	it('compter: false : le reste n\'est jamais compté (ni au budget, ni en panne), le total d’une passe de plusieurs lots une fois', async () => {
 		const { dep, sens } = await memoire(199);
 		const nombre = dep.index.nombreAVectoriser.bind(dep.index);
 		let comptes = 0;
@@ -91,24 +91,40 @@ describe('vectoriser', () => {
 		expect((await vectoriser(dep, { budgetMs: 100, demarrer: true, compter: false })).restants).toBeNull();
 		sens.panne = true;
 		expect(await vectoriser(dep, { budgetMs: 2000, demarrer: true, compter: false })).toEqual({ faits: 0, restants: null });
-		// seul le total de chaque passe qui a à faire est compté, une fois, au premier lot (avancement affiché)
-		expect(comptes).toBe(2);
-		// la recherche d'un outil ne lit pas ce reste : seul le total de sa passe est compté
+		// seul le total d'une passe qui a réussi un premier lot et en a un autre à faire est compté, une fois (avancement affiché)
+		expect(comptes).toBe(1);
+		// la recherche d'un outil ne lit pas ce reste (et le modèle en panne n'a réussi aucun lot) : rien de compté
 		await chercherAvecAvis(dep, { texte: 'numéro' });
-		expect(comptes).toBe(3);
-		// par défaut, le reste est compté aussi
+		expect(comptes).toBe(1);
+		// par défaut, le reste est compté
 		expect((await vectoriser(dep, { budgetMs: 2000, demarrer: true })).restants).toBeGreaterThan(0);
-		expect(comptes).toBe(5);
+		expect(comptes).toBe(2);
 	});
 
 	it('activité : vectorisation, avec l’avancement de la passe entière (pas du lot)', async () => {
 		const { dep, sens } = await memoire(140);
 		await vectoriser(dep, { ...SANS_LIMITE, compter: false });
 		expect(sens.appels.map((a) => a.options.activite)).toEqual([
-			{ operation: 'vectorisation', avancement: { faits: 0, total: 141 } },
+			{ operation: 'vectorisation', avancement: { faits: 0, total: null } },
 			{ operation: 'vectorisation', avancement: { faits: 64, total: 141 } },
 			{ operation: 'vectorisation', avancement: { faits: 128, total: 141 } },
 		]);
+	});
+
+	it('une passe d’un seul lot ne compte rien ; une passe de plusieurs lots compte son total une fois', async () => {
+		const { dep } = await memoire(30);
+		const nombre = dep.index.nombreAVectoriser.bind(dep.index);
+		let comptes = 0;
+		dep.index = { ...dep.index, nombreAVectoriser: (m) => (comptes++, nombre(m)) };
+		expect(await vectoriser(dep, { ...SANS_LIMITE, compter: false })).toEqual({ faits: 31, restants: 0 });
+		expect(comptes).toBe(0);
+		// mnemo index hors terminal (ni progression ni compter: false) : un seul comptage pour la passe
+		const autre = await memoire(140);
+		let autres = 0;
+		const n = autre.dep.index.nombreAVectoriser.bind(autre.dep.index);
+		autre.dep.index = { ...autre.dep.index, nombreAVectoriser: (m) => (autres++, n(m)) };
+		expect(await vectoriser(autre.dep, SANS_LIMITE)).toEqual({ faits: 141, restants: 0 });
+		expect(autres).toBe(1);
 	});
 
 	it('progression : appelée après chaque lot avec le total', async () => {
