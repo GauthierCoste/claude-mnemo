@@ -6,6 +6,7 @@
  * quota n'est connu. Mistral Vibe et GitHub Copilot CLI n'en communiquent aucun de lisible : le panneau Contexte de leurs
  * sessions le dit.
  */
+import { IDS_MOTEURS } from '@mnemo/commun';
 import type { IdMoteur } from '@mnemo/commun';
 import type { QuotaVue, QuotasDesMoteursVue, QuotasVue } from '@mnemo/contrat';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
@@ -34,20 +35,28 @@ export function quotasEnCours(q: QuotasVue | null, maintenant: number): QuotasVu
 	return { ...(valable(q?.cinqHeures) ? { cinqHeures: q!.cinqHeures } : {}), ...(valable(q?.semaine) ? { semaine: q!.semaine } : {}) };
 }
 
-/** Abonnements montrés, dans cet ordre, et leur libellé. */
-const ABONNEMENTS: readonly { moteur: IdMoteur; libelle: string }[] = [
-	{ moteur: 'claude-code', libelle: 'Claude' },
-	{ moteur: 'codex', libelle: 'ChatGPT' },
-];
+/**
+ * Libellé de l'abonnement dont Mnemo lit les quotas pour chaque moteur, montrés dans l'ordre de `IDS_MOTEURS` ; null : ce
+ * moteur n'en communique pas de lisibles. Un moteur de plus doit dire le sien.
+ */
+const ABONNEMENTS: Readonly<Record<IdMoteur, string | null>> = {
+	'claude-code': 'Claude',
+	codex: 'ChatGPT',
+	'mistral-vibe': null,
+	'copilot-cli': null,
+};
 
 /** Libellé de l'abonnement dont Mnemo lit les quotas pour ce moteur ; null : ce moteur n'en communique pas de lisibles. */
-export const abonnementDuMoteur = (moteur: IdMoteur): string | null => ABONNEMENTS.find((a) => a.moteur === moteur)?.libelle ?? null;
+export const abonnementDuMoteur = (moteur: IdMoteur): string | null => ABONNEMENTS[moteur];
 
 export type AbonnementEnCours = { moteur: IdMoteur; libelle: string; quotas: QuotasVue };
 
-/** Les abonnements qui ont au moins une fenêtre encore valable, dans l'ordre de `ABONNEMENTS`. */
+/** Les abonnements qui ont au moins une fenêtre encore valable, dans l'ordre de `IDS_MOTEURS`. */
 export function abonnementsEnCours(moteurs: QuotasDesMoteursVue, maintenant: number): AbonnementEnCours[] {
-	return ABONNEMENTS.map(({ moteur, libelle }) => ({ moteur, libelle, quotas: quotasEnCours(moteurs[moteur] ?? null, maintenant) })).filter((a) => a.quotas.cinqHeures !== undefined || a.quotas.semaine !== undefined);
+	return IDS_MOTEURS.flatMap((moteur) => {
+		const libelle = ABONNEMENTS[moteur];
+		return libelle === null ? [] : [{ moteur, libelle, quotas: quotasEnCours(moteurs[moteur] ?? null, maintenant) }];
+	}).filter((a) => a.quotas.cinqHeures !== undefined || a.quotas.semaine !== undefined);
 }
 
 /** « Claude : 5 heures : 42 % (remise 18:00) · semaine : 61 % (remise lun. 09:00) ». */
