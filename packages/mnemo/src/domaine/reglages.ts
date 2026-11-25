@@ -96,7 +96,7 @@ export const CHAMPS_REGLAGES: readonly ChampReglage[] = [
 		cle: 'contexte.seuilPiste',
 		groupe: 'contexte',
 		libelle: 'Seuil des pistes',
-		explication: 'Note minimale d’une piste (carte proposée sans injecter la fiche dans la session), jamais au-dessus du seuil d’injection. Agit seulement avec une note calibrée ; sans elle, les premières de l’ordre.',
+		explication: 'Note minimale d’une piste (carte proposée sans injecter la fiche dans la session), jamais au-dessus du seuil d’injection. Agit dès qu’une note est apprise, même refusée ; sans note apprise, les premières de l’ordre.',
 		genre: 'entier',
 		defaut: 10,
 		min: 0,

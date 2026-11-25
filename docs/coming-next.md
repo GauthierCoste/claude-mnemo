@@ -12,7 +12,7 @@
   neutral notes, the places named, the notes linked to a note injected by hand), refined by the reranker in the
   background. A confidence score, one small model per level of the models, is learned on your judgements (`mnemo banc
   contexte --extraire`, `--juger`, `--apprendre`; coefficients in `.mnemo/coefficients-note.json`). Accepted, it shows
-  calibrated percentages, chooses the leads (`contexte.seuilPiste`, 30 %) and injects a note whole at the message itself
+  calibrated percentages, chooses the leads (`contexte.seuilPiste`, 10 %) and injects a note whole at the message itself
   (`contexte.seuilInjection`, 90 %, 2 at most per message); refused, it orders the ranking and chooses the leads without
   %. Automatic injection is watched over its last 100 injections and stops when the lower Wilson bound falls under 0.75;
   « Réactiver » starts it again. The history of your gestures gives each note a prior; ✗ offers « Pas pour cette

@@ -485,7 +485,7 @@ model files it was learned with. Three cases:
   message or be linked to an injected note (at the first message, the notes of the folder of the position still qualify).
 
 **Leads.** With a learned score, each meaningful message sends as leads the new notes whose score reaches
-`contexte.seuilPiste` (30 % by default), best first, at most `contexte.pistesParMessage` (3 by default). A note whose title
+`contexte.seuilPiste` (10 % by default), best first, at most `contexte.pistesParMessage` (3 by default). A note whose title
 or alias is written in your message (whole words, at least 4 letters) is a lead at any message, with the reason *nommée*,
 at most `contexte.cartesNommees` (5 by default), in the order of the message. Naming the place of a note from elsewhere
 unlocks the notes stored under it, and only those that are named too are proposed.

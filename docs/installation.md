@@ -204,7 +204,7 @@ falls back to its default with a warning, never a crash.
 | Minimum similarity of a search result by meaning, 0.1 to 0.95 (`contexte.similariteRecherche`) | 0.45 | immediately |
 | Threshold of automatic injection: score a note needs to be injected whole at the message, 50 to 100 %, 100: never; only with an accepted confidence score (`contexte.seuilInjection`) | 90 % | immediately |
 | Notes injected automatically per message, 0 to 5 (`contexte.injectionsParMessage`) | 2 | immediately |
-| Threshold of leads: score a new note needs to be proposed as a lead, 0 to 100 %, never above the threshold of injection (`contexte.seuilPiste`) | 30 % | immediately |
+| Threshold of leads: score a new note needs to be proposed as a lead, 0 to 100 %, never above the threshold of injection (`contexte.seuilPiste`) | 10 % | immediately |
 | Leads per message, 0 to 10 (`contexte.pistesParMessage`) | 3 | immediately |
 | Leads for the notes named in a message, 0 to 15, per message (`contexte.cartesNommees`) | 5 | immediately |
 | Weight of a note you inject by hand on the notes linked to it, 0 to 1 (`contexte.poidsInjection`) | 0.25 | immediately |
