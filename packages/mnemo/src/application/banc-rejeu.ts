@@ -313,11 +313,11 @@ export function mesurerJugements(messages: readonly MessageRejoue[], options: Op
 }
 
 /** Un message se rejoue s'il a des candidates, n'est pas sauté, et porte au moins un jugement (ou est marqué silence). */
-const rejouable = (c: CasContexte): boolean =>
+export const rejouable = (c: CasContexte): boolean =>
 	c.candidates !== undefined && c.candidates.length > 0 && c.saute !== true && (c.silence || Object.keys(c.jugements ?? {}).length > 0);
 
 /** Silence : marqué, ou toutes les fiches jugées sans aucune pertinente ni indécise. */
-const estSilence = (c: CasContexte): boolean => {
+export const estSilence = (c: CasContexte): boolean => {
 	if (c.silence) return true;
 	const jugements = c.jugements ?? {};
 	return (c.candidates ?? []).every((x) => jugements[x.chemin] === 'non_pertinente');

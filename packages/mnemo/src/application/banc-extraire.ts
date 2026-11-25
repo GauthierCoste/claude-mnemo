@@ -9,6 +9,7 @@ import { empreinte } from '../domaine/empreinte.ts';
 import { choisirMessages, cleDeMessage, entrelacer } from '../domaine/echantillon-banc.ts';
 import type { MessageDuJournal } from '../domaine/echantillon-banc.ts';
 import { raisonDeMutisme } from '../domaine/message-muet.ts';
+import type { IdentiteDesModeles } from '../domaine/modele-de-note.ts';
 import { messagePrecedent } from '../domaine/requete-du-message.ts';
 import type { InjectionManuelle } from '../domaine/signal-injection.ts';
 import { designe } from './banc-contexte.ts';
@@ -52,6 +53,8 @@ export type LectureDuJournal = {
 export type MessageAExtraire = MessageDuJournal & {
 	injectionsDuJournal?: { chemin: string; messages: number; position: string | null }[];
 	injectees?: InjectionManuelle[];
+	/** `--completer` : les candidates déjà au fichier, dont les signaux sont recalculés avec les modèles installés. */
+	connues?: string[];
 };
 
 /**
@@ -122,6 +125,8 @@ export type OptionsExtraction = {
 	avancement?: (faits: number, total: number) => void;
 	/** Gestes lus dans l'état (a priori, écartées toujours) ; absent : a priori 0, aucune écartée toujours. */
 	gestes?: GestesDuBanc;
+	/** Identité des modèles installés (GGUF), enregistrée dans chaque cas pour les modèles qui ont répondu. */
+	gguf?: IdentiteDesModeles;
 };
 /**
  * `sansCandidate` : messages sans aucune fiche candidate ; `sansModele` : messages laissés parce qu'un modèle disponible n'a pas
@@ -187,10 +192,17 @@ export async function extraireJugements(dep: Dependances, messages: readonly Mes
 			sansModele += 1;
 			continue;
 		}
-		const pile = new Set(listesDe.keys());
+		// la pile : les têtes des listes, et toute candidate qu'un signal de session ou un a priori désigne (le hook la classe
+		// avec ces signaux : elle doit être jugée, pas laissée au hasard du tirage hors pile)
+		const designee = (c: string) => Object.values(signauxDe.get(c) ?? {}).some((x) => (x.signalSession ?? 0) > 0 || (x.apriori ?? 0) !== 0);
+		const pile = new Set([...listesDe.keys(), ...pool.filter(designee)]);
+		const tirees = pile.size === 0 ? [] : horsPile(m.message, pool, pile);
+		// --completer : les candidates déjà au fichier reçoivent leurs signaux recalculés (les autres champs restent ceux du fichier)
+		const connues = (m.connues ?? []).filter((c) => !pile.has(c) && !tirees.includes(c) && signauxDe.has(c));
 		const candidates: CandidateAJuger[] = [
-			...[...pile].sort().map((chemin) => candidate(memoire, chemin, LISTES_DU_BANC.filter((l) => listesDe.get(chemin)!.has(l)), signauxDe.get(chemin) ?? {}, false)),
-			...(pile.size === 0 ? [] : horsPile(m.message, pool, pile).map((chemin) => candidate(memoire, chemin, [], signauxDe.get(chemin) ?? {}, true))),
+			...[...pile].sort().map((chemin) => candidate(memoire, chemin, LISTES_DU_BANC.filter((l) => listesDe.get(chemin)?.has(l) === true), signauxDe.get(chemin) ?? {}, false)),
+			...tirees.map((chemin) => candidate(memoire, chemin, [], signauxDe.get(chemin) ?? {}, true)),
+			...connues.map((chemin) => candidate(memoire, chemin, [], signauxDe.get(chemin)!, false)),
 		];
 		if (candidates.length === 0) {
 			sansCandidate += 1;
@@ -210,6 +222,9 @@ export async function extraireJugements(dep: Dependances, messages: readonly Mes
 			extraitLe,
 			precedent: m.precedent,
 			modeles: { sens: disponibles.sens && repondu.sens, reranker: disponibles.reranker && repondu.reranker },
+			...(options.gguf === undefined
+				? {}
+				: { gguf: { sens: disponibles.sens && repondu.sens ? options.gguf.sens : null, reranker: disponibles.reranker && repondu.reranker ? options.gguf.reranker : null } }),
 			...(injectees.length === 0 ? {} : { injectionsManuelles: injectees }),
 			candidates,
 			jugements: {},
@@ -246,6 +261,7 @@ export function messagesDesCas(cas: readonly CasContexte[]): MessageAExtraire[] 
 			position: c.position,
 			precedent: c.precedent ?? null,
 			injectees: c.injectionsManuelles ?? [],
+			connues: (c.candidates ?? []).map((x) => x.chemin),
 		}));
 }
 
@@ -253,7 +269,9 @@ export function messagesDesCas(cas: readonly CasContexte[]): MessageAExtraire[] 
  * Ajoute les cas extraits aux cas existants. Un cas déjà connu (même position, même message) garde ses jugements et reçoit
  * les candidates qui lui manquent (pas de nouvelles fiches hors pile s'il en a déjà), et sa session, son rang, son horodatage
  * s'il ne les avait pas ; s'il était étiqueté à la main, ses `attendues` deviennent pertinentes, ses `interdites` non
- * pertinentes, et tout est non pertinent dans un cas `silence`.
+ * pertinentes, et tout est non pertinent dans un cas `silence`. Un extrait qui porte une identité des modèles (GGUF) autre
+ * que celle du cas connu, ou la même avec des signaux autres (code du hook changé) sans modèle perdu, lui donne ses signaux
+ * recalculés (par chemin), son identité et ses modèles : ses jugements restent.
  */
 export function fusionnerCas(existants: readonly CasContexte[], extraits: readonly CasContexte[]): { cas: CasContexte[]; ajoutes: number; completes: number; fichesAjoutees: number } {
 	const cle = (c: CasContexte) => JSON.stringify([c.position, c.message]);
@@ -278,7 +296,24 @@ export function fusionnerCas(existants: readonly CasContexte[], extraits: readon
 		const presentes = new Set((connu.candidates ?? []).map((c) => c.chemin));
 		const aDejaHorsPile = (connu.candidates ?? []).some((c) => c.horsPile === true);
 		const manquantes = (e.candidates ?? []).filter((c) => !presentes.has(c.chemin) && !(c.horsPile === true && aDejaHorsPile));
-		if (manquantes.length === 0 && connu.candidates !== undefined) continue;
+		const signauxDe = new Map((e.candidates ?? []).map((c) => [c.chemin, c.signaux]));
+		// même identité : signaux recalculés aussi s'ils diffèrent (le code du hook a changé : textes du reranker, cosinusZ…),
+		// sauf si un modèle qui avait répondu manque à la relance (on ne perd pas des logits pour des null)
+		const degrade = (connu.modeles?.sens === true && e.modeles?.sens === false) || (connu.modeles?.reranker === true && e.modeles?.reranker === false);
+		const autreIdentite = JSON.stringify(connu.gguf) !== JSON.stringify(e.gguf);
+		const signauxChanges = (connu.candidates ?? []).some((c) => signauxDe.has(c.chemin) && JSON.stringify(signauxDe.get(c.chemin)) !== JSON.stringify(c.signaux));
+		const recalcule = e.gguf !== undefined && connu.candidates !== undefined && (autreIdentite || (signauxChanges && !degrade));
+		if (recalcule) {
+			Object.assign(connu, {
+				gguf: e.gguf,
+				...(e.modeles === undefined ? {} : { modeles: e.modeles }),
+				candidates: connu.candidates!.map((c) => (signauxDe.has(c.chemin) ? { ...c, signaux: signauxDe.get(c.chemin)! } : c)),
+			});
+		}
+		if (manquantes.length === 0 && connu.candidates !== undefined) {
+			if (recalcule) completes += 1;
+			continue;
+		}
 		const jugements: Record<string, Jugement> = { ...connu.jugements };
 		for (const { chemin } of manquantes) {
 			if (jugements[chemin] !== undefined) continue;

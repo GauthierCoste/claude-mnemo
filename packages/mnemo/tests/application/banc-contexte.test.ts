@@ -207,6 +207,16 @@ describe('extraireJugements : mise en commun', () => {
 		const avant = await extraireJugements(dep, [{ ...duJournal({ message: 'la maquette du chantier', rang: 2 }), injectionsDuJournal: [{ chemin: YSALINE, messages: 1, position: POSITION }] }]);
 		expect(avant.cas[0]!.candidates!.map((c) => c.chemin)).toContain(ERP);
 		expect(avant.cas[0]!.injectionsManuelles).toEqual([{ chemin: YSALINE, messages: 1 }]);
+		// désignée par le signal de session : dans la pile même hors des têtes ; l'identité des modèles est enregistrée
+		const gguf = { sens: 'bge-m3-q8_0.gguf@aa473d51f451', reranker: 'bge-reranker-v2-m3-Q8_0.gguf@a43c7c9b11a4' };
+		const designee = await extraireJugements(
+			dep,
+			[{ ...duJournal({ message: 'la maquette du chantier', rang: 2 }), injectionsDuJournal: [{ chemin: YSALINE, messages: 1, position: POSITION }] }],
+			{ premieres: 1, gguf },
+		);
+		expect(designee.cas[0]!.candidates!.find((c) => c.chemin === ERP)).toMatchObject({ listes: [] });
+		expect(designee.cas[0]!.candidates!.find((c) => c.chemin === ERP)!.horsPile).toBeUndefined();
+		expect(designee.cas[0]!.gguf).toEqual(gguf);
 		const sans = await extraireJugements(dep, [duJournal({ message: 'la maquette du chantier', rang: 2 })], { premieres: 20 });
 		expect(sans.cas[0]!.candidates!.map((c) => c.chemin)).not.toContain(ERP);
 		// injectée à ce message (âge 0) : injectée entière, pas à juger ; la fiche de position servie n'est pas une injection à la main
@@ -346,13 +356,43 @@ describe('--completer : messagesDesCas et fusion', () => {
 		const carte = (chemin: string, horsPile = false) => ({ chemin, titre: chemin, ligne: '', listes: [], signaux: {}, ...(horsPile ? { horsPile: true } : {}) });
 		const existant = cas({ nom: 'x', message: 'm', session: 's', rang: 3, horodatageMs: 7, injectionsManuelles: [{ chemin: YSALINE, messages: 1 }], candidates: [carte(OUTIL), carte(GIT, true)], jugements: { [OUTIL]: 'pertinente', [GIT]: 'non_pertinente' } });
 		expect(messagesDesCas([existant, { ...existant, nom: 'sauté', saute: true }])).toEqual([
-			{ session: 's', groupe: '', rang: 3, horodatageMs: 7, message: 'm', position: POSITION, precedent: null, injectees: [{ chemin: YSALINE, messages: 1 }] },
+			{ session: 's', groupe: '', rang: 3, horodatageMs: 7, message: 'm', position: POSITION, precedent: null, injectees: [{ chemin: YSALINE, messages: 1 }], connues: [OUTIL, GIT] },
 		]);
 		const relance = { ...existant, candidates: [carte(OUTIL), carte(SOUS), carte(ERP, true)], jugements: {} };
 		const { cas: tous, completes, fichesAjoutees } = fusionnerCas([existant], [relance]);
 		expect({ completes, fichesAjoutees }).toEqual({ completes: 1, fichesAjoutees: 1 });
 		expect(tous[0]!.candidates!.map((c) => c.chemin)).toEqual([OUTIL, GIT, SOUS]);
 		expect(tous[0]!.jugements).toEqual({ [OUTIL]: 'pertinente', [GIT]: 'non_pertinente' });
+	});
+
+	it('relancé avec l’identité des modèles : signaux recalculés et identité enregistrée, jugements gardés', () => {
+		const s = (logit: number) => ({ seule: { logit, cosinus: 0.8, cosinusRelatif: 0.1, bm25Relatif: 0.5 } });
+		const existant = cas({ nom: 'x', message: 'm', session: 's', rang: 1, candidates: [{ chemin: OUTIL, titre: 'Outil', ligne: '', listes: ['sens'], signaux: s(1) }], jugements: { [OUTIL]: 'pertinente' } });
+		const gguf = { sens: 'bge-m3-q8_0.gguf@aa473d51f451', reranker: 'bge-reranker-v2-m3-Q8_0.gguf@a43c7c9b11a4' };
+		const relance = { ...existant, gguf, candidates: [{ chemin: OUTIL, titre: 'Outil', ligne: '', listes: [], signaux: s(4) }], jugements: {} };
+		const { cas: tous, completes } = fusionnerCas([existant], [relance]);
+		expect(completes).toBe(1);
+		expect(tous[0]).toMatchObject({ gguf, jugements: { [OUTIL]: 'pertinente' } });
+		expect(tous[0]!.candidates![0]).toMatchObject({ listes: ['sens'], signaux: s(4) });
+		// même identité : rien ne change
+		expect(fusionnerCas(tous, [relance]).completes).toBe(0);
+	});
+
+	it('même identité, signaux recalculés autrement (code du hook changé) : remplacés, sauf si un modèle a manqué', () => {
+		const s = (logit: number | null) => ({ seule: { logit, cosinus: 0.8, cosinusRelatif: 0.1, cosinusZ: 1.2, bm25Relatif: 0.5 } });
+		const gguf = { sens: 'bge-m3-q8_0.gguf@aa473d51f451', reranker: 'bge-reranker-v2-m3-Q8_0.gguf@a43c7c9b11a4' };
+		const modeles = { sens: true, reranker: true };
+		const existant = cas({ nom: 'x', message: 'm', session: 's', rang: 1, gguf, modeles, candidates: [{ chemin: OUTIL, titre: 'Outil', ligne: '', listes: ['sens'], signaux: s(1) }], jugements: { [OUTIL]: 'pertinente' } });
+		const relance = { ...existant, candidates: [{ chemin: OUTIL, titre: 'Outil', ligne: '', listes: [], signaux: s(3) }], jugements: {} };
+		const { cas: tous, completes } = fusionnerCas([existant], [relance]);
+		expect(completes).toBe(1);
+		expect(tous[0]!.candidates![0]).toMatchObject({ signaux: s(3) });
+		expect(tous[0]!.jugements).toEqual({ [OUTIL]: 'pertinente' });
+		// le reranker n'a pas répondu à la relance : les logits enregistrés restent
+		const sansReranker = { ...relance, modeles: { sens: true, reranker: false }, candidates: [{ chemin: OUTIL, titre: 'Outil', ligne: '', listes: [], signaux: s(null) }] };
+		const garde = fusionnerCas([existant], [sansReranker]);
+		expect(garde.completes).toBe(0);
+		expect(garde.cas[0]!.candidates![0]).toMatchObject({ signaux: s(1) });
 	});
 });
 

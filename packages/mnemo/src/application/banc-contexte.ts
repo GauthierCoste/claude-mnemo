@@ -8,6 +8,7 @@ import { servir } from './servir.ts';
 import { SANS_EXTRACTION, synchroniser } from './synchroniser.ts';
 import { raisonDeMutisme } from '../domaine/message-muet.ts';
 import type { ListeDuBanc, Signaux } from './banc-signaux.ts';
+import type { IdentiteDesModeles } from '../domaine/modele-de-note.ts';
 import type { InjectionManuelle } from '../domaine/signal-injection.ts';
 
 /**
@@ -49,6 +50,8 @@ export type CasContexte = {
 	extraitLe?: string;
 	/** Modèles qui ont répondu pour ce message à l'extraction (un message dont un modèle disponible n'a pas répondu n'est pas gardé). */
 	modeles?: { sens: boolean; reranker: boolean };
+	/** Identité des modèles (GGUF) qui ont calculé les signaux des candidates ; absente : extraites avant qu'on l'enregistre. */
+	gguf?: IdentiteDesModeles;
 	/**
 	 * Fiches injectées à la main dans la session avant ce message (ou à ce message, âge 0), reconstituées du journal : leurs
 	 * voisines sont candidates (signal de session).

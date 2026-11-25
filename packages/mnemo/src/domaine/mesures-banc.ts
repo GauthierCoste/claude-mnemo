@@ -69,3 +69,40 @@ export function plisParSession(elements: readonly { session: string }[], k = 5):
 	}
 	return elements.map(({ session }) => pliDe.get(session)!);
 }
+
+/** Générateur pseudo-aléatoire déterministe (mulberry32) : nombres dans [0, 1[, la même suite pour la même graine. */
+export function hasardFixe(graine: number): () => number {
+	let a = graine >>> 0;
+	return () => {
+		a = (a + 0x6d2b79f5) >>> 0;
+		let t = a;
+		t = Math.imul(t ^ (t >>> 15), t | 1);
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+/**
+ * Plis groupés par session, dans un ordre des sessions tiré de `graine` (chaque session, prise dans cet ordre, va au pli le
+ * moins rempli) : d'une graine à l'autre, un autre découpage, toujours sans couper une session. Déterministe pour une graine.
+ */
+export function plisParSessionMelanges(elements: readonly { session: string }[], k: number, graine: number): number[] {
+	if (!Number.isInteger(k) || k < 1) throw new Error(`Nombre de plis invalide : ${k}`);
+	const tailles = new Map<string, number>();
+	for (const { session } of elements) tailles.set(session, (tailles.get(session) ?? 0) + 1);
+	const sessions = [...tailles].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+	const u = hasardFixe(graine);
+	for (let i = sessions.length - 1; i > 0; i--) {
+		const j = Math.floor(u() * (i + 1));
+		[sessions[i], sessions[j]] = [sessions[j]!, sessions[i]!];
+	}
+	const remplissage = Array.from({ length: k }, () => 0);
+	const pliDe = new Map<string, number>();
+	for (const [session, taille] of sessions) {
+		let pli = 0;
+		for (let i = 1; i < k; i++) if (remplissage[i]! < remplissage[pli]!) pli = i;
+		pliDe.set(session, pli);
+		remplissage[pli] = remplissage[pli]! + taille;
+	}
+	return elements.map(({ session }) => pliDe.get(session)!);
+}
