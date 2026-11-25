@@ -17,6 +17,7 @@ import { DEPOT_ABSENT } from '../aides/faux-ports.ts';
 import { fauxSens } from '../aides/faux-sens.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import type { ContexteService } from '../aides/service-faux.ts';
+import { MOTEUR_CODEX } from '../../src/infra/moteurs/codex.ts';
 
 const chemin = (route: string, id: string) => route.replace(':id', id);
 const CLES_VUE = ['bilanDemandeMs', 'branche', 'commitDebut', 'creeeMs', 'dialogueOuvert', 'dossier', 'dossierNonRattache', 'etat', 'id', 'majMs', 'moteur', 'niveauModeles', 'objectif', 'position', 'profil', 'projet', 'terminal'];
@@ -421,6 +422,27 @@ describe('routes : hook', () => {
 		await c.service.arreter();
 		expect(c.dep.commits).toEqual([]);
 		expect(await c.etat.lire(UUID)).toMatchObject({ etat: 'attend', majMs: 1000 });
+	});
+
+	it('POST hook fin d’une session Codex dont le processus tourne ici (/new, /resume) : ignoré ; la fin est traitée à la sortie du processus', async () => {
+		const maison = join(await dossierTemporaire(), 'codex');
+		const c = await serviceFaux({}, {
+			pil: (pil) => {
+				pil.moteurs = { ...pil.moteurs, codex: { moteur: { ...MOTEUR_CODEX, version: async () => '0.171.0' }, commande: { commande: process.execPath, avant: ['/aides/faux-codex.mjs'] } } };
+				pil.hote.env = { ...pil.hote.env, CODEX_HOME: maison };
+			},
+		});
+		await c.dep.coffre.ecrire('profils/revue/revue.md', '---\ntype: profil\nmoteur: codex\n---\n# Revue\n\nRelis.\n');
+		const vue = await lancer(c, { profil: 'revue', dossier: 'alpha' });
+		const hook = (evenement: string) => api(c).post(ROUTES.hook, { evenement, session: vue.id, horodatageMs: Date.now(), cwd: null, moteur: 'codex', fil: 'fil-a' });
+		expect((await hook('arret')).statut).toBe(200);
+		expect(await c.etat.lire(vue.id)).toMatchObject({ etat: 'attend', fil: 'fil-a' });
+		expect((await hook('fin')).statut).toBe(200);
+		expect((await c.etat.lire(vue.id))?.etat).toBe('attend');
+		// sortie du processus : a_relire, avec son épisode minimal
+		c.terminaux.lances[0]!.finir(0);
+		expect(await jusqua(async () => (await c.etat.lire(vue.id))?.etat === 'a_relire', 2000)).toBe(true);
+		expect(await jusqua(async () => c.dep.commits.some((x) => /episode/u.test(x.message)), 2000)).toBe(true);
 	});
 
 	it('POST hook outil d’un autre moteur que la session : vérifié tout de même (refus), état inchangé', async () => {

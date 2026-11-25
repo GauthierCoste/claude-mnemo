@@ -112,4 +112,4 @@ function lireArguments(args: string[]): { evenement: EvenementHook; options: Set
 const ECHEANCES_MS: Record<EvenementHook, number> = { debut: 900, message: 900, outil: 2000, apres_outil: 900, arret: 900, fin: 2500 };
 
 /** Codex : hooks installés pour tout le poste, inertes hors d'une session Codex de Mnemo (`sessionMnemo`). */
-export const HOOKS_CODEX: HooksDuMoteur = { lireArguments, inerte: (env) => sessionMnemo(env) === null, traduire, sortie: sortieDe, echeancesMs: ECHEANCES_MS };
+export const HOOKS_CODEX: HooksDuMoteur = { lireArguments, inerte: (env) => sessionMnemo(env) === null, traduire, sortie: sortieDe, echeancesMs: ECHEANCES_MS, finIgnoreeSiVivante: true };

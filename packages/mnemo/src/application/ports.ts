@@ -903,6 +903,11 @@ export type HooksDuMoteur = {
 	 * bornent ; sous le délai que le moteur laisse à chaque hook.
 	 */
 	echeancesMs: Record<EvenementHook, number>;
+	/**
+	 * Vrai : un `fin` reçu pendant que le processus de la session tourne encore dans ce service est ignoré, la fin est traitée à
+	 * la sortie du processus (Codex : `/new` et `/resume` envoient `SessionEnd` sans quitter).
+	 */
+	finIgnoreeSiVivante: boolean;
 	/** Sortie attendue par le moteur pour la réponse (stdout), ou « ». */
 	sortie(evenement: EvenementHook, reponse: ReponseHook): string;
 };

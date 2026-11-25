@@ -657,7 +657,10 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				if (etranger && entree.evenement !== 'outil') return ok({});
 				// les modèles de la session bornés par son niveau (relu à chaque appel)
 				const depDuHook = entree.session === '' ? dep : dependancesDeSession(dep, pil.etat, entree.session);
-				const reponse = await traiterEvenement(depDuHook, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, rattachee: (id) => pilote.reecrirePlugin(id) });
+				// `fin` d'un moteur qui l'envoie sans quitter (Codex : `/new`, `/resume`) pendant que son processus tourne ici : ignoré,
+				// la fin est traitée à la sortie du processus
+				const finIgnoree = entree.evenement === 'fin' && pilote.enCours(entree.session) && pil.moteurs[entree.moteur ?? MOTEUR_PAR_DEFAUT]?.moteur.hooks.finIgnoreeSiVivante === true;
+				const reponse = finIgnoree ? {} : await traiterEvenement(depDuHook, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, rattachee: (id) => pilote.reecrirePlugin(id) });
 				if (etranger) return ok(reponse);
 				if (entree.session !== '') {
 					const s = await pil.etat.lire(entree.session).catch(() => null);

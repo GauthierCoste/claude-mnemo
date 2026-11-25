@@ -403,6 +403,10 @@ profile.
   only abandoned. The interface greys these actions out and says why.
 - **Stop.** Mnemo stops a Codex session by typing `/quit` (before the first hook, it stops the process without typing
   anything).
+- **One conversation per session.** Do not use `/new` or `/resume` inside a session started by Mnemo: the session keeps
+  following the conversation it started with, so what comes after is neither tracked nor resumed. The session ends when
+  Codex exits. Commands run in another conversation, such as a nested `codex exec`, are still checked against your
+  verified instructions.
 - **Context gauge and quotas.** They are read from the session's transcript (`~/.codex/sessions/`, or under
   `$CODEX_HOME`) after a hook: how full the context window is, and the ChatGPT quotas of the title bar.
 - **Not found.** Without `codex`, or with a version older than 0.171, a Codex session is not started (there is no command

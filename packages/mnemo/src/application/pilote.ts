@@ -308,8 +308,9 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 
 	/**
 	 * Fin du processus : pid effacé ; pause → `en_pause` ; fin imprévue d'une session active → `a_relire` ; bilan ou abandon
-	 * dont le `fin` n'a pas abouti (processus tué) → `terminee`. Bilan ou abandon d'une session lancée : son épisode minimal
-	 * est assuré (s'il n'y en a aucun : le `fin` a pu manquer de temps) ; jamais pour un lancement raté (`lanceMs` absent).
+	 * dont le `fin` n'a pas abouti (processus tué) → `terminee`. Bilan ou abandon d'une session lancée, ou session passée ici à
+	 * `a_relire` (son `fin` manqué, ou ignoré tant que le processus tournait : Codex) : son épisode minimal est assuré (s'il
+	 * n'y en a aucun) ; jamais pour un lancement raté (`lanceMs` absent).
 	 */
 	const apresFin = async (id: string): Promise<void> => {
 		const s = await pil.etat.lire(id);
@@ -320,7 +321,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		const finale = s.arretAttendu === 'bilan' || s.arretAttendu === 'abandon';
 		if (finale && s.etat !== 'terminee') champs.etat = 'terminee';
 		const apres = await modifier(id, champs);
-		if (apres !== null && finale && (apres.lanceMs ?? null) !== null) await assurerEpisode(apres);
+		if (apres !== null && (finale || champs.etat === 'a_relire') && (apres.lanceMs ?? null) !== null) await assurerEpisode(apres);
 	};
 
 	/**
