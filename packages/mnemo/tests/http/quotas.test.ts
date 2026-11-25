@@ -42,27 +42,63 @@ describe('routes : quotas du compte', () => {
 		expect((await appeler(c.service.port, 'GET', ROUTES.quotas, {})).statut).toBe(401);
 	});
 
-	it('Codex : fenêtre et quotas relevés dans la transcription à chaque hook, à côté de ceux de Claude Code', async () => {
+	/** Un service avec une session Codex dont la transcription (sous un `CODEX_HOME` jetable) porte ce `token_count`. */
+	async function serviceCodex(instant: string | null, pourcentage = 2) {
 		const home = await dossierTemporaire();
 		const dossier = join(home, 'sessions', '2026', '11', '25');
 		await mkdir(dossier, { recursive: true });
 		const transcription = join(dossier, `rollout-2026-11-25T15-00-00-${FIL}.jsonl`);
-		const tokenCount = { timestamp: '2026-11-25T15:00:00.000Z', type: 'event_msg', payload: { type: 'token_count', info: { last_token_usage: { input_tokens: 21_000, cached_input_tokens: 20_000, output_tokens: 300 }, model_context_window: 475_000 }, rate_limits: { limit_id: 'codex', primary: { used_percent: 2, window_minutes: 10_080, resets_at: 1_796_000_000 }, secondary: null } } };
-		await writeFile(transcription, `${JSON.stringify(tokenCount)}\n`);
-		const codex = { ...MOTEUR_CODEX, telemetrie: { fenetre: lectureTranscriptionCodex({ env: () => ({ CODEX_HOME: home }), accueil: await dossierTemporaire() }), quotas: () => null } };
+		const ecrire = (quand: string | null, part: number) =>
+			writeFile(
+				transcription,
+				`${JSON.stringify({ ...(quand === null ? {} : { timestamp: quand }), type: 'event_msg', payload: { type: 'token_count', info: { last_token_usage: { input_tokens: 21_000, cached_input_tokens: 20_000, output_tokens: 300 }, model_context_window: 475_000 }, rate_limits: { limit_id: 'codex', primary: { used_percent: part, window_minutes: 10_080, resets_at: 1_796_000_000 }, secondary: null } } })}\n`,
+			);
+		await ecrire(instant, pourcentage);
+		const codex = { ...MOTEUR_CODEX, telemetrie: { ...MOTEUR_CODEX.telemetrie, fenetre: lectureTranscriptionCodex({ env: () => ({ CODEX_HOME: home }), accueil: await dossierTemporaire() }) } };
 		const c = await serviceFaux({}, { pil: (pil) => void (pil.moteurs = { ...pil.moteurs, codex: { moteur: codex, commande: null } }) });
 		await c.etat.creer({ id: UUID, profil: 'travail', dossier: 'alpha', position: 'projets/alpha', projet: 'alpha', objectif: 'Objectif', etat: 'travaille', creeeMs: 1000, majMs: 1000, arretAttendu: null, bilanDemandeMs: null, commitDebut: null, branche: null, pid: null, moteur: 'codex', modele: '', fil: FIL } satisfies Session);
 		const jeton = c.service.jeton;
-		await appeler(c.service.port, 'POST', ROUTES.quotas, { jeton, corps: { rate_limits: { five_hour: { used_percentage: 10, resets_at: 1_795_600_000 } } } });
-		const r = await appeler(c.service.port, 'POST', ROUTES.hook, { jeton, corps: { evenement: 'arret', session: UUID, horodatageMs: Date.now(), cwd: null, moteur: 'codex', fil: FIL, transcription } });
-		expect(r.statut).toBe(200);
+		const hook = (evenement: string) => appeler(c.service.port, 'POST', ROUTES.hook, { jeton, corps: { evenement, session: UUID, horodatageMs: Date.now(), cwd: null, moteur: 'codex', fil: FIL, transcription } });
 		const lus = async () => (await appeler(c.service.port, 'GET', ROUTES.quotas, { jeton })).corps as ReponseQuotas;
+		const fenetre = async () => ((await appeler(c.service.port, 'GET', ROUTES.fenetres, { jeton })).corps as ReponseFenetres).fenetres[UUID];
+		return { c, jeton, hook, lus, fenetre, ecrire };
+	}
+
+	it('Codex : fenêtre et quotas relevés dans la transcription après un hook, à côté de ceux de Claude Code', async () => {
+		const instant = new Date(Date.now() - 60_000).toISOString();
+		const { c, jeton, hook, lus, fenetre } = await serviceCodex(instant);
+		await appeler(c.service.port, 'POST', ROUTES.quotas, { jeton, corps: { rate_limits: { five_hour: { used_percentage: 10, resets_at: 1_795_600_000 } } } });
+		expect((await hook('arret')).statut).toBe(200);
 		expect(await jusqua(async () => (await lus()).moteurs?.codex !== undefined, 2000)).toBe(true);
 		const quotas = await lus();
-		expect(quotas.moteurs?.codex).toEqual({ semaine: { pourcentage: 2, remiseMs: 1_796_000_000_000 }, releveMs: Date.parse('2026-11-25T15:00:00.000Z') });
+		expect(quotas.moteurs?.codex).toEqual({ semaine: { pourcentage: 2, remiseMs: 1_796_000_000_000 }, releveMs: Date.parse(instant) });
 		expect(quotas.moteurs?.['claude-code']).toMatchObject({ cinqHeures: { pourcentage: 10 } });
 		expect(quotas.quotas).toEqual(quotas.moteurs?.['claude-code']);
-		const fenetres = (await appeler(c.service.port, 'GET', ROUTES.fenetres, { jeton })).corps as ReponseFenetres;
-		expect(fenetres.fenetres[UUID]).toEqual({ utilises: 21_300, max: 475_000 });
+		expect(await fenetre()).toEqual({ utilises: 21_300, max: 475_000 });
+	});
+
+	it('Codex : pas de lecture avant un outil (outil)', async () => {
+		const { hook, fenetre } = await serviceCodex(new Date().toISOString());
+		expect((await hook('outil')).statut).toBe(200);
+		expect(await jusqua(async () => (await fenetre()) !== undefined, 300)).toBe(false);
+	});
+
+	it('Codex : un relevé de plus d’une heure (transcription relue après un redémarrage) est ignoré, la fenêtre non', async () => {
+		const { hook, lus, fenetre } = await serviceCodex(new Date(Date.now() - 2 * 3_600_000).toISOString());
+		await hook('arret');
+		expect(await jusqua(async () => (await fenetre()) !== undefined, 2000)).toBe(true);
+		expect((await lus()).moteurs).toEqual({});
+	});
+
+	it('Codex : un token_count sans instant compte s’il n’y a rien, puis est ignoré', async () => {
+		const { hook, lus, ecrire } = await serviceCodex(null, 4);
+		await hook('arret');
+		expect(await jusqua(async () => (await lus()).moteurs?.codex?.semaine?.pourcentage === 4, 2000)).toBe(true);
+		await ecrire(null, 9);
+		await hook('message');
+		expect(await jusqua(async () => (await lus()).moteurs?.codex?.semaine?.pourcentage === 9, 400)).toBe(false);
+		await ecrire(new Date().toISOString(), 9);
+		await hook('message');
+		expect(await jusqua(async () => (await lus()).moteurs?.codex?.semaine?.pourcentage === 9, 2000)).toBe(true);
 	});
 });

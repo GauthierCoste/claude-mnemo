@@ -47,6 +47,12 @@ describe('quotasDeCodex', () => {
 		expect(quotasDeCodex(limites)).toEqual({ cinqHeures: { pourcentage: 100, remiseMs: 10_000 }, semaine: { pourcentage: 2, remiseMs: 20_000 } });
 	});
 
+	it('tolère une durée à peine différente : 299 min pour 5 heures, 10 079 pour la semaine', () => {
+		const limites = { primary: { used_percent: 1, window_minutes: 299, resets_at: 10 }, secondary: { used_percent: 2, window_minutes: 10_079, resets_at: 20 } };
+		expect(quotasDeCodex(limites)).toEqual({ cinqHeures: { pourcentage: 1, remiseMs: 10_000 }, semaine: { pourcentage: 2, remiseMs: 20_000 } });
+		expect(quotasDeCodex({ primary: { used_percent: 1, window_minutes: 306, resets_at: 10 }, secondary: { used_percent: 2, window_minutes: 10_111, resets_at: 20 } })).toBeNull();
+	});
+
 	it('null sans fenêtre lisible, d’une durée inconnue, ou d’une autre limite que celle de l’abonnement', () => {
 		expect(quotasDeCodex(undefined)).toBeNull();
 		expect(quotasDeCodex({ primary: null, secondary: null })).toBeNull();

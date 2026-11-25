@@ -41,5 +41,6 @@ export const MOTEUR_CODEX: Moteur = {
 	touches: TOUCHES_CODEX,
 	hooks: HOOKS_CODEX,
 	outils: OUTILS_CODEX,
-	telemetrie: { fenetre: lectureTranscriptionCodex(), quotas: () => null },
+	// relue à chaque hook sauf avant un outil (`outil`) : `fin` relève le dernier `token_count` de la session
+	telemetrie: { fenetre: lectureTranscriptionCodex(), evenementsLus: new Set(['debut', 'message', 'apres_outil', 'arret', 'fin']), quotas: () => null },
 };

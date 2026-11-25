@@ -36,7 +36,7 @@ import { messageDErreur } from '../../domaine/texte.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
 import { estIdMoteur, MOTEUR_PAR_DEFAUT } from '../../domaine/moteurs/moteur.ts';
 import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
-import { memesQuotas } from '../../domaine/quotas.ts';
+import { memesQuotas, releveAGarder } from '../../domaine/quotas.ts';
 import type { Quotas } from '../../domaine/quotas.ts';
 import { estCauseNonVerifiee } from '../../domaine/refus-outil.ts';
 import { estSourceDeDebut, estUuid } from '../../domaine/session.ts';
@@ -276,6 +276,8 @@ function entreeHook(brut: unknown): EntreeHook {
 const MARGE_REPONSE_HOOK_MS = 50;
 /** Ce qu'attendait au plus un hook qui ne transmet pas son échéance (version plus ancienne), depuis son envoi. */
 const ATTENTE_HOOK_SANS_ECHEANCE_MS = 300;
+/** Une lecture de transcription (jauge, quotas) au-delà : abandonnée, la suivante de la session peut partir. */
+const DELAI_LECTURE_TRANSCRIPTION_MS = 2000;
 
 /**
  * Échéance de `message` et `apres_outil` : un hook qui n'attend plus la réponse recalcule seul, en excluant les fiches notées
@@ -364,13 +366,11 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	/** Quotas de l'abonnement de chaque moteur, communs à toutes ses sessions : le dernier relevé de chacun. */
 	const quotasParMoteur: Partial<Record<IdMoteur, Quotas>> = {};
 	/**
-	 * Note un relevé des quotas d'un moteur ; un relevé plus ancien que celui gardé est ignoré (une session reprise relit une
-	 * vieille transcription). Diffusé si les fenêtres changent (`quotas` en plus pour Claude Code, que lisent les anciens
-	 * clients) ; sinon seul l'instant du relevé est mis à jour.
+	 * Note un relevé des quotas d'un moteur ; diffusé si les fenêtres changent (`quotas` en plus pour Claude Code, que lisent
+	 * les anciens clients) ; sinon seul l'instant du relevé est mis à jour.
 	 */
 	const noterQuotas = (moteur: IdMoteur, recus: Quotas): void => {
 		const avant = quotasParMoteur[moteur];
-		if (avant?.releveMs !== undefined && recus.releveMs !== undefined && recus.releveMs < avant.releveMs) return;
 		quotasParMoteur[moteur] = recus;
 		if (memesQuotas(avant, recus)) return;
 		if (moteur === MOTEUR_PAR_DEFAUT) ctx.diffuser({ type: 'quotas', quotas: recus });
@@ -389,7 +389,9 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		const lue = await lecture.lire(source);
 		if (lue === null) return;
 		const { fenetre, quotas } = lue;
-		if (quotas !== undefined) noterQuotas(moteur, quotas.releveMs === undefined ? { ...quotas, releveMs: Date.now() } : quotas);
+		// une transcription peut être vieille (session reprise, service redémarré) : seul un relevé récent est gardé
+		const garde = quotas === undefined ? null : releveAGarder(quotasParMoteur[moteur], quotas, Date.now());
+		if (garde !== null) noterQuotas(moteur, garde);
 		if (fenetre === undefined) return;
 		const avant = fenetres.get(session);
 		if (avant !== undefined && avant.utilises === fenetre.utilises && avant.max === fenetre.max && avant.avantResume === fenetre.avantResume) return;
@@ -397,8 +399,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		ctx.diffuser({ type: 'fenetre', session, fenetre });
 	};
 	/**
-	 * Une seule lecture à la fois par session : un hook arrivé pendant une lecture en demande une autre, faite juste après (la
-	 * transcription a pu changer entre-temps) ; les suivants s'y joignent.
+	 * Une seule lecture à la fois par session, chacune bornée à `DELAI_LECTURE_TRANSCRIPTION_MS` : un hook arrivé pendant une
+	 * lecture en demande une autre, faite juste après (la transcription a pu changer entre-temps) ; les suivants s'y joignent.
 	 */
 	const lectures = new Map<string, { encore: (() => Promise<void>) | null }>();
 	const relireApresHook = (session: string, relire: () => Promise<void>): void => {
@@ -412,7 +414,10 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		void (async () => {
 			let suivante: (() => Promise<void>) | null = relire;
 			while (suivante !== null) {
-				await suivante().catch(() => {});
+				// bornée : une lecture qui ne finit pas (disque lent, fichier spécial) ne coince jamais la file de la session
+				let minuteur: NodeJS.Timeout | undefined;
+				await Promise.race([suivante().catch(() => {}), new Promise<void>((fin) => (minuteur = setTimeout(fin, DELAI_LECTURE_TRANSCRIPTION_MS)))]);
+				clearTimeout(minuteur);
 				suivante = etat.encore;
 				etat.encore = null;
 			}
@@ -652,11 +657,6 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				// les modèles de la session bornés par son niveau (relu à chaque appel)
 				const depDuHook = entree.session === '' ? dep : dependancesDeSession(dep, pil.etat, entree.session);
 				const reponse = await traiterEvenement(depDuHook, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, rattachee: (id) => pilote.reecrirePlugin(id) });
-				if (entree.session !== '' && (transcription !== undefined || entree.fil !== undefined)) {
-					// à chaque hook, hors de son chemin : sa réponse n'attend pas la lecture (ni son échéance)
-					const source: SourceTranscription = { ...(transcription === undefined ? {} : { chemin: transcription }), ...(entree.fil === undefined ? {} : { fil: entree.fil }), dossier: entree.cwd };
-					relireApresHook(entree.session, () => relireFenetre(entree.session, source, entree.moteur));
-				}
 				if (entree.session !== '') {
 					const s = await pil.etat.lire(entree.session).catch(() => null);
 					if (s !== null) {
@@ -677,6 +677,12 @@ export function routes(ctx: ContexteRoutes): Route[] {
 							if (dernier !== undefined) ctx.diffuser({ type: 'servi', entree: vueServie(dernier, await titresDeLIndex()) });
 						}
 					}
+				}
+				// après la réponse, hors du chemin du hook (ni sa réponse ni son échéance n'attendent la lecture), aux seuls événements
+				// où le moteur écrit dans sa transcription ce qu'on y lit
+				if (entree.session !== '' && (transcription !== undefined || entree.fil !== undefined) && telemetrie(entree.moteur)?.evenementsLus.has(entree.evenement) === true) {
+					const source: SourceTranscription = { ...(transcription === undefined ? {} : { chemin: transcription }), ...(entree.fil === undefined ? {} : { fil: entree.fil }), dossier: entree.cwd };
+					setImmediate(() => relireApresHook(entree.session, () => relireFenetre(entree.session, source, entree.moteur)));
 				}
 				return ok(reponse);
 			},

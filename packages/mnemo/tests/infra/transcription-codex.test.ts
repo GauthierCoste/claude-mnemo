@@ -1,6 +1,9 @@
+import { execFileSync } from 'node:child_process';
 import { mkdir, symlink, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { dossierCodex } from '../../src/infra/moteurs/codex/dossier-codex.ts';
 import { lectureTranscriptionCodex } from '../../src/infra/moteurs/codex/transcription.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
@@ -64,6 +67,15 @@ describe('lectureTranscriptionCodex', () => {
 		expect(await l.lire({ chemin: join(home, 'sessions', 'rollout.txt') })).toBeNull();
 	});
 
+	it.skipIf(process.platform === 'win32')('une FIFO à la place de la transcription : refusée aussitôt, sans attendre d’écrivain', async () => {
+		const { home, accueil } = await codexHome(`${tokenCount(1_000)}\n`);
+		const fifo = join(home, 'sessions', '2026', '11', '25', 'rollout-fifo.jsonl');
+		execFileSync('mkfifo', [fifo]);
+		const lue = lecture(home, accueil).lire({ chemin: fifo });
+		const bloquee = new Promise((fin) => setTimeout(() => fin('bloquée'), 1_000));
+		expect(await Promise.race([lue, bloquee])).toBeNull();
+	});
+
 	it('fichier absent : null ; sans chemin ni fil : null', async () => {
 		const { home, accueil } = await codexHome(`${tokenCount(1_000)}\n`);
 		expect(await lecture(home, accueil).lire({ chemin: join(home, 'sessions', 'absent.jsonl') })).toBeNull();
@@ -82,5 +94,15 @@ describe('lectureTranscriptionCodex', () => {
 	it('par le fil : rien au-delà des derniers jours', async () => {
 		const { home, accueil } = await codexHome(`${tokenCount(5_000)}\n`, '10');
 		expect(await lecture(home, accueil).lire({ fil: FIL })).toBeNull();
+	});
+});
+
+describe('dossierCodex', () => {
+	it('CODEX_HOME absolu ; relatif ou vide : ignoré, ~/.codex', async () => {
+		const home = await dossierTemporaire();
+		expect(dossierCodex({ CODEX_HOME: home })).toBe(home);
+		expect(dossierCodex({ CODEX_HOME: 'codex-relatif' })).toBe(join(homedir(), '.codex'));
+		expect(dossierCodex({ CODEX_HOME: '' })).toBe(join(homedir(), '.codex'));
+		expect(dossierCodex({})).toBe(join(homedir(), '.codex'));
 	});
 });

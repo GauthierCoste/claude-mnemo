@@ -68,6 +68,16 @@ describe('Quotas dans la barre de titre', () => {
 		expect(libelles(screen.getByRole('button', { name: /^Quotas des abonnements/u }))).toEqual(['claude-code']);
 	});
 
+	it('message quotas (Claude Code) rangé sous Claude tant qu’aucun quotasMoteurs n’est reçu', async () => {
+		const faux = monter({ quotas: null, moteurs: { codex: { semaine: { pourcentage: 18, remiseMs: dans(72) } } } });
+		await screen.findByRole('button', { name: /^Quotas des abonnements/u });
+		await act(async () => faux.connexion.emettre({ type: 'quotas', quotas: { semaine: { pourcentage: 3, remiseMs: dans(5) } } }));
+		expect(libelles(screen.getByRole('button', { name: /^Quotas des abonnements/u }))).toEqual(['claude-code', 'codex']);
+		await act(async () => faux.connexion.emettre({ type: 'quotasMoteurs', moteurs: { codex: { semaine: { pourcentage: 20, remiseMs: dans(72) } } } }));
+		await act(async () => faux.connexion.emettre({ type: 'quotas', quotas: { semaine: { pourcentage: 4, remiseMs: dans(5) } } }));
+		expect(libelles(screen.getByRole('button', { name: /^Quotas des abonnements/u }))).toEqual(['codex']);
+	});
+
 	it('un service sans moteurs : les quotas de Claude seuls ; rien sans relevé', async () => {
 		monter({ quotas: { semaine: { pourcentage: 3, remiseMs: dans(5) } } });
 		expect(libelles(await screen.findByRole('button', { name: /^Quotas des abonnements/u }))).toEqual(['claude-code']);

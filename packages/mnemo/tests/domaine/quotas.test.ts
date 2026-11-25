@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { quotasDeLimites } from '../../src/domaine/moteurs/claude-code/quotas.ts';
-import { memesQuotas } from '../../src/domaine/quotas.ts';
+import { AGE_MAX_RELEVE_MS, memesQuotas, releveAGarder } from '../../src/domaine/quotas.ts';
 
 describe('quotasDeLimites', () => {
 	it('lit les deux fenêtres : pourcentage arrondi, remise en millisecondes', () => {
@@ -37,5 +37,22 @@ describe('memesQuotas', () => {
 		expect(memesQuotas(q, { ...q, semaine: { pourcentage: 1, remiseMs: 1 } })).toBe(false);
 		expect(memesQuotas(null, q)).toBe(false);
 		expect(memesQuotas(null, null)).toBe(true);
+	});
+});
+
+describe('releveAGarder', () => {
+	const maintenant = 1_800_000_000_000;
+	const semaine = { pourcentage: 5, remiseMs: maintenant + 1 };
+	it('un relevé récent remplace un plus ancien ; un plus ancien que celui gardé est ignoré', () => {
+		expect(releveAGarder({ semaine, releveMs: maintenant - 10 }, { semaine, releveMs: maintenant - 5 }, maintenant)).toEqual({ semaine, releveMs: maintenant - 5 });
+		expect(releveAGarder({ semaine, releveMs: maintenant - 5 }, { semaine, releveMs: maintenant - 10 }, maintenant)).toBeNull();
+	});
+	it('plus vieux d’une heure : ignoré, même sans rien de gardé', () => {
+		expect(releveAGarder(undefined, { semaine, releveMs: maintenant - AGE_MAX_RELEVE_MS - 1 }, maintenant)).toBeNull();
+		expect(releveAGarder(undefined, { semaine, releveMs: maintenant - AGE_MAX_RELEVE_MS }, maintenant)).toEqual({ semaine, releveMs: maintenant - AGE_MAX_RELEVE_MS });
+	});
+	it('sans instant : relevé maintenant s’il n’y a rien, ignoré sinon', () => {
+		expect(releveAGarder(undefined, { semaine }, maintenant)).toEqual({ semaine, releveMs: maintenant });
+		expect(releveAGarder({ semaine, releveMs: maintenant - 5 }, { semaine }, maintenant)).toBeNull();
 	});
 });

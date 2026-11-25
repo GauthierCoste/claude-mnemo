@@ -13,9 +13,11 @@ import type { FenetreDeContexte } from '../moteur.ts';
  *   `resets_at` en secondes) du dernier `token_count` qui en porte, relevés à son `timestamp`.
  */
 
-/** Durées des fenêtres de quota (minutes) que Mnemo sait nommer ; une autre est ignorée. */
+/** Durées des fenêtres de quota (minutes) que Mnemo sait nommer, à une tolérance près ; une autre est ignorée. */
 const CINQ_HEURES_MIN = 300;
+const TOLERANCE_CINQ_HEURES_MIN = 5;
 const SEMAINE_MIN = 7 * 24 * 60;
+const TOLERANCE_SEMAINE_MIN = 30;
 
 const nombre = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
@@ -42,7 +44,7 @@ function quotaDe(fenetre: unknown): { minutes: number; quota: Quota } | null {
 
 /**
  * Quotas d'un `rate_limits` de Codex (ceux de l'abonnement, `limit_id` absent ou `codex`) : chaque fenêtre rangée selon sa
- * durée (5 heures, semaine), qu'elle soit `primary` ou `secondary` ; null s'il n'y en a aucune de lisible.
+ * durée (5 heures à 5 min près, semaine à 30 min près), qu'elle soit `primary` ou `secondary` ; null s'il n'y en a aucune de lisible.
  */
 export function quotasDeCodex(limites: unknown, releveMs?: number): Quotas | null {
 	if (!estObjet(limites)) return null;
@@ -50,8 +52,9 @@ export function quotasDeCodex(limites: unknown, releveMs?: number): Quotas | nul
 	const quotas: Quotas = {};
 	for (const brute of [limites.primary, limites.secondary]) {
 		const lue = quotaDe(brute);
-		if (lue?.minutes === CINQ_HEURES_MIN) quotas.cinqHeures = lue.quota;
-		else if (lue?.minutes === SEMAINE_MIN) quotas.semaine = lue.quota;
+		if (lue === null) continue;
+		if (Math.abs(lue.minutes - CINQ_HEURES_MIN) <= TOLERANCE_CINQ_HEURES_MIN) quotas.cinqHeures = lue.quota;
+		else if (Math.abs(lue.minutes - SEMAINE_MIN) <= TOLERANCE_SEMAINE_MIN) quotas.semaine = lue.quota;
 	}
 	if (quotas.cinqHeures === undefined && quotas.semaine === undefined) return null;
 	return releveMs === undefined ? quotas : { ...quotas, releveMs };

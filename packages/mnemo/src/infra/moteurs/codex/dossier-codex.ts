@@ -1,7 +1,11 @@
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 
-/** Dossier de configuration de Codex : `$CODEX_HOME`, sinon `~/.codex`. */
+/**
+ * Dossier de configuration de Codex : `$CODEX_HOME` s'il est un chemin absolu, sinon `~/.codex` (un chemin relatif dépendrait
+ * du dossier courant de chaque processus : ignoré).
+ */
 export function dossierCodex(env: Record<string, string | undefined>): string {
-	return env.CODEX_HOME !== undefined && env.CODEX_HOME !== '' ? env.CODEX_HOME : join(homedir(), '.codex');
+	const home = env.CODEX_HOME;
+	return home !== undefined && home !== '' && isAbsolute(home) ? home : join(homedir(), '.codex');
 }

@@ -44,5 +44,6 @@ export const MOTEUR_CLAUDE_CODE: Moteur = {
 	touches: TOUCHES_CLAUDE_CODE,
 	hooks: HOOKS_CLAUDE_CODE,
 	outils: OUTILS_CLAUDE_CODE,
-	telemetrie: { fenetre: sansQuotas(fenetreDeTranscription()), quotas: quotasDeLimites },
+	// relue après une réponse ou un outil, jamais avant un outil (`outil`) ni à la fin
+	telemetrie: { fenetre: sansQuotas(fenetreDeTranscription()), evenementsLus: new Set(['debut', 'message', 'apres_outil', 'arret']), quotas: quotasDeLimites },
 };

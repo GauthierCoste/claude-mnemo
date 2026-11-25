@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { fenetreDeTranscription } from '../../src/infra/moteurs/claude-code/fenetre-transcription.ts';
@@ -32,6 +32,11 @@ describe('fenetreDeTranscription', () => {
 		expect(await t.lire(join(racine, '..', 's.jsonl'))).toBeNull();
 		expect(await t.lire(join(racine, 's.txt'))).toBeNull();
 		expect(await t.lire(join(racine, 'absent.jsonl'))).toBeNull();
+		// un lien sous la racine vers un fichier ou un dossier hors d'elle : refusé (liens résolus)
+		await symlink(join(ailleurs, 's.jsonl'), join(racine, 'lien.jsonl'));
+		await symlink(ailleurs, join(racine, 'dossier-lien'));
+		expect(await t.lire(join(racine, 'lien.jsonl'))).toBeNull();
+		expect(await t.lire(join(racine, 'dossier-lien', 's.jsonl'))).toBeNull();
 	});
 
 	it('prend le seuil de résumé automatique du projet comme maximum, même dépassé', async () => {

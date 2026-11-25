@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
-import { extname, join, resolve, sep } from 'node:path';
+import { realpath } from 'node:fs/promises';
+import { extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fenetreDeContexte } from '../../../domaine/moteurs/claude-code/fenetre-contexte.ts';
 import type { FenetreDeContexte } from '../../../domaine/moteurs/moteur.ts';
 import { lignesDeLaFin } from '../../fin-de-fichier.ts';
@@ -26,9 +27,15 @@ export function fenetreDeTranscription(racinePermise: string = join(homedir(), '
 	};
 }
 
-/** Lignes de la fin du fichier ; null si le chemin est refusé ou illisible. */
-async function lireFin(racine: string, chemin: string, octetsLus: number): Promise<string[] | null> {
-	const absolu = resolve(chemin);
-	if (!absolu.startsWith(racine + sep) || extname(absolu) !== '.jsonl') return null;
-	return lignesDeLaFin(absolu, octetsLus);
+/**
+ * Lignes de la fin du fichier ; null si le chemin est refusé (hors de la racine une fois les liens résolus, ou d'un autre
+ * format) ou illisible.
+ */
+async function lireFin(racinePermise: string, chemin: string, octetsLus: number): Promise<string[] | null> {
+	if (extname(chemin) !== '.jsonl') return null;
+	const [racine, reel] = await Promise.all([realpath(racinePermise).catch(() => null), realpath(chemin).catch(() => null)]);
+	if (racine === null || reel === null || extname(reel) !== '.jsonl') return null;
+	const relatif = relative(racine, reel);
+	if (relatif === '' || relatif.startsWith('..') || isAbsolute(relatif)) return null;
+	return lignesDeLaFin(reel, octetsLus);
 }

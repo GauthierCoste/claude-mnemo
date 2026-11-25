@@ -921,7 +921,12 @@ export type SourceTranscription = { chemin?: string; fil?: string; dossier?: str
 export type LectureFenetre = { lire(source: SourceTranscription): Promise<{ fenetre?: FenetreDeContexte; quotas?: Quotas } | null> };
 
 /** Télémétrie d'un moteur : transcription, et quotas du compte tirés de ce que le moteur en dit ailleurs (null : illisibles). */
-export type TelemetrieDuMoteur = { fenetre: LectureFenetre; quotas(brut: unknown): Quotas | null };
+export type TelemetrieDuMoteur = {
+	fenetre: LectureFenetre;
+	/** Événements de hook après lesquels la transcription est relue (ceux qui suivent une écriture utile du moteur). */
+	evenementsLus: ReadonlySet<EvenementHook>;
+	quotas(brut: unknown): Quotas | null;
+};
 
 /**
  * Un agent de code sur le poste, hors des sessions : `commandeParDefaut`, le nom écrit dans une ligne à coller quand il est

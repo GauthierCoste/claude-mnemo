@@ -11,6 +11,7 @@ import {
 	type ReponseAServir,
 	type ReponseFenetres,
 	type QuotasDesMoteursVue,
+	type QuotasVue,
 	type ReponseQuotas,
 	type EntreeServieVue,
 	type LueVue,
@@ -315,15 +316,28 @@ const AUCUN_QUOTA: QuotasDesMoteursVue = {};
 
 /**
  * Quotas de l'abonnement de chaque moteur (communs à toutes ses sessions) : lus au service, puis tenus par les messages
- * `quotasMoteurs` ; vide tant qu'aucun n'est relevé. Un service sans `moteurs` : ceux de Claude Code seuls.
+ * `quotasMoteurs` ; vide tant qu'aucun n'est relevé. Un service sans `moteurs` ni `quotasMoteurs` : ceux de Claude Code seuls
+ * (`quotas`, réponse et message).
  */
 export function useQuotas(): QuotasDesMoteursVue {
 	const { api, connexion } = useClient();
 	const base = useRessource('quotas', () => api.lire<ReponseQuotas>(ROUTES.quotas));
 	const [recus, setRecus] = useState<QuotasDesMoteursVue | null>(null);
-	useEffect(() => connexion.surMessage((m) => m.type === 'quotasMoteurs' && setRecus(m.moteurs)), [connexion]);
+	// `quotas` (Claude Code) d'un service qui n'envoie pas `quotasMoteurs` : rangé sous Claude Code, tant qu'aucun `quotasMoteurs` n'est reçu
+	const [claudeSeul, setClaudeSeul] = useState<QuotasVue | null>(null);
+	useEffect(
+		() =>
+			connexion.surMessage((m) => {
+				if (m.type === 'quotasMoteurs') setRecus(m.moteurs);
+				else if (m.type === 'quotas') setClaudeSeul(m.quotas);
+			}),
+		[connexion],
+	);
 	const lue = base.donnees;
-	const duService = useMemo(() => (lue === undefined ? AUCUN_QUOTA : (lue.moteurs ?? (lue.quotas === null ? AUCUN_QUOTA : { 'claude-code': lue.quotas }))), [lue]);
+	const duService = useMemo(() => {
+		const moteurs = lue === undefined ? AUCUN_QUOTA : (lue.moteurs ?? (lue.quotas === null ? AUCUN_QUOTA : { 'claude-code': lue.quotas }));
+		return claudeSeul === null ? moteurs : { ...moteurs, 'claude-code': claudeSeul };
+	}, [lue, claudeSeul]);
 	return recus ?? duService;
 }
 
