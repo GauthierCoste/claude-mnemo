@@ -140,7 +140,7 @@ describe('servir', () => {
 		await dep.coffre.ecrire('projets/Vela.md', fiche('Vela', '2026-11-01', 'portee: client:Vela\n', '\n## Relations\n- concerne [[Avoirs]]\n- concerne [[Factures]]\n'));
 		await dep.coffre.ecrire('projets/Vela/Avoirs.md', fiche('Avoirs', '2026-11-05'));
 		await dep.coffre.ecrire('projets/Vela/Factures.md', fiche('Factures', '2026-11-03'));
-		dep.reglages = () => ({ ...REGLAGES_PAR_DEFAUT, contexte: { ...REGLAGES_PAR_DEFAUT.contexte, cartesPerimetre: 1 } });
+		dep.reglages = () => ({ ...REGLAGES_PAR_DEFAUT, contexte: { ...REGLAGES_PAR_DEFAUT.contexte, pistesParMessage: 1 } });
 		const demande = {
 			position: 'projets/Vela',
 			message: 'on reprend les écritures',

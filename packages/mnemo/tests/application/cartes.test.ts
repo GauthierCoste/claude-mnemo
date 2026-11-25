@@ -35,6 +35,8 @@ async function memoire(options: { syntheseDePosition?: string } = {}) {
 	await e(DOC, `---\nid: 01SRC\ntype: source\nchemin: docs/doc.md\ntype_source: spec_validee\nupdated: 2026-11-01\n---\n# Doc SVE\n`);
 	await e(DOSSIER, fiche('dossier', 'Clients', 'Les clients.'));
 	await synchroniser(dep, SANS_EXTRACTION);
+	// plafond large (l'ancien plafond du périmètre) : ces tests portent sur le choix des cartes, pas sur leur nombre
+	dep.reglages = () => ({ ...REGLAGES_PAR_DEFAUT, contexte: { ...REGLAGES_PAR_DEFAUT.contexte, pistesParMessage: 10 } });
 	return dep;
 }
 
@@ -72,9 +74,9 @@ describe('calculerCartes : premier message', () => {
 		expect(chemins(c)).not.toContain(SVE);
 	});
 
-	it('ne propose pas plus que contexte.cartesPerimetre', async () => {
+	it('ne propose pas plus que contexte.pistesParMessage', async () => {
 		const dep = await memoire();
-		avecReglages(dep, { cartesPerimetre: 2 });
+		avecReglages(dep, { pistesParMessage: 2 });
 		const c = await calculerCartes(dep, demande());
 		expect(c.cartes).toHaveLength(2);
 	});
@@ -473,7 +475,7 @@ describe('calculerCartes : poids d’une fiche injectée à la main', () => {
 
 	it('une fiche injectée entière à ce message n’est pas candidate : elle ne prend pas la place d’une carte sous le plafond', async () => {
 		const dep = await memoire();
-		avecReglages(dep, { cartesPerimetre: 1 });
+		avecReglages(dep, { pistesParMessage: 1 });
 		// sans modèle, par date : Outil Parcs (05/11) puis Git (04/11)
 		expect(chemins(await calculerCartes(dep, demande()))).toEqual([OUTIL]);
 		expect(chemins(await calculerCartes(dep, demande({ demandees: [OUTIL] })))).toEqual([GIT]);

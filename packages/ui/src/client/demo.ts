@@ -1089,7 +1089,12 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 	function remplacerReglages(corps: unknown): ReglagesVue {
 		const valeurs = (corps as { valeurs?: Record<string, unknown> } | null)?.valeurs ?? {};
 		for (const cle of Object.keys(valeurs)) if (!reglages.some((c) => c.cle === cle)) throw new ErreurApi(`Réglages refusés : réglage inconnu « ${cle} ».`, 400);
-		reglages = reglages.map((c) => (c.cle in valeurs ? { ...c, valeur: (valeurs[c.cle] ?? c.defaut) as ChampReglageVue['valeur'] } : c));
+		const suivants = reglages.map((c) => (c.cle in valeurs ? { ...c, valeur: (valeurs[c.cle] ?? c.defaut) as ChampReglageVue['valeur'] } : c));
+		const valeur = (cle: string) => suivants.find((c) => c.cle === cle)?.valeur as number;
+		if (valeur('contexte.seuilPiste') > valeur('contexte.seuilInjection')) {
+			throw new ErreurApi(`Réglages refusés : le seuil des pistes (${valeur('contexte.seuilPiste')} %) dépasse le seuil d’injection automatique (${valeur('contexte.seuilInjection')} %).`, 400);
+		}
+		reglages = suivants;
 		return reglagesDemo();
 	}
 

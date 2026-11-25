@@ -16,7 +16,12 @@ export type Reglages = {
 	projets: { marqueurs: string[] };
 	contexte: {
 		similariteRecherche: number;
-		cartesPerimetre: number;
+		/** Note minimale (%, 50 à 100) d'une injection automatique ; 100 : jamais. */
+		seuilInjection: number;
+		injectionsParMessage: number;
+		/** Note minimale (%, 0 à 100) d'une piste ; jamais au-dessus de `seuilInjection`. */
+		seuilPiste: number;
+		pistesParMessage: number;
 		cartesNommees: number;
 		poidsInjection: number;
 		demiVieInjection: number;
@@ -64,14 +69,50 @@ export type ChampReglage = {
 
 export const CHAMPS_REGLAGES: readonly ChampReglage[] = [
 	{
-		cle: 'contexte.cartesPerimetre',
+		cle: 'contexte.seuilInjection',
 		groupe: 'contexte',
-		libelle: 'Cartes du périmètre au premier message',
-		explication: 'Cartes (titre, chemin, première phrase) proposées au premier message pour les fiches du périmètre de la position.',
+		libelle: 'Seuil d’injection automatique',
+		explication: 'Note minimale d’une fiche pour être injectée dans la session sans geste de ta part ; 100 % : jamais. Agit seulement avec une note calibrée (modèle de note accepté).',
 		genre: 'entier',
-		defaut: 10,
+		defaut: 90,
+		min: 50,
+		max: 100,
+		unite: '%',
+		effet: 'immediat',
+	},
+	{
+		cle: 'contexte.injectionsParMessage',
+		groupe: 'contexte',
+		libelle: 'Fiches injectées automatiquement par message',
+		explication: 'Fiches injectées au plus dans la session à chaque message, les mieux notées d’abord, au-dessus du seuil d’injection ; 0 : jamais.',
+		genre: 'entier',
+		defaut: 2,
 		min: 0,
-		max: 30,
+		max: 5,
+		unite: 'fiches',
+		effet: 'immediat',
+	},
+	{
+		cle: 'contexte.seuilPiste',
+		groupe: 'contexte',
+		libelle: 'Seuil des pistes',
+		explication: 'Note minimale d’une piste (carte proposée sans injecter la fiche dans la session), jamais au-dessus du seuil d’injection. Agit seulement avec une note calibrée ; sans elle, les premières de l’ordre.',
+		genre: 'entier',
+		defaut: 60,
+		min: 0,
+		max: 100,
+		unite: '%',
+		effet: 'immediat',
+	},
+	{
+		cle: 'contexte.pistesParMessage',
+		groupe: 'contexte',
+		libelle: 'Pistes par message',
+		explication: 'Cartes (titre, chemin, première phrase) proposées au plus à chaque message pour des fiches nouvelles, à injecter dans la session d’un geste ; 0 : aucune.',
+		genre: 'entier',
+		defaut: 3,
+		min: 0,
+		max: 10,
 		unite: 'cartes',
 		effet: 'immediat',
 	},
@@ -279,6 +320,12 @@ export const CHAMPS_REGLAGES: readonly ChampReglage[] = [
 	},
 ];
 
+/**
+ * Réglages retirés : ignorés sans avertissement à la lecture (un ancien fichier reste muet), refusés à la modification.
+ * `contexte.cartesPerimetre` : remplacé par les pistes (`contexte.pistesParMessage`).
+ */
+export const REGLAGES_RETIRES: readonly string[] = ['contexte.cartesPerimetre'];
+
 const MARQUEURS_MAX = 50;
 const MARQUEUR_LONGUEUR_MAX = 100;
 
@@ -374,8 +421,14 @@ export function lireReglages(brut: unknown): { reglages: Reglages; avertissement
 			continue;
 		}
 		for (const nom of Object.keys(contenu)) {
-			if (!CHAMPS_REGLAGES.some((c) => c.cle === `${groupe}.${nom}`)) avertissements.push(`Réglage inconnu « ${groupe}.${nom} » : ignoré.`);
+			const cle = `${groupe}.${nom}`;
+			if (!CHAMPS_REGLAGES.some((c) => c.cle === cle) && !REGLAGES_RETIRES.includes(cle)) avertissements.push(`Réglage inconnu « ${groupe}.${nom} » : ignoré.`);
 		}
+	}
+	const { seuilPiste, seuilInjection } = reglages.contexte;
+	if (seuilPiste > seuilInjection) {
+		avertissements.push(`Réglage « contexte.seuilPiste » (Seuil des pistes) : ${seuilPiste} % dépasse le seuil d’injection automatique ; ramené à ${seuilInjection} %.`);
+		reglages = avecValeur(reglages, 'contexte.seuilPiste', seuilInjection);
 	}
 	return { reglages, avertissements };
 }
@@ -391,7 +444,7 @@ export function modifierReglages(r: Reglages, valeurs: Record<string, unknown>):
 	for (const [cle, v] of Object.entries(valeurs)) {
 		const champ = CHAMPS_REGLAGES.find((c) => c.cle === cle);
 		if (champ === undefined) {
-			motifs.push(`Réglage inconnu « ${cle} ».`);
+			motifs.push(REGLAGES_RETIRES.includes(cle) ? `Réglage retiré « ${cle} ».` : `Réglage inconnu « ${cle} ».`);
 			continue;
 		}
 		if (v === null) {
@@ -401,6 +454,9 @@ export function modifierReglages(r: Reglages, valeurs: Record<string, unknown>):
 		const resultat = validerValeur(champ, v);
 		if (resultat.ok) suivant = avecValeur(suivant, cle, resultat.valeur);
 		else motifs.push(`${champ.libelle} (${cle}) : ${resultat.motif}.`);
+	}
+	if (motifs.length === 0 && suivant.contexte.seuilPiste > suivant.contexte.seuilInjection) {
+		motifs.push(`Seuil des pistes (contexte.seuilPiste) : ${suivant.contexte.seuilPiste} % dépasse le seuil d’injection automatique (${suivant.contexte.seuilInjection} %).`);
 	}
 	return motifs.length > 0 ? { ok: false, motifs } : { ok: true, reglages: suivant };
 }
