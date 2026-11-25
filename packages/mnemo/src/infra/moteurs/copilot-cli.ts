@@ -1,4 +1,3 @@
-import { CATALOGUE_MOTEURS } from '../../domaine/moteurs/catalogue.ts';
 import { HOOKS_COPILOT_CLI } from '../../application/moteurs/copilot-cli/hooks.ts';
 import { fichiersDeSessionCopilotCli, preparerCopilotCli } from '../../application/moteurs/copilot-cli/session.ts';
 import type { Moteur } from '../../application/ports.ts';
@@ -25,11 +24,8 @@ import { versionParCommande } from './version-par-commande.ts';
  */
 export const MOTEUR_COPILOT_CLI: Moteur = {
 	id: 'copilot-cli',
-	nom: CATALOGUE_MOTEURS['copilot-cli'].nom,
 	commandeParDefaut: 'copilot',
 	installation: {
-		optionInit: CATALOGUE_MOTEURS['copilot-cli'].optionInit,
-		facultatif: { bloc: 'copilot', etape: 'copilot', etapeHooks: 'copilot_hooks' },
 		recherche: 'commande copilot absente du PATH, de Homebrew et de ~/.npm-global/bin, ou MNEMO_COPILOT invalide',
 		desactivation: '"mnemo" dans disabledMcpServers de settings.json',
 		retraitManuel: 'l’entrée « mnemo » de mcpServers dans mcp-config.json',

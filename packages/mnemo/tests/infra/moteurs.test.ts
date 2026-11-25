@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CONTRAT_DES_FACULTATIFS, MOTEURS_FACULTATIFS } from '../../src/adaptateurs/cli/moteurs-facultatifs.ts';
 import { hooksDuMoteur } from '../../src/application/moteurs/hooks.ts';
 import { IDS_MOTEURS } from '@mnemo/commun';
 import { CATALOGUE_MOTEURS } from '../../src/domaine/moteurs/catalogue.ts';
@@ -14,11 +15,13 @@ describe('moteurs : un seul registre de vérité', () => {
 		}
 	});
 
-	it('le catalogue du domaine (aide, hooks) dit de chaque moteur du poste son nom, son option d’init et s’il est facultatif', () => {
-		for (const id of IDS_MOTEURS) {
-			const m = MOTEURS_DU_POSTE[id];
-			expect(CATALOGUE_MOTEURS[id], id).toMatchObject({ nom: m.nom, optionInit: m.installation.optionInit, facultatif: m.installation.facultatif !== undefined });
-		}
+	it('moteurs de sessions et du poste dans l’ordre des identifiants ; facultatifs du catalogue = ceux qui ont leur bloc et leurs étapes dans le contrat', () => {
+		expect(MOTEURS.map((m) => m.id)).toEqual([...IDS_MOTEURS]);
+		for (const id of IDS_MOTEURS) expect(MOTEURS_DU_POSTE[id].id).toBe(id);
+		expect(IDS_MOTEURS.filter((id) => CATALOGUE_MOTEURS[id].facultatif)).toEqual(Object.keys(CONTRAT_DES_FACULTATIFS));
+		expect(MOTEURS_FACULTATIFS.map((m) => [m.id, m.nom, m.optionInit, m.moteur.id])).toEqual(
+			IDS_MOTEURS.filter((id) => CATALOGUE_MOTEURS[id].facultatif).map((id) => [id, CATALOGUE_MOTEURS[id].nom, CATALOGUE_MOTEURS[id].optionInit, id]),
+		);
 		expect(IDS_MOTEURS.filter((id) => CATALOGUE_MOTEURS[id].litLesHooksDeClaudeCode)).toEqual(['copilot-cli']);
 	});
 

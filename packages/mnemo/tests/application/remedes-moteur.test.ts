@@ -4,7 +4,8 @@ import { avertissementDesHooks } from '../../src/application/moteurs/avertisseme
 import { remedesDuMoteur } from '../../src/application/moteurs/remedes.ts';
 import { lireOptionsInit } from '../../src/adaptateurs/cli/init-options.ts';
 import { IDS_MOTEURS } from '../../src/domaine/moteurs/moteur.ts';
-import { MOTEURS_DU_POSTE, MOTEURS_FACULTATIFS } from '../../src/infra/moteurs/moteurs.ts';
+import { MOTEURS_FACULTATIFS } from '../../src/adaptateurs/cli/moteurs-facultatifs.ts';
+import { MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 
 describe('remèdes des moteurs', () => {
 	it('commandes tirées de l’installation ; moteur par défaut sans --moteur', () => {
@@ -20,7 +21,7 @@ describe('remèdes des moteurs', () => {
 		const texte = avertissementDesHooks(MOTEURS_DU_POSTE['mistral-vibe'], { etat: 'absent', chemin: '/h/.vibe/hooks.toml' });
 		expect(texte).toContain('« mnemo init --mistral »');
 		expect(avertissementDesHooks(MOTEURS_DU_POSTE.codex, { etat: 'perime', chemin: '/h/.codex/hooks.json' })).toContain('« mnemo declarer --moteur codex --remplacer »');
-		for (const m of MOTEURS_FACULTATIFS) expect(lireOptionsInit([m.installation.optionInit]).moteurs).toEqual([m.id]);
+		for (const m of MOTEURS_FACULTATIFS) expect(lireOptionsInit([m.optionInit]).moteurs).toEqual([m.id]);
 	});
 
 	it('registre : chaque identifiant a son moteur du poste', () => {

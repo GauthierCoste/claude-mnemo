@@ -1,3 +1,4 @@
+import { NOMS_MOTEURS } from '@mnemo/commun';
 /**
  * Route des moteurs (`ROUTES.moteurs`) : chaque agent de code du service, sa commande trouvée au démarrage, sa version et ses
  * modèles (Réglages › Profils) ; avec `poste=1`, ce que vérifie `mnemo verifier-poste` (déclaration MCP, hooks du poste et
@@ -53,7 +54,7 @@ function pointCommande(moteur: Moteur, commande: CommandeMoteur | null, trouvee:
 	const introuvable = commandesDe(moteur).introuvable;
 	if (memeCommande(commande, trouvee)) return commande === null ? { ...c, ok: false, etat: 'introuvable', detail: introuvable } : { ...c, ok: true, etat: 'trouvée', detail: chemin(commande) };
 	if (commande === null) {
-		return { ...c, ok: false, etat: 'trouvée depuis le démarrage', detail: `${chemin(trouvee!)} : le service, démarré sans ${moteur.nom}, ne la prend qu'en redémarrant.`, remede: REDEMARRER };
+		return { ...c, ok: false, etat: 'trouvée depuis le démarrage', detail: `${chemin(trouvee!)} : le service, démarré sans ${NOMS_MOTEURS[moteur.id]}, ne la prend qu'en redémarrant.`, remede: REDEMARRER };
 	}
 	if (trouvee === null) return { ...c, ok: false, etat: 'introuvable maintenant', detail: `Le service lance encore ${chemin(commande)}, trouvée à son démarrage ; ${introuvable}.` };
 	return { ...c, ok: false, etat: 'changée', detail: `Le service lance ${chemin(commande)}, trouvée à son démarrage ; trouvée maintenant : ${chemin(trouvee)}. Il ne la prend qu'en redémarrant.`, remede: REDEMARRER };
@@ -68,9 +69,9 @@ async function pointsDuPoste(duService: MoteurDuService, p: PosteDesMoteurs): Pr
 	const mcp = { cle: 'mcp', libelle: 'Serveur MCP mnemo' } as const;
 	if (typeof lu !== 'string') points.push({ ...mcp, ok: false, etat: 'illisible', detail: lu.echec });
 	else if (lu === 'deja') points.push({ ...mcp, ok: true, etat: 'déclaré' });
-	else if (lu === 'absent') points.push({ ...mcp, ok: false, etat: 'non déclaré', detail: `Les sessions de ${moteur.nom} lancées hors de Mnemo ne lisent pas la mémoire.`, remede: terminal(commandes.declarer) });
+	else if (lu === 'absent') points.push({ ...mcp, ok: false, etat: 'non déclaré', detail: `Les sessions de ${NOMS_MOTEURS[moteur.id]} lancées hors de Mnemo ne lisent pas la mémoire.`, remede: terminal(commandes.declarer) });
 	else if (lu === 'perime') points.push({ ...mcp, ok: false, etat: 'périmé', detail: 'Déclaré pour un autre Node ou une autre installation de Mnemo.', remede: terminal(commandes.remplacer) });
-	else if (lu === 'desactive') points.push({ ...mcp, ok: false, etat: 'désactivé', detail: `Désactivé dans ${moteur.nom} (${commandes.desactivation}) : Mnemo ne le réactive pas ; réactive-le dans sa configuration.` });
+	else if (lu === 'desactive') points.push({ ...mcp, ok: false, etat: 'désactivé', detail: `Désactivé dans ${NOMS_MOTEURS[moteur.id]} (${commandes.desactivation}) : Mnemo ne le réactive pas ; réactive-le dans sa configuration.` });
 	else points.push({ ...mcp, ok: false, etat: 'autre serveur', detail: 'Une déclaration « mnemo » existe mais ne lance pas Mnemo : laissée telle quelle.' });
 
 	if (moteur.hooksDuPoste === undefined) return points;
@@ -102,8 +103,8 @@ async function vueMoteur(duService: MoteurDuService, p: PosteDesMoteurs, poste: 
 		moteur.modeles({ executer: p.executer, commande, env: p.env }).catch((): readonly string[] => []),
 	]);
 	const tropAncien = moteur.refusDeVersion?.(version) ?? null;
-	const indisponible = commande === null ? `${moteur.nom} introuvable sur ce poste (${commandesDe(moteur).introuvable}).` : tropAncien === null ? null : `${tropAncien}.`;
-	const vue: MoteurVue = { id: moteur.id, nom: moteur.nom, indisponible, manuel: commande === null && moteur.sansCommande === 'manuel', version, modeles: [...modeles] };
+	const indisponible = commande === null ? `${NOMS_MOTEURS[moteur.id]} introuvable sur ce poste (${commandesDe(moteur).introuvable}).` : tropAncien === null ? null : `${tropAncien}.`;
+	const vue: MoteurVue = { id: moteur.id, nom: NOMS_MOTEURS[moteur.id], indisponible, manuel: commande === null && moteur.sansCommande === 'manuel', version, modeles: [...modeles] };
 	if (!poste) return vue;
 	const points: PointMoteurVue[] = [pointCommande(moteur, commande, moteur.trouver(p.env, p.plateforme))];
 	if (commande !== null && moteur.version !== undefined) {
@@ -112,7 +113,7 @@ async function vueMoteur(duService: MoteurDuService, p: PosteDesMoteurs, poste: 
 				? { cle: 'version', libelle: 'Version', ok: null, etat: 'illisible', detail: `${moteur.commandeParDefaut} --version ne répond pas : rien n'est empêché.` }
 				: tropAncien === null
 					? { cle: 'version', libelle: 'Version', ok: true, etat: version }
-					: { cle: 'version', libelle: 'Version', ok: false, etat: version, detail: `${tropAncien} : mets ${moteur.nom} à jour.` },
+					: { cle: 'version', libelle: 'Version', ok: false, etat: version, detail: `${tropAncien} : mets ${NOMS_MOTEURS[moteur.id]} à jour.` },
 		);
 	}
 	if (commande !== null) points.push(...(await pointsDuPoste(duService, p)));

@@ -1,4 +1,5 @@
 import type { MoteurDuPoste } from '../ports.ts';
+import { CATALOGUE_MOTEURS } from '../../domaine/moteurs/catalogue.ts';
 import { MOTEUR_PAR_DEFAUT } from '../../domaine/moteurs/moteur.ts';
 
 /**
@@ -9,5 +10,5 @@ export type RemedesDuMoteur = { declarer: string; remplacer: string; retirer: st
 
 export function remedesDuMoteur(moteur: Pick<MoteurDuPoste, 'id' | 'installation'>): RemedesDuMoteur {
 	const option = moteur.id === MOTEUR_PAR_DEFAUT ? '' : ` --moteur ${moteur.id}`;
-	return { declarer: `mnemo init ${moteur.installation.optionInit}`, remplacer: `mnemo declarer${option} --remplacer`, retirer: `mnemo declarer${option} --retirer` };
+	return { declarer: `mnemo init ${CATALOGUE_MOTEURS[moteur.id].optionInit}`, remplacer: `mnemo declarer${option} --remplacer`, retirer: `mnemo declarer${option} --retirer` };
 }

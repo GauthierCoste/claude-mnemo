@@ -14,7 +14,8 @@ import { HOOKS_DU_POSTE_COPILOT_CLI } from '../../src/infra/moteurs/copilot-cli/
 import { modelesCopilotCli } from '../../src/infra/moteurs/copilot-cli/modeles.ts';
 import { lectureTranscriptionCopilotCli } from '../../src/infra/moteurs/copilot-cli/transcription.ts';
 import { trouverCopilot } from '../../src/infra/moteurs/copilot-cli/trouver-copilot.ts';
-import { MOTEURS, MOTEURS_DU_POSTE, MOTEURS_FACULTATIFS } from '../../src/infra/moteurs/moteurs.ts';
+import { MOTEURS_FACULTATIFS } from '../../src/adaptateurs/cli/moteurs-facultatifs.ts';
+import { MOTEURS, MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 import { nodeDurable } from '../../src/infra/node-durable.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
@@ -210,7 +211,7 @@ describe('mnemo declarer --moteur copilot-cli et verifier-poste', () => {
 		const lignes: string[] = [];
 		await commandeVerifierPoste(['--json'], { executer, trouver: { 'claude-code': () => COPILOT, codex: () => null, 'mistral-vibe': () => null, 'copilot-cli': () => ({ commande: process.execPath, avant: [faux] }) }, versionNode: '26.0.0', main: MAIN, env: { COPILOT_HOME: home } }, (l) => lignes.push(l));
 		expect(JSON.parse(lignes[0]!).copilot).toEqual({ ok: true, chemin: faux, version: '1.0.115', mcp: { etat: 'absent' }, hooks: { etat: 'absent' } });
-		expect(MOTEURS_FACULTATIFS.map((m) => m.installation.optionInit)).toContain('--copilot');
+		expect(MOTEURS_FACULTATIFS.map((m) => m.optionInit)).toContain('--copilot');
 	});
 });
 
@@ -271,6 +272,7 @@ describe('GitHub Copilot CLI : modèles, version, registres', () => {
 		expect(MOTEUR_COPILOT_CLI.sansCommande).toBe('refus');
 		expect(MOTEUR_COPILOT_CLI.marqueDeSession(ID)).toBe(ID);
 		expect(MOTEUR_COPILOT_CLI.debutAuPremierMessage).toBe(true);
-		expect(MOTEUR_COPILOT_CLI.installation).toMatchObject({ optionInit: '--copilot', facultatif: { bloc: 'copilot', etape: 'copilot', etapeHooks: 'copilot_hooks' }, approbation: null });
+		expect(MOTEUR_COPILOT_CLI.installation).toMatchObject({ approbation: null });
+		expect(MOTEURS_FACULTATIFS.find((m) => m.id === 'copilot-cli')).toMatchObject({ optionInit: '--copilot', bloc: 'copilot', etape: 'copilot', etapeHooks: 'copilot_hooks' });
 	});
 });

@@ -1,3 +1,4 @@
+import { NOMS_MOTEURS } from '@mnemo/commun';
 import type { LectureHooksDuPoste, MoteurDuPoste } from '../ports.ts';
 import { remedesDuMoteur } from './remedes.ts';
 
@@ -9,8 +10,8 @@ const PERTE = 'cette session ne transmettra rien à Mnemo (état, contexte servi
  * d'une autre installation, illisibles, ou pas approuvés chez le moteur. La session se lance quand même ; null : rien à
  * signaler (approbation lue, ou impossible à vérifier : `verifier-poste` le dit).
  */
-export function avertissementDesHooks(moteur: Pick<MoteurDuPoste, 'id' | 'nom' | 'installation'>, lu: LectureHooksDuPoste): string | null {
-	const { nom } = moteur;
+export function avertissementDesHooks(moteur: Pick<MoteurDuPoste, 'id' | 'installation'>, lu: LectureHooksDuPoste): string | null {
+	const nom = NOMS_MOTEURS[moteur.id];
 	const r = remedesDuMoteur(moteur);
 	if ('echec' in lu) return `Hooks de Mnemo pour ${nom} illisibles (${lu.echec}) : ${PERTE}.`;
 	if (lu.etat === 'absent') return `Hooks de Mnemo pour ${nom} non installés (${lu.chemin}) : ${PERTE}. Installe-les avec « ${r.declarer} ».`;

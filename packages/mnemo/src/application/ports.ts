@@ -1110,17 +1110,13 @@ export type TelemetrieDuMoteur = {
  */
 /**
  * Ce que Mnemo dit d'un moteur sur le poste (`mnemo init`, `verifier-poste`, `declarer`, Réglages › Système, avertissements de
- * session) ; les commandes `mnemo` qui y remédient en sont tirées (`remedesDuMoteur`). `optionInit` : l'option de `mnemo init`
- * qui déclare le serveur MCP (et installe les hooks du poste) ; `facultatif` : moteur que `init` ne touche que sur cette
- * option, avec son bloc dans `PosteVerifie` et ses étapes d'`init` (`EtapeInit`) ; absent : Claude Code, toujours vérifié.
- * `recherche` : où sa commande est cherchée (dit quand elle est introuvable) ; `desactivation` : le réglage qui éteint sa
+ * session) ; les commandes `mnemo` qui y remédient en sont tirées (`remedesDuMoteur`, avec l'option de `mnemo init` du
+ * catalogue). `recherche` : où sa commande est cherchée (dit quand elle est introuvable) ; `desactivation` : le réglage qui éteint sa
  * déclaration MCP ; `retraitManuel` : comment retirer une déclaration « mnemo » qui ne lance pas Mnemo ; `approbation` : ce
  * qu'il faut faire pour qu'il lance des hooks installés (`commande` à taper dans le moteur, `consigne` à dire) ; null : il
  * les lance sans approbation.
  */
 export type InstallationDuMoteur = {
-	optionInit: string;
-	facultatif?: { bloc: string; etape: string; etapeHooks: string };
 	recherche: string;
 	desactivation: string;
 	retraitManuel: string;
@@ -1129,7 +1125,6 @@ export type InstallationDuMoteur = {
 
 export type MoteurDuPoste = {
 	id: IdMoteur;
-	nom: string;
 	commandeParDefaut: string;
 	installation: InstallationDuMoteur;
 	trouver(env: Record<string, string | undefined>, plateforme: string): CommandeMoteur | null;

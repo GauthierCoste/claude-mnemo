@@ -1,4 +1,3 @@
-import { CATALOGUE_MOTEURS } from '../../domaine/moteurs/catalogue.ts';
 import { HOOKS_CLAUDE_CODE } from '../../application/moteurs/claude-code/hooks.ts';
 import { assemblerPlugin, preparerClaudeCode } from '../../application/moteurs/claude-code/plugin.ts';
 import type { LectureFenetre, Moteur } from '../../application/ports.ts';
@@ -29,10 +28,8 @@ function sansQuotas(transcription: LectureTranscription): LectureFenetre {
  */
 export const MOTEUR_CLAUDE_CODE: Moteur = {
 	id: 'claude-code',
-	nom: CATALOGUE_MOTEURS['claude-code'].nom,
 	commandeParDefaut: 'claude',
 	installation: {
-		optionInit: CATALOGUE_MOTEURS['claude-code'].optionInit,
 		recherche: 'commande claude absente du PATH, ou MNEMO_CLAUDE invalide',
 		desactivation: 'désactivé',
 		retraitManuel: '`claude mcp remove mnemo --scope user`',

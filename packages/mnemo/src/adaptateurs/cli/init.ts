@@ -1,3 +1,4 @@
+import { NOMS_MOTEURS } from '@mnemo/commun';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -13,7 +14,8 @@ import type { ResultatDeclaration, ResultatInstallationHooks } from '../../appli
 import { citerPosix, citerPowerShell } from '../../domaine/citer.ts';
 import { commandeManuelle, declarerServeurMcp } from '../../infra/moteurs/claude-code/declaration-mcp.ts';
 import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
-import { MOTEURS_DU_POSTE, MOTEURS_FACULTATIFS } from '../../infra/moteurs/moteurs.ts';
+import { MOTEURS_DU_POSTE } from '../../infra/moteurs/moteurs.ts';
+import { MOTEURS_FACULTATIFS } from './moteurs-facultatifs.ts';
 import { remedesDuMoteur } from '../../application/moteurs/remedes.ts';
 import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
 import { commandeAJour, dossierDeCommande } from '../../infra/commande-mnemo.ts';
@@ -242,17 +244,15 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 		for (const m of MOTEURS_FACULTATIFS) {
 			if (!choix.moteurs.includes(m.id)) continue;
 			const { nom } = m;
-			// étapes du contrat (`EtapeInit`), portées par l'installation du moteur
-			const f = { id: m.id, etape: m.installation.facultatif.etape as EtapeInit, etapeHooks: m.installation.facultatif.etapeHooks as EtapeInit };
 			if (sansMcpEnv) {
-				j.evenement(f.etape, 'saute', `Serveur MCP non déclaré à ${nom} (MNEMO_SANS_MCP=1).`);
-				j.evenement(f.etapeHooks, 'saute', `Hooks non installés chez ${nom} (MNEMO_SANS_MCP=1).`);
+				j.evenement(m.etape, 'saute', `Serveur MCP non déclaré à ${nom} (MNEMO_SANS_MCP=1).`);
+				j.evenement(m.etapeHooks, 'saute', `Hooks non installés chez ${nom} (MNEMO_SANS_MCP=1).`);
 				continue;
 			}
 			let ligne: string | null = null;
-			await mener(f.etape, `Serveur MCP (${nom})`, `Déclaration du serveur MCP à ${nom}.`, async () => {
-				const declarationMoteur = await actions.declarerAuMoteur(f.id);
-				ligne = messageDeclarationMoteur(f.id, declarationMoteur);
+			await mener(m.etape, `Serveur MCP (${nom})`, `Déclaration du serveur MCP à ${nom}.`, async () => {
+				const declarationMoteur = await actions.declarerAuMoteur(m.id);
+				ligne = messageDeclarationMoteur(m.id, declarationMoteur);
 				if (declarationMoteur === 'desactive') return { laisse: ligne };
 				if (json && declarationMoteur !== 'declare' && declarationMoteur !== 'deja')
 					throw 'perime' in declarationMoteur && declarationMoteur.remplacable === true ? new EchecMotive(ligne, 'perime') : new Error(ligne);
@@ -260,13 +260,13 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 			});
 			if (ligne !== null) ecrire(ligne);
 			let ligneHooks: string | null = null;
-			const cheminHooks = actions.cheminHooks(f.id);
-			await mener(f.etapeHooks, `Hooks (${nom})`, `Installation des hooks de Mnemo chez ${nom} (${cheminHooks}).`, async () => {
-				const r = await actions.installerHooks(f.id);
+			const cheminHooks = actions.cheminHooks(m.id);
+			await mener(m.etapeHooks, `Hooks (${nom})`, `Installation des hooks de Mnemo chez ${nom} (${cheminHooks}).`, async () => {
+				const r = await actions.installerHooks(m.id);
 				// hooks d'une autre installation de Mnemo : `mnemo declarer --moteur <id> --remplacer` les reprend
 				if (typeof r !== 'string' && r.perime === true) throw new EchecMotive(r.echec, 'perime');
 				if (typeof r !== 'string') throw new Error(r.echec);
-				ligneHooks = messageHooksMoteur(f.id, r, cheminHooks);
+				ligneHooks = messageHooksMoteur(m.id, r, cheminHooks);
 				return ligneHooks;
 			});
 			if (ligneHooks !== null) ecrire(ligneHooks);
@@ -411,7 +411,8 @@ export function messagesInit(racine: string, resultat: ResultatInitialisation, d
 /** Une ligne pour la déclaration MCP chez un moteur facultatif. */
 export function messageDeclarationMoteur(id: IdMoteur, declaration: ResultatDeclaration): string {
 	const moteur = MOTEURS_DU_POSTE[id];
-	const { nom, installation } = moteur;
+	const { installation } = moteur;
+	const nom = NOMS_MOTEURS[id];
 	if (declaration === 'declare') return `Serveur MCP déclaré pour toutes les sessions ${nom}.`;
 	if (declaration === 'deja') return `Serveur MCP déjà déclaré à ${nom}.`;
 	if (declaration === 'desactive') return `Serveur MCP : déclaration désactivée dans ${nom} (${installation.desactivation}), laissée telle quelle.`;
@@ -425,8 +426,8 @@ export function messageDeclarationMoteur(id: IdMoteur, declaration: ResultatDecl
 
 /** Une ligne pour les hooks installés chez un moteur facultatif ; s'il demande de les approuver (Codex), comment. */
 export function messageHooksMoteur(id: IdMoteur, r: Exclude<ResultatInstallationHooks, { echec: string }>, chemin: string): string {
-	const { nom, installation } = MOTEURS_DU_POSTE[id];
-	const { approbation } = installation;
+	const nom = NOMS_MOTEURS[id];
+	const { approbation } = MOTEURS_DU_POSTE[id].installation;
 	if (r === 'deja') return `Hooks de Mnemo déjà installés chez ${nom} (${chemin})${approbation === null ? '.' : ` ; s’ils ne sont pas encore approuvés, approuvez-les dans ${nom} (${approbation.commande}).`}`;
 	const fait = r === 'installe' ? 'installés' : 'mis à jour';
 	return `Hooks de Mnemo ${fait} chez ${nom} (${chemin})${approbation === null ? '.' : ` ; ${approbation.consigne}`}`;

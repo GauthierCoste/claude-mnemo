@@ -1,4 +1,4 @@
-import { OBJECTIF_MAX, PROFIL_ARCHIVISTE } from '@mnemo/commun';
+import { NOMS_MOTEURS, OBJECTIF_MAX, PROFIL_ARCHIVISTE } from '@mnemo/commun';
 import type { NiveauModeles } from '@mnemo/commun';
 import { validerDossier } from './dossiers.ts';
 import { dialogueOuvert, ETATS_RELANCES, objectifDe } from '../domaine/session.ts';
@@ -434,7 +434,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			const lu = await moteur.hooksDuPoste.lire({ node: pil.plugin.appel.node, main: pil.plugin.appel.main, env: pil.hote.env }).catch((erreur: unknown) => ({ echec: (erreur as Error).message }));
 			return avertissementDesHooks(moteur, lu);
 		};
-		const mcp = async (): Promise<string | null> => (moteur.reglagesMcp === undefined ? null : avertissementDesReglagesMcp(moteur.nom, await moteur.reglagesMcp(pil.hote.env)));
+		const mcp = async (): Promise<string | null> => (moteur.reglagesMcp === undefined ? null : avertissementDesReglagesMcp(NOMS_MOTEURS[moteur.id], await moteur.reglagesMcp(pil.hote.env)));
 		const borne = (p: Promise<string | null>): Promise<string | null> => {
 			let minuteur: ReturnType<typeof setTimeout> | undefined;
 			const delai = new Promise<null>((r) => {
@@ -607,7 +607,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		if (duService === null) return { refus: `Le profil « ${profil.nom} » utilise le moteur « ${profil.moteur} », pas encore pris en charge par ce service.` };
 		const { moteur: duProfil, commande } = duService;
 		if (commande === null && duProfil.sansCommande === 'refus') {
-			return { refus: `Le profil « ${profil.nom} » utilise ${duProfil.nom}, introuvable sur ce poste (commande « ${duProfil.commandeParDefaut} ») : installe-le, puis relance le service.` };
+			return { refus: `Le profil « ${profil.nom} » utilise ${NOMS_MOTEURS[duProfil.id]}, introuvable sur ce poste (commande « ${duProfil.commandeParDefaut} ») : installe-le, puis relance le service.` };
 		}
 		// une version trop ancienne du moteur est refusée ; illisible, elle n'empêche rien
 		if (commande !== null && duProfil.version !== undefined && duProfil.refusDeVersion !== undefined) {

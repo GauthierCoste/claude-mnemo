@@ -1,3 +1,4 @@
+import { NOMS_MOTEURS } from '@mnemo/commun';
 import { fileURLToPath } from 'node:url';
 import type { SortieDeclarer } from '@mnemo/contrat';
 import { basename } from 'node:path';
@@ -40,7 +41,7 @@ const MESSAGES: Record<Exclude<SortieDeclarer['resultat'], 'echec'>, string> = {
 /** Messages des hooks de Mnemo installés pour tout le poste chez ce moteur (`fichier` : leur fichier). */
 function messagesHooks(moteur: MoteurDuPoste, fichier: string): Record<'absent' | 'deja' | 'remplace' | 'autre' | 'retire', string> {
 	const { approbation } = moteur.installation;
-	const approuver = approbation === null ? '' : ` ; approuvez-les de nouveau dans ${moteur.nom} (${approbation.commande})`;
+	const approuver = approbation === null ? '' : ` ; approuvez-les de nouveau dans ${NOMS_MOTEURS[moteur.id]} (${approbation.commande})`;
 	return {
 		absent: `Aucun hook de Mnemo dans ${fichier} : rien à faire.`,
 		deja: 'Hooks de Mnemo déjà à jour.',
@@ -92,7 +93,7 @@ export async function commandeDeclarer(args: string[], partiel: Partial<Dependan
 		env: partiel.env ?? process.env,
 	};
 	const r = remplacer ? await moteur.declarationMcp.remplacer(appel) : await moteur.declarationMcp.retirer(appel);
-	const prefixe = id === MOTEUR_PAR_DEFAUT ? '' : `${moteur.nom} : `;
+	const prefixe = id === MOTEUR_PAR_DEFAUT ? '' : `${NOMS_MOTEURS[moteur.id]} : `;
 	const sortie: SortieDeclarer = typeof r === 'string' ? { resultat: r, message: `${prefixe}${MESSAGES[r]}` } : { resultat: 'echec', message: `${prefixe}Échec : ${r.echec}` };
 	if (moteur.hooksDuPoste !== undefined) {
 		const hooks = await entretenirHooks(moteur, moteur.hooksDuPoste, remplacer, { node: nodeDurable(process.platform), main: appel.main, env: appel.env });
