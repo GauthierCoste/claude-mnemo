@@ -842,7 +842,9 @@ const TAC = 'consignes/Test avant correction.md';
 /**
  * Classement vivant de la première session (note apprise et acceptée : des %) : le dernier message déjà classé, où Mnemo a
  * injecté « Migrations réversibles » (94 %) ; puis, peu après l'ouverture, deux nouveaux messages classés au hook puis affinés
- * en arrière-plan (les lignes glissent), le second avec une injection par Mnemo.
+ * en arrière-plan (les lignes glissent), le second avec une injection par Mnemo. Cohérent avec les règles du hook : au-dessus
+ * du seuil (90 %), la fiche est injectée (2 au plus par message), sinon sa note reste dessous, affinée comprise ; les pistes
+ * sont les nouvelles fiches (jamais proposées ni injectées dans la session) à 30 % au moins, 3 au plus par message.
  */
 export const CLASSEMENT_VIVANT_DEMO: { avant: MessageClasseDemo; suivants: MessageClasseDemo[] } = {
 	avant: {
@@ -855,19 +857,19 @@ export const CLASSEMENT_VIVANT_DEMO: { avant: MessageClasseDemo; suivants: Messa
 			[CDC, 0.62, 'proche'],
 			[TAC, 0.58, 'historique'],
 			[MT, 0.41, 'perimetre'],
-			[CSV, 0.3, 'perimetre'],
+			[CSV, 0.27, 'perimetre'],
 		],
 		affine: [
 			[MIG, 0.95, 'proche'],
-			[DEC, 0.91, 'proche'],
+			[DEC, 0.87, 'proche'],
 			[PG, 0.84, 'nommee'],
 			[LOTS, 0.72, 'liee'],
 			[CDC, 0.6, 'proche'],
 			[TAC, 0.55, 'historique'],
 			[MT, 0.38, 'perimetre'],
-			[CSV, 0.28, 'perimetre'],
+			[CSV, 0.25, 'perimetre'],
 		],
-		pistes: [PG, DEC],
+		pistes: [DEC, TAC],
 		auto: MIG,
 	},
 	suivants: [
@@ -884,7 +886,7 @@ export const CLASSEMENT_VIVANT_DEMO: { avant: MessageClasseDemo; suivants: Messa
 				[TAC, 0.4, 'historique'],
 			],
 			affine: [
-				[LOTS, 0.93, 'liee'],
+				[LOTS, 0.88, 'liee'],
 				[CSV, 0.77, 'perimetre'],
 				[CF, 0.58, 'proche'],
 				[CDC, 0.56, 'proche'],

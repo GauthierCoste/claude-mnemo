@@ -19,7 +19,7 @@
  * à la jonction. Pas de % hors calibration : une entrée ancienne, ou un modèle de note non accepté, donne l'ordre seul.
  */
 import { libelleRaison, niveauEffectif, type NiveauModeles } from '@mnemo/commun';
-import type { CoupureInjectionVue, EntreeServieVue, InjectionVue, LueVue, RaisonCarteVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
+import type { ClassementVue, CoupureInjectionVue, EntreeServieVue, InjectionVue, LueVue, RaisonCarteVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
 import { useAServir, useEcartes, useEcarteesToujours, useModeles, useReactiverInjection, useReglages } from '../../client/hooks.ts';
@@ -153,6 +153,9 @@ export function ClassementEnDirect(p: {
 	const lueA = new Map((p.lues ?? []).map((l) => [l.chemin, l.horodatageMs]));
 	const pistesConnues = new Map(cartesProposees(p.entrees, ordreServies).map((c) => [c.id, c]));
 	const ecartables = cartesRecentes(p.entrees, ENTREES_ECARTABLES);
+	// « piste » : seulement une piste de ce message (sa marque au classement ; une entrée d'avant le classement vivant : ses cartes)
+	const cartesDuMessage = new Set((derniere?.cartes ?? []).map((c) => chemin(c.id)));
+	const pisteDuMessage = (l: ClassementVue) => l.piste === true || (l.signaux === undefined && cartesDuMessage.has(chemin(l.id)));
 
 	const classees: Ligne[] = classement
 		.filter((l) => !l.servi && !injectees.has(chemin(l.id)) && !horsJeu(l.id))
@@ -163,7 +166,7 @@ export function ClassementEnDirect(p: {
 			return {
 				id: l.id,
 				titre: l.titre,
-				classee: { p: calibre ? (l.p ?? l.note) : null, rang: i + 1, piste: l.piste === true || carte !== undefined },
+				classee: { p: calibre ? (l.p ?? l.note) : null, rang: i + 1, piste: pisteDuMessage(l) },
 				...(raison === undefined ? {} : { raison }),
 				...(carte?.depuis === undefined ? {} : { depuis: carte.depuis.titre }),
 				...(lueMs === undefined ? {} : { lueMs }),
@@ -213,13 +216,20 @@ export function ClassementEnDirect(p: {
 	);
 
 	useLayoutEffect(() => {
-		// FLIP : chaque ligne déjà là part de son ancienne place et glisse vers la nouvelle.
+		// FLIP : chaque ligne déjà là part de son ancienne place et glisse vers la nouvelle. Pendant le glissement, une ligne a un
+		// fond opaque et celle qui monte passe au-dessus de celle qui descend : les textes ne se mêlent jamais.
 		const reduit = mouvementReduit();
 		for (const [id, el] of elements.current) {
 			const avant = positions.current.get(id);
 			const delta = avant === undefined ? 0 : avant - el.offsetTop;
 			if (delta !== 0 && !reduit && typeof el.animate === 'function') {
-				el.animate([{ transform: `translateY(${delta}px)` }, { transform: 'none' }], { duration: GLISSEMENT_MS, easing: 'ease-out' });
+				el.dataset['glisse'] = delta > 0 ? 'monte' : 'descend';
+				const animation = el.animate([{ transform: `translateY(${delta}px)` }, { transform: 'none' }], { duration: GLISSEMENT_MS, easing: 'ease-out' }) as Animation | undefined;
+				const fin = () => {
+					delete el.dataset['glisse'];
+				};
+				if (animation !== undefined && 'finished' in animation) void animation.finished.then(fin, fin);
+				else setTimeout(fin, GLISSEMENT_MS);
 			}
 		}
 		// ▲/▼ et nouvelles venues : seulement quand un classement arrive ou s'affine (pas quand l'utilisateur écarte une ligne).
@@ -547,7 +557,7 @@ export function ClassementEnDirect(p: {
 											{x.motif}.
 										</p>
 									))}
-									<p className={s.detailCoupure}>Les % restent affichés ; ➤ pour injecter à la main.</p>
+									<p className={s.detailCoupure}>{calibre ? 'Les % restent affichés ; ➤ pour injecter à la main.' : '➤ pour injecter à la main.'}</p>
 									{p.modifiable && (
 										<Bouton petit title="Réactiver l'injection automatique : elle se coupera de nouveau si les écarts continuent" onClick={() => void agir(() => reactiver(p.session))}>
 											Réactiver

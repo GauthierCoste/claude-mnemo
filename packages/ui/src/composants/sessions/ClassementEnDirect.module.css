@@ -59,6 +59,17 @@
 	background: var(--s3);
 }
 
+/* Glissement (FLIP) : fond opaque, la ligne qui monte au-dessus de celle qui descend ; jamais deux textes mêlés. */
+.ligne[data-glisse] {
+	background: var(--s1);
+	z-index: 1;
+}
+
+.ligne[data-glisse='monte'] {
+	z-index: 2;
+	box-shadow: 0 1px 4px color-mix(in srgb, var(--fond-page) 60%, transparent);
+}
+
 .ligne[data-nouvelle='true'] {
 	animation: fondu 900ms ease-out;
 }

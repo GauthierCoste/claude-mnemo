@@ -9,6 +9,7 @@ import { BoutonModeles, ENCORE_EN_CHARGEMENT } from '../../src/composants/modele
 import { ModelesSession } from '../../src/composants/modeles/ModelesSession.tsx';
 import { ClassementEnDirect } from '../../src/composants/sessions/ClassementEnDirect.tsx';
 import { FournisseurToast } from '../../src/composants/Toast.tsx';
+import { ItemMenu, MenuModeles } from '../../src/composants/modeles/MenuModeles.tsx';
 import { FournisseurNavigation, useNavigation } from '../../src/navigation.tsx';
 import { creerFauxClient } from '../aides/faux-client.tsx';
 import { vueModeles } from '../aides/modeles.ts';
@@ -283,5 +284,38 @@ describe('« Injecté dans la session » sans notes : la raison selon le niveau'
 		expect(await classement(vueModeles({ ...sansReranker, gardien: 'arrete', sens: 'arrete' }), null)).toBe('Notes indisponibles : modèles arrêtésDémarrer');
 		const rien = { installes: false, sens: 'absent', reranker: 'absent', pieces: { sens: null, reranker: null, moteur: null } } as const;
 		expect(await classement(vueModeles(rien), null)).toBe('Notes indisponibles : modèles non installés');
+	});
+});
+
+describe('MenuModeles : place dans la fenêtre', () => {
+	it('près du bas de la fenêtre, le menu s’ouvre au-dessus du bouton ; sinon dessous', async () => {
+		const rect = (top: number, height: number) => ({ top, bottom: top + height, left: 100, right: 130, width: 30, height, x: 100, y: top, toJSON: () => ({}) }) as DOMRect;
+		let basBouton = 750;
+		const espion = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+			return this.tagName === 'BUTTON' && this.getAttribute('aria-haspopup') === 'menu' ? rect(basBouton - 20, 20) : rect(0, 200);
+		});
+		try {
+			const { unmount } = render(
+				<MenuModeles libelle="Menu" classeBouton="" contenuBouton="✗" alignement="droite">
+					{() => <ItemMenu libelle="Un" detail="d" surChoix={() => {}} />}
+				</MenuModeles>,
+			);
+			await act(async () => screen.getByRole('button', { name: 'Menu' }).click());
+			const panneau = screen.getByRole('menu').parentElement!;
+			// fenêtre de 800 px (happy-dom : innerHeight) : 750 + 4 + 200 déborde, le menu passe au-dessus (730 - 4 - 200)
+			expect(window.innerHeight).toBeLessThan(750 + 4 + 200);
+			expect(panneau.style.top).toBe(`${730 - 4 - 200}px`);
+			unmount();
+			basBouton = 100;
+			render(
+				<MenuModeles libelle="Menu" classeBouton="" contenuBouton="✗" alignement="droite">
+					{() => <ItemMenu libelle="Un" detail="d" surChoix={() => {}} />}
+				</MenuModeles>,
+			);
+			await act(async () => screen.getByRole('button', { name: 'Menu' }).click());
+			expect(screen.getByRole('menu').parentElement!.style.top).toBe('104px');
+		} finally {
+			espion.mockRestore();
+		}
 	});
 });

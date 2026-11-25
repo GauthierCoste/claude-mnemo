@@ -5,6 +5,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ErreurApi } from '../../src/client/api.ts';
 import { creerClientDemo } from '../../src/client/demo.ts';
+import { CLASSEMENT_VIVANT_DEMO } from '../../src/client/demo-donnees.ts';
 import { aujourdhui } from '../../src/client/hooks.ts';
 import { Application } from '../../src/composants/Application.tsx';
 import { grouperSessions } from '../../src/sessions/groupes.ts';
@@ -90,6 +91,22 @@ describe('mode démo', () => {
 		const [ordre] = (await promesse).servis;
 		expect(ordre).toMatchObject({ calibree: false, mesure: 'ordre' });
 		expect(ordre!.classement.every((c) => c.p === null)).toBe(true);
+	});
+
+	it('données du classement vivant cohérentes avec les règles du hook : ≥ 90 % ⇔ injectée (2 au plus), pistes nouvelles ≥ 30 % (3 au plus)', () => {
+		const { avant, suivants } = CLASSEMENT_VIVANT_DEMO;
+		// déjà vues dans la session : les pistes du message de position
+		const vues = new Set(['consignes/Migrations réversibles.md', 'projets/erp-saas/Multi-tenant.md', 'stacks/PostgreSQL.md', 'sources/cdc-stocks-v2.md', 'episodes/erp-saas/2026-11-21-schema-des-lots.md']);
+		for (const m of [avant, ...suivants]) {
+			const autos = m.auto === undefined ? [] : [m.auto];
+			for (const lignes of [m.hook, m.affine ?? []]) {
+				expect(lignes.filter(([, p]) => p >= 0.9).map(([id]) => id)).toEqual(autos);
+			}
+			expect(m.pistes.length).toBeLessThanOrEqual(3);
+			const attendues = m.hook.filter(([id, p]) => p >= 0.3 && !autos.includes(id) && !vues.has(id)).map(([id]) => id).slice(0, 3);
+			expect(m.pistes).toEqual(attendues);
+			for (const id of [...m.pistes, ...autos]) vues.add(id);
+		}
 	});
 
 	it('coupure, réactivation, écartée toujours et rétablie (`&coupure=1`)', async () => {

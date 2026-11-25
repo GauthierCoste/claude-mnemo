@@ -4,8 +4,11 @@
  * plus loin (la grille ne se dézoome pas derrière lui), comme un clic ailleurs ; flèches, Début et Fin entre les items, un
  * item désactivé (`aria-disabled`) compris.
  */
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import s from './Modeles.module.css';
+
+/** Écart gardé entre le menu et le bord de la fenêtre. */
+const MARGE_FENETRE = 8;
 
 export function MenuModeles(p: {
 	libelle: string;
@@ -26,6 +29,7 @@ export function MenuModeles(p: {
 		setOuvert(true);
 	};
 	const racine = useRef<HTMLDivElement>(null);
+	const panneau = useRef<HTMLDivElement>(null);
 	const menu = useRef<HTMLDivElement>(null);
 	const bouton = useRef<HTMLButtonElement>(null);
 	const items = () => [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]') ?? [])];
@@ -33,6 +37,14 @@ export function MenuModeles(p: {
 		setOuvert(false);
 		if (rendreFocus) bouton.current?.focus();
 	};
+	// près du bas de la fenêtre, le menu s'ouvre au-dessus du bouton (vers l'intérieur de l'écran), sans sortir par le haut
+	useLayoutEffect(() => {
+		const r = bouton.current?.getBoundingClientRect();
+		const h = panneau.current?.getBoundingClientRect().height ?? 0;
+		if (!ouvert || r === undefined || h === 0 || r.bottom + 4 + h <= window.innerHeight - MARGE_FENETRE) return;
+		const top = Math.max(MARGE_FENETRE, r.top - 4 - h);
+		if (place.top !== top) setPlace({ ...place, top });
+	}, [ouvert, place]);
 	useEffect(() => {
 		if (!ouvert) return;
 		(items().find((i) => i.getAttribute('aria-checked') === 'true') ?? items()[0])?.focus();
@@ -49,6 +61,7 @@ export function MenuModeles(p: {
 			</button>
 			{ouvert && (
 				<div
+					ref={panneau}
 					className={s.menu}
 					style={place}
 					onKeyDown={(e) => {

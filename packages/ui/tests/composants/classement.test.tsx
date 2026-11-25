@@ -3,7 +3,9 @@ import type { ClassementVue, CoupureInjectionVue, EcarteVue, EcarteeToujoursVue,
 import { act, cleanup, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ErreurApi } from '../../src/client/api.ts';
 import { ClassementEnDirect } from '../../src/composants/sessions/ClassementEnDirect.tsx';
+import { FournisseurToast } from '../../src/composants/Toast.tsx';
 import { creerFauxClient, rendreAvecClient } from '../aides/faux-client.tsx';
 import { vueSelonReranker } from '../aides/modeles.ts';
 
@@ -55,6 +57,7 @@ type Options = {
 	suggestions?: SuggestionEcarteeToujoursVue[];
 	toujours?: EcarteeToujoursVue[];
 	modifiable?: boolean;
+	reactiver?: () => unknown;
 };
 
 /** Le composant, avec des entrées qu'on remplace comme le ferait un nouveau `servi`. */
@@ -85,7 +88,7 @@ function monter(o: Options = {}) {
 			if (corps?.chemin) toujours = [...toujours, { chemin: corps.chemin, titre: corps.chemin, horodatageMs: 9 }];
 			return { ecarteesToujours: toujours };
 		},
-		'/api/injection-automatique': { coupures: [] },
+		'/api/injection-automatique': o.reactiver ?? { coupures: [] },
 	});
 	const ouvrir = vi.fn();
 	let remplacer!: (e: EntreeServieVue[]) => void;
@@ -107,7 +110,12 @@ function monter(o: Options = {}) {
 			/>
 		);
 	}
-	rendreAvecClient(<Banc />, faux.client);
+	rendreAvecClient(
+		<FournisseurToast>
+			<Banc />
+		</FournisseurToast>,
+		faux.client,
+	);
 	return { faux, ouvrir, remplacer: (e: EntreeServieVue[]) => act(() => remplacer(e)) };
 }
 
@@ -214,6 +222,12 @@ describe('ClassementEnDirect : classement vivant', () => {
 			places.set('e.md', 40).set('b.md', 60).set('d.md', 80);
 			remplacer([entree(CALIBRE.horodatageMs, [CALIBRE.classement[0]!, v('e.md', 'Epsilon', 2, 0.95), v('b.md', 'Bêta', 3, 0.6), v('d.md', 'Delta', 4, 0.3)], { ids: CALIBRE.ids })]);
 			expect(animations.find((x) => x.id === 'e.md')?.depart).toBe('translateY(40px)');
+			// pendant le glissement : fond opaque, celle qui monte au-dessus de celle qui descend ; marques levées à la fin
+			const ligne = (id: string) => lignes().find((l) => l.getAttribute('data-id') === id)!;
+			expect(ligne('e.md').dataset['glisse']).toBe('monte');
+			expect(ligne('d.md').dataset['glisse']).toBe('descend');
+			await act(async () => vi.advanceTimersByTime(300));
+			expect(ligne('e.md').dataset['glisse']).toBeUndefined();
 		} finally {
 			if (descripteur) Object.defineProperty(HTMLElement.prototype, 'offsetTop', descripteur);
 			HTMLElement.prototype.animate = animer;
@@ -288,7 +302,7 @@ describe('ClassementEnDirect : classement vivant', () => {
 		const coupure: CoupureInjectionVue = { niveau: 'complets', injections: 100, ecartees: 31, depuisMs: 1, motif: '31 des 100 dernières fiches injectées par Mnemo ont été écartées' };
 		const { faux } = monter({ coupures: [coupure] });
 		await act(async () => {});
-		const etat = screen.getByRole('status');
+		const etat = screen.getAllByRole('status').find((x) => x.textContent?.includes('Injection automatique coupée') === true)!;
 		expect(etat.textContent).toContain('Injection automatique coupée (modèles complets) : justesse récente insuffisante.');
 		expect(etat.textContent).toContain('31 des 100 dernières fiches injectées par Mnemo ont été écartées.');
 		expect(note(lignes()[2]!)).toBe('92 %');
@@ -296,6 +310,32 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(within(lignes()[2]!).getByRole('button', { name: 'Bêta' }).getAttribute('title')).toMatch(/l'injection automatique est coupée : ➤/u);
 		await act(async () => within(etat).getByRole('button', { name: 'Réactiver' }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/injection-automatique', { session: 's1' });
+	});
+
+	it('injection coupée en ordre seul : pas de « Les % restent » (il n’y en a pas) ; Réactiver refusé (suivi illisible) : le motif du service en toast', async () => {
+		const coupure: CoupureInjectionVue = { niveau: 'complets', injections: 100, ecartees: 31, depuisMs: 1, motif: 'm' };
+		monter({
+			coupures: [coupure],
+			entrees: [entree(1, [v('b.md', 'Bêta', 1, null)], { calibree: false })],
+			reactiver: () => {
+				throw new ErreurApi('Suivi des injections illisible : réessayez.', 503);
+			},
+		});
+		await act(async () => {});
+		const etat = screen.getAllByRole('status').find((x) => x.textContent?.includes('Injection automatique coupée') === true)!;
+		expect(etat.textContent).not.toContain('Les % restent');
+		expect(etat.textContent).toContain('➤ pour injecter à la main.');
+		await act(async () => within(etat).getByRole('button', { name: 'Réactiver' }).click());
+		expect(await screen.findByText('Suivi des injections illisible : réessayez.')).toBeTruthy();
+	});
+
+	it('« piste » seulement pour une piste de ce message : une fiche proposée en carte plus tôt dans la session ne la porte pas', async () => {
+		const ancienne = entree(A(14, 20), [], { cartes: [{ id: 'd.md', titre: 'Delta', raison: 'perimetre' }] });
+		monter({ entrees: [ancienne, CALIBRE] });
+		await act(async () => {});
+		const delta = lignes().find((l) => l.getAttribute('data-id') === 'd.md')!;
+		expect(delta.textContent).not.toContain('piste');
+		expect(lignes().find((l) => l.getAttribute('data-id') === 'b.md')!.textContent).toContain('– piste');
 	});
 
 	it('suggestion des 3 sessions : « Ne plus suggérer » écarte toujours ; « Garder » la retire', async () => {
