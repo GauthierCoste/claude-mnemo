@@ -18,6 +18,11 @@ export function niveauEffectif(global: NiveauModeles, propre: NiveauModeles | nu
 	return propre === null || RANG[global] <= RANG[propre] ? global : propre;
 }
 
+/** Vrai si `a` permet plus que `b` (« complets » est plus large que « sens seul », lui-même plus large que « coupés »). */
+export function plusLarge(a: NiveauModeles, b: NiveauModeles): boolean {
+	return RANG[a] > RANG[b];
+}
+
 /** Les modèles qu'un niveau permet d'appeler et de démarrer. */
 export function modelesPermis(niveau: NiveauModeles): { sens: boolean; reranker: boolean } {
 	return { sens: niveau !== 'coupes', reranker: niveau === 'complets' };

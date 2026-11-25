@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estNiveauModeles, modelesPermis, niveauEffectif, niveauRetireUnModele, NIVEAUX_MODELES } from '../src/index.ts';
+import { estNiveauModeles, modelesPermis, niveauEffectif, niveauRetireUnModele, NIVEAUX_MODELES, plusLarge } from '../src/index.ts';
 
 describe('niveaux des modèles', () => {
 	it('niveau effectif : le plus restrictif du global et de celui de la session', () => {
@@ -18,6 +18,15 @@ describe('niveaux des modèles', () => {
 		expect(modelesPermis('complets')).toEqual({ sens: true, reranker: true });
 		expect(modelesPermis('sens')).toEqual({ sens: true, reranker: false });
 		expect(modelesPermis('coupes')).toEqual({ sens: false, reranker: false });
+	});
+
+	it('plus large : permet plus de modèles (complets > sens seul > coupés)', () => {
+		expect(plusLarge('complets', 'sens')).toBe(true);
+		expect(plusLarge('sens', 'coupes')).toBe(true);
+		expect(plusLarge('complets', 'coupes')).toBe(true);
+		expect(plusLarge('sens', 'complets')).toBe(false);
+		expect(plusLarge('coupes', 'sens')).toBe(false);
+		for (const n of NIVEAUX_MODELES) expect(plusLarge(n, n)).toBe(false);
 	});
 
 	it('un changement retire un modèle seulement vers un niveau plus restrictif', () => {
