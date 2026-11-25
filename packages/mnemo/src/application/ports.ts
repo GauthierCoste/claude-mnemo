@@ -8,6 +8,7 @@ import type { Reglages } from '../domaine/reglages.ts';
 import type { InjectionManuelle } from '../domaine/signal-injection.ts';
 import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
 import type { EtatIndicateur } from '../domaine/refus-outil.ts';
+import type { Geste, OrigineGeste } from '../domaine/gestes.ts';
 import type { TypeSource } from '../domaine/regles.ts';
 import type { FichierPlugin } from './plugin.ts';
 import type { AppelPlugin } from './plugin.ts';
@@ -602,6 +603,44 @@ export type FicheServieLueOuEcrite = {
 	empreinteLue: string | null;
 };
 
+/** Vecteur d'un message par le modèle de sens (`modele` : son identité, `bge-m3@…`). */
+export type VecteurDuMessage = { modele: string; valeurs: Float32Array };
+
+/**
+ * Un geste à noter au journal durable des gestes. Le reste du contexte est lu dans la session au moment de l'écriture :
+ * dossier, position, rang du message (`messages_porteurs`). `message` : texte (déjà coupé à `DEMANDE_MAX`) du message
+ * porteur qui porte le geste ; absent : le dernier message porteur du journal servi. `note` : note de la fiche au moment du
+ * geste ; absente : celle de sa dernière carte notée dans le journal servi de la session. `vecteur` : celui du message,
+ * s'il a déjà été calculé (jamais calculé pour le geste).
+ */
+export type GesteANoter = {
+	geste: Geste;
+	session: string;
+	fiche: string;
+	empreinte: string | null;
+	horodatageMs: number;
+	message?: string | null;
+	note?: number | null;
+	vecteur?: VecteurDuMessage | null;
+};
+
+/** Un geste du journal durable (`rang` : ordre d'écriture). `message` : null s'il n'y en avait pas, ou si la session a été supprimée. */
+export type GesteNote = {
+	rang: number;
+	horodatageMs: number;
+	geste: Geste;
+	origine: OrigineGeste;
+	session: string;
+	dossier: string;
+	position: string | null;
+	fiche: string;
+	empreinte: string | null;
+	message: string | null;
+	rangMessage: number;
+	note: number | null;
+	vecteur: VecteurDuMessage | null;
+};
+
 export interface EtatSessions {
 	creer(s: Session): Promise<void>;
 	lire(id: string): Promise<Session | null>;
@@ -676,10 +715,17 @@ export interface EtatSessions {
 	 */
 	sessionsAyantServi(chemin: string, limite: number | null): Promise<{ sessions: { session: Session; horodatageMs: number }[]; total: number }>;
 	/**
-	 * Retire de l'historique une session terminée : elle, ses entrées servies, ses écartés et leurs traces, en une transaction.
-	 * `non_terminee` : rien n'est supprimé.
+	 * Retire de l'historique une session terminée : elle, ses entrées servies, ses écartés et leurs traces, en une transaction ;
+	 * ses gestes restent au journal durable, sans le texte de leur message. `non_terminee` : rien n'est supprimé.
 	 */
 	supprimer(id: string): Promise<'supprimee' | 'inconnue' | 'non_terminee'>;
+	/**
+	 * Note un geste au journal durable des gestes (sans limite de nombre, gardé après /clear, /compact et la fin de la
+	 * session ; `supprimer` n'en efface que le texte du message) ; sans effet pour une session inconnue.
+	 */
+	noterGeste(geste: GesteANoter): Promise<void>;
+	/** Gestes du journal durable, les plus récents d'abord : ceux de `fiche`, depuis `depuisMs` (inclus), `limite` au plus (null : tous). */
+	gestes(filtre: { fiche?: string; depuisMs?: number; limite: number | null }): Promise<GesteNote[]>;
 	/** Instant de la dernière écriture, toutes sessions confondues (0 si aucune). */
 	derniereModificationMs(): Promise<number>;
 	/**

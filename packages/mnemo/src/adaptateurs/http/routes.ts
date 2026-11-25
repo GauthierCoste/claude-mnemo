@@ -13,6 +13,7 @@ import { chercherAvecAvis, voisins } from '../../application/chercher.ts';
 import { deplacer, destinationDuDeplacement } from '../../application/deplacer.ts';
 import { BORNES_DOCUMENTS, documentsDeLaMemoire, SANS_BORNE } from '../../application/documents.ts';
 import { ecarterDuClassement } from '../../application/ecarter.ts';
+import { noterGeste } from '../../application/gestes.ts';
 import { traiterEvenement } from '../../application/evenements.ts';
 import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
@@ -510,6 +511,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const resultat = await ecarterDuClassement(pil.etat, s, id!, undefined, (chemin) => titreDeFiche(chemin, titres));
 				if (resultat === 'introuvable') throw new ErreurHttp(404, 'Élément absent des derniers classements de la session.');
 				if (resultat === 'terminee') throw new ErreurHttp(409, 'Session terminée : plus rien à écarter.');
+				await noterGeste(dep, pil.etat, { geste: 'ecartee_ici', session: s.id, fiche: id!.split('#')[0]!, horodatageMs: Date.now() });
 				return ecartesDiffuses(s.id);
 			},
 		},
@@ -521,6 +523,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				if (id === null || id === '') throw new ErreurHttp(400, 'Paramètre « id » : obligatoire.');
 				const s = await session(r.id);
 				if (!(await pil.etat.retablir(s.id, id))) throw new ErreurHttp(409, 'Session terminée : plus rien à rétablir.');
+				await noterGeste(dep, pil.etat, { geste: 'retablie', session: s.id, fiche: id.split('#')[0]!, horodatageMs: Date.now() });
 				return ecartesDiffuses(s.id);
 			},
 		},

@@ -1,14 +1,16 @@
 import { closeSync, openSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { estNiveauModeles } from '@mnemo/commun';
-import type { ActionSurFiche, Classe, EntreeServie, EtatSessions, Lots } from '../application/ports.ts';
+import type { ActionSurFiche, Classe, EntreeServie, EtatSessions, GesteNote, Lots, VecteurDuMessage } from '../application/ports.ts';
+import { origineDe } from '../domaine/gestes.ts';
+import type { Geste, OrigineGeste } from '../domaine/gestes.ts';
 import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
 import type { RaisonMuet } from '../domaine/message-muet.ts';
 import { etatApres } from '../domaine/session.ts';
 import type { ArretAttendu, CauseArret, EtatSession, EvenementHook, Session } from '../domaine/session.ts';
 
 /** Version du schéma (`PRAGMA user_version`). L'état n'est pas jetable : une autre version est une erreur, jamais un effacement. */
-export const VERSION_ETAT = 12;
+export const VERSION_ETAT = 13;
 /** Migration 3 → 4 : les sessions terminées depuis plus longtemps n'entrent plus dans le rattrapage des épisodes. */
 const RATTRAPAGE_MAX_MS = 7 * 86_400_000;
 const ATTENTE_VERROU_MS = 2000;
@@ -108,6 +110,33 @@ CREATE TABLE IF NOT EXISTS lots (
 CREATE INDEX IF NOT EXISTS lots_decide ON lots (decide_ms);
 `;
 
+/**
+ * Journal durable des gestes de l'utilisateur sur les fiches (sans limite, gardé après la session) ; ajouté en version 13.
+ * `vecteur` : vecteur du message (Float32 dans l'ordre d'octets de la machine), du modèle `modele_vecteur` ; null s'il n'a
+ * pas été calculé.
+ */
+const SCHEMA_GESTES = `
+CREATE TABLE IF NOT EXISTS gestes (
+	rang INTEGER PRIMARY KEY AUTOINCREMENT,
+	horodatage_ms INTEGER NOT NULL,
+	geste TEXT NOT NULL,
+	origine TEXT NOT NULL,
+	session TEXT NOT NULL,
+	dossier TEXT NOT NULL,
+	position TEXT,
+	fiche TEXT NOT NULL,
+	empreinte TEXT,
+	message TEXT,
+	rang_message INTEGER NOT NULL,
+	note REAL,
+	modele_vecteur TEXT,
+	vecteur BLOB
+);
+CREATE INDEX IF NOT EXISTS gestes_fiche ON gestes (fiche, horodatage_ms);
+CREATE INDEX IF NOT EXISTS gestes_horodatage ON gestes (horodatage_ms);
+CREATE INDEX IF NOT EXISTS gestes_session ON gestes (session);
+`;
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
 	id TEXT PRIMARY KEY,
@@ -152,7 +181,7 @@ CREATE TABLE IF NOT EXISTS servis (
 	position TEXT
 );
 CREATE INDEX IF NOT EXISTS servis_session ON servis (session, rang);
-${SCHEMA_ECARTES}${SCHEMA_RATTACHEMENT}${SCHEMA_FICHES_SERVIES_LUES_ECRITES}${SCHEMA_CARTES}${SCHEMA_INJECTIONS_MANUELLES}${SCHEMA_LOTS}`;
+${SCHEMA_ECARTES}${SCHEMA_RATTACHEMENT}${SCHEMA_FICHES_SERVIES_LUES_ECRITES}${SCHEMA_CARTES}${SCHEMA_INJECTIONS_MANUELLES}${SCHEMA_LOTS}${SCHEMA_GESTES}`;
 
 type Ligne = Record<string, unknown>;
 
@@ -245,6 +274,34 @@ function ligneVersEntree(l: Ligne): EntreeServie {
 	};
 }
 
+/** Float32Array → octets (sans copie) ; octets → Float32Array (copiés : l'alignement du tampon lu n'est pas garanti). */
+function vecteurEnOctets(v: Float32Array): Uint8Array {
+	return new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+}
+function octetsEnVecteur(o: Uint8Array): Float32Array {
+	return new Float32Array(Uint8Array.from(o).buffer);
+}
+
+function ligneVersGeste(l: Ligne): GesteNote {
+	const octets = l.vecteur as Uint8Array | null;
+	const modele = l.modele_vecteur as string | null;
+	return {
+		rang: Number(l.rang),
+		horodatageMs: Number(l.horodatage_ms),
+		geste: l.geste as Geste,
+		origine: l.origine as OrigineGeste,
+		session: l.session as string,
+		dossier: l.dossier as string,
+		position: (l.position as string | null) ?? null,
+		fiche: l.fiche as string,
+		empreinte: (l.empreinte as string | null) ?? null,
+		message: (l.message as string | null) ?? null,
+		rangMessage: Number(l.rang_message),
+		note: (l.note as number | null) ?? null,
+		vecteur: octets === null || modele === null || octets.byteLength % 4 !== 0 ? null : ({ modele, valeurs: octetsEnVecteur(octets) } satisfies VecteurDuMessage),
+	};
+}
+
 /** Une transaction courte, prise en écriture d'emblée : les écritures concurrentes de plusieurs processus se suivent. */
 function transaction<T>(base: DatabaseSync, attente: Attente, travail: () => T): T {
 	return reessayerSiOccupe(base, attente, () => {
@@ -283,7 +340,7 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				// versions précédentes : la trace du processus (1 → 2), le bilan lu (2 → 3), le dernier arrêt et l'épisode écrit
 				// (3 → 4), la demande et le classement des entrées servies et les écartés (4 → 5), le dossier non rattaché
 				// (5 → 6), les fiches servies, lues ou écrites par chaque session (6 → 7), les cartes proposées, le journal des actions et le journal servi enrichi (7 → 8), l'empreinte lue des fiches (8 → 9), les injections à la main et le
-				// compteur de messages porteurs (9 → 10), les lots d'informations (10 → 11), le niveau des modèles d'une session (11 → 12) s'ajoutent, rien n'est perdu
+				// compteur de messages porteurs (9 → 10), les lots d'informations (10 → 11), le niveau des modèles d'une session (11 → 12), le journal durable des gestes (12 → 13) s'ajoutent, rien n'est perdu
 				if (version === 1) for (const colonne of ['demarrage_machine_ms', 'lance_ms', 'vu_vivant_ms']) base.exec(`ALTER TABLE sessions ADD COLUMN ${colonne} INTEGER`);
 				if (version <= 2) base.exec('ALTER TABLE sessions ADD COLUMN bilan_lu_ms INTEGER');
 				if (version <= 3) {
@@ -320,6 +377,7 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				// 11 → 12 : le niveau des modèles propre à une session (absent : elle suit celui de la machine)
 				const colonnesSessions = (base.prepare('PRAGMA table_info(sessions)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesSessions.includes('niveau_modeles')) base.exec('ALTER TABLE sessions ADD COLUMN niveau_modeles TEXT');
+				base.exec(SCHEMA_GESTES);
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
 			} else if (version !== VERSION_ETAT) {
 				throw new ErreurEtat(
@@ -758,9 +816,79 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 				if (s === null) return 'inconnue';
 				if (s.etat !== 'terminee') return 'non_terminee';
 				for (const table of ['servis', 'ecartes', 'traces_ecartes', 'fiches_servies_lues_ecrites', 'cartes_proposees', 'actions_fiches', 'injections_manuelles']) base.prepare(`DELETE FROM ${table} WHERE session = ?`).run(id);
+				// les gestes restent (données d'apprentissage) ; le texte de l'utilisateur part avec la session
+				base.prepare('UPDATE gestes SET message = NULL WHERE session = ?').run(id);
 				base.prepare('DELETE FROM sessions WHERE id = ?').run(id);
 				return 'supprimee';
 			});
+		},
+
+		async noterGeste(g) {
+			ecrire(() => {
+				const s = base.prepare('SELECT dossier, position, messages_porteurs FROM sessions WHERE id = ?').get(g.session) as Ligne | undefined;
+				if (s === undefined) return;
+				// le dernier message porteur : une entrée de message non muette (les appels de l'outil `contexte` n'en sont pas)
+				const message =
+					g.message !== undefined
+						? g.message
+						: ((
+								base
+									.prepare("SELECT demande FROM servis WHERE session = ? AND moment = 'message' AND muet IS NULL AND demande IS NOT NULL ORDER BY rang DESC LIMIT 1")
+									.get(g.session) as Ligne | undefined
+							)?.demande as string | undefined) ?? null;
+				// la note de la dernière carte notée de la fiche dans le journal servi de la session
+				const note =
+					g.note !== undefined
+						? g.note
+						: ((
+								base
+									.prepare(
+										`SELECT json_extract(c.value, '$.note') AS note FROM servis s, json_each(s.cartes) c
+										WHERE s.session = ? AND json_extract(c.value, '$.chemin') = ? AND json_type(c.value, '$.note') IN ('real', 'integer')
+										ORDER BY s.rang DESC LIMIT 1`,
+									)
+									.get(g.session, g.fiche) as Ligne | undefined
+							)?.note as number | undefined) ?? null;
+				const vecteur = g.vecteur ?? null;
+				base
+					.prepare(
+						`INSERT INTO gestes (horodatage_ms, geste, origine, session, dossier, position, fiche, empreinte, message, rang_message, note, modele_vecteur, vecteur)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					)
+					.run(
+						g.horodatageMs,
+						g.geste,
+						origineDe(g.geste),
+						g.session,
+						s.dossier as string,
+						(s.position as string | null) ?? null,
+						g.fiche,
+						g.empreinte,
+						message,
+						Number(s.messages_porteurs),
+						note,
+						vecteur?.modele ?? null,
+						vecteur === null ? null : vecteurEnOctets(vecteur.valeurs),
+					);
+			});
+		},
+
+		async gestes(filtre) {
+			const conditions: string[] = [];
+			const parametres: (string | number)[] = [];
+			if (filtre.fiche !== undefined) {
+				conditions.push('fiche = ?');
+				parametres.push(filtre.fiche);
+			}
+			if (filtre.depuisMs !== undefined) {
+				conditions.push('horodatage_ms >= ?');
+				parametres.push(filtre.depuisMs);
+			}
+			const ou = conditions.length === 0 ? '' : `WHERE ${conditions.join(' AND ')}`;
+			// LIMIT -1 : sans limite (SQLite)
+			return reessayer(() =>
+				(base.prepare(`SELECT * FROM gestes ${ou} ORDER BY horodatage_ms DESC, rang DESC LIMIT ?`).all(...parametres, filtre.limite ?? -1) as Ligne[]).map(ligneVersGeste),
+			);
 		},
 
 		async derniereModificationMs() {

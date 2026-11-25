@@ -23,7 +23,7 @@ import { normaliser } from '../domaine/sens.ts';
 import { ficheDePosition } from './chercher.ts';
 import { aujourdhui } from './commun.ts';
 import { resolveurDeLiens } from './liens.ts';
-import type { CarteJournalisee, Dependances, FicheServieLueOuEcrite, RaisonCarte } from './ports.ts';
+import type { CarteJournalisee, Dependances, FicheServieLueOuEcrite, RaisonCarte, VecteurDuMessage } from './ports.ts';
 
 /** Fiches lues ou écrites par la session, d'après son état : chemin → empreinte de la fiche à sa lecture (null : écrite, ou inconnue). */
 export function dejaLuesDe(fiches: readonly FicheServieLueOuEcrite[]): Map<string, string | null> {
@@ -76,8 +76,11 @@ export type DemandeCartes = {
 	/** Fiches injectées entières à ce message à la demande de l'utilisateur : jamais candidates (exclues avant le plafond). */
 	demandees?: readonly string[];
 };
-/** `positionFiche` : fiche de la position si elle existe dans l'index (injectée ou non) ; null sinon : il n'y a alors pas de périmètre à proposer. */
-export type CartesCalculees = { position: FicheDePositionServie | null; positionFiche: string | null; cartes: Carte[]; mesure: 'reranker' | 'sens' | 'aucune' };
+/**
+ * `positionFiche` : fiche de la position si elle existe dans l'index (injectée ou non) ; null sinon : il n'y a alors pas de périmètre à proposer.
+ * `vecteur` : celui du message, s'il a été calculé (jamais calculé pour lui seul).
+ */
+export type CartesCalculees = { position: FicheDePositionServie | null; positionFiche: string | null; cartes: Carte[]; mesure: 'reranker' | 'sens' | 'aucune'; vecteur?: VecteurDuMessage };
 
 /** Au-delà, la fiche de position n'est plus servie entière : elle devient la première carte. */
 export const TAILLE_POSITION_MAX = 8000;
@@ -122,13 +125,14 @@ export async function fichesAEncadrer(dep: Dependances, fiches: readonly { chemi
 	return new Set(fiches.filter((f) => f.typeFiche === 'source' || parDocument.has(f.chemin)).map((f) => f.chemin));
 }
 
-async function vecteurDuMessage(dep: Dependances, message: string, fin: number): Promise<Float32Array | null> {
+async function vecteurDuMessage(dep: Dependances, message: string, fin: number): Promise<VecteurDuMessage | null> {
 	const budgetMs = fin - Date.now();
-	if (dep.sens.modele() === null || budgetMs <= 0 || message.trim() === '') return null;
+	const modele = dep.sens.modele();
+	if (modele === null || budgetMs <= 0 || message.trim() === '') return null;
 	try {
 		const vecteurs = await dep.sens.vecteurs([message], { budgetMs, demarrer: false, activite: { operation: 'injection' } });
 		const v = vecteurs?.length === 1 ? vecteurs[0]! : null;
-		return v === null || v.length === 0 || !v.every(Number.isFinite) ? null : normaliser(v);
+		return v === null || v.length === 0 || !v.every(Number.isFinite) ? null : { modele, valeurs: normaliser(v) };
 	} catch {
 		return null;
 	}
@@ -225,6 +229,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 	/** Note de la fiche de position trop longue (première carte) : comme celle d'une fiche nommée, sans reclasser. */
 	let noteDePosition: number | null = null;
 	let mesure: CartesCalculees['mesure'] = 'aucune';
+	let vecteurDuCalcul: VecteurDuMessage | null = null;
 	const date = (chemin: string) => elementDe.get(chemin)?.date ?? '';
 
 	// Note unique : sens du message (base) plus le poids de chaque signal. Un nouveau signal s'ajoute à cette liste.
@@ -244,7 +249,8 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		// Outil `contexte` : tout est proposable, ailleurs compris ; la note (sens plus signaux) classe, le reranker remplace le sens.
 		const candidates = elements.map((e) => e.chemin).filter(proposable);
 		let notes: Note[] = [];
-		const vecteur = await vecteurDuMessage(dep, d.message, d.fin);
+		vecteurDuCalcul = await vecteurDuMessage(dep, d.message, d.fin);
+		const vecteur = vecteurDuCalcul?.valeurs ?? null;
 		if (vecteur !== null) {
 			mesure = 'sens';
 			const sim = await similarites(dep, candidates, vecteur, CANDIDATS_QUESTION);
@@ -299,8 +305,8 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		// la note dit la même chose partout ; seules les candidates sont classées par elle. Le vecteur du message est calculé une fois.
 		const horsClassement = [...cartesNommees, ...(carteDePosition === null ? [] : [carteDePosition])];
 		const aNoter = [...candidates, ...horsClassement];
-		const vecteur = aNoter.length === 0 ? null : await vecteurDuMessage(dep, d.message, d.fin);
-		const sim = await similarites(dep, aNoter, vecteur, aNoter.length);
+		vecteurDuCalcul = aNoter.length === 0 ? null : await vecteurDuMessage(dep, d.message, d.fin);
+		const sim = await similarites(dep, aNoter, vecteurDuCalcul?.valeurs ?? null, aNoter.length);
 		if (sim.size > 0) mesure = 'sens';
 		const noteHorsClassement = (chemin: string): number | null => (mesure === 'aucune' ? null : noterPiste(chemin, sim.get(chemin) ?? 0).total);
 		// à note égale (sans modèle : poids seuls), la plus récente d'abord
@@ -332,5 +338,5 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		});
 	}
 	if (position !== null) position = { ...position, encadree: encadrees.has(position.chemin) };
-	return { position, positionFiche, cartes, mesure };
+	return { position, positionFiche, cartes, mesure, ...(vecteurDuCalcul === null ? {} : { vecteur: vecteurDuCalcul }) };
 }

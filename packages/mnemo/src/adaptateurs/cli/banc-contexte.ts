@@ -3,12 +3,14 @@ import { dirname, join } from 'node:path';
 import { extraireCas, rejouerCas } from '../../application/banc-contexte.ts';
 import type { CasContexte, EchecContexte, MesureContexte } from '../../application/banc-contexte.ts';
 import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
+import { compterGestes, GESTES } from '../../domaine/gestes.ts';
+import type { ComptesDesGestes } from '../../domaine/gestes.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
 import { dependancesReelles, etatParesseux } from '../../infra/systeme.ts';
 import { AUCUNE_MEMOIRE, ErreurCli } from './erreurs.ts';
 import { trouverRacine } from './racine.ts';
 
-const USAGE_CONTEXTE = 'Usage : mnemo banc contexte [--json] | mnemo banc contexte --extraire <session>';
+const USAGE_CONTEXTE = 'Usage : mnemo banc contexte [--json] | mnemo banc contexte --extraire <session> | mnemo banc contexte --gestes [--json]';
 
 /** Cas du banc `contexte` : `.mnemo/banc-contexte.json` (état local, ignoré par git, jamais commité). */
 export function fichierBancContexte(racine: string): string {
@@ -66,6 +68,15 @@ export function contexteEnTexte(mesure: MesureContexte, echecs: EchecContexte[])
 	].join('\n');
 }
 
+/** Comptes du journal des gestes, sans aucun texte de message : par geste, puis par fiche. */
+export function gestesEnTexte(comptes: ComptesDesGestes): string {
+	const parGeste = GESTES.map((g) => `${g} ${comptes.parGeste[g]}`).join(', ');
+	return [
+		`Gestes : ${comptes.total} (${parGeste})`,
+		...comptes.parFiche.map((f) => `  ${f.fiche} : ${f.total} (${GESTES.filter((g) => f.parGeste[g] !== undefined).map((g) => `${g} ${f.parGeste[g]}`).join(', ')})`),
+	].join('\n');
+}
+
 /** Les cas à ajouter : ceux dont le couple (position, message) n'est pas déjà connu, une seule fois chacun. */
 export function casNouveaux(existants: readonly CasContexte[], extraits: readonly CasContexte[]): CasContexte[] {
 	const cle = (c: CasContexte) => JSON.stringify([c.position, c.message]);
@@ -82,10 +93,24 @@ export function casNouveaux(existants: readonly CasContexte[], extraits: readonl
 /**
  * `mnemo banc contexte [--json]` : rejoue les cas étiquetés de `.mnemo/banc-contexte.json` sur la mémoire courante (sans
  * `claude`). `--extraire <session>` ajoute au fichier les messages journalisés de la session (dédoublonnés par position et
- * message), à étiqueter.
+ * message), à étiqueter. `--gestes` : comptes du journal durable des gestes, par geste et par fiche (sans texte de message).
  */
 export async function commandeContexte(args: string[]): Promise<void> {
 	const json = args.includes('--json');
+	if (args.includes('--gestes')) {
+		const autre = args.find((a) => a !== '--json' && a !== '--gestes');
+		if (autre !== undefined) throw new ErreurCli(`${autre.startsWith('--') ? `Option inconnue : « ${autre} »` : `Argument inattendu : « ${autre} »`}.\n${USAGE_CONTEXTE}`, 2);
+		const racine = trouverRacine(process.cwd());
+		if (racine === null) throw new ErreurCli(AUCUNE_MEMOIRE);
+		const etat = etatParesseux(racine);
+		try {
+			const comptes = compterGestes(await etat.gestes({ limite: null }));
+			console.log(json ? JSON.stringify(comptes, null, 2) : gestesEnTexte(comptes));
+		} finally {
+			etat.fermer();
+		}
+		return;
+	}
 	const i = args.indexOf('--extraire');
 	const session = i === -1 ? null : (args[i + 1] ?? null);
 	if (i !== -1 && (session === null || session.startsWith('--'))) throw new ErreurCli(`Session manquante après --extraire.\n${USAGE_CONTEXTE}`, 2);

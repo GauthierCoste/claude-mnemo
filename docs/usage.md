@@ -363,6 +363,11 @@ instructions, the action check is declared so that Claude Code refuses the actio
 `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` and the `CLAUDE_CODE_USE_*` provider selectors are removed from its
 environment. `MNEMO_CLAUDE` names another `claude` binary.
 
+Mnemo keeps a log of your gestures on the notes it proposes (a note injected by hand, set aside with ✗, restored, or read
+with `lire` after a lead proposed it), with the message that carried it, in `.mnemo/etat.sqlite` only (never in the
+versioned memory), across `/clear`, `/compact` and the end of the session. Deleting a session keeps its gestures but
+erases the text of its messages.
+
 ### Injected context
 
 Mnemo proposes, it never forces. It does not push notes into the session: it hands Claude a few **cards** (title, path,
@@ -625,6 +630,7 @@ Benchmarks measure Mnemo on fictitious corpora shipped with it (`packages/mnemo/
   ones (injected at the right message). Without `claude`, in a few seconds.
 - `mnemo banc contexte [--json]` and `mnemo banc contexte --extraire <session>`: the cards proposed on messages labelled
   by hand, from the file `.mnemo/banc-contexte.json` (private, never committed); see [banc.md](banc.md#banc-du-contexte-sobre).
+  `mnemo banc contexte --gestes [--json]`: counts of the logged gestures, by kind and by note (no message text).
 - `mnemo banc extraction --reel` and `mnemo banc contradictions --reel`: the archivist run by the real `claude -p` on
   test documents, then scored. **They consume your Claude subscription**: without `--reel`, the command refuses.
 

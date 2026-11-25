@@ -282,16 +282,23 @@ describe('routes : écartés', () => {
 		const d = await api(c).supprimer(ecartes('projets/beta/beta.md#^f-0001'));
 		expect(d.statut).toBe(200);
 		expect(d.corps).toEqual({ ecartes: [] });
+		// gestes : la fiche de l'élément, avec le dernier message porteur
+		expect(await c.etat.gestes({ limite: null })).toMatchObject([
+			{ geste: 'retablie', origine: 'manuelle', fiche: 'projets/beta/beta.md', dossier: 'code/alpha', message: 'Où en est Alpha ?' },
+			{ geste: 'ecartee_ici', origine: 'manuelle', fiche: 'projets/beta/beta.md', dossier: 'code/alpha', message: 'Où en est Alpha ?' },
+		]);
 	});
 
 	it('POST écarte une carte d’une nouvelle entrée (classement vide) : titre repris, trace notée', async () => {
 		const c = await serviceFaux();
 		await c.etat.creer(sessionFixe(UUID, { dossier: 'code/alpha' }));
-		await c.etat.journaliser({ session: UUID, moment: 'message', horodatageMs: 5, ids: [], texte: '', ms: 1, sens: false, demande: 'Où en est Plan ?', classement: [], muet: null, cartes: [{ chemin: 'projets/alpha/Plan.md', raison: 'question' }], position: null });
+		await c.etat.journaliser({ session: UUID, moment: 'message', horodatageMs: 5, ids: [], texte: '', ms: 1, sens: false, demande: 'Où en est Plan ?', classement: [], muet: null, cartes: [{ chemin: 'projets/alpha/Plan.md', raison: 'question', note: 0.64 }], position: null });
 		const r = await api(c).post(chemin(ROUTES.ecartes, UUID), { id: 'projets/alpha/Plan.md' });
 		expect(r.statut).toBe(200);
 		expect(r.corps).toEqual({ ecartes: [{ id: 'projets/alpha/Plan.md', titre: 'Plan', horodatageMs: expect.any(Number) }] });
 		expect((await c.etat.ecartes(UUID)).map((e) => e.id)).toEqual(['projets/alpha/Plan.md']);
+		// la note de la carte au moment du geste
+		expect(await c.etat.gestes({ limite: null })).toMatchObject([{ geste: 'ecartee_ici', fiche: 'projets/alpha/Plan.md', note: 0.64, message: 'Où en est Plan ?', rangMessage: 0 }]);
 	});
 
 	it('refus : id absent des classements récents (404), corps invalide (400), session inconnue (404) ou terminée (409)', async () => {
@@ -305,6 +312,8 @@ describe('routes : écartés', () => {
 		await c.etat.modifier(UUID, { etat: 'terminee' });
 		expect((await api(c).post(chemin(ROUTES.ecartes, UUID), { id: 'projets/alpha/alpha.md' })).statut).toBe(409);
 		expect((await api(c).supprimer(ecartes('projets/alpha/alpha.md'))).statut).toBe(409);
+		// aucun échec n'est noté comme un geste
+		expect(await c.etat.gestes({ limite: null })).toEqual([]);
 	});
 });
 

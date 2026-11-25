@@ -143,6 +143,8 @@ export function etatParesseux(racineDossier: string): EtatSessions {
 		actions: (session) => etat().actions(session),
 		sessionsAyantServi: (chemin, limite) => etat().sessionsAyantServi(chemin, limite),
 		supprimer: (id) => etat().supprimer(id),
+		noterGeste: (geste) => etat().noterGeste(geste),
+		gestes: (filtre) => etat().gestes(filtre),
 		derniereModificationMs: () => etat().derniereModificationMs(),
 		noterRattachement: (dossier, rattache, vuMs) => etat().noterRattachement(dossier, rattache, vuMs),
 		dossiersNonRattaches: () => etat().dossiersNonRattaches(),

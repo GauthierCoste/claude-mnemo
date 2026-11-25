@@ -29,7 +29,7 @@ Commandes :
   modeles arreter   arrête les serveurs de modèles (un seul jeu pour la machine)
   banc [questions]  mesure la qualité de la recherche (sans fichier : mémoire d'essai) [--json]
   banc consignes    banc des consignes (vérification et rappel, sans claude) [--json]
-  banc contexte     rejoue les cas étiquetés de .mnemo/banc-contexte.json (sans claude) [--extraire <session>] [--json]
+  banc contexte     rejoue les cas étiquetés de .mnemo/banc-contexte.json (sans claude) [--extraire <session>] [--json] ; --gestes : comptes des gestes
   banc extraction|contradictions --reel  bancs de l'archiviste : lancent le vrai claude -p (abonnement consommé) [--json]
   jeton             adresse de première ouverture dans un navigateur (avec le jeton) [--renouveler]
   ouvrir [dossier]  ouvre Mnemo en fenêtre d'application (démarre le service, détaché, s'il ne tourne pas)

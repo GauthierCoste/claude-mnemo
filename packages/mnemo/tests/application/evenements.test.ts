@@ -272,6 +272,24 @@ describe('traiterEvenement : après un outil', () => {
 		expect(await etat.perimetrePropose(ID)).toBeNull();
 	});
 
+	it('lue après une carte : geste noté une fois par proposition, avec le message porteur ; fiche jamais proposée, `voisins` : rien', async () => {
+		const { dep, etat, pil } = await contexte();
+		const AVOIRS = 'projets/vela/avoirs.md';
+		await dep.coffre.ecrire(AVOIRS, `${entete()}# Avoirs\n\nUn avoir annule une facture.\n`);
+		await traiterEvenement(dep, pil, entree('message', 10, { prompt: 'catalogue références' }), local);
+		expect((await etat.cartesProposees(ID)).has(AVOIRS)).toBe(true);
+		await traiterEvenement(dep, pil, entree('apres_outil', 11, { outil: { nom: 'mcp__mnemo__voisins', entree: { id: AVOIRS } } }), local);
+		expect(await etat.gestes({ limite: null })).toEqual([]);
+		await traiterEvenement(dep, pil, entree('apres_outil', 12, lire(AVOIRS)), local);
+		await traiterEvenement(dep, pil, entree('apres_outil', 13, lire(AVOIRS)), local);
+		// la fiche de position, injectée entière, n'a jamais été proposée en carte
+		await traiterEvenement(dep, pil, entree('apres_outil', 14, lire('projets/vela/vela.md')), local);
+		const empreinte = (await dep.index.fiches()).find((f) => f.chemin === AVOIRS)!.empreinte;
+		expect(await etat.gestes({ limite: null })).toMatchObject([
+			{ geste: 'lue_apres_carte', origine: 'manuelle', fiche: AVOIRS, empreinte, horodatageMs: 12, message: 'catalogue références', rangMessage: 1, position: 'projets/vela', vecteur: null },
+		]);
+	});
+
 	it('apres_outil : un outil sans lien avec une fiche ne note rien et rend {}', async () => {
 		const { dep, etat, pil } = await contexte();
 		expect(await traiterEvenement(dep, pil, entree('apres_outil', 10, { outil: { nom: 'Read', entree: { file_path: '/a.php' } } }), local)).toEqual({});
@@ -302,6 +320,21 @@ describe('traiterEvenement : fiches demandées par l’utilisateur (➤)', () =>
 		expect(avoirs).toMatchObject({ derniereAction: 'servie' });
 		expect(avoirs!.empreinteInjectee).not.toBeNull();
 		expect((await etat.servis(ID, 1))[0]!.ids).toContain(AVOIRS);
+		// « ok » est muet et aucun message porteur ne l'a précédé : geste sans message, au rang 0
+		expect(await etat.gestes({ limite: null })).toMatchObject([{ geste: 'injectee_main', fiche: AVOIRS, empreinte: avoirs!.empreinteInjectee, message: null, rangMessage: 0, position: 'projets/vela' }]);
+	});
+
+	it('injection à la main : notée avec le message porteur qui la porte et son rang ; portée par un message muet : le dernier porteur', async () => {
+		const { dep, etat, pil, demandees } = await avecDemande();
+		const reglages = { ...local, demandees };
+		await traiterEvenement(dep, pil, entree('message', 11, { prompt: 'catalogue des avoirs' }), reglages);
+		await traiterEvenement(dep, pil, entree('message', 12, { prompt: 'références produits' }), reglages);
+		demandees.demander(ID, AVOIRS);
+		await traiterEvenement(dep, pil, entree('message', 13, { prompt: 'ok' }), reglages);
+		expect(await etat.gestes({ limite: null })).toMatchObject([
+			{ geste: 'injectee_main', fiche: AVOIRS, horodatageMs: 13, message: 'références produits', rangMessage: 2 },
+			{ geste: 'injectee_main', fiche: AVOIRS, horodatageMs: 11, message: 'catalogue des avoirs', rangMessage: 1, origine: 'manuelle' },
+		]);
 	});
 
 	it('le hook n’attend plus : rien d’injecté, la demande est remise en attente pour le message suivant', async () => {
@@ -309,6 +342,7 @@ describe('traiterEvenement : fiches demandées par l’utilisateur (➤)', () =>
 		expect(await traiterEvenement(dep, pil, entree('message', 11, { prompt: 'ok' }), { ...local, demandees, echeance: Date.now() - 1 })).toEqual({});
 		expect(demandees.voir(ID)).toEqual([AVOIRS]);
 		expect(await etat.servis(ID, 5)).toEqual([]);
+		expect(await etat.gestes({ limite: null })).toEqual([]);
 	});
 });
 

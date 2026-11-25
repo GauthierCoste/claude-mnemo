@@ -27,7 +27,7 @@ import { trouverRacine } from './racine.ts';
 import { DOSSIER_MEMOIRE } from '../../domaine/dossier-memoire.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
 
-const USAGE = 'Usage : mnemo banc [questions.yaml] [--json] | mnemo banc consignes [--json] | mnemo banc contexte [--extraire <session>] [--json] | mnemo banc extraction|contradictions --reel [--json]';
+const USAGE = 'Usage : mnemo banc [questions.yaml] [--json] | mnemo banc consignes [--json] | mnemo banc contexte [--extraire <session> | --gestes] [--json] | mnemo banc extraction|contradictions --reel [--json]';
 /** Mémoire d'essai (dossier qui contient `_mnemo/`) et ses questions, livrées avec Mnemo. */
 const CORPUS = fileURLToPath(new URL('../../../banc/corpus/', import.meta.url));
 const QUESTIONS = fileURLToPath(new URL('../../../banc/questions.yaml', import.meta.url));

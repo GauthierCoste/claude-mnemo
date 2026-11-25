@@ -294,7 +294,8 @@ describe('calculerCartes : par le sens', () => {
 		const c = await calculerCartes(dep, demande({ message: 'on reprend la maquette', perimetre: false }));
 		expect(appels).toBe(0);
 		expect(c.mesure).not.toBe('sens');
-		expect(c.cartes).toEqual([]);
+		expect(c.cartes).toEqual([]);		// aucun vecteur calculé : aucun rendu
+		expect(c.vecteur).toBeUndefined();
 	});
 
 	it('message suivant avec une fiche nommée : le sens est appelé une fois et la note la fiche nommée', async () => {
@@ -306,6 +307,9 @@ describe('calculerCartes : par le sens', () => {
 		const c = await calculerCartes(dep, demande({ message: 'parle-moi de Corvel et de Ysaline', perimetre: false }));
 		expect(appels).toBe(1);
 		expect(c.mesure).toBe('sens');
+		// le vecteur du message, déjà calculé, est rendu avec l'identité du modèle (pour le journal des gestes)
+		expect(c.vecteur?.modele).toBe('mots@1');
+		expect(c.vecteur?.valeurs).toBeInstanceOf(Float32Array);
 		// ordre du message et raison inchangés : la note ne reclasse pas les fiches nommées
 		expect(c.cartes.map((x) => [x.chemin, x.raison])).toEqual([
 			[CORVEL, 'nommee'],
