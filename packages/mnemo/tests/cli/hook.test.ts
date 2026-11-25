@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -16,6 +18,10 @@ import { FICHIER_CONSIGNES_VERIFIEES } from '../../src/infra/indicateur-consigne
 import type { CauseNonVerifiee } from '../../src/domaine/refus-outil.ts';
 import type { EvenementHook, Session } from '../../src/domaine/session.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
+import { piecesPourPlateforme } from '../../src/infra/modeles/catalogue.ts';
+import { dossierServeurs } from '../../src/infra/modeles/dossier.ts';
+import { dossierPiece } from '../../src/infra/modeles/installer.ts';
+import { arreterServeurs, cheminsModeles } from '../../src/infra/modeles/serveurs.ts';
 import { dependancesReelles } from '../../src/infra/systeme.ts';
 import { verrouFichier } from '../../src/infra/verrou-fichier.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
@@ -625,4 +631,55 @@ describe('mnemo hook fin : épisode minimal', () => {
 		expect(JSON.parse(requetes[0]!.corps)).toMatchObject({ evenement: 'fin', session: ID });
 		expect(await readdir(join(racine, '_mnemo', 'episodes')).catch(() => [])).toEqual([]);
 	});
+});
+
+describe('mnemo hook sans service : niveau des modèles de la session', () => {
+	const FAUX_LLAMA = join(import.meta.dirname, '../aides/faux-llama.mjs');
+	const serveursOuverts: string[] = [];
+	afterEach(async () => {
+		// le gardien lancé par le hook de contrôle (faux moteur) est arrêté, ses faux serveurs avec lui
+		while (serveursOuverts.length > 0) await arreterServeurs(serveursOuverts.pop()!);
+	});
+
+	/** Faux modèles installés (sens et reranker, moteur remplacé par le faux) et une fiche que le message désigne. */
+	async function avecModeles(racine: string): Promise<{ env: Record<string, string>; serveurs: string; lancements: string }> {
+		const modeles = await dossierTemporaire();
+		const pieces = piecesPourPlateforme(process.platform, process.arch);
+		if (pieces === null) throw new Error('plateforme sans pièces');
+		let lancements = '';
+		for (const nom of ['sens', 'reranker'] as const) {
+			const piece = pieces.find((p) => p.nom === nom)!;
+			const dossier = dossierPiece(modeles, piece);
+			await mkdir(join(dossier, ...piece.fichier.split('/').slice(0, -1)), { recursive: true });
+			await writeFile(join(dossier, '.empreinte'), `${piece.sha256}\n`);
+			await writeFile(join(dossier, ...piece.fichier.split('/')), '');
+			if (nom === 'sens') lancements = join(dossier, ...piece.fichier.split('/').slice(0, -1), 'lancements.log');
+		}
+		await mkdir(join(racine, '_mnemo', 'sujets'), { recursive: true });
+		await writeFile(join(racine, '_mnemo', 'sujets', 'catalogue.md'), `${entete('sujet')}# Catalogue des machines\n\nLe catalogue des machines est revu chaque mois.\n`);
+		const env = { MNEMO_RACINE: racine, MNEMO_SESSION: ID, MNEMO_MODELES: modeles, MNEMO_LLAMA_SERVEUR: FAUX_LLAMA };
+		const serveurs = dossierServeurs(env, process.platform, homedir());
+		serveursOuverts.push(serveurs);
+		return { env, serveurs, lancements };
+	}
+
+	it('session « coupes » : le sens n’est ni appelé ni démarré ; sans niveau propre, le hook lance les modèles (contrôle)', async () => {
+		const prompt = 'Revois le catalogue des machines de ce mois';
+		const coupee = await dossierMnemo();
+		const c = await avecModeles(coupee);
+		const etat = ouvrirEtat(join(coupee, '.mnemo', 'etat.sqlite'));
+		await etat.modifier(ID, { niveauModeles: 'coupes' });
+		etat.fermer();
+		const r = await hook(coupee, 'message', entreeMessage(coupee, prompt), c.env);
+		expect(r.code).toBe(0);
+		expect(r.out).toContain('Catalogue des machines');
+		expect(existsSync(cheminsModeles(c.serveurs).etat)).toBe(false);
+		expect(existsSync(c.lancements)).toBe(false);
+
+		// contrôle : un dossier pareil, la session sans niveau propre : le hook lance le gardien (sans l'attendre)
+		const libre = await dossierMnemo();
+		const l = await avecModeles(libre);
+		expect((await hook(libre, 'message', entreeMessage(libre, prompt), l.env)).code).toBe(0);
+		expect(existsSync(cheminsModeles(l.serveurs).etat)).toBe(true);
+	}, 30_000);
 });
