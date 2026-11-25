@@ -444,7 +444,8 @@ async function noterInjection(
 ): Promise<void> {
 	const { position, cartes } = servi.calcul;
 	const injectees = [...(position === null ? [] : [position]), ...servi.demandees, ...servi.calcul.injectees];
-	// les fiches injectées par Mnemo sont notées servies avec leur geste, une fois la réponse livrée (`noterInjectionsAuto`)
+	// les fiches injectées par Mnemo sont notées servies avec leur geste, et ajoutées à l'entrée du journal, une fois la réponse
+	// livrée (`noterInjectionsAuto`) : jamais montrées injectées si la session ne les a pas reçues
 	const auto = new Set(servi.calcul.injectees.map((f) => f.chemin));
 	for (const f of injectees.filter((f) => !auto.has(f.chemin))) {
 		await pil.etat.noterFicheServieLueOuEcrite(session.id, { chemin: f.chemin, action: 'servie', horodatageMs: entree.horodatageMs, empreinte: f.empreinte }).catch(() => {});
@@ -463,13 +464,13 @@ async function noterInjection(
 			session: session.id,
 			moment: 'message',
 			horodatageMs: entree.horodatageMs,
-			ids: injectees.map((f) => f.chemin),
+			ids: injectees.filter((f) => !auto.has(f.chemin)).map((f) => f.chemin),
 			texte: servi.texte,
 			ms: Date.now() - debutMs,
 			...(appelMs === undefined ? {} : { msService: Date.now() - appelMs }),
 			sens: servi.calcul.mesure !== 'aucune',
 			demande: entree.prompt === undefined ? null : entree.prompt.slice(0, DEMANDE_MAX),
-			classement,
+			classement: sansMarqueAuto(classement),
 			...(classement.length === 0 ? {} : { calibree: servi.calcul.calibree }),
 			muet: demande.muet,
 			cartes: cartesDuJournal(cartes),
@@ -486,6 +487,11 @@ async function noterInjection(
 	}
 }
 
+/** Le classement sans la marque `auto` : journalisé avant la livraison de la réponse, il ne la porte pas encore. */
+function sansMarqueAuto(classement: readonly Classe[]): Classe[] {
+	return classement.map(({ auto: _auto, ...c }) => c);
+}
+
 /**
  * Trace « servie » et geste `injectee_auto` des fiches injectées par Mnemo à ce message (spec § 9.1), une fois la réponse
  * livrée : le geste avec le message porteur, son vecteur s'il a
@@ -493,6 +499,7 @@ async function noterInjection(
  * injections le lit). Jamais `noterInjectionManuelle` : elle ne pèse sur aucune voisine et ne compte pas comme un geste positif.
  */
 async function noterInjectionsAuto(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session: Session, entree: EntreeHook, servi: Servi, rang: number | null, classement: readonly Classe[]): Promise<void> {
+	await pil.etat.confirmerInjectionsAuto(session.id, entree.horodatageMs, servi.calcul.injectees.map((f) => f.chemin)).catch(() => {});
 	const vecteur = rang === null || servi.calcul.vecteur === undefined ? null : { rang, vecteur: servi.calcul.vecteur };
 	const lignes = new Map(classement.map((c) => [c.id, c]));
 	for (const f of servi.calcul.injectees) {
@@ -535,6 +542,9 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 		await noterInjection(dep, pil, session, entree, demande, servi, debut, reglages.appelMs, rang, classement, (chemin) => noteDuPorteur(precedent, chemin));
 		// après les écritures : le hook attend-il encore ? Sinon, la réponse ne lui parviendrait pas (les fiches demandées sont remises)
 		if (!aTemps(reglages)) injecte = false;
+		// sans service, les traces des fiches injectées par Mnemo s'écrivent avant de répondre : il faut encore le temps de les
+		// écrire, sinon rien ne part (elles restent injectables, les fiches demandées sont remises)
+		if (auto && injecte && reglages.aLaReponse === undefined && !aTemps(reglages, MARGE_ECRITURE_MS)) injecte = false;
 		if (auto && injecte) {
 			// la trace « servie » et le geste des fiches injectées par Mnemo : le service les écrit une fois la réponse livrée par la
 			// route (jamais si elle ne l'est pas) ; sans lui, juste avant de répondre, après le dernier contrôle
@@ -555,7 +565,8 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 			horodatageMs: entree.horodatageMs,
 			rang,
 			requete: demande.requete ?? demande.message,
-			classement: servi.calcul.classement,
+			// sans la marque `auto` : elle n'est posée qu'une fois la réponse livrée (`confirmerInjectionsAuto`), et l'affinage la garde
+			classement: servi.calcul.classement.map(({ auto: _auto, ...l }) => l),
 			sens: servi.calcul.mesure !== 'aucune',
 			mesurer: reglages.dureeReranker?.fiable() === false,
 			aprioriConnu: demande.aprioris !== undefined,

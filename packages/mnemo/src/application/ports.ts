@@ -761,6 +761,12 @@ export interface EtatSessions {
 	 */
 	completerClassement(session: string, horodatageMs: number, classement: Classe[], affinage: Affinage | null, options?: { sens?: boolean; calibree?: boolean }): Promise<boolean>;
 	/**
+	 * Les fiches injectées par Mnemo au message de cet horodatage, une fois la réponse livrée : ajoutées aux injectées de son
+	 * entrée et marquées `auto` à leur ligne du classement (l'entrée est journalisée sans elles avant la livraison). Un
+	 * `completerClassement` ultérieur garde ces marques.
+	 */
+	confirmerInjectionsAuto(session: string, horodatageMs: number, chemins: readonly string[]): Promise<void>;
+	/**
 	 * Les `limite` dernières entrées de la session, les plus récentes d'abord ; `moment` : celles de ce moment seulement ;
 	 * `options.classement` : `dernier` ne lit le classement que de la plus récente rendue.
 	 */

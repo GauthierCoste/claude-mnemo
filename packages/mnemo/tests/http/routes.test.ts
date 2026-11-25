@@ -2,7 +2,7 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { request } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { avertissementIndex } from '../../src/application/synchroniser.ts';
 import { ENTETE_REMPLACEMENT, ROUTES } from '@mnemo/contrat';
 import type { FicheVue, ReponseProfils, SessionVue } from '@mnemo/contrat';
@@ -382,6 +382,18 @@ describe('routes : injection automatique (suivi et réactivation)', () => {
 		expect((await api(c).post(ROUTES.injectionAutomatique, { session: '22222222-2222-4333-8444-555555555555' })).statut).toBe(404);
 		expect((await api(c).get(ROUTES.injectionAutomatique)).corps).toEqual({ coupures: [COUPURE] });
 	});
+
+	it('suivi illisible : 503 « réessayez », aucun geste noté', async () => {
+		const c = await coupee();
+		const noter = vi.spyOn(c.etat, 'noterGeste');
+		const lire = vi.spyOn(c.etat, 'gestes').mockRejectedValue(new Error('base occupée'));
+		const r = await api(c).post(ROUTES.injectionAutomatique, { session: UUID });
+		lire.mockRestore();
+		expect(r.statut).toBe(503);
+		expect(JSON.stringify(r.corps)).toContain('réessayez');
+		expect(noter).not.toHaveBeenCalled();
+		noter.mockRestore();
+	});
 });
 
 describe('routes : hook, traces d’une injection automatique après la livraison de la réponse', () => {
@@ -422,6 +434,9 @@ describe('routes : hook, traces d’une injection automatique après la livraiso
 		const r = await api(c).post(ROUTES.hook, corps(c));
 		expect((r.corps as { contexte?: string }).contexte).toContain('Un avoir annule une facture.');
 		expect(await jusqua(async () => (await c.etat.gestes({ sortes: ['injectee_auto'], limite: null })).length === 1 && (await servie(c)), 2000)).toBe(true);
+		// l'entrée du journal porte la fiche injectée par Mnemo (marque `auto` à sa ligne), après la livraison seulement
+		expect(await jusqua(async () => (await c.etat.servis(UUID, 1))[0]?.ids.includes(AVOIRS) === true, 2000)).toBe(true);
+		expect((await c.etat.servis(UUID, 1))[0]!.classement.find((l) => l.id === AVOIRS)).toMatchObject({ auto: true });
 	});
 
 	it('connexion abandonnée avant la réponse : ni trace « servie » ni geste ; la fiche reste injectable', async () => {
@@ -439,6 +454,10 @@ describe('routes : hook, traces d’une injection automatique après la livraiso
 		await new Promise((r) => setTimeout(r, 500));
 		expect(await c.etat.gestes({ sortes: ['injectee_auto'], limite: null })).toEqual([]);
 		expect(await servie(c)).toBe(false);
+		// le journal ne la montre pas injectée : ni dans les injectées de l'entrée, ni marquée `auto`
+		const [entree] = await c.etat.servis(UUID, 1);
+		expect(entree?.ids ?? []).not.toContain(AVOIRS);
+		expect((entree?.classement ?? []).some((l) => l.auto === true)).toBe(false);
 		// le message suivant, livré : elle part
 		const r = await api(c).post(ROUTES.hook, corps(c));
 		expect((r.corps as { contexte?: string }).contexte).toContain('Un avoir annule une facture.');

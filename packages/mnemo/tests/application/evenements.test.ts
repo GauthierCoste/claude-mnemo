@@ -10,7 +10,7 @@ import { porteursRecents } from '../../src/application/porteurs-recents.ts';
 import { aprioriDesGestes } from '../../src/application/apriori.ts';
 import { affiner } from '../../src/application/affiner.ts';
 import { modelesActifs } from '../../src/application/note-du-classement.ts';
-import { coupuresDesInjections, reactiverInjection, suiviDesInjections } from '../../src/application/suivi-injection.ts';
+import { coupuresDesInjections, reactiverInjection, SuiviIllisible, suiviDesInjections } from '../../src/application/suivi-injection.ts';
 import { noterGeste } from '../../src/application/gestes.ts';
 import type { DemandeAffinage } from '../../src/application/affiner.ts';
 import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
@@ -927,12 +927,45 @@ describe('traiterEvenement : injection automatique', () => {
 				const service = avecService ? { enFond: () => {}, aLaReponse: (t: () => Promise<unknown>) => apres.push(t) } : {};
 				const r = await traiterEvenement(dep, pil, message(10, 'montant exact des avoirs annulés en novembre'), { ...local, echeance, demandees, ...service });
 				expect(r).toEqual({});
-				// l'injection automatique avait été décidée (le journal, écrit avant le dernier contrôle, la porte)
-				expect((await etat.servis(ID, 1))[0]!.classement.find((c) => c.id === AVOIRS)).toMatchObject({ auto: true });
+				// l'injection automatique avait été décidée, mais le journal ne la montre pas injectée : la réponse n'est pas partie
+				const [j] = await etat.servis(ID, 1);
+				expect(j!.classement.find((c) => c.id === AVOIRS)).toBeDefined();
+				expect(j!.classement.some((c) => c.auto === true)).toBe(false);
+				expect(j!.ids).not.toContain(AVOIRS);
 				expect(apres).toEqual([]);
 				expect(demandees.voir(ID)).toEqual([VOISINE]);
 				expect(await etat.gestes({ sortes: ['injectee_auto'], limite: null })).toEqual([]);
 				expect((await etat.fichesServiesLuesOuEcrites(ID)).some((f) => f.chemin === AVOIRS)).toBe(false);
+			});
+		}
+	});
+
+	describe('sans service, moins de MARGE_ECRITURE_MS après les écritures : pas le temps d’écrire les traces avant de répondre', () => {
+		afterEach(() => vi.restoreAllMocks());
+		for (const avecService of [false, true]) {
+			it(`${avecService ? 'service (traces après la livraison) : elle part' : 'sans service : rien ne part, la fiche reste injectable'}`, async () => {
+				const { dep, etat, pil } = await memoire();
+				const echeance = Date.now() + 10_000;
+				const reel = Date.now.bind(Date);
+				let decalage = 0;
+				vi.spyOn(Date, 'now').mockImplementation(() => reel() + decalage);
+				const journaliser = etat.journaliser.bind(etat);
+				// le journal écrit, il reste 10 ms : assez pour répondre, pas pour écrire les traces d'abord
+				etat.journaliser = async (e) => {
+					await journaliser(e);
+					decalage = echeance - 10 - reel();
+				};
+				const apres: (() => Promise<unknown>)[] = [];
+				const service = avecService ? { enFond: () => {}, aLaReponse: (t: () => Promise<unknown>) => apres.push(t) } : {};
+				const r = await traiterEvenement(dep, pil, message(10, 'montant exact des avoirs annulés en novembre'), { ...local, echeance, ...service });
+				if (avecService) {
+					expect(r.contexte).toContain('Un avoir annule une facture.');
+					expect(apres).toHaveLength(1);
+				} else {
+					expect(r).toEqual({});
+					expect(await etat.gestes({ sortes: ['injectee_auto'], limite: null })).toEqual([]);
+					expect((await etat.fichesServiesLuesOuEcrites(ID)).some((f) => f.chemin === AVOIRS)).toBe(false);
+				}
 			});
 		}
 	});
@@ -1046,6 +1079,16 @@ describe('traiterEvenement : injection automatique', () => {
 		for (let i = 0; i < 17; i++) await etat2.etat.noterGeste({ geste: 'injectee_auto', session: ID, fiche: `notes/n${i}.md`, empreinte: null, horodatageMs: Date.parse('2026-11-25T11:00:00.000Z') + i, note: { niveau: 'sens' } });
 		for (let i = 0; i < 17; i++) await etat2.etat.noterGeste({ geste: 'ecartee_ici', session: ID, fiche: `notes/n${i}.md`, empreinte: null, horodatageMs: Date.parse('2026-11-25T11:30:00.000Z') + i, note: null });
 		expect((await coupuresDesInjections(etat2.etat, modelesActifs(dep))).sens).toBeNull();
+	});
+
+	it('réactivation pendant une panne de lecture du suivi : aucun geste (coupure inconnue), `SuiviIllisible`', async () => {
+		const { dep, etat } = await memoire();
+		const noter = vi.spyOn(etat, 'noterGeste');
+		const lire = vi.spyOn(etat, 'gestes').mockRejectedValue(new Error('base occupée'));
+		await expect(reactiverInjection(dep, etat, modelesActifs(dep), { session: '', horodatageMs: 1 })).rejects.toBeInstanceOf(SuiviIllisible);
+		expect(noter).not.toHaveBeenCalled();
+		lire.mockRestore();
+		noter.mockRestore();
 	});
 
 	it('rien après un outil, rien en différé : l’affinage qui met une fiche au seuil ne l’injecte pas', async () => {

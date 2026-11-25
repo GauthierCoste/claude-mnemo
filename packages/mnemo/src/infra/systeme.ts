@@ -128,6 +128,7 @@ export function etatParesseux(racineDossier: string): EtatSessions {
 		battre: (ids, vuVivantMs) => etat().battre(ids, vuVivantMs),
 		journaliser: (entree) => etat().journaliser(entree),
 		completerClassement: (session, horodatageMs, classement, affinage, options) => etat().completerClassement(session, horodatageMs, classement, affinage, options),
+		confirmerInjectionsAuto: (session, horodatageMs, chemins) => etat().confirmerInjectionsAuto(session, horodatageMs, chemins),
 		servis: (session, limite, moment, options) => etat().servis(session, limite, moment, options),
 		ecarter: (session, ecarte, trace) => etat().ecarter(session, ecarte, trace),
 		retablir: (session, id) => etat().retablir(session, id),

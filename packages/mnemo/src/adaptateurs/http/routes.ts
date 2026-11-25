@@ -20,7 +20,7 @@ import { affiner } from '../../application/affiner.ts';
 import type { DemandeAffinage } from '../../application/affiner.ts';
 import { traiterEvenement } from '../../application/evenements.ts';
 import { modelesActifs } from '../../application/note-du-classement.ts';
-import { coupuresDesInjections, reactiverInjection } from '../../application/suivi-injection.ts';
+import { coupuresDesInjections, reactiverInjection, SuiviIllisible } from '../../application/suivi-injection.ts';
 import type { SuiviDesInjections } from '../../application/suivi-injection.ts';
 import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
@@ -678,7 +678,11 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const d = champs(await r.json(), { session: { requis: false, max: 100 }, niveau: { requis: false, max: 20 } });
 				if (d.niveau !== undefined && d.niveau !== 'complets' && d.niveau !== 'sens') throw new ErreurHttp(400, 'niveau : « complets » ou « sens » attendu.');
 				const s = d.session === undefined ? null : await session(d.session);
-				const reactives = await reactiverInjection(dep, pil.etat, modelesActifs(dep), { session: s?.id ?? '', horodatageMs: Date.now(), ...(d.niveau === undefined ? {} : { niveau: d.niveau }) });
+				const reactives = await reactiverInjection(dep, pil.etat, modelesActifs(dep), { session: s?.id ?? '', horodatageMs: Date.now(), ...(d.niveau === undefined ? {} : { niveau: d.niveau }) }).catch((e: unknown) => {
+					// état de coupure inconnu : aucun geste, l'utilisateur réessaie
+					if (e instanceof SuiviIllisible) throw new ErreurHttp(503, 'Suivi des injections illisible : réessayez.');
+					throw e;
+				});
 				if (reactives.length > 0) {
 					ctx.journal(`injection automatique réactivée par l'utilisateur : ${reactives.join(', ')}.`);
 					await apresSuivi();
@@ -862,6 +866,9 @@ export function routes(ctx: ContexteRoutes): Route[] {
 						ctx.enFond(
 							(async () => {
 								for (const tache of aLaReponse) await tache().catch(() => {});
+								// l'entrée du message porte maintenant ses fiches injectées par Mnemo : le panneau les voit (◆ auto)
+								const [dernier] = await pil.etat.servis(entree.session, 1).catch(() => []);
+								if (dernier !== undefined && dernier.horodatageMs === entree.horodatageMs) ctx.diffuser({ type: 'servi', entree: vueServie(dernier, await titresDeLIndex()) });
 								await apresSuivi();
 							})(),
 						),

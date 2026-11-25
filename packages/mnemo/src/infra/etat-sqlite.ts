@@ -741,6 +741,10 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 		async completerClassement(session, horodatageMs, classement, affinage, options) {
 			const calibree = options?.calibree === undefined ? null : options.calibree ? 1 : 0;
 			return ecrire(() => {
+				// les fiches injectées par Mnemo, confirmées après la livraison : leur marque `auto` reste sur le classement complété
+				const avant = base.prepare(`SELECT classement FROM servis WHERE session = ? AND horodatage_ms = ? AND moment = 'message'`).get(session, horodatageMs) as Ligne | undefined;
+				const autos = new Set((avant === undefined ? [] : (JSON.parse(avant.classement as string) as Classe[])).filter((c) => c.auto === true).map((c) => c.id));
+				if (autos.size > 0) classement = classement.map((c) => (autos.has(c.id) ? { ...c, auto: true } : c));
 				// seulement l'entrée de message porteur la plus récente de la session : un message porteur plus récent rend l'affinage
 				// caduc (une entrée d'après un outil ou un message muet, non : Claude enchaîne souvent un outil juste après le message)
 				const { changes } = base
@@ -757,6 +761,19 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 				const remise = base.prepare(`UPDATE servis SET affinage = NULL WHERE session = ? AND horodatage_ms = ? AND moment = 'message' AND affinage IS NOT NULL`).run(session, horodatageMs);
 				if (remise.changes > 0) ecriture(session);
 				return false;
+			});
+		},
+
+		async confirmerInjectionsAuto(session, horodatageMs, chemins) {
+			if (chemins.length === 0) return;
+			ecrire(() => {
+				const ligne = base.prepare(`SELECT rang, ids, classement FROM servis WHERE session = ? AND horodatage_ms = ? AND moment = 'message'`).get(session, horodatageMs) as Ligne | undefined;
+				if (ligne === undefined) return;
+				const confirmees = new Set(chemins);
+				const ids = [...new Set([...(JSON.parse(ligne.ids as string) as string[]), ...chemins])];
+				const classement = (JSON.parse(ligne.classement as string) as Classe[]).map((c) => (confirmees.has(c.id) ? { ...c, auto: true as const } : c));
+				base.prepare('UPDATE servis SET ids = ?, classement = ? WHERE rang = ?').run(JSON.stringify(ids), JSON.stringify(classement), ligne.rang as number);
+				ecriture(session);
 			});
 		},
 

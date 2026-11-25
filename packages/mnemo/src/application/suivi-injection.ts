@@ -151,9 +151,18 @@ export async function modelesSuivis(etat: Pick<EtatSessions, 'gestes'>, modeles:
 	return avecLesCoupures(modeles, suivi?.coupures(modeles) ?? (await coupuresDesInjections(etat, modeles)));
 }
 
+/** Le suivi n'a pas pu être lu : l'état de coupure des niveaux est inconnu, rien n'est réactivé. */
+export class SuiviIllisible extends Error {
+	constructor() {
+		super('Suivi des injections illisible : réessayez.');
+		this.name = 'SuiviIllisible';
+	}
+}
+
 /**
  * Réactive l'injection automatique des niveaux coupés (`niveau` : celui-là seulement) : un geste `injection_reactivee` par
- * niveau, noté dans `session` (vide : hors session). Rend les niveaux réactivés (aucun : rien n'était coupé).
+ * niveau, noté dans `session` (vide : hors session). Rend les niveaux réactivés (aucun : rien n'était coupé). Journal des
+ * gestes illisible : lève `SuiviIllisible`, sans rien noter (aucun geste pour un niveau dont la coupure est inconnue).
  */
 export async function reactiverInjection(
 	dep: Pick<Dependances, 'index'>,
@@ -161,7 +170,12 @@ export async function reactiverInjection(
 	modeles: ModelesDeNote,
 	o: { session: string; horodatageMs: number; niveau?: NiveauDeNote },
 ): Promise<NiveauDeNote[]> {
-	const coupures = await coupuresDesInjections(etat, modeles);
+	let coupures: CoupuresDInjection;
+	try {
+		coupures = await lireCoupures(etat, modeles);
+	} catch {
+		throw new SuiviIllisible();
+	}
 	const reactives = NIVEAUX.filter((n) => coupures[n] !== null && (o.niveau === undefined || o.niveau === n));
 	for (const niveau of reactives) {
 		await noterGeste(dep, etat, { geste: 'injection_reactivee', session: o.session, fiche: '', empreinte: null, horodatageMs: o.horodatageMs, note: { niveau, motif: coupures[niveau]!.motif } });

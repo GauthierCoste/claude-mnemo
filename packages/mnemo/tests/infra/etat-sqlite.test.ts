@@ -203,6 +203,29 @@ describe('etat.sqlite', () => {
 		expect((await etat.servis('s1', 2))[1]).toMatchObject({ demande: 'quoi ?', classement });
 	});
 
+	it('confirmerInjectionsAuto : après la livraison, la fiche rejoint les injectées de l’entrée et sa ligne est `auto` ; l’affinage garde la marque', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('s1'));
+		const signaux = { cosinus: 0.81, cosinusRelatif: 0.12, bm25Relatif: 0.5, signalSession: 0 };
+		const classement = [
+			{ id: 'a.md', note: 0.9, servi: false, rang: 1, signaux, p: 0.94 },
+			{ id: 'b.md', note: 0.5, servi: false, rang: 2, signaux, p: 0.5 },
+		];
+		await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: 10, ids: ['pos.md'], texte: 't', ms: 1, sens: true, demande: 'q', classement, muet: null, cartes: [], position: null });
+		await etat.confirmerInjectionsAuto('s1', 10, ['a.md']);
+		const [e] = await etat.servis('s1', 1);
+		expect(e!.ids).toEqual(['pos.md', 'a.md']);
+		expect(e!.classement.map((c) => c.auto ?? null)).toEqual([true, null]);
+		// l'affinage réécrit le classement (sans la marque) : elle reste sur la ligne de la fiche
+		expect(await etat.completerClassement('s1', 10, [{ ...classement[1]!, rang: 1 }, { ...classement[0]!, rang: 2 }], 'fait')).toBe(true);
+		expect((await etat.servis('s1', 1))[0]!.classement.map((c) => [c.id, c.auto ?? null])).toEqual([
+			['b.md', null],
+			['a.md', true],
+		]);
+		// entrée inconnue : rien
+		await etat.confirmerInjectionsAuto('s1', 99, ['a.md']);
+	});
+
 	it('completerClassement : l’entrée la plus récente de la session seulement, avec son état d’affinage ; une entrée dépassée : rien', async () => {
 		const { etat } = await ouvrir();
 		await etat.creer(session('s1'));
