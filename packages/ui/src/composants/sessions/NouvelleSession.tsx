@@ -1,14 +1,16 @@
 /**
  * Dialogue « Nouvelle session » : profil (ceux du service, `PROFIL_TRAVAIL` d'abord choisi), dossier choisi dans l'arbre
  * (prérempli depuis le panneau ou la ligne, sinon la racine ; un profil lancé dans la mémoire n'en a pas), objectif
- * facultatif → `POST` sessions. Mode dégradé (`manuel`) : la ligne de commande à coller, avec « Copier ».
+ * facultatif → `POST` sessions. Mode dégradé (`manuel`) : la ligne de commande à coller, avec « Copier ». Un profil dont le
+ * moteur ne peut pas lancer de session ici (introuvable sans ligne à coller, ou trop ancien : `/api/moteurs`) reste
+ * choisissable, mais « Lancer » est indisponible avec la raison.
  */
 import { OBJECTIF_MAX, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { ROUTES, type ProfilVue, type ReponseLancement, type SessionVue } from '@mnemo/contrat';
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
 import { useClient } from '../../client/contexte.tsx';
-import { useProfils } from '../../client/hooks.ts';
+import { useMoteurs, useProfils } from '../../client/hooks.ts';
 import { PLIAGE_INITIAL } from '../../dossiers/arbre.ts';
 import { ArbreDossiers } from '../commun/ArbreDossiers.tsx';
 import { AvatarProfil } from '../commun/AvatarProfil.tsx';
@@ -32,6 +34,11 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 	const lancesAPart = profils.donnees?.profils.filter((x) => x.lanceur === 'propre') ?? [];
 	const profilChoisi = choisissables?.find((x) => x.nom === profil) ?? null;
 	const dansLaMemoire = profilChoisi?.lancement === 'memoire';
+	// le moteur du profil ne lancera pas de session ici, et n'a pas de ligne à coller (Claude Code en a une : mode dégradé)
+	const moteurs = useMoteurs();
+	const moteurDuProfil = profilChoisi === null ? undefined : moteurs.donnees?.moteurs.find((m) => m.id === profilChoisi.moteur);
+	const moteurIndisponible = moteurDuProfil !== undefined && moteurDuProfil.indisponible !== null && !moteurDuProfil.manuel ? moteurDuProfil.indisponible : null;
+	const idRaison = useId();
 	const [dossier, setDossier] = useState(p.dossierInitial ?? '');
 	const [pliage, setPliage] = useState(PLIAGE_INITIAL);
 	const [objectif, setObjectif] = useState('');
@@ -56,7 +63,7 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 
 	const lancer = async (e: FormEvent) => {
 		e.preventDefault();
-		if (envoi) return;
+		if (envoi || moteurIndisponible !== null) return;
 		setEnvoi(true);
 		setErreur(null);
 		try {
@@ -134,6 +141,11 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 							<span className={s.lbl}>Objectif (facultatif)</span>
 							<input type="text" maxLength={OBJECTIF_MAX} value={objectif} onChange={(e) => setObjectif(e.target.value)} placeholder="Ce que la session doit faire" />
 						</label>
+						{moteurIndisponible !== null && (
+							<p id={idRaison} className={s.erreur}>
+								{`Lancement impossible ici : ${moteurIndisponible}`}
+							</p>
+						)}
 						{erreur && (
 							<p role="alert" className={s.erreur}>
 								{erreur}
@@ -143,7 +155,7 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 							<Bouton petit onClick={fermer}>
 								Annuler
 							</Bouton>
-							<Bouton petit genre="primaire" type="submit" disabled={envoi}>
+							<Bouton petit genre="primaire" type="submit" disabled={envoi} indisponible={moteurIndisponible !== null && { raison: idRaison }}>
 								Lancer
 							</Bouton>
 						</div>

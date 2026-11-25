@@ -417,6 +417,33 @@ describe('vue Sessions', () => {
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions', { profil: 'redaction', dossier: 'erp-saas' });
 	});
 
+	it('Nouvelle session : un profil dont le moteur ne lance pas ici (Codex introuvable) garde Lancer indisponible avec la raison ; rien n’est envoyé', async () => {
+		const profils = { ...PROFILS, profils: PROFILS.profils.map((x) => (x.nom === 'redaction' ? { ...x, moteur: 'codex', modele: '' } : { ...x, moteur: 'claude-code', modele: '' })) };
+		const moteurs = {
+			moteurs: [
+				{ id: 'claude-code', nom: 'Claude Code', indisponible: 'Claude Code introuvable sur ce poste (claude).', manuel: true, version: null, modeles: [] },
+				{ id: 'codex', nom: 'Codex', indisponible: 'Codex introuvable sur ce poste (codex).', manuel: false, version: null, modeles: [] },
+			],
+		};
+		const faux = await monter({ '/api/profils': profils, '/api/moteurs': moteurs, '/api/sessions': (_: unknown, corps: unknown) => (corps === undefined ? { sessions: SESSIONS } : { session: SESSIONS[0] }) });
+		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
+		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
+		const choix = within(dialogue).getByLabelText<HTMLSelectElement>('Profil');
+		await waitFor(() => expect(choix.options.length).toBe(3));
+		// Claude Code introuvable : la ligne à coller reste possible, Lancer aussi
+		await waitFor(() => expect(within(dialogue).getByRole('button', { name: 'Lancer' }).getAttribute('aria-disabled')).toBeNull());
+		fireEvent.change(choix, { target: { value: 'redaction' } });
+		const lancer = await waitFor(() => {
+			const b = within(dialogue).getByRole('button', { name: 'Lancer' });
+			expect(b.getAttribute('aria-disabled')).toBe('true');
+			return b;
+		});
+		const raison = document.getElementById(lancer.getAttribute('aria-describedby')!);
+		expect(raison?.textContent).toBe('Lancement impossible ici : Codex introuvable sur ce poste (codex).');
+		await act(async () => lancer.click());
+		expect(faux.api.envoyer).not.toHaveBeenCalledWith('/api/sessions', expect.anything());
+	});
+
 	it('Nouvelle session : un profil lancé dans la mémoire remplace l’arbre par une phrase et envoie la racine', async () => {
 		const faux = await monter({ '/api/sessions': (_: unknown, corps: unknown) => (corps === undefined ? { sessions: SESSIONS } : { session: SESSIONS[4] }) });
 		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
