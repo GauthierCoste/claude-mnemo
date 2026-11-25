@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HOOKS_CODEX } from '../../src/application/moteurs/codex/hooks.ts';
-import { argumentsCodex, CONSIGNE_MAX, consigneCodex, environnementCodex, fichiersDeSessionCodex, motifSansRepriseCodex, preparerCodex } from '../../src/application/moteurs/codex/session.ts';
+import { argumentsCodex, CONSIGNE_MAX, consigneCodex, LIGNE_ARGUMENTS_MAX, longueurSurLaLigne, environnementCodex, fichiersDeSessionCodex, motifSansRepriseCodex, preparerCodex } from '../../src/application/moteurs/codex/session.ts';
 import type { AppelHook, ContextePreparation } from '../../src/application/ports.ts';
 import { CONSIGNE_TRAVAIL_PAR_DEFAUT, SKILLS_PAR_DEFAUT } from '../../src/application/profil.ts';
 import { PROFILS_PAR_DEFAUT } from '../../src/domaine/profil.ts';
@@ -84,6 +84,16 @@ describe('arguments de codex', () => {
 		// consigne trop longue pour la ligne de commande : refusée avec la longueur et la limite
 		expect(() => argumentsCodex({ session: session(), profil: PROFIL, mode: 'nouvelle', consigne: 'x'.repeat(CONSIGNE_MAX), racine: RACINE, appel: APPEL })).toThrow(/Consigne de session trop longue .*\(24002 caractères, 24000 au plus\)/u);
 		expect(() => argumentsCodex({ session: session(), profil: PROFIL, mode: 'nouvelle', consigne: 'x'.repeat(CONSIGNE_MAX - 2), racine: RACINE, appel: APPEL })).not.toThrow();
+	});
+
+	it('ligne de commande bornée sous la limite de Windows (32 767) : au-delà de LIGNE_ARGUMENTS_MAX, refusée avec la longueur', () => {
+		expect(longueurSurLaLigne(['ab', 'c"d\\e'])).toBe(2 + 3 + 5 + 2 + 3);
+		const appel = (consigne: string, objectif: string) => ({ session: session(), profil: PROFIL, mode: 'nouvelle' as const, consigne, racine: RACINE, appel: APPEL, objectif });
+		// consigne pleine (guillemets doublés au pire) et objectif long : refusée
+		expect(() => argumentsCodex(appel('"'.repeat(CONSIGNE_MAX - 10), 'o'.repeat(5000)))).toThrow(new RegExp(`^Ligne de commande de Codex trop longue \\(\\d+ caractères, ${LIGNE_ARGUMENTS_MAX} au plus`, 'u'));
+		const permis = argumentsCodex(appel('x'.repeat(CONSIGNE_MAX - 2), 'o'.repeat(4000)));
+		expect(longueurSurLaLigne(permis)).toBeLessThanOrEqual(LIGNE_ARGUMENTS_MAX);
+		expect(LIGNE_ARGUMENTS_MAX).toBeLessThan(32_767);
 	});
 });
 

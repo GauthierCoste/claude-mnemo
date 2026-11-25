@@ -25,6 +25,18 @@ export const VARIABLES_INTERDITES_CODEX: readonly string[] = ['CODEX_API_KEY'];
 export const CONSIGNE_MAX = 24_000;
 
 /**
+ * Longueur au plus de tous les arguments de `codex` sur la ligne de commande (`longueurSurLaLigne`) : Windows borne la ligne
+ * entière à 32 767 caractères ; la marge laisse place au chemin de la commande et à ce qui la précède.
+ */
+export const LIGNE_ARGUMENTS_MAX = 30_000;
+
+/**
+ * Longueur des arguments sur une ligne de commande Windows, au pire : chacun entre guillemets, séparé par une espace, chaque
+ * guillemet double et chaque barre oblique inverse doublés.
+ */
+export const longueurSurLaLigne = (args: readonly string[]): number => args.reduce((total, a) => total + a.length + (a.match(/["\\]/gu)?.length ?? 0) + 3, 0);
+
+/**
  * Variables de la session que le serveur MCP `mnemo` lancé par Codex reçoit (`env_vars`) : Codex ne transmet à un serveur
  * MCP qu'un petit nombre de variables de son environnement.
  */
@@ -107,7 +119,8 @@ export type AppelArgumentsCodex = {
  * (`developer_instructions`, `CONSIGNE_MAX` au plus), serveur MCP `mnemo` allumé (ce Node, ce `main.ts`, les variables de la
  * session) et ses outils de lecture et `proposer` approuvés d'avance. Chaque valeur `-c` est du TOML (`valeurToml` : littérale
  * quand c'est possible, sans guillemet double). Reprise : `codex resume`, les mêmes
- * options, puis le `fil`. Le premier message (objectif, ou consigne tapée d'emblée à la reprise) suit `--`.
+ * options, puis le `fil`. Le premier message (objectif, ou consigne tapée d'emblée à la reprise) suit `--`. Lève si la ligne
+ * dépasse `LIGNE_ARGUMENTS_MAX`.
  */
 export function argumentsCodex(a: AppelArgumentsCodex): string[] {
 	const { session } = a;
@@ -129,8 +142,12 @@ export function argumentsCodex(a: AppelArgumentsCodex): string[] {
 	options.push('-c', `mcp_servers.mnemo.env_vars=${listeValeursToml(VARIABLES_DU_SERVEUR_MCP)}`);
 	for (const outil of OUTILS_MNEMO_PERMIS) options.push('-c', `mcp_servers.mnemo.tools.${outil}.approval_mode='approve'`);
 	const message = a.objectif === undefined || a.objectif.trim() === '' ? [] : [a.objectif];
-	if (a.mode === 'nouvelle') return [...options, ...(message.length === 0 ? [] : ['--', ...message])];
-	return ['resume', ...options, '--', session.fil!, ...message];
+	const args = a.mode === 'nouvelle' ? [...options, ...(message.length === 0 ? [] : ['--', ...message])] : ['resume', ...options, '--', session.fil!, ...message];
+	const longueur = longueurSurLaLigne(args);
+	if (longueur > LIGNE_ARGUMENTS_MAX) {
+		throw new Error(`Ligne de commande de Codex trop longue (${longueur} caractères, ${LIGNE_ARGUMENTS_MAX} au plus : Windows la borne à 32 767) : raccourcis la consigne du profil ou l'objectif, ou retiens moins de skills.`);
+	}
+	return args;
 }
 
 const estInterditeCodex = (majuscules: string): boolean => VARIABLES_INTERDITES_CODEX.includes(majuscules);
