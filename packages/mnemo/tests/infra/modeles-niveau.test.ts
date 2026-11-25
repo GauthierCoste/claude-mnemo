@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -193,4 +194,24 @@ describe('niveau des modèles de la machine', () => {
 		expect(pidVivant(etat.gardien.pid)).toBe(true);
 		expect(await readFile(cheminsModeles(b.serveurs).journal, 'utf8')).not.toContain('niveau changé');
 	}, 30_000);
+});
+
+describe('mnemo index au niveau « coupes »', () => {
+	const MAIN = join(import.meta.dirname, '../../src/adaptateurs/cli/main.ts');
+	const mnemo = (cwd: string, env: NodeJS.ProcessEnv, ...args: string[]) =>
+		new Promise<{ code: number; out: string }>((resoudre) => {
+			execFile(process.execPath, [MAIN, ...args], { cwd, env }, (erreur, out) => resoudre({ code: erreur ? (erreur.code as number) : 0, out }));
+		});
+
+	it('dit que le sens est coupé par le niveau, sans rien lancer', { timeout: 60_000 }, async () => {
+		const b = await banc();
+		await changerNiveau(b.env, 'coupes');
+		expect((await mnemo(b.racine, b.env, 'init', '--sans-mcp')).code).toBe(0);
+		await mkdir(join(b.racine, '_mnemo', 'projets'), { recursive: true });
+		await writeFile(join(b.racine, '_mnemo', 'projets', 'alpha.md'), '# Alpha\n\nUn projet de tapirs.\n');
+		const r = await mnemo(b.racine, b.env, 'index');
+		expect(r.code).toBe(0);
+		expect(r.out).toMatch(/\n0 vecteurs calculés \(bge-m3@[0-9a-f]{12}\)\n[1-9]\d* vecteurs restants : sens coupé par le niveau des modèles, recherche par les mots pour ceux-là\n$/u);
+		expect(await lancements(b)).toHaveLength(0);
+	});
 });

@@ -1,6 +1,8 @@
+import { modelesPermis } from '@mnemo/commun';
 import { synchroniser } from '../../application/synchroniser.ts';
 import { vectoriser } from '../../application/vectoriser.ts';
 import type { Dependances } from '../../application/ports.ts';
+import { niveauMachine } from '../../infra/modeles/niveau.ts';
 import { dependancesReelles } from '../../infra/systeme.ts';
 import { AUCUNE_MEMOIRE, ErreurCli } from './erreurs.ts';
 import { trouverRacine } from './racine.ts';
@@ -26,7 +28,10 @@ async function vectoriserTout(dependances: Dependances): Promise<void> {
 	const { faits, restants } = await vectoriser(dependances, { budgetMs: Infinity, demarrer: true, ...(terminal ? { progression } : {}) });
 	if (palier >= 0) process.stderr.write('\n');
 	console.log(`${faits} vecteurs calculés (${modele})`);
-	if (restants !== null && restants > 0) console.log(`${restants} vecteurs restants : modèle de sens indisponible, recherche par les mots pour ceux-là`);
+	if (restants !== null && restants > 0) {
+		const motif = modelesPermis(await niveauMachine()).sens ? 'modèle de sens indisponible' : 'sens coupé par le niveau des modèles';
+		console.log(`${restants} vecteurs restants : ${motif}, recherche par les mots pour ceux-là`);
+	}
 }
 
 /** `mnemo index` : met l'index à jour ; `--reconstruire` le vide d'abord, sur place (les autres processus gardent leur connexion). */
