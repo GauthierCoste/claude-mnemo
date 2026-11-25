@@ -423,6 +423,21 @@ describe('routes : hook', () => {
 		expect(await c.etat.lire(UUID)).toMatchObject({ etat: 'attend', majMs: 1000 });
 	});
 
+	it('POST hook outil d’un autre moteur que la session : vérifié tout de même (refus), état inchangé', async () => {
+		const c = await serviceFaux();
+		await c.dep.coffre.ecrire(
+			'consignes/env.md',
+			'---\nid: C1\ntype: consigne\nupdated: 2026-11-01\nportee: globale\nniveau: verifiee\nrepetitions: []\nregle: { type: chemins_interdits, motifs: ["**/.env"] }\n---\n# Env\n\nNe touche jamais aux .env.\n',
+		);
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		await c.etat.creer(sessionFixe(UUID));
+		const patch = '*** Begin Patch\n*** Add File: .env\n+x\n*** End Patch';
+		const r = await api(c).post(ROUTES.hook, { evenement: 'outil', session: UUID, horodatageMs: Date.now(), cwd: join(c.racine, 'alpha'), moteur: 'codex', fil: 'fil-codex', outil: { nom: 'apply_patch', entree: { command: patch } } });
+		expect(r.statut).toBe(200);
+		expect((r.corps as { refus?: string }).refus).toMatch(/consigne vérifiée/u);
+		expect(await c.etat.lire(UUID)).toMatchObject({ etat: 'attend', majMs: 1000 });
+	});
+
 	it('POST hook : horodatage hors bornes (négatif, au-delà de maintenant + 60 s) → 400, état intact', async () => {
 		const c = await serviceFaux();
 		await c.etat.creer(sessionFixe(UUID));

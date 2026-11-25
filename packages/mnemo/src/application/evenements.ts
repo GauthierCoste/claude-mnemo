@@ -232,13 +232,18 @@ async function finDeSession(dep: Dependances, pil: Pick<Pilotage, 'etat' | 'depo
 }
 
 /**
- * L'événement vient-il d'un autre moteur que celui de la session, ou d'un autre fil (`evenementEtranger`) ? Lu avant d'appliquer
- * quoi que ce soit ; session inconnue ou illisible : non (rien ne sera appliqué à une session inconnue).
+ * La session de l'événement, s'il vient d'un autre moteur que celui de la session ou d'un autre fil (`evenementEtranger`) ; null
+ * sinon. Lu avant d'appliquer quoi que ce soit ; session inconnue ou illisible : null (rien ne sera appliqué à une session inconnue).
  */
-export async function estEtranger(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil'>): Promise<boolean> {
-	if (entree.session === '') return false;
+async function sessionEtrangere(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil'>): Promise<Session | null> {
+	if (entree.session === '') return null;
 	const session = await pil.etat.lire(entree.session).catch(() => null);
-	return session !== null && evenementEtranger(session, entree);
+	return session !== null && evenementEtranger(session, entree) ? session : null;
+}
+
+/** L'événement est-il étranger à sa session (`sessionEtrangere`) ? */
+export async function estEtranger(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil'>): Promise<boolean> {
+	return (await sessionEtrangere(pil, entree)) !== null;
 }
 
 /**
@@ -247,10 +252,17 @@ export async function estEtranger(pil: Pick<Pilotage, 'etat'>, entree: Pick<Entr
  * `message` sert celui du prompt. Chaque contexte servi à une session connue est journalisé (durée, usage du sens). Session
  * inconnue de l'état : servie quand même, sans état ni journal. `outil` vérifie l'action contre les consignes vérifiées
  * (refus éventuel) ; `fin` écrit l'épisode minimal s'il le faut (`finDeSession`). Avec `enFond` (le service), git et
- * l'épisode ne retardent jamais la réponse. Un événement étranger à la session (`estEtranger`) est sans effet.
+ * l'épisode ne retardent jamais la réponse. Un événement étranger à la session (`estEtranger` : agent imbriqué qui hérite de
+ * son environnement, `/new` de Codex) ne touche ni à l'état, ni au contexte, ni au fil, ni à l'objectif, et `fin` n'y termine
+ * rien ; mais un `outil` étranger est vérifié comme les autres, avec les consignes de la position de la session.
  */
 export async function traiterEvenement(dep: Dependances, pil: Pick<Pilotage, 'etat' | 'depot'>, entree: EntreeHook, reglages: ReglagesEvenement): Promise<ReponseHook> {
-	if (await estEtranger(pil, entree)) return {};
+	const etrangere = await sessionEtrangere(pil, entree);
+	if (etrangere !== null) {
+		if (entree.evenement !== 'outil') return {};
+		const { rattachee: _rattachee, ...sansRattachement } = reglages;
+		return verifierOutil(dep, pil, etrangere, entree, sansRattachement);
+	}
 	const session = await appliquer(pil, entree);
 	if (entree.evenement === 'fin') {
 		const tache = finDeSession(dep, pil, session, entree, reglages).catch(() => {});

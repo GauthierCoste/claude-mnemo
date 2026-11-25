@@ -652,11 +652,13 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const entree = entreeHook(brut);
 				const echeance = echeanceDuHook(brut, entree.evenement);
 				const transcription = transcriptionDuHook(brut);
-				// un autre moteur que celui de la session, ou un autre fil : ni état, ni contexte, ni jauge
-				if (await estEtranger(pil, entree)) return ok({});
+				// un autre moteur que celui de la session, ou un autre fil : ni état, ni contexte, ni jauge ; un `outil` est tout de même vérifié
+				const etranger = await estEtranger(pil, entree);
+				if (etranger && entree.evenement !== 'outil') return ok({});
 				// les modèles de la session bornés par son niveau (relu à chaque appel)
 				const depDuHook = entree.session === '' ? dep : dependancesDeSession(dep, pil.etat, entree.session);
 				const reponse = await traiterEvenement(depDuHook, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, rattachee: (id) => pilote.reecrirePlugin(id) });
+				if (etranger) return ok(reponse);
 				if (entree.session !== '') {
 					const s = await pil.etat.lire(entree.session).catch(() => null);
 					if (s !== null) {

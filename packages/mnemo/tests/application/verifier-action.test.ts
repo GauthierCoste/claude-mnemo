@@ -131,4 +131,23 @@ describe('traiterEvenement : outil', () => {
 		// sans racine connue : permis
 		expect(await traiterEvenement(dep, { etat, depot: DEPOT_ABSENT }, entree(bash('git push --force')), { froid: 'si-budget' })).toEqual({});
 	});
+
+	it('outil étranger (autre fil : agent imbriqué, /new de Codex ; autre moteur) : vérifié avec les consignes de la session, état inchangé', async () => {
+		const dep = await memoire();
+		const etat = ouvrirEtat(join(await dossierTemporaire(), 'etat.sqlite'));
+		ouverts.push(etat);
+		await etat.creer({
+			id: ID, profil: 'travail', dossier: 'code/vela', position: 'projets/vela', projet: 'vela', objectif: null, etat: 'attend', creeeMs: 1, majMs: 1,
+			arretAttendu: null, bilanDemandeMs: null, commitDebut: null, branche: null, pid: null, moteur: 'codex', fil: 'fil-a',
+		});
+		const avant = await etat.lire(ID);
+		const reglages = { froid: 'si-budget' as const, racine: RACINE };
+		// cwd hors de tout projet : seule la position de la session porte la consigne
+		const entree = (command: string, extra: { moteur?: 'codex' | 'claude-code'; fil?: string }) => ({ evenement: 'outil' as const, session: ID, horodatageMs: 10, cwd: '/r/ailleurs', outil: bash(command), ...extra });
+		const refus = { refus: 'Mnemo : consigne vérifiée « Jamais de push forcé sur Vela. » (motif « git push --force* »).' };
+		expect(await traiterEvenement(dep, { etat, depot: DEPOT_ABSENT }, entree('git push --force', { moteur: 'codex', fil: 'fil-b' }), reglages)).toEqual(refus);
+		expect(await traiterEvenement(dep, { etat, depot: DEPOT_ABSENT }, entree('git push --force', { moteur: 'claude-code' }), reglages)).toEqual(refus);
+		expect(await traiterEvenement(dep, { etat, depot: DEPOT_ABSENT }, entree('git push', { moteur: 'codex', fil: 'fil-b' }), reglages)).toEqual({});
+		expect(await etat.lire(ID)).toEqual(avant);
+	});
 });
