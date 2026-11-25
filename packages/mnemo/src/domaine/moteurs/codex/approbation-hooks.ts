@@ -134,9 +134,9 @@ export function approbationDesHooks(texte: string | null, chemins: readonly stri
 	if (texte === null) return { etat: 'inconnu', motif: 'config.toml de Codex illisible : approbation à vérifier dans Codex (/hooks).' };
 	const { illisible, etats } = etatsDansConfig(texte);
 	const lus = cles.map((cle) => chemins.map((chemin) => etats.get(`${chemin}:${cle}`)).find((e) => e !== undefined));
-	if (lus.some((e) => e?.desactive === true)) return { etat: 'a_approuver', motif: 'hooks de Mnemo désactivés dans Codex : réactive-les dans Codex (/hooks).' };
+	if (lus.some((e) => e?.desactive === true)) return { etat: 'a_approuver', motif: 'hooks de Mnemo désactivés dans Codex : à réactiver dans Codex (/hooks).' };
 	const approuves = lus.filter((e) => e?.approuve === true).length;
 	if (approuves === cles.length) return { etat: 'approuves', motif: `approbation enregistrée dans config.toml (hooks.state) ; ${AVERTISSEMENT}.` };
 	if (illisible) return { etat: 'inconnu', motif: 'hooks.state de config.toml sous une forme que Mnemo ne lit pas : approbation à vérifier dans Codex (/hooks).' };
-	return { etat: 'a_approuver', motif: `${cles.length - approuves} hook(s) de Mnemo sur ${cles.length} sans approbation : approuve-les dans Codex (/hooks).` };
+	return { etat: 'a_approuver', motif: `${cles.length - approuves} hook(s) de Mnemo sur ${cles.length} sans approbation : à approuver dans Codex (/hooks).` };
 }
