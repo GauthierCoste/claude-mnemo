@@ -8,6 +8,7 @@ import type { EtatModelesVue, MessageClient, MessageServeur, SessionVue } from '
 import type { Pilote } from '../../application/pilote.ts';
 import type { EtatSessions } from '../../application/ports.ts';
 import type { Session } from '../../domaine/session.ts';
+import type { SuggestionEcarteeToujours } from '../../domaine/apriori-gestes.ts';
 import { vueServie, vueSession } from './vues.ts';
 import { DOSSIER_MEMOIRE } from '../../domaine/dossier-memoire.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
@@ -82,6 +83,8 @@ export function creerHub(o: {
 	titres: () => Promise<ReadonlyMap<string, string>>;
 	/** Signature des lots d'informations (`Lots.version`) ; absente : rien n'est sondé. */
 	versionDesLots?: () => Promise<string>;
+	/** Suggestions « écartée toujours » d'une session, jointes à sa vue (absent : aucune). */
+	suggestions?: (session: string) => readonly SuggestionEcarteeToujours[];
 	/** État des modèles de la machine, envoyé à l'accueil d'un client (message `modeles`) ; absent : rien n'est envoyé. */
 	etatModeles?: () => Promise<EtatModelesVue>;
 	racine: string;
@@ -163,7 +166,7 @@ export function creerHub(o: {
 	};
 
 	const signaler = (s: Session): void => {
-		const vue = vueSession(s, o.pilote.enCours(s.id));
+		const vue = vueSession(s, o.pilote.enCours(s.id), o.suggestions?.(s.id));
 		const texte = JSON.stringify(vue);
 		const avant = diffusees.get(s.id);
 		if (avant === texte) return;
@@ -222,7 +225,7 @@ export function creerHub(o: {
 				}
 			}
 			if (c.ws.readyState !== WebSocket.OPEN) return;
-			c.ws.send(JSON.stringify({ type: 'sessions', sessions: sessions.map((s) => vueSession(s, o.pilote.enCours(s.id))) } satisfies MessageServeur));
+			c.ws.send(JSON.stringify({ type: 'sessions', sessions: sessions.map((s) => vueSession(s, o.pilote.enCours(s.id), o.suggestions?.(s.id))) } satisfies MessageServeur));
 			if (modeles !== null) c.ws.send(JSON.stringify({ type: 'modeles', modeles } satisfies MessageServeur));
 			c.accueilli = true;
 			const enAttente = c.enAttente.splice(0);

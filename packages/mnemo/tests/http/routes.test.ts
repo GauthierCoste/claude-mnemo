@@ -336,6 +336,78 @@ describe('routes : écartés', () => {
 	});
 });
 
+describe('routes : écartées toujours', () => {
+	const ALPHA = 'projets/alpha/alpha.md';
+	const UUID2 = '22222222-2222-4333-8444-555555555555';
+	const UUID3 = '33333333-2222-4333-8444-555555555555';
+	const retablir = (chemin: string) => `${ROUTES.ecarteesToujours}?chemin=${encodeURIComponent(chemin)}`;
+
+	it('POST écarte toujours (geste noté dans la session), GET les liste, DELETE rétablit (geste noté dans la session de l’écart)', async () => {
+		const c = await serviceFaux();
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		await c.etat.creer(sessionFixe(UUID));
+		const r = await api(c).post(ROUTES.ecarteesToujours, { chemin: ALPHA, session: UUID });
+		expect(r.statut).toBe(200);
+		expect(r.corps).toEqual({ ecarteesToujours: [{ chemin: ALPHA, titre: expect.any(String), horodatageMs: expect.any(Number) }] });
+		expect((await api(c).get(ROUTES.ecarteesToujours)).corps).toEqual(r.corps);
+		// une deuxième fois : rien ne change, aucun geste de plus
+		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: ALPHA, session: UUID })).corps).toEqual(r.corps);
+		expect((await c.etat.gestes({ limite: null })).map((g) => [g.geste, g.session, g.fiche])).toEqual([['ecartee_toujours', UUID, ALPHA]]);
+		const d = await api(c).supprimer(retablir(ALPHA));
+		expect(d.statut).toBe(200);
+		expect(d.corps).toEqual({ ecarteesToujours: [] });
+		expect((await c.etat.gestes({ limite: null })).map((g) => [g.geste, g.session])).toEqual([
+			['retablie', UUID],
+			['ecartee_toujours', UUID],
+		]);
+		expect(await c.etat.ecarteesToujours()).toEqual([]);
+	});
+
+	it('sans session : écartée et rétablie, sans geste', async () => {
+		const c = await serviceFaux();
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: ALPHA })).statut).toBe(200);
+		expect(await c.etat.ecarteesToujours()).toEqual([{ fiche: ALPHA, session: null, horodatageMs: expect.any(Number) }]);
+		expect((await api(c).supprimer(retablir(ALPHA))).statut).toBe(200);
+		expect(await c.etat.gestes({ limite: null })).toEqual([]);
+	});
+
+	it('refus : fiche inconnue (404), session inconnue (404) ou terminée (409), corps invalide (400), rétablir une fiche non écartée (404)', async () => {
+		const c = await serviceFaux();
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		await c.etat.creer(sessionFixe(UUID, { etat: 'terminee' }));
+		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: 'inconnue.md' })).statut).toBe(404);
+		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: ALPHA, session: UUID2 })).statut).toBe(404);
+		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: ALPHA, session: UUID })).statut).toBe(409);
+		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: 3 })).statut).toBe(400);
+		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: ALPHA, pirate: 1 })).statut).toBe(400);
+		expect((await api(c).supprimer(retablir(ALPHA))).statut).toBe(404);
+		expect((await api(c).supprimer(ROUTES.ecarteesToujours)).statut).toBe(400);
+		expect(await c.etat.ecarteesToujours()).toEqual([]);
+	});
+
+	it('suggestion après 3 sessions sur 2 jours : dans la vue de la session qui l’a écartée, retirée une fois écartée toujours', async () => {
+		const c = await serviceFaux();
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		const hier = Date.now() - 86_400_000 * 1.5;
+		for (const [i, id] of [UUID2, UUID3].entries()) {
+			await c.etat.creer(sessionFixe(id));
+			await c.etat.noterGeste({ geste: 'ecartee_ici', session: id, fiche: ALPHA, empreinte: null, horodatageMs: hier + i });
+		}
+		await c.etat.creer(sessionFixe(UUID));
+		await c.etat.journaliser({ session: UUID, moment: 'message', horodatageMs: 5, ids: [], texte: '', ms: 1, sens: false, demande: 'Où en est Alpha ?', classement: [{ id: ALPHA, titre: 'Alpha', note: 0.4, servi: false, rang: 1 }], muet: null, cartes: [], position: null });
+		const vueDe = async (id: string) => ((await api(c).get(chemin(ROUTES.session, id))).corps as { session: SessionVue }).session;
+		expect((await vueDe(UUID)).suggestionsEcarteeToujours).toBeUndefined();
+		expect((await api(c).post(chemin(ROUTES.ecartes, UUID), { id: ALPHA })).statut).toBe(200);
+		expect((await vueDe(UUID)).suggestionsEcarteeToujours).toEqual([{ chemin: ALPHA, sessions: 3, jours: 2 }]);
+		expect((await vueDe(UUID2)).suggestionsEcarteeToujours).toEqual([{ chemin: ALPHA, sessions: 3, jours: 2 }]);
+		// jamais appliquée seule
+		expect(await c.etat.ecarteesToujours()).toEqual([]);
+		await api(c).post(ROUTES.ecarteesToujours, { chemin: ALPHA, session: UUID });
+		expect((await vueDe(UUID)).suggestionsEcarteeToujours).toBeUndefined();
+	});
+});
+
 describe('routes : hook', () => {
 	it('POST hook = traiterEvenement : état appliqué, contexte servi, journalisé', async () => {
 		const c = await serviceFaux();
