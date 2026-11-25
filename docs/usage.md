@@ -389,6 +389,11 @@ instructions, the action check is declared so that Claude Code refuses the actio
 `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` and the `CLAUDE_CODE_USE_*` provider selectors are removed from its
 environment. `MNEMO_CLAUDE` names another `claude` binary.
 
+Whatever its engine, a session never receives the keys and tokens of another provider: `CLAUDECODE`, `CLAUDE_CODE_*` and
+`ANTHROPIC_*` outside Claude Code, `CODEX_API_KEY` and `OPENAI_API_KEY` outside Codex, `MISTRAL_API_KEY` outside Mistral
+Vibe, `COPILOT_GITHUB_TOKEN` outside GitHub Copilot CLI. `GH_TOKEN` and `GITHUB_TOKEN` are passed to every engine (`gh`
+and git use them).
+
 Mnemo keeps a log of the gestures made on the notes it proposes: a note you inject by hand, set aside with ✗ or restore,
 and a note Claude reads with `lire` after a lead proposed it. Each gesture keeps the text of your last meaningful message
 and, when the meaning model has already computed it, that message's vector. The log lives in `.mnemo/etat.sqlite` only
@@ -416,9 +421,9 @@ profile.
   A session whose hooks are not approved never sends it: it can be neither paused nor resumed, and neither wrapped up;
   only abandoned. The interface greys these actions out and says why.
 - **Permissions.** When Codex asks you to approve a tool, the session shows « Attend ta réponse » (waiting for your
-  answer). After you approve a patch or a Mnemo tool, it goes back to work; after you approve a command, it shows the
-  question until the next tool or the end of the turn (changing the installed hooks to see it sooner would make you
-  approve them again).
+  answer). After you approve a patch or a Mnemo tool, it goes back to work; after you approve a command, it keeps
+  showing the question while the command runs, until the next hook arrives (the next tool, your next message, or the end
+  of the turn): changing the installed hooks to see it sooner would make you approve them again.
 - **Stop.** Mnemo stops a Codex session by typing `/quit` (before the first hook, it stops the process without typing
   anything).
 - **One conversation per session.** Do not use `/new` or `/resume` inside a session started by Mnemo: the session keeps

@@ -215,7 +215,7 @@ A `mnemo` block that carries your own settings (environment, working folder, dis
 the command says what to change by hand; a block turned off with `disabled = true` stays off.
 
 To remove both the declaration and the hooks: `mnemo declarer --moteur mistral-vibe --retirer`. It removes only what
-runs this Node.js and this Mnemo, and gives back the file as it was before.
+runs this Node.js and this Mnemo (the `mnemo` block and the `mnemo-…` hooks), and leaves the rest of each file as it is.
 
 **Trust.** Vibe asks « Trust this folder? » only for a project that has its own Vibe settings (a `.vibe/` folder, or
 `.agents/skills/`). Answer it yourself in the terminal of the session: Mnemo never does.
@@ -256,7 +256,8 @@ subscription. Mnemo looks for `copilot` in `MNEMO_COPILOT`, then in the `PATH`, 
 What Mnemo writes, and nothing else: the `mnemo` entry of `mcp-config.json` and `hooks/mnemo.json`. It never rewrites a
 `mcp-config.json` with comments, nor a `mnemo` entry that carries your own settings (`env`, `cwd`, a restricted `tools`
 list…): the command gives the entry to paste instead. A `mnemo` entry turned off in `disabledMcpServers` (`settings.json`)
-stays off. It never writes hooks into `.claude/settings.json`: if a repository has Claude Code hooks there, Copilot runs
+stays off in the Copilot sessions you start outside Mnemo; the sessions started by Mnemo pass their own memory server on
+the command line. It never writes hooks into `.claude/settings.json`: if a repository has Claude Code hooks there, Copilot runs
 them too, and the Mnemo ones among them do nothing in a Copilot session. For each session, an instructions file with the
 instruction of the profile goes into the session folder of Mnemo (`.mnemo/plugins/<session>/.github/instructions/`),
 added in front of your own `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`; nothing is written into your project.
