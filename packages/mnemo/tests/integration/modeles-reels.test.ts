@@ -8,14 +8,16 @@ import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 import type { Variante } from '../../src/application/chercher.ts';
 import { synchroniser } from '../../src/application/synchroniser.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
-import { dossierModeles } from '../../src/infra/modeles/dossier.ts';
+import { dossierModeles, dossierServeurs } from '../../src/infra/modeles/dossier.ts';
 import { arreterServeurs, lireEtatServeurs, pidVivant } from '../../src/infra/modeles/serveurs.ts';
 import { dependancesReelles } from '../../src/infra/systeme.ts';
 
 /**
  * Avec les vrais modèles installés (`mnemo modeles installer`), facultatif : `MNEMO_MODELES_REELS=1 pnpm exec vitest run
  * tests/integration`. Lance de vrais `llama-server` (≈ 1,3 Go de mémoire), arrêtés à la fin. Les pièces sont lues dans le
- * dossier de modèles de l'utilisateur (vitest en désigne un vide pour tous les autres tests), ou dans `MNEMO_MODELES_REELS_DOSSIER`.
+ * dossier de modèles de l'utilisateur (vitest en désigne un vide pour tous les autres tests), ou dans
+ * `MNEMO_MODELES_REELS_DOSSIER`. Son `serveurs/` est celui de la machine : le gardien de l'utilisateur, s'il tourne, est
+ * réutilisé puis arrêté (le prochain usage le relance).
  */
 const REELS = process.env['MNEMO_MODELES_REELS'] === '1';
 const CORPUS = fileURLToPath(new URL('../../banc/corpus/', import.meta.url));
@@ -25,6 +27,7 @@ const SENS: Variante = { ...MOTS, sens: true };
 describe.skipIf(!REELS)('modèles réels (bge-m3, bge-reranker-v2-m3, llama.cpp)', () => {
 	const modelesDeTest = process.env['MNEMO_MODELES'];
 	let racine = '';
+	const serveurs = () => dossierServeurs(process.env, process.platform, userInfo().homedir);
 
 	beforeAll(async () => {
 		const { MNEMO_MODELES: _, ...sansDossierDeTest } = process.env;
@@ -37,7 +40,7 @@ describe.skipIf(!REELS)('modèles réels (bge-m3, bge-reranker-v2-m3, llama.cpp)
 
 	afterAll(async () => {
 		if (racine !== '') {
-			await arreterServeurs(racine);
+			await arreterServeurs(serveurs());
 			await rm(racine, { recursive: true, force: true });
 		}
 		if (modelesDeTest === undefined) delete process.env['MNEMO_MODELES'];
@@ -90,12 +93,12 @@ describe.skipIf(!REELS)('modèles réels (bge-m3, bge-reranker-v2-m3, llama.cpp)
 
 	// Dépend des tests précédents : ce sont eux qui ont lancé le gardien et les deux serveurs.
 	it('mnemo modeles arreter : gardien et serveurs arrêtés', async () => {
-		const etat = await lireEtatServeurs(racine);
+		const etat = await lireEtatServeurs(serveurs());
 		expect(etat).not.toBeNull();
 		const pids = [etat!.gardien.pid, etat!.sens?.pid, etat!.reranker?.pid].filter((p): p is number => p !== undefined);
 		expect(pids.length).toBe(3);
-		expect(await arreterServeurs(racine)).toBe('arrete');
+		expect(await arreterServeurs(serveurs())).toBe('arrete');
 		for (const pid of pids) expect(pidVivant(pid)).toBe(false);
-		expect(await lireEtatServeurs(racine)).toBeNull();
+		expect(await lireEtatServeurs(serveurs())).toBeNull();
 	}, 60_000);
 });

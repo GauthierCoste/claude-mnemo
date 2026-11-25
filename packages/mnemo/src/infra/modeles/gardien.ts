@@ -1,20 +1,18 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { chmod, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { messageDErreur } from '../../domaine/texte.ts';
 import { piecesPourPlateforme } from './catalogue.ts';
-import { dossierModeles } from './dossier.ts';
+import { dossierModeles, dossierServeurs } from './dossier.ts';
 import { requeteLocale } from './http-local.ts';
+import { inactiviteTransmise } from './inactivite.ts';
 import { etatDesPieces } from './installer.ts';
 import { journaliser } from './journal.ts';
 import { variable } from '../environnement.ts';
-import { lireReglagesDuDossier } from '../reglages-fichier.ts';
-import { lireService, processusVivant } from '../service-local.ts';
 import {
 	AGE_MAX_DEMARRAGE_MS,
 	chargementMaxMs,
@@ -26,29 +24,20 @@ import {
 	ecrireEtatServeurs,
 	lireEtatServeurs,
 	pidVivant,
+	preparerDossierServeurs,
 	retirerEtatDuGardien,
 	verifierServeur,
 	verrouModeles,
 } from './serveurs.ts';
 import type { EntreeServeur, EtatGardien, EtatServeurs, TypeServeur } from './serveurs.ts';
-import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
 
-/**
- * Arrêt après ce temps sans requête (date de `.mnemo/modeles.actif`) : le réglage `modeles.inactiviteMinutes`, lu au
- * démarrage du gardien ; `MNEMO_MODELES_INACTIVITE_MS` le remplace (tests).
- */
-export function inactiviteDuGardien(racine: string, env: NodeJS.ProcessEnv, avertir: (message: string) => void = () => {}): number {
-	if (Number(env['MNEMO_MODELES_INACTIVITE_MS']) > 0) return Number(env['MNEMO_MODELES_INACTIVITE_MS']);
-	const { reglages, avertissements } = lireReglagesDuDossier(racine);
-	for (const a of avertissements) avertir(a);
-	return reglages.modeles.inactiviteMinutes * 60_000;
-}
 export type DecisionSurInactivite = { arreter: false } | { arreter: true; motif: string };
 
-/** Le service garde les modèles prêts pour chaque hook ; sans service, l'arrêt pour inactivité rend la mémoire vive. */
-export function decisionSurInactivite(e: { serviceVivant: boolean; serviceVuVivant: boolean; inactifDepuisMs: number; inactiviteMs: number }): DecisionSurInactivite {
-	if (e.serviceVivant) return { arreter: false };
-	if (e.serviceVuVivant) return { arreter: true, motif: 'service arrêté' };
+/**
+ * Arrêt après `inactiviteMs` sans requête (date de `modeles.actif`), que le service Mnemo tourne ou non : la mémoire vive est
+ * rendue, et le prochain usage relance les modèles.
+ */
+export function decisionSurInactivite(e: { inactifDepuisMs: number; inactiviteMs: number }): DecisionSurInactivite {
 	if (e.inactifDepuisMs > e.inactiviteMs) return { arreter: true, motif: `${Math.round(e.inactiviteMs / 1000)} s sans requête` };
 	return { arreter: false };
 }
@@ -94,17 +83,18 @@ export function environnementServeur(env: NodeJS.ProcessEnv, plateforme: NodeJS.
 type Serveur = { type: TypeServeur; gguf: string; enfant: ChildProcess; entree: EntreeServeur };
 
 /**
- * Processus détaché (`mnemo modeles garde <racine>`), un par dossier Mnemo : lance un `llama-server` par modèle installé
- * (sens, reranker), écrit `.mnemo/modeles.json`, les arrête tous à l'arrêt du service ou, sans service, après `inactiviteDuGardien` sans requête, si l'un meurt, si un
- * autre gardien le remplace, si `modeles.json` disparaît, ou sur signal ; retire alors `modeles.json` s'il le nomme encore.
- * Un modèle qui ne démarre pas n'empêche pas l'autre de servir. Ne crée jamais de dossier : si `<racine>/.mnemo` a disparu
- * (dossier supprimé ou recloné), il arrête ses serveurs et sort sans rien écrire. `MNEMO_LLAMA_SERVEUR` (tests seulement)
- * remplace le moteur : un script `.mjs`/`.js` est lancé par Node.
+ * Processus détaché (`mnemo modeles garde`), un seul pour toute la machine (par utilisateur) : lance un `llama-server` par
+ * modèle installé (sens, reranker), écrit `serveurs/modeles.json` (`dossierServeurs`, seul dossier qu'il crée), les arrête
+ * tous après l'inactivité reçue à son lancement (`inactiviteTransmise`) sans requête, si l'un meurt, si un autre gardien le
+ * remplace, si `modeles.json` disparaît, ou sur signal ; retire alors `modeles.json` s'il le nomme encore. Un modèle qui ne
+ * démarre pas n'empêche pas l'autre de servir. `MNEMO_LLAMA_SERVEUR` (tests seulement) remplace le moteur : un script
+ * `.mjs`/`.js` est lancé par Node.
  */
-export async function garder(racine: string, env: NodeJS.ProcessEnv = process.env): Promise<void> {
+export async function garder(env: NodeJS.ProcessEnv = process.env): Promise<void> {
 	const plateforme = process.platform;
 	const depuis = new Date().toISOString();
-	const inactiviteMs = inactiviteDuGardien(racine, env, (m) => void journaliser(racine, `gardien : ${m}`));
+	const dossier = dossierServeurs(env, plateforme, homedir());
+	const inactiviteMs = inactiviteTransmise(env);
 	const chargementMs = chargementMaxMs(env);
 	const surveillanceMs =
 		Number(env['MNEMO_MODELES_SURVEILLANCE_MS']) > 0
@@ -112,7 +102,7 @@ export async function garder(racine: string, env: NodeJS.ProcessEnv = process.en
 			: Math.max(50, Math.min(SURVEILLANCE_MS, Math.floor(inactiviteMs / 5)));
 	/** Pids de tous les serveurs lancés par ce gardien (essais ratés compris), retirés du registre à la sortie. */
 	const pidsLances: number[] = [];
-	const journal = (message: string) => journaliser(racine, `gardien : ${message}`);
+	const journal = (message: string) => journaliser(dossier, `gardien : ${message}`);
 	/** Serveurs lancés, en chargement ou prêts (un par type) : publiés dès leur lancement, arrêtés à la sortie. */
 	const serveurs = new Map<TypeServeur, Serveur>();
 	/** Tous les processus lancés (essais ratés compris) : tués à la sortie quoi qu'il arrive. */
@@ -127,7 +117,7 @@ export async function garder(racine: string, env: NodeJS.ProcessEnv = process.en
 	let ecritures: Promise<void> = Promise.resolve();
 	const publier = (): Promise<void> => {
 		const ecrire = () =>
-			ecrireEtatServeurs(racine, {
+			ecrireEtatServeurs(dossier, {
 				gardien: { pid: process.pid, depuis, etat: phase },
 				...Object.fromEntries([...serveurs.values()].map((s) => [s.type, s.entree])),
 			});
@@ -155,20 +145,15 @@ export async function garder(racine: string, env: NodeJS.ProcessEnv = process.en
 	};
 	const arreterTout = async (motif: string, echec: boolean): Promise<void> => {
 		clearInterval(surveillance);
-		// dossier supprimé (ou recloné au même chemin) : ses serveurs arrêtés, aucune écriture (rien ne recrée `.mnemo/`)
-		if (!existsSync(join(racine, DOSSIER_LOCAL))) {
-			await Promise.all([...serveurs.values()].map((s) => arreterServeur(s.enfant)));
-			return;
-		}
 		await journal(`arrêt (${motif})`);
 		await Promise.all([...serveurs.values()].map((s) => arreterServeur(s.enfant)));
 		await Promise.all([...fichiersCle].map((f) => rm(f, { force: true })));
-		await retirerLances(racine, pidsLances).catch(() => {});
+		await retirerLances(dossier, pidsLances).catch(() => {});
 		try {
-			const etat = await lireEtatServeurs(racine);
+			const etat = await lireEtatServeurs(dossier);
 			if (echec && etat?.gardien.pid === process.pid) {
-				await ecrireEtatServeurs(racine, { gardien: { pid: process.pid, depuis: new Date().toISOString(), etat: 'echec' } });
-			} else await retirerEtatDuGardien(racine, process.pid);
+				await ecrireEtatServeurs(dossier, { gardien: { pid: process.pid, depuis: new Date().toISOString(), etat: 'echec' } });
+			} else await retirerEtatDuGardien(dossier, process.pid);
 		} catch {
 			/* rien à retirer */
 		}
@@ -181,7 +166,7 @@ export async function garder(racine: string, env: NodeJS.ProcessEnv = process.en
 	try {
 		return await demarrerEtGarder();
 	} catch (erreur) {
-		// filet : toute erreur du démarrage ou de la garde (dossier supprimé pendant un chargement…) arrête tout
+		// filet : toute erreur du démarrage ou de la garde (`serveurs/` supprimé pendant un chargement…) arrête tout
 		return arreter(`erreur : ${messageDErreur(erreur)}`, phase === 'demarrage');
 	}
 
@@ -197,14 +182,15 @@ export async function garder(racine: string, env: NodeJS.ProcessEnv = process.en
 		if (moteur === undefined) return arreter('moteur llama.cpp absent', true);
 		if (modeles.length === 0) return arreter('aucun modèle installé', true);
 
-		// Un seul gardien par dossier : sous le verrou, laisser la place à un autre qui démarre ou qui sert déjà.
-		const place = await verrouModeles(racine).avec(async () => {
-			const ancien = await lireEtatServeurs(racine);
+		// Un seul gardien pour la machine : sous le verrou, laisser la place à un autre qui démarre ou qui sert déjà.
+		await preparerDossierServeurs(dossier);
+		const place = await verrouModeles(dossier).avec(async () => {
+			const ancien = await lireEtatServeurs(dossier);
 			if (ancien !== null && ancien.gardien.pid !== process.pid) {
 				if (await autreGardienActif(ancien)) return false;
 			}
 			// serveurs d'un gardien disparu, même tué en plein chargement : retrouvés par le registre
-			await nettoyerLancesSousVerrou(racine, process.pid, env);
+			await nettoyerLancesSousVerrou(dossier, process.pid, env);
 			await publier();
 			return true;
 		});
@@ -219,7 +205,7 @@ export async function garder(racine: string, env: NodeJS.ProcessEnv = process.en
 			const cle = randomBytes(32).toString('hex');
 			// la clé passe par un fichier 0600 (jamais sur la ligne de commande, visible de tous par `ps`), retiré une fois le
 			// serveur prêt : llama-server le lit à son démarrage seulement
-			const fichierCle = join(racine, DOSSIER_LOCAL, `modeles-${type}-${randomBytes(6).toString('hex')}.cle`);
+			const fichierCle = join(dossier, `modeles-${type}-${randomBytes(6).toString('hex')}.cle`);
 			await writeFile(fichierCle, `${cle}\n`, { mode: 0o600 });
 			await chmod(fichierCle, 0o600);
 			fichiersCle.add(fichierCle);
@@ -236,7 +222,7 @@ export async function garder(racine: string, env: NodeJS.ProcessEnv = process.en
 			});
 			enfant.stderr?.setEncoding('utf8');
 			enfant.stderr?.on('data', (texte: string) => {
-				for (const ligne of texte.split('\n')) if (ligne.trim() !== '') void journaliser(racine, `${type} : ${ligne.slice(0, 500)}`);
+				for (const ligne of texte.split('\n')) if (ligne.trim() !== '') void journaliser(dossier, `${type} : ${ligne.slice(0, 500)}`);
 			});
 			const parti = new Promise<string>((resoudre) => {
 				enfant.once('error', (erreur) => resoudre(messageDErreur(erreur)));
@@ -248,7 +234,7 @@ export async function garder(racine: string, env: NodeJS.ProcessEnv = process.en
 			if (enfant.pid !== undefined) {
 				pidsLances.push(enfant.pid);
 				try {
-					await noterLance(racine, { pid: enfant.pid, port, cle, piece: basename(gguf), lanceMs: Date.now(), gardien: process.pid });
+					await noterLance(dossier, { pid: enfant.pid, port, cle, piece: basename(gguf), lanceMs: Date.now(), gardien: process.pid });
 				} catch (erreur) {
 					// pas noté, donc introuvable après nous : arrêté tout de suite
 					enfant.kill('SIGKILL');
@@ -306,39 +292,34 @@ export async function garder(racine: string, env: NodeJS.ProcessEnv = process.en
 		} catch (erreur) {
 			return arreter(`publication impossible : ${messageDErreur(erreur)}`);
 		}
-		await journal(`prêt : ${[...serveurs.values()].map((s) => `${s.type} port ${s.entree.port}`).join(', ')}`);
+		await journal(`prêt : ${[...serveurs.values()].map((s) => `${s.type} port ${s.entree.port}`).join(', ')} ; arrêt après ${Math.round(inactiviteMs / 1000)} s sans requête`);
 
 		// un serveur mort après « prêt » laisse la même trace `echec` d'une minute : pas de relance en boucle
 		for (const s of serveurs.values()) s.enfant.once('exit', (code, signal) => void arreter(`${s.type} arrêté (${signal ?? code})`, true));
 		const mort = [...serveurs.values()].find((s) => s.enfant.exitCode !== null || s.enfant.signalCode !== null);
 		if (mort !== undefined) return arreter(`${mort.type} arrêté`, true);
 
-		// Surveillance : inactivité, remplacement par un autre gardien, état ou dossier disparu.
+		// Surveillance : inactivité, remplacement par un autre gardien, état disparu.
 		const debut = Date.now();
-		let serviceVuVivant = false;
 		let verification = false;
 		surveillance = setInterval(
 			() => {
 				if (verification) return; // la précédente n'a pas fini
 				verification = true;
 				void (async () => {
-					const etat = await lireEtatServeurs(racine);
-					// `.mnemo/` supprimé : `arreter` le voit et sort sans rien écrire
+					const etat = await lireEtatServeurs(dossier);
 					if (etat === null) return arreter('état disparu');
 					if (etat.gardien.pid !== process.pid) return arreter('remplacé par un autre gardien');
 					let derniere = debut;
 					try {
-						derniere = Math.max(debut, (await stat(cheminsModeles(racine).actif)).mtimeMs);
+						derniere = Math.max(debut, (await stat(cheminsModeles(dossier).actif)).mtimeMs);
 					} catch {
 						/* aucune requête encore */
 					}
-					const service = lireService(racine);
-					const serviceVivant = service !== null && processusVivant(service.pid);
-					const decision = decisionSurInactivite({ serviceVivant, serviceVuVivant, inactifDepuisMs: Date.now() - derniere, inactiviteMs });
-					if (serviceVivant) serviceVuVivant = true;
+					const decision = decisionSurInactivite({ inactifDepuisMs: Date.now() - derniere, inactiviteMs });
 					if (decision.arreter) return arreter(decision.motif);
 					// serveurs d'un gardien disparu qui chargeaient encore au démarrage : arrêtés dès qu'ils répondent
-					await nettoyerLances(racine, { garder: process.pid, env });
+					await nettoyerLances(dossier, { garder: process.pid, env });
 				})().finally(() => {
 					verification = false;
 				});

@@ -26,7 +26,7 @@ Commandes :
   amorce            importe la mémoire de Claude Code comme sources [--dossier-claude <chemin>]
   modeles etat      état des modèles locaux (sens, reranker) et du moteur llama.cpp
   modeles installer installe les modèles qui manquent [--depuis <dossier>]
-  modeles arreter   arrête les serveurs de modèles de ce dossier
+  modeles arreter   arrête les serveurs de modèles (un seul jeu pour la machine)
   banc [questions]  mesure la qualité de la recherche (sans fichier : mémoire d'essai) [--json]
   banc consignes    banc des consignes (vérification et rappel, sans claude) [--json]
   banc contexte     rejoue les cas étiquetés de .mnemo/banc-contexte.json (sans claude) [--extraire <session>] [--json]

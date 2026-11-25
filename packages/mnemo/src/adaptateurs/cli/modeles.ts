@@ -1,11 +1,13 @@
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { piecesPourPlateforme } from '../../infra/modeles/catalogue.ts';
 import type { Piece } from '../../infra/modeles/catalogue.ts';
-import { dossierModeles } from '../../infra/modeles/dossier.ts';
+import { dossierModeles, SOUS_DOSSIER_SERVEURS } from '../../infra/modeles/dossier.ts';
 import { etatDesPieces, installerPiece } from '../../infra/modeles/installer.ts';
 import type { Telecharger } from '../../infra/modeles/installer.ts';
+import { migrerAncienGardien } from '../../infra/modeles/migration-gardien-dossier.ts';
 import { arreterServeurs, lireEtatServeurs, pidVivant, serveursVerifies } from '../../infra/modeles/serveurs.ts';
+import type { ResultatArret } from '../../infra/modeles/serveurs.ts';
 import { telechargerFichier } from '../../infra/modeles/telechargement.ts';
 import { ErreurCli } from './erreurs.ts';
 import { trouverRacine } from './racine.ts';
@@ -20,7 +22,10 @@ export type ContexteModeles = {
 	/** Par défaut : les pièces figées de la plateforme. */
 	pieces: Piece[] | null;
 	telecharger: Telecharger;
-	/** Dossier Mnemo dont on montre ou arrête les serveurs ; par défaut celui du dossier courant (null : aucun). */
+	/**
+	 * Dossier Mnemo dont `arreter` retire l'ancien gardien (un par dossier jusqu'à la 1.5 : migration) ; par défaut celui du
+	 * dossier courant (null : aucun). Les serveurs, eux, sont ceux de la machine (`serveurs/` de `dossier`).
+	 */
 	racine: string | null;
 	/** Lignes de `installer` : la sortie et l'erreur standard par défaut (`mnemo init --json` les garde pour lui). */
 	journal: { info(ligne: string): void; erreur(ligne: string): void };
@@ -68,13 +73,12 @@ async function etat(contexte: ContexteModeles, pieces: Piece[]): Promise<void> {
 	for (const { piece, installee, chemin } of await etatDesPieces(contexte.dossier, pieces)) {
 		console.log(installee ? `${piece.libelle} : installé — ${chemin}` : `${piece.libelle} : absent (mnemo modeles installer)`);
 	}
-	await serveursEnMarche(contexte.racine);
+	await serveursEnMarche(join(contexte.dossier, SOUS_DOSSIER_SERVEURS));
 }
 
-/** Serveurs du dossier Mnemo en marche, d'après `.mnemo/modeles.json` : seulement ceux qui répondent avec leur clé. */
-async function serveursEnMarche(racine: string | null): Promise<void> {
-	if (racine === null) return;
-	const etat = await lireEtatServeurs(racine);
+/** Serveurs de la machine en marche, d'après `serveurs/modeles.json` : seulement ceux qui répondent avec leur clé. */
+async function serveursEnMarche(dossier: string): Promise<void> {
+	const etat = await lireEtatServeurs(dossier);
 	const verifies = etat === null || !pidVivant(etat.gardien.pid) ? [] : await serveursVerifies(etat, Date.now() + 1000);
 	if (verifies.length === 0) {
 		console.log(etat?.gardien.etat === 'demarrage' && pidVivant(etat.gardien.pid) ? 'Serveurs : en chargement' : 'Serveurs : aucun serveur en marche');
@@ -107,12 +111,21 @@ async function installer(contexte: ContexteModeles, pieces: Piece[], depuis: str
 			journal.erreur(`${piece.libelle} : échec — ${erreur instanceof Error ? erreur.message : String(erreur)}`);
 		}
 	}
-	// Des serveurs lancés avant cette installation ne connaissent pas la pièce neuve : ceux de ce dossier sont arrêtés, le
-	// prochain appel les relance avec tout ce qui est installé (ceux des autres dossiers s'arrêtent après 15 min sans requête).
-	if (nouvelles > 0 && contexte.racine !== null && (await arreterServeurs(contexte.racine)) === 'arrete') {
-		journal.info('Serveurs de ce dossier arrêtés : ils repartiront avec les pièces neuves.');
+	// Des serveurs lancés avant cette installation ne connaissent pas la pièce neuve : ils sont arrêtés, le prochain appel les
+	// relance avec tout ce qui est installé.
+	if (nouvelles > 0 && (await arreterServeurs(join(contexte.dossier, SOUS_DOSSIER_SERVEURS))) === 'arrete') {
+		journal.info('Serveurs des modèles arrêtés : ils repartiront avec les pièces neuves.');
 	}
 	if (echecs > 0) throw new ErreurCli(`${echecs} ${echecs === 1 ? 'pièce non installée' : 'pièces non installées'}.`, 1);
+}
+
+/** Un seul bilan pour deux arrêts : des serveurs en chargement d'abord, puis un arrêt, puis un état périmé. */
+function combinerArrets(a: ResultatArret | null, b: ResultatArret): ResultatArret {
+	const tous = a === null ? [b] : [a, b];
+	const enChargement = tous.reduce((n, r) => n + (typeof r === 'object' ? r.enChargement : 0), 0);
+	if (enChargement > 0) return { enChargement };
+	if (tous.includes('arrete')) return 'arrete';
+	return tous.includes('perime') ? 'perime' : 'rien';
 }
 
 /** `mnemo modeles etat` : une ligne par pièce ; `mnemo modeles installer [--depuis <dossier>]` : installe celles qui manquent. */
@@ -120,16 +133,17 @@ export async function commandeModeles(args: string[], partiel: Partial<ContexteM
 	const [action, ...reste] = args;
 	let depuis: string | undefined;
 	if (action === 'garde') {
-		// interne : le gardien des serveurs d'un dossier, lancé détaché par le premier appel qui en a besoin
-		if (reste.length !== 1 || reste[0] === '') throw new ErreurCli(USAGE, 2);
+		// interne : le gardien des serveurs de la machine, lancé détaché par le premier appel qui en a besoin
+		if (reste.length > 0) throw new ErreurCli(USAGE, 2);
 		const { garder } = await import('../../infra/modeles/gardien.ts');
-		return garder(resolve(reste[0]!));
+		return garder();
 	}
 	if (action === 'arreter') {
 		if (reste.length > 0) throw new ErreurCli(USAGE, 2);
-		const racine = partiel.racine !== undefined ? partiel.racine : trouverRacine(process.cwd());
-		if (racine === null) throw new ErreurCli('Aucune mémoire Mnemo ici (mnemo init).', 1);
-		const resultat = await arreterServeurs(racine);
+		const contexte = contexteReel(partiel);
+		// l'ancien gardien du dossier courant (migration), puis celui de la machine
+		const ancien = contexte.racine === null ? null : await migrerAncienGardien(contexte.racine);
+		const resultat = combinerArrets(ancien, await arreterServeurs(join(contexte.dossier, SOUS_DOSSIER_SERVEURS)));
 		if (typeof resultat === 'object') {
 			console.log(`${resultat.enChargement} serveur(s) encore en chargement : relancez \`mnemo modeles arreter\` dans un instant.`);
 			return;

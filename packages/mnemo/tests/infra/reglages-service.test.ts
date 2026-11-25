@@ -4,17 +4,23 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { commandeFenetre, navigateurInstalle } from '../../src/infra/navigateurs.ts';
 import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
-import { inactiviteDuGardien } from '../../src/infra/modeles/gardien.ts';
+import { inactiviteDuDossier, inactiviteTransmise } from '../../src/infra/modeles/inactivite.ts';
 import { ecrireReglagesDuDossier } from '../../src/infra/reglages-fichier.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
 describe('modeles.inactiviteMinutes', () => {
 	it('15 min par défaut ; le réglage le change ; MNEMO_MODELES_INACTIVITE_MS (tests) l’emporte', async () => {
 		const racine = await dossierTemporaire();
-		expect(inactiviteDuGardien(racine, {})).toBe(15 * 60_000);
+		expect(inactiviteDuDossier(racine, {})).toBe(15 * 60_000);
 		ecrireReglagesDuDossier(racine, { ...REGLAGES_PAR_DEFAUT, modeles: { inactiviteMinutes: 30 } });
-		expect(inactiviteDuGardien(racine, {})).toBe(30 * 60_000);
-		expect(inactiviteDuGardien(racine, { MNEMO_MODELES_INACTIVITE_MS: '500' })).toBe(500);
+		expect(inactiviteDuDossier(racine, {})).toBe(30 * 60_000);
+		expect(inactiviteDuDossier(racine, { MNEMO_MODELES_INACTIVITE_MS: '500' })).toBe(500);
+	});
+
+	it('le gardien garde la valeur reçue à son lancement ; sans elle, le défaut', () => {
+		expect(inactiviteTransmise({ MNEMO_MODELES_INACTIVITE_MS: '120000' })).toBe(120_000);
+		expect(inactiviteTransmise({})).toBe(15 * 60_000);
+		expect(inactiviteTransmise({ MNEMO_MODELES_INACTIVITE_MS: 'abc' })).toBe(15 * 60_000);
 	});
 
 	it('réglage invalide : le défaut, et l’avertissement va au journal', async () => {
@@ -22,7 +28,7 @@ describe('modeles.inactiviteMinutes', () => {
 		mkdirSync(join(racine, '.mnemo'));
 		writeFileSync(join(racine, '.mnemo', 'reglages.json'), JSON.stringify({ modeles: { inactiviteMinutes: 0 } }));
 		const avis: string[] = [];
-		expect(inactiviteDuGardien(racine, {}, (m) => avis.push(m))).toBe(15 * 60_000);
+		expect(inactiviteDuDossier(racine, {}, (m) => avis.push(m))).toBe(15 * 60_000);
 		expect(avis).toEqual([expect.stringContaining('modeles.inactiviteMinutes')]);
 	});
 });

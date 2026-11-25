@@ -6,12 +6,14 @@ import { messageDErreur } from '../../domaine/texte.ts';
 import type { Modeles, OptionsModele, Reranker, Sens } from '../../application/ports.ts';
 import { piecesPourPlateforme } from './catalogue.ts';
 import type { Piece } from './catalogue.ts';
-import { dossierModeles } from './dossier.ts';
+import { dossierModeles, dossierServeurs } from './dossier.ts';
 import { requeteLocale } from './http-local.ts';
 import type { ReponseLocale } from './http-local.ts';
+import { inactiviteDuDossier } from './inactivite.ts';
 import { dossierPiece } from './installer.ts';
 import { journaliser } from './journal.ts';
 import { cheminsModeles, oublierServeur, serveurPret } from './serveurs.ts';
+import type { OptionsServeur } from './serveurs.ts';
 import type { EntreeServeur, TypeServeur } from './serveurs.ts';
 
 /** Dimension des vecteurs de bge-m3 : toute autre est une réponse invalide. */
@@ -59,9 +61,24 @@ function piecesDisponibles(options: OptionsClient): () => Disponibles {
 	};
 }
 
+/**
+ * Où trouver les serveurs (`serveurs/` du cache, un gardien pour la machine), et ce que le gardien reçoit s'il est lancé : son
+ * environnement et l'inactivité tolérée par le dossier Mnemo `racine` (son réglage `modeles.inactiviteMinutes`). La racine ne
+ * sert qu'à cela : l'état des serveurs ne dépend d'aucun dossier.
+ */
+function lieuDesServeurs(racine: string, options: OptionsClient): { dossier: () => string; serveur: Pick<OptionsServeur, 'env' | 'inactiviteMs'> } {
+	const env = options.env ?? process.env;
+	const plateforme = options.plateforme ?? process.platform;
+	const dossier = () => dossierServeurs(env, plateforme, homedir());
+	return {
+		dossier,
+		serveur: { env, inactiviteMs: () => inactiviteDuDossier(racine, env, (m) => void journaliser(dossier(), `réglages de ${racine} : ${m}`)) },
+	};
+}
+
 /** Marque une requête : le gardien s'arrête après un long moment sans. */
-async function toucher(racine: string): Promise<void> {
-	const fichier = cheminsModeles(racine).actif;
+async function toucher(dossier: string): Promise<void> {
+	const fichier = cheminsModeles(dossier).actif;
 	const maintenant = new Date();
 	try {
 		await utimes(fichier, maintenant, maintenant);
@@ -109,21 +126,23 @@ type Appel<T> = (serveur: EntreeServeur, finMs: number) => Promise<T | string>;
 
 /**
  * Trouve (ou démarre) le serveur, puis fait l'appel ; tout ce qui ne va pas rend null, avec une ligne de journal. Un appel rend
- * une valeur ou le motif de son échec.
+ * une valeur ou le motif de son échec. `demarrer` faux (hooks) : sans serveur prêt, le gardien est lancé sans être attendu,
+ * l'appel rend null aussitôt et les suivants trouveront les modèles.
  */
-async function appeler<T>(racine: string, type: TypeServeur, options: OptionsModele & { env: NodeJS.ProcessEnv }, appel: Appel<T>): Promise<T | null> {
+async function appeler<T>(lieu: ReturnType<typeof lieuDesServeurs>, type: TypeServeur, options: OptionsModele, appel: Appel<T>): Promise<T | null> {
 	const finMs = Date.now() + options.budgetMs;
+	const dossier = lieu.dossier();
 	try {
-		const serveur = await serveurPret(racine, type, { finMs, demarrer: options.demarrer, env: options.env });
+		const serveur = await serveurPret(dossier, type, { finMs, demarrage: options.demarrer ? 'attendre' : 'sans-attendre', ...lieu.serveur });
 		if (serveur === null) return null;
-		await toucher(racine);
+		await toucher(dossier);
 		const resultat = await appel(serveur, finMs);
 		if (typeof resultat !== 'string') return resultat;
 		if (!resultat.startsWith('délai')) oublierServeur(serveur);
-		await journaliser(racine, `${type} : ${resultat}`);
+		await journaliser(dossier, `${type} : ${resultat}`);
 		return null;
 	} catch (erreur) {
-		await journaliser(racine, `${type} : ${messageDErreur(erreur)}`);
+		await journaliser(dossier, `${type} : ${messageDErreur(erreur)}`);
 		return null;
 	}
 }
@@ -131,7 +150,7 @@ async function appeler<T>(racine: string, type: TypeServeur, options: OptionsMod
 /** Vecteurs de sens par le serveur local `bge-m3` (`POST /v1/embeddings`, lots de 64), dans le budget de l'appelant. */
 export function sensLlama(racine: string, options: OptionsClient = {}): Sens {
 	const disponibles = piecesDisponibles(options);
-	const env = options.env ?? process.env;
+	const lieu = lieuDesServeurs(racine, options);
 	return {
 		modele() {
 			const sens = disponibles().sens;
@@ -141,7 +160,7 @@ export function sensLlama(racine: string, options: OptionsClient = {}): Sens {
 			if (textes.length === 0) return [];
 			const d = disponibles();
 			if (!d.moteur || d.sens === null) return null;
-			return appeler(racine, 'sens', { ...opts, env }, async (serveur, finMs) => {
+			return appeler(lieu, 'sens', opts, async (serveur, finMs) => {
 				const sortie: Float32Array[] = [];
 				for (let i = 0; i < textes.length; i += LOT_SENS) {
 					const lot = textes.slice(i, i + LOT_SENS);
@@ -166,13 +185,13 @@ export function sensLlama(racine: string, options: OptionsClient = {}): Sens {
 /** Notes du serveur local `bge-reranker-v2-m3` (`POST /v1/rerank`), une par texte, dans le budget de l'appelant. */
 export function rerankerLlama(racine: string, options: OptionsClient = {}): Reranker {
 	const disponibles = piecesDisponibles(options);
-	const env = options.env ?? process.env;
+	const lieu = lieuDesServeurs(racine, options);
 	return {
 		async noter(requete, textes, opts) {
 			if (textes.length === 0) return [];
 			const d = disponibles();
 			if (!d.moteur || d.reranker === null) return null;
-			return appeler(racine, 'reranker', { ...opts, env }, async (serveur, finMs) => {
+			return appeler(lieu, 'reranker', opts, async (serveur, finMs) => {
 				const reponse = await requeteLocale(serveur.port, '/v1/rerank', { cle: serveur.cle, finMs, corps: { query: requete, documents: textes } });
 				const motif = motifReponse(reponse);
 				if (motif !== null) return motif;
@@ -191,10 +210,10 @@ const LECTURE_ETAT_MS = 300;
 /** Démarrage demandé : le gardien est lancé, on n'attend pas son chargement au-delà. */
 const ATTENTE_DEMARRAGE_MS = 1000;
 
-/** Les modèles de ce dossier, vus du service : rien n'est lancé sans `demarrer` (geste de l'utilisateur). */
+/** Les modèles de la machine, vus du service du dossier `racine` : l'état seul ne lance rien ; `demarrer` (geste de l'utilisateur). */
 export function modelesLocaux(racine: string, options: OptionsClient = {}): Modeles {
 	const disponibles = piecesDisponibles(options);
-	const env = options.env ?? process.env;
+	const lieu = lieuDesServeurs(racine, options);
 	const installes = () => {
 		const d = disponibles();
 		return d.moteur && d.reranker !== null;
@@ -202,10 +221,10 @@ export function modelesLocaux(racine: string, options: OptionsClient = {}): Mode
 	return {
 		async etatReranker() {
 			if (!installes()) return 'absent';
-			return (await serveurPret(racine, 'reranker', { finMs: Date.now() + LECTURE_ETAT_MS, demarrer: false, env })) === null ? 'arrete' : 'pret';
+			return (await serveurPret(lieu.dossier(), 'reranker', { finMs: Date.now() + LECTURE_ETAT_MS, demarrage: 'jamais', ...lieu.serveur })) === null ? 'arrete' : 'pret';
 		},
 		async demarrer() {
-			if (installes()) await serveurPret(racine, 'reranker', { finMs: Date.now() + ATTENTE_DEMARRAGE_MS, demarrer: true, env });
+			if (installes()) await serveurPret(lieu.dossier(), 'reranker', { finMs: Date.now() + ATTENTE_DEMARRAGE_MS, demarrage: 'attendre', ...lieu.serveur });
 		},
 	};
 }

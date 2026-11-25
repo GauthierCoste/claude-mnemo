@@ -853,7 +853,7 @@ export const REGLAGES_DEMO: ChampReglageVue[] = [
 	{ cle: 'memoire.repetitions', groupe: 'memoire', libelle: 'Répétitions pour monter une consigne', explication: 'Fois où une consigne est redite avant que Mnemo propose de la rendre toujours présente.', genre: 'entier', defaut: 2, valeur: 2, min: 1, max: 20, effet: 'immediat' },
 	{ cle: 'memoire.poids_declare', groupe: 'memoire', libelle: 'Poids d’un fait déclaré', explication: 'Multiplie la fiabilité de la source pour donner la confiance du fait.', genre: 'decimal', defaut: 1, valeur: 1, min: 0, max: 1, effet: 'immediat' },
 	{ cle: 'memoire.fiabilite_email', groupe: 'memoire', libelle: 'Fiabilité : Email', explication: 'Fiabilité d’une information de source « email ».', genre: 'decimal', defaut: 0.7, valeur: 0.7, min: 0, max: 1, effet: 'immediat' },
-	{ cle: 'modeles.inactiviteMinutes', groupe: 'modeles', libelle: 'Arrêt pour inactivité', explication: 'Sans service Mnemo, les modèles locaux s’arrêtent après ce temps sans requête. Avec le service, ils restent démarrés et s’arrêtent avec lui.', genre: 'entier', defaut: 15, valeur: 15, min: 1, max: 240, unite: 'minutes', effet: 'modeles' },
+	{ cle: 'modeles.inactiviteMinutes', groupe: 'modeles', libelle: 'Arrêt pour inactivité', explication: 'Les modèles locaux s’arrêtent après ce temps sans requête, que le service tourne ou non ; le prochain usage les relance. Partagés par toute la machine, ils gardent le délai du dossier qui les a démarrés.', genre: 'entier', defaut: 15, valeur: 15, min: 1, max: 240, unite: 'minutes', effet: 'modeles' },
 	{
 		cle: 'archiviste.typesAConfirmer',
 		groupe: 'archiviste',

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { cp, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
@@ -17,6 +17,7 @@ import type { Session } from '../../domaine/session.ts';
 import { motifRegleInvalide } from '../../domaine/regles-verifiees.ts';
 import type { Regle } from '../../domaine/consigne.ts';
 import { ecrirePlugin, trouverClaude } from '../../infra/claude.ts';
+import { dossierServeurs } from '../../infra/modeles/dossier.ts';
 import { arreterServeurs } from '../../infra/modeles/serveurs.ts';
 import { appelPlugin, dependancesReelles } from '../../infra/systeme.ts';
 import type { Executer } from './declarer.ts';
@@ -69,8 +70,8 @@ export function lireQuestions(texte: string): Question[] {
 }
 
 /**
- * `travail` dans un dossier temporaire neuf, supprimé ensuite. Les serveurs de modèles lancés pour lui sont arrêtés avant ;
- * le nettoyage se fait une seule fois, même interrompu (Ctrl-C ou SIGTERM : rien ne reste derrière). Interrompu, le
+ * `travail` dans un dossier temporaire neuf, supprimé ensuite. Les serveurs de modèles (ceux de la machine, partagés) sont
+ * arrêtés avant la suppression : le banc ne laisse pas leur mémoire prise, le prochain usage les relance. Le nettoyage se fait une seule fois, même interrompu (Ctrl-C ou SIGTERM : rien ne reste derrière). Interrompu, le
  * `signal` passé à `travail` est d'abord levé : un processus lancé avec lui (`claude -p`) est tué.
  */
 async function dansUnDossierTemporaire<T>(prefixe: string, travail: (dossier: string, signal: AbortSignal) => Promise<T>): Promise<T> {
@@ -79,7 +80,7 @@ async function dansUnDossierTemporaire<T>(prefixe: string, travail: (dossier: st
 	let nettoyage: Promise<void> | null = null;
 	const nettoyer = (): Promise<void> =>
 		(nettoyage ??= (async () => {
-			await arreterServeurs(dossier).catch(() => 'rien');
+			await arreterServeurs(dossierServeurs(process.env, process.platform, homedir())).catch(() => 'rien');
 			await rm(dossier, { recursive: true, force: true });
 		})());
 	const interrompre = (): void => {

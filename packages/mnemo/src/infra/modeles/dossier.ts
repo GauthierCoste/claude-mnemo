@@ -17,3 +17,14 @@ export function dossierModeles(env: NodeJS.ProcessEnv, plateforme: NodeJS.Platfo
 	const xdg = env['XDG_CACHE_HOME'];
 	return chemins.join(xdg !== undefined && posix.isAbsolute(xdg) ? xdg : chemins.join(home, '.cache'), 'mnemo');
 }
+
+/** Sous-dossier du cache des pièces qui tient l'état des serveurs. */
+export const SOUS_DOSSIER_SERVEURS = 'serveurs';
+
+/**
+ * État des serveurs de modèles, un seul pour toute la machine (un gardien, ses serveurs) : `serveurs/` dans le cache des
+ * pièces. Le cache est par utilisateur : chaque utilisateur a son gardien.
+ */
+export function dossierServeurs(env: NodeJS.ProcessEnv, plateforme: NodeJS.Platform, home: string): string {
+	return (plateforme === 'win32' ? win32 : posix).join(dossierModeles(env, plateforme, home), SOUS_DOSSIER_SERVEURS);
+}

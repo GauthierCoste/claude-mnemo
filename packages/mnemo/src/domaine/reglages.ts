@@ -232,7 +232,7 @@ export const CHAMPS_REGLAGES: readonly ChampReglage[] = [
 		cle: 'modeles.inactiviteMinutes',
 		groupe: 'modeles',
 		libelle: 'Arrêt pour inactivité',
-		explication: 'Sans service Mnemo, les modèles locaux s’arrêtent après ce temps sans requête. Avec le service, ils restent démarrés et s’arrêtent avec lui.',
+		explication: 'Les modèles locaux s’arrêtent après ce temps sans requête, que le service tourne ou non ; le prochain usage les relance. Partagés par toute la machine, ils gardent le délai du dossier qui les a démarrés.',
 		genre: 'entier',
 		defaut: 15,
 		min: 1,

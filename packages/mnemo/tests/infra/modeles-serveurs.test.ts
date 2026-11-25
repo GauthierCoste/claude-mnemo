@@ -1,14 +1,20 @@
 import { execFile, spawn } from 'node:child_process';
-import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { commandeModeles } from '../../src/adaptateurs/cli/modeles.ts';
 import { piecesPourPlateforme } from '../../src/infra/modeles/catalogue.ts';
 import { dossierPiece } from '../../src/infra/modeles/installer.ts';
 import { rerankerLlama, sensLlama } from '../../src/infra/modeles/client-llama.ts';
+import { dossierServeurs } from '../../src/infra/modeles/dossier.ts';
 import { journaliser } from '../../src/infra/modeles/journal.ts';
+import { migrerAncienGardien } from '../../src/infra/modeles/migration-gardien-dossier.ts';
+import { ecrireService } from '../../src/infra/service-local.ts';
+import { ecrireReglagesDuDossier } from '../../src/infra/reglages-fichier.ts';
+import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 import { arreterServeurs, cheminsModeles, ecrireEtatServeurs, environnementGardien, lireEtatServeurs, lireLances, nettoyerLances, pidVivant } from '../../src/infra/modeles/serveurs.ts';
 import type { EtatServeurs } from '../../src/infra/modeles/serveurs.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
@@ -20,18 +26,19 @@ const SENS = PIECES.find((p) => p.nom === 'sens')!;
 const RERANKER = PIECES.find((p) => p.nom === 'reranker')!;
 
 type Reglages = { demarrageMs?: number; delaiMs?: number; dimension?: number; defaut?: string; notes?: number[] };
-type Banc = { racine: string; modeles: string; env: NodeJS.ProcessEnv; gguf: { sens: string; reranker: string } };
+/** `serveurs` : l'état des serveurs de la machine (isolé par `MNEMO_MODELES`) ; `racine` : un dossier Mnemo qui s'en sert. */
+type Banc = { racine: string; modeles: string; serveurs: string; env: NodeJS.ProcessEnv; gguf: { sens: string; reranker: string } };
 
-const racinesOuvertes: string[] = [];
+const serveursOuverts: string[] = [];
 const processus: number[] = [];
 
 afterEach(async () => {
 	vi.restoreAllMocks();
 	// jamais de processus laissé derrière : gardiens arrêtés, faux serveurs tués
-	while (racinesOuvertes.length > 0) {
-		const racine = racinesOuvertes.pop()!;
+	while (serveursOuverts.length > 0) {
+		const serveurs = serveursOuverts.pop()!;
 		// des serveurs encore en chargement ne sont pas vérifiables : ceux du registre de ce test sont tués
-		if (typeof (await arreterServeurs(racine)) === 'object') for (const l of await lireLances(racine)) processus.push(l.pid);
+		if (typeof (await arreterServeurs(serveurs)) === 'object') for (const l of await lireLances(serveurs)) processus.push(l.pid);
 	}
 	while (processus.length > 0) {
 		try {
@@ -58,7 +65,6 @@ async function banc(
 	const racine = await dossierTemporaire();
 	const modeles = await dossierTemporaire();
 	await mkdir(join(racine, '.mnemo'), { recursive: true });
-	racinesOuvertes.push(racine);
 	const sens = await installerFaux(modeles, 'sens');
 	const reranker = options.reranker === false ? '' : await installerFaux(modeles, 'reranker');
 	if (options.sens) await writeFile(`${sens}.faux.json`, JSON.stringify(options.sens));
@@ -70,7 +76,15 @@ async function banc(
 		MNEMO_MODELES_INACTIVITE_MS: String(options.inactiviteMs ?? 60_000),
 		...options.env,
 	};
-	return { racine, modeles, env, gguf: { sens, reranker } };
+	const serveurs = dossierServeurs(env, process.platform, homedir());
+	serveursOuverts.push(serveurs);
+	return { racine, modeles, serveurs, env, gguf: { sens, reranker } };
+}
+
+/** Écrit un état des serveurs comme l'aurait fait un gardien (le dossier `serveurs/` créé au besoin). */
+async function ecrireEtat(b: Banc, etat: EtatServeurs): Promise<void> {
+	await mkdir(b.serveurs, { recursive: true });
+	await ecrireEtatServeurs(b.serveurs, etat);
 }
 
 async function lancements(b: Banc): Promise<{ pid: number; args: string[]; env: string[] }[]> {
@@ -99,8 +113,8 @@ async function attendreQue(condition: () => Promise<boolean> | boolean, delaiMs 
 async function demarrer(b: Banc): Promise<EtatServeurs> {
 	const v = await sensLlama(b.racine, { env: b.env }).vecteurs(['amorce'], { budgetMs: 15_000, demarrer: true });
 	expect(v).not.toBeNull();
-	await attendreQue(async () => (await lireEtatServeurs(b.racine))?.gardien.etat === 'pret');
-	return (await lireEtatServeurs(b.racine))!;
+	await attendreQue(async () => (await lireEtatServeurs(b.serveurs))?.gardien.etat === 'pret');
+	return (await lireEtatServeurs(b.serveurs))!;
 }
 
 async function portLibre(): Promise<number> {
@@ -120,16 +134,40 @@ async function pidMort(): Promise<number> {
 }
 
 describe('modèles partagés : démarrage et clients', () => {
-	it('sans serveur et sans démarrer : null aussitôt, rien de lancé', async () => {
-		const b = await banc();
+	it('sans serveur et sans démarrer (hook) : null aussitôt, le gardien lancé sans être attendu ; le tour suivant a les modèles', async () => {
+		const b = await banc({ sens: { demarrageMs: 500 }, rerankerReglages: { demarrageMs: 500 } });
 		const debut = Date.now();
 		expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 400, demarrer: false })).toBeNull();
 		expect(await rerankerLlama(b.racine, { env: b.env }).noter('q', ['a'], { budgetMs: 400, demarrer: false })).toBeNull();
-		expect(Date.now() - debut).toBeLessThan(400);
+		expect(Date.now() - debut).toBeLessThan(800);
+		await attendreQue(async () => (await lireEtatServeurs(b.serveurs))?.gardien.etat === 'pret');
+		expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 2000, demarrer: false })).toHaveLength(1);
+		expect(await rerankerLlama(b.racine, { env: b.env }).noter('q', ['a'], { budgetMs: 2000, demarrer: false })).toHaveLength(1);
+		// un seul gardien, lancé une fois
+		expect(await lancements(b)).toHaveLength(2);
+	}, 30_000);
+
+	it('deux dossiers Mnemo : un seul gardien et un seul jeu de serveurs pour la machine', async () => {
+		const b = await banc();
+		const autre = await dossierTemporaire();
+		await mkdir(join(autre, '.mnemo'));
+		const etat = await demarrer(b);
+		expect(await sensLlama(autre, { env: b.env }).vecteurs(['a'], { budgetMs: 2000, demarrer: true })).toHaveLength(1);
+		expect(await rerankerLlama(autre, { env: b.env }).noter('q', ['a'], { budgetMs: 2000, demarrer: true })).toHaveLength(1);
 		await attendre(300);
-		expect(await lancements(b)).toHaveLength(0);
-		expect(existsSync(cheminsModeles(b.racine).etat)).toBe(false);
-	});
+		expect(await lancements(b)).toHaveLength(2);
+		expect((await lireEtatServeurs(b.serveurs))!.gardien.pid).toBe(etat.gardien.pid);
+		for (const racine of [b.racine, autre]) expect((await readdir(join(racine, '.mnemo'))).filter((f) => f.startsWith('modeles'))).toEqual([]);
+	}, 30_000);
+
+	it('le gardien reçoit l’inactivité du dossier qui le lance (modeles.inactiviteMinutes)', async () => {
+		const b = await banc();
+		const env = { ...b.env };
+		delete env['MNEMO_MODELES_INACTIVITE_MS'];
+		ecrireReglagesDuDossier(b.racine, { ...REGLAGES_PAR_DEFAUT, modeles: { inactiviteMinutes: 7 } });
+		expect(await sensLlama(b.racine, { env }).vecteurs(['a'], { budgetMs: 15_000, demarrer: true })).toHaveLength(1);
+		await attendreQue(async () => (await readFile(cheminsModeles(b.serveurs).journal, 'utf8')).includes('arrêt après 420 s sans requête'));
+	}, 30_000);
 
 	it('démarre un gardien : vecteurs 1024, notes par index, modeles.json 0600, arguments et environnement des serveurs', async () => {
 		const b = await banc();
@@ -144,16 +182,16 @@ describe('modèles partagés : démarrage et clients', () => {
 		const notes = await rerankerLlama(b.racine, { env: b.env }).noter('abc', ['xyz', 'abc', 'ab'], { budgetMs: 15_000, demarrer: true });
 		expect(notes).toEqual([0, 0.3, 0.2]);
 
-		await attendreQue(async () => (await lireEtatServeurs(b.racine))?.gardien.etat === 'pret');
-		const etat = (await lireEtatServeurs(b.racine))!;
+		await attendreQue(async () => (await lireEtatServeurs(b.serveurs))?.gardien.etat === 'pret');
+		const etat = (await lireEtatServeurs(b.serveurs))!;
 		expect(pidVivant(etat.gardien.pid)).toBe(true);
 		expect(etat.sens!.modele).toBe('bge-m3-q8_0.gguf');
 		expect(etat.reranker!.modele).toBe('bge-reranker-v2-m3-Q8_0.gguf');
 		expect(etat.sens!.cle).toMatch(/^[0-9a-f]{64}$/u);
 		expect(etat.sens!.cle).not.toBe(etat.reranker!.cle);
 		expect(pidVivant(etat.sens!.pid) && pidVivant(etat.reranker!.pid)).toBe(true);
-		if (process.platform !== 'win32') expect((await stat(cheminsModeles(b.racine).etat)).mode & 0o777).toBe(0o600);
-		expect(existsSync(cheminsModeles(b.racine).actif)).toBe(true);
+		if (process.platform !== 'win32') expect((await stat(cheminsModeles(b.serveurs).etat)).mode & 0o777).toBe(0o600);
+		expect(existsSync(cheminsModeles(b.serveurs).actif)).toBe(true);
 
 		const lances = await lancements(b);
 		expect(lances).toHaveLength(2);
@@ -169,7 +207,10 @@ describe('modèles partagés : démarrage et clients', () => {
 			expect(args).toMatch(/--api-key-file \S+\.cle/u);
 			expect(args).not.toMatch(/[0-9a-f]{64}/u);
 		}
-		expect((await readdir(join(b.racine, '.mnemo'))).filter((f) => f.endsWith('.cle'))).toEqual([]);
+		expect((await readdir(b.serveurs)).filter((f) => f.endsWith('.cle'))).toEqual([]);
+		if (process.platform !== 'win32') expect((await stat(b.serveurs)).mode & 0o777).toBe(0o700);
+		// rien d'écrit dans le dossier Mnemo
+		expect((await readdir(join(b.racine, '.mnemo'))).filter((f) => f.startsWith('modeles'))).toEqual([]);
 		if (process.platform === 'win32') {
 			// libuv ajoute toujours à l'environnement d'un enfant ces variables du système, si le parent les a : rien d'autre
 			const systeme = ['HOMEDRIVE', 'HOMEPATH', 'LOGONSERVER', 'PATH', 'SYSTEMDRIVE', 'SYSTEMROOT', 'TEMP', 'USERDOMAIN', 'USERNAME', 'USERPROFILE', 'WINDIR'];
@@ -198,11 +239,11 @@ describe('modèles partagés : démarrage et clients', () => {
 
 	it('deux gardiens lancés ensemble (sans démarreur) : un seul reste', async () => {
 		const b = await banc();
-		const lancer = () => spawn(process.execPath, [MAIN, 'modeles', 'garde', b.racine], { cwd: b.racine, env: b.env, stdio: 'ignore' });
+		const lancer = () => spawn(process.execPath, [MAIN, 'modeles', 'garde'], { cwd: b.racine, env: b.env, stdio: 'ignore' });
 		const g1 = lancer();
 		const g2 = lancer();
 		processus.push(g1.pid!, g2.pid!);
-		await attendreQue(async () => (await lireEtatServeurs(b.racine))?.gardien.etat === 'pret');
+		await attendreQue(async () => (await lireEtatServeurs(b.serveurs))?.gardien.etat === 'pret');
 		await attendreQue(() => !pidVivant(g1.pid!) || !pidVivant(g2.pid!));
 		expect(await lancements(b)).toHaveLength(2);
 	}, 30_000);
@@ -210,7 +251,7 @@ describe('modèles partagés : démarrage et clients', () => {
 	it('modeles.json au pid mort : remplacé', async () => {
 		const b = await banc();
 		const mort = await pidMort();
-		await ecrireEtatServeurs(b.racine, {
+		await ecrireEtat(b, {
 			gardien: { pid: mort, depuis: new Date().toISOString(), etat: 'pret' },
 			sens: { port: await portLibre(), cle: 'a'.repeat(64), modele: 'bge-m3-q8_0.gguf', pid: mort, depuis: new Date().toISOString() },
 		});
@@ -225,7 +266,7 @@ describe('modèles partagés : démarrage et clients', () => {
 		const intrus = spawn(process.execPath, [FAUX_LLAMA, '-m', b.gguf.sens, '--host', '127.0.0.1', '--port', String(port), '--api-key', 'b'.repeat(64), '--embedding'], { stdio: 'ignore' });
 		processus.push(intrus.pid!);
 		await attendre(300);
-		await ecrireEtatServeurs(b.racine, {
+		await ecrireEtat(b, {
 			gardien: { pid: intrus.pid!, depuis: new Date().toISOString(), etat: 'pret' },
 			sens: { port, cle: 'a'.repeat(64), modele: 'bge-m3-q8_0.gguf', pid: intrus.pid!, depuis: new Date().toISOString() },
 		});
@@ -241,7 +282,7 @@ describe('modèles partagés : démarrage et clients', () => {
 		const debut = Date.now();
 		expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 200, demarrer: true })).toBeNull();
 		expect(Date.now() - debut).toBeLessThan(600);
-		await attendreQue(async () => (await lireEtatServeurs(b.racine))?.gardien.etat === 'pret');
+		await attendreQue(async () => (await lireEtatServeurs(b.serveurs))?.gardien.etat === 'pret');
 		const t = Date.now();
 		expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 400, demarrer: false })).toBeNull();
 		expect(Date.now() - t).toBeLessThan(800);
@@ -255,7 +296,7 @@ describe('modèles partagés : démarrage et clients', () => {
 			if (!sens.dimension) {
 				expect(await rerankerLlama(b.racine, { env: b.env }).noter('q', ['a', 'b'], { budgetMs: 15_000, demarrer: true })).toBeNull();
 			}
-			expect(await readFile(cheminsModeles(b.racine).journal, 'utf8')).toMatch(/sens/u);
+			expect(await readFile(cheminsModeles(b.serveurs).journal, 'utf8')).toMatch(/sens/u);
 		}
 	}, 60_000);
 
@@ -289,7 +330,7 @@ describe('modèles partagés : démarrage et clients', () => {
 		expect(await rerankerLlama(b.racine, { env: b.env }).noter('q', ['a'], { budgetMs: 2000, demarrer: true })).toBeNull();
 		await attendre(300);
 		expect(await lancements(b)).toHaveLength(1);
-		expect((await lireEtatServeurs(b.racine))!.gardien.pid).toBe(etat.gardien.pid);
+		expect((await lireEtatServeurs(b.serveurs))!.gardien.pid).toBe(etat.gardien.pid);
 	}, 30_000);
 
 	it('modele() : bge-m3@<sha12> si la pièce est installée, sinon null', async () => {
@@ -316,7 +357,16 @@ describe('gardien : arrêt', () => {
 		await attendreQue(() => !pidVivant(etat.gardien.pid), 15_000);
 		expect(pidVivant(etat.sens!.pid)).toBe(false);
 		expect(pidVivant(etat.reranker!.pid)).toBe(false);
-		expect(existsSync(cheminsModeles(b.racine).etat)).toBe(false);
+		expect(existsSync(cheminsModeles(b.serveurs).etat)).toBe(false);
+	}, 30_000);
+
+	it('après inactivité même avec le service Mnemo vivant', async () => {
+		const b = await banc({ inactiviteMs: 1500 });
+		ecrireService(b.racine, { pid: process.pid, port: 4747, jeton: 'j'.repeat(64), demarre: Date.now() });
+		const etat = await demarrer(b);
+		await attendreQue(() => !pidVivant(etat.gardien.pid), 15_000);
+		expect(pidVivant(etat.sens!.pid) || pidVivant(etat.reranker!.pid)).toBe(false);
+		expect(await readFile(cheminsModeles(b.serveurs).journal, 'utf8')).toContain('arrêt (2 s sans requête)');
 	}, 30_000);
 
 	it('l’activité repousse l’arrêt', async () => {
@@ -336,12 +386,12 @@ describe('gardien : arrêt', () => {
 		process.kill(etat.sens!.pid, 'SIGKILL');
 		await attendreQue(() => !pidVivant(etat.gardien.pid));
 		expect(pidVivant(etat.reranker!.pid)).toBe(false);
-		expect((await lireEtatServeurs(b.racine))?.gardien.etat).toBe('echec');
+		expect((await lireEtatServeurs(b.serveurs))?.gardien.etat).toBe('echec');
 		const avant = (await lancements(b)).length;
 		expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 1500, demarrer: true })).toBeNull();
 		await attendre(300);
 		expect((await lancements(b)).length).toBe(avant);
-		expect((await lireEtatServeurs(b.racine))?.gardien.pid).toBe(etat.gardien.pid);
+		expect((await lireEtatServeurs(b.serveurs))?.gardien.pid).toBe(etat.gardien.pid);
 	}, 30_000);
 
 	it('un modèle qui ne charge pas : l’autre est publié et sert ; le premier rend null sans relance', async () => {
@@ -353,42 +403,16 @@ describe('gardien : arrêt', () => {
 		const avant = (await lancements(b)).length;
 		expect(await rerankerLlama(b.racine, { env: b.env }).noter('q', ['a'], { budgetMs: 1500, demarrer: true })).toBeNull();
 		expect((await lancements(b)).length).toBe(avant);
-		expect((await lireEtatServeurs(b.racine))?.gardien.pid).toBe(etat.gardien.pid);
+		expect((await lireEtatServeurs(b.serveurs))?.gardien.pid).toBe(etat.gardien.pid);
 		expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 2000, demarrer: false })).not.toBeNull();
 	}, 30_000);
 
-	it('dossier Mnemo supprimé : le gardien arrête ses serveurs et ne recrée rien', async () => {
+	it('modeles.json disparu : arrêt journalisé « état disparu »', async () => {
 		const b = await banc({ env: { MNEMO_MODELES_SURVEILLANCE_MS: '200' } });
 		const etat = await demarrer(b);
-		await rm(b.racine, { recursive: true, force: true });
-		await attendre(1000);
-		await attendreQue(() => !pidVivant(etat.gardien.pid) && !pidVivant(etat.sens!.pid) && !pidVivant(etat.reranker!.pid), 10_000);
-		await attendre(300);
-		expect(existsSync(b.racine)).toBe(false);
-	}, 30_000);
-
-	it('dossier Mnemo supprimé pendant le chargement : gardien et serveurs arrêtés, rien de recréé', async () => {
-		const LENT = { demarrageMs: 2500 };
-		const b = await banc({ sens: LENT, rerankerReglages: LENT, env: { MNEMO_MODELES_SURVEILLANCE_MS: '200' } });
-		expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 300, demarrer: true })).toBeNull();
-		await attendreQue(async () => {
-			const e = await lireEtatServeurs(b.racine);
-			return e?.gardien.etat === 'demarrage' && e.sens !== undefined && e.reranker !== undefined;
-		});
-		const etat = (await lireEtatServeurs(b.racine))!;
-		const pids = [etat.gardien.pid, etat.sens!.pid, etat.reranker!.pid];
-		processus.push(...pids);
-		await rm(b.racine, { recursive: true, force: true });
-		await attendreQue(() => pids.every((pid) => !pidVivant(pid)), 8000);
-		expect(existsSync(b.racine)).toBe(false);
-	}, 30_000);
-
-	it('modeles.json disparu (dossier gardé) : arrêt journalisé « état disparu »', async () => {
-		const b = await banc({ env: { MNEMO_MODELES_SURVEILLANCE_MS: '200' } });
-		const etat = await demarrer(b);
-		await rm(cheminsModeles(b.racine).etat);
+		await rm(cheminsModeles(b.serveurs).etat);
 		await attendreQue(() => !pidVivant(etat.gardien.pid) && !pidVivant(etat.sens!.pid));
-		expect(await readFile(cheminsModeles(b.racine).journal, 'utf8')).toContain('arrêt (état disparu)');
+		expect(await readFile(cheminsModeles(b.serveurs).journal, 'utf8')).toContain('arrêt (état disparu)');
 	}, 30_000);
 
 	it('mnemo modeles arreter : gardien et serveurs arrêtés ; etat liste les serveurs en marche', async () => {
@@ -403,13 +427,13 @@ describe('gardien : arrêt', () => {
 		expect(lignes.join('\n')).toMatch(/serveur reranker : port \d+, bge-reranker-v2-m3-Q8_0\.gguf/u);
 
 		lignes.length = 0;
-		await commandeModeles(['arreter'], { racine: b.racine });
+		await commandeModeles(['arreter'], { dossier: b.modeles, racine: b.racine });
 		expect(lignes.join('\n')).toContain('Serveurs arrêtés');
 		for (const pid of [etat.gardien.pid, etat.sens!.pid, etat.reranker!.pid]) expect(pidVivant(pid)).toBe(false);
-		expect(existsSync(cheminsModeles(b.racine).etat)).toBe(false);
+		expect(existsSync(cheminsModeles(b.serveurs).etat)).toBe(false);
 
 		lignes.length = 0;
-		await commandeModeles(['arreter'], { racine: b.racine });
+		await commandeModeles(['arreter'], { dossier: b.modeles, racine: b.racine });
 		expect(lignes.join('\n')).toContain('Aucun serveur');
 		lignes.length = 0;
 		await commandeModeles(['etat'], { dossier: b.modeles, racine: b.racine });
@@ -423,7 +447,7 @@ describe('gardien : arrêt', () => {
 		await attendreQue(() => !pidVivant(etat.gardien.pid));
 		expect(pidVivant(etat.sens!.pid)).toBe(true);
 		vi.spyOn(console, 'log').mockImplementation(() => {});
-		await commandeModeles(['arreter'], { racine: b.racine });
+		await commandeModeles(['arreter'], { dossier: b.modeles, racine: b.racine });
 		await attendreQue(() => !pidVivant(etat.sens!.pid) && !pidVivant(etat.reranker!.pid));
 	}, 30_000);
 });
@@ -455,7 +479,7 @@ describe('identité stricte, arrêt sûr, orphelins', () => {
 			const intrus = spawn(process.execPath, ['--input-type=module', '-e', INTRUS, port.toString(), journal, corps], { stdio: 'ignore' });
 			processus.push(intrus.pid!);
 			await attendre(300);
-			await ecrireEtatServeurs(b.racine, {
+			await ecrireEtat(b, {
 				gardien: { pid: intrus.pid!, depuis: new Date().toISOString(), etat: 'pret' },
 				sens: { port, cle: 'a'.repeat(64), modele: 'bge-m3-q8_0.gguf', pid: intrus.pid!, depuis: new Date().toISOString() },
 			});
@@ -472,7 +496,7 @@ describe('identité stricte, arrêt sûr, orphelins', () => {
 	it('arreter : un état périmé qui nomme un processus étranger vivant le laisse en vie', async () => {
 		const b = await banc();
 		const etranger = processusEtranger();
-		await ecrireEtatServeurs(b.racine, {
+		await ecrireEtat(b, {
 			gardien: { pid: etranger, depuis: new Date().toISOString(), etat: 'pret' },
 			sens: { port: await portLibre(), cle: 'a'.repeat(64), modele: 'bge-m3-q8_0.gguf', pid: etranger, depuis: new Date().toISOString() },
 		});
@@ -482,11 +506,11 @@ describe('identité stricte, arrêt sûr, orphelins', () => {
 		});
 		await commandeModeles(['etat'], { dossier: b.modeles, racine: b.racine });
 		expect(lignes.join('\n')).toContain('aucun serveur en marche');
-		await commandeModeles(['arreter'], { racine: b.racine });
+		await commandeModeles(['arreter'], { dossier: b.modeles, racine: b.racine });
 		expect(lignes.join('\n')).toContain('état périmé retiré');
 		await attendre(500);
 		expect(pidVivant(etranger)).toBe(true);
-		expect(existsSync(cheminsModeles(b.racine).etat)).toBe(false);
+		expect(existsSync(cheminsModeles(b.serveurs).etat)).toBe(false);
 	});
 
 	it('gardien tué net : le démarrage suivant arrête ses anciens serveurs', async () => {
@@ -503,17 +527,17 @@ describe('identité stricte, arrêt sûr, orphelins', () => {
 		const b = await banc({ sens: { demarrageMs: 1500 }, rerankerReglages: { demarrageMs: 1500 } });
 		expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 200, demarrer: true })).toBeNull();
 		await attendreQue(async () => {
-			const e = await lireEtatServeurs(b.racine);
+			const e = await lireEtatServeurs(b.serveurs);
 			return e?.gardien.etat === 'demarrage' && e.sens !== undefined && e.reranker !== undefined;
 		});
-		const enChargement = (await lireEtatServeurs(b.racine))!;
+		const enChargement = (await lireEtatServeurs(b.serveurs))!;
 		process.kill(enChargement.gardien.pid, 'SIGKILL');
 		await attendre(2000);
 		await demarrer(b);
 		await attendreQue(() => !pidVivant(enChargement.sens!.pid) && !pidVivant(enChargement.reranker!.pid), 6000);
 	}, 30_000);
 
-	it('installer une pièce neuve arrête les serveurs du dossier (ils repartent avec elle)', async () => {
+	it('installer une pièce neuve arrête les serveurs (ils repartent avec elle)', async () => {
 		const b = await banc();
 		const etat = await demarrer(b);
 		const lignes: string[] = [];
@@ -522,7 +546,7 @@ describe('identité stricte, arrêt sûr, orphelins', () => {
 		});
 		const piece = { nom: 'reranker' as const, libelle: 'pièce neuve', adresse: 'https://exemple.invalid/x.gguf', sha256: '0'.repeat(64), archive: null, fichier: 'x.gguf' };
 		await commandeModeles(['installer'], {
-			dossier: await dossierTemporaire(),
+			dossier: b.modeles,
 			racine: b.racine,
 			pieces: [piece],
 			telecharger: async (_url, vers) => {
@@ -530,7 +554,7 @@ describe('identité stricte, arrêt sûr, orphelins', () => {
 				return '0'.repeat(64);
 			},
 		});
-		expect(lignes.join('\n')).toContain('Serveurs de ce dossier arrêtés');
+		expect(lignes.join('\n')).toContain('Serveurs des modèles arrêtés');
 		expect(pidVivant(etat.gardien.pid)).toBe(false);
 	}, 30_000);
 
@@ -545,11 +569,11 @@ describe('identité stricte, arrêt sûr, orphelins', () => {
 async function tuerPendantLeChargement(b: Banc): Promise<EtatServeurs> {
 	expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 200, demarrer: true })).toBeNull();
 	await attendreQue(async () => {
-		const e = await lireEtatServeurs(b.racine);
+		const e = await lireEtatServeurs(b.serveurs);
 		return e?.gardien.etat === 'demarrage' && e.sens !== undefined && e.reranker !== undefined;
 	});
-	const etat = (await lireEtatServeurs(b.racine))!;
-	expect((await lireLances(b.racine)).map((l) => l.pid).sort()).toEqual([etat.sens!.pid, etat.reranker!.pid].sort());
+	const etat = (await lireEtatServeurs(b.serveurs))!;
+	expect((await lireLances(b.serveurs)).map((l) => l.pid).sort()).toEqual([etat.sens!.pid, etat.reranker!.pid].sort());
 	process.kill(etat.gardien.pid, 'SIGKILL');
 	await attendreQue(() => !pidVivant(etat.gardien.pid));
 	return etat;
@@ -569,20 +593,20 @@ describe('registre des serveurs lancés', () => {
 		const nouveau = await demarrer(b);
 		expect(nouveau.gardien.pid).not.toBe(ancien.gardien.pid);
 		await attendreQue(() => !pidVivant(ancien.sens!.pid) && !pidVivant(ancien.reranker!.pid), 4000 + 6000);
-		await attendreQue(async () => (await lireLances(b.racine)).every((l) => l.gardien === nouveau.gardien.pid));
+		await attendreQue(async () => (await lireLances(b.serveurs)).every((l) => l.gardien === nouveau.gardien.pid));
 		expect(pidVivant(nouveau.sens!.pid) && pidVivant(nouveau.reranker!.pid)).toBe(true);
 	}, 30_000);
 
 	it.skipIf(WINDOWS)('gardien tué en plein chargement puis arreter : gardés tant qu’ils chargent, arrêtés au arreter suivant', async () => {
 		const b = await banc({ sens: LENT, rerankerReglages: LENT, env: ENV_COURT });
 		const ancien = await tuerPendantLeChargement(b);
-		expect(await arreterServeurs(b.racine, b.env)).toEqual({ enChargement: 2 });
-		expect(existsSync(cheminsModeles(b.racine).etat)).toBe(false);
-		expect(await lireLances(b.racine)).toHaveLength(2);
+		expect(await arreterServeurs(b.serveurs, b.env)).toEqual({ enChargement: 2 });
+		expect(existsSync(cheminsModeles(b.serveurs).etat)).toBe(false);
+		expect(await lireLances(b.serveurs)).toHaveLength(2);
 		await attendre(2000);
-		expect(await arreterServeurs(b.racine, b.env)).toBe('arrete');
+		expect(await arreterServeurs(b.serveurs, b.env)).toBe('arrete');
 		await attendreQue(() => !pidVivant(ancien.sens!.pid) && !pidVivant(ancien.reranker!.pid), 5000);
-		expect(await lireLances(b.racine)).toEqual([]);
+		expect(await lireLances(b.serveurs)).toEqual([]);
 	}, 30_000);
 
 	it.skipIf(WINDOWS)('mnemo modeles arreter pendant un chargement (gardien mort) : « encore en chargement », pas « état périmé »', async () => {
@@ -594,7 +618,7 @@ describe('registre des serveurs lancés', () => {
 		vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => {
 			lignes.push(a.join(' '));
 		});
-		await commandeModeles(['arreter'], { racine: b.racine });
+		await commandeModeles(['arreter'], { dossier: b.modeles, racine: b.racine });
 		expect(lignes.join('\n')).toContain('2 serveur(s) encore en chargement : relancez `mnemo modeles arreter` dans un instant');
 		expect(lignes.join('\n')).not.toContain('périmé');
 	}, 30_000);
@@ -604,10 +628,11 @@ describe('registre des serveurs lancés', () => {
 		const vieux = processusEtranger();
 		const jeune = processusEtranger();
 		const lance = (pid: number, lanceMs: number) => ({ pid, port: 1, cle: 'c'.repeat(64), piece: 'bge-m3-q8_0.gguf', lanceMs, gardien: 999_999 });
-		await writeFile(cheminsModeles(b.racine).lances, JSON.stringify({ lances: [lance(vieux, Date.now() - 600_000), lance(jeune, Date.now())] }));
-		expect(await nettoyerLances(b.racine, { garder: null, env: b.env })).toEqual({ arretes: 0, enChargement: 1 });
-		expect((await lireLances(b.racine)).map((l) => l.pid)).toEqual([jeune]);
-		await arreterServeurs(b.racine, b.env);
+		await mkdir(b.serveurs, { recursive: true });
+		await writeFile(cheminsModeles(b.serveurs).lances, JSON.stringify({ lances: [lance(vieux, Date.now() - 600_000), lance(jeune, Date.now())] }));
+		expect(await nettoyerLances(b.serveurs, { garder: null, env: b.env })).toEqual({ arretes: 0, enChargement: 1 });
+		expect((await lireLances(b.serveurs)).map((l) => l.pid)).toEqual([jeune]);
+		await arreterServeurs(b.serveurs, b.env);
 		await demarrer(b);
 		await attendre(500);
 		expect(pidVivant(vieux) && pidVivant(jeune)).toBe(true);
@@ -615,13 +640,14 @@ describe('registre des serveurs lancés', () => {
 
 	it('fichiers de clé abandonnés retirés après le chargement maximal', async () => {
 		const b = await banc({ env: ENV_COURT });
-		const reste = join(b.racine, '.mnemo', 'modeles-sens-abc.cle');
-		const recent = join(b.racine, '.mnemo', 'modeles-sens-def.cle');
+		await mkdir(b.serveurs, { recursive: true });
+		const reste = join(b.serveurs, 'modeles-sens-abc.cle');
+		const recent = join(b.serveurs, 'modeles-sens-def.cle');
 		await writeFile(reste, 'x');
 		await writeFile(recent, 'x');
 		const { utimes } = await import('node:fs/promises');
 		await utimes(reste, new Date(Date.now() - 60_000), new Date(Date.now() - 60_000));
-		await nettoyerLances(b.racine, { garder: null, env: b.env });
+		await nettoyerLances(b.serveurs, { garder: null, env: b.env });
 		expect(existsSync(reste)).toBe(false);
 		expect(existsSync(recent)).toBe(true);
 	});
@@ -632,28 +658,94 @@ describe('registre des serveurs lancés', () => {
 			await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 50, demarrer: true });
 			// « lancé » est journalisé après la publication de l'entrée
 			await attendreQue(async () => {
-				const j = existsSync(cheminsModeles(b.racine).journal) ? await readFile(cheminsModeles(b.racine).journal, 'utf8') : '';
+				const j = existsSync(cheminsModeles(b.serveurs).journal) ? await readFile(cheminsModeles(b.serveurs).journal, 'utf8') : '';
 				return j.includes('sens lancé') && j.includes('reranker lancé');
 			});
-			const etat = (await lireEtatServeurs(b.racine))!;
+			const etat = (await lireEtatServeurs(b.serveurs))!;
 			expect(etat.sens, `essai ${i}`).toBeDefined();
 			expect(etat.reranker, `essai ${i}`).toBeDefined();
-			await arreterServeurs(b.racine);
+			await arreterServeurs(b.serveurs);
 		}
 	}, 60_000);
 });
 
+/**
+ * Un gardien de dossier comme jusqu'à la 1.5 : son état dans `<racine>/.mnemo/`. Simulé par un gardien d'aujourd'hui dont le
+ * dossier des serveurs est un lien vers `.mnemo/` (mêmes noms de fichiers). Rend son état, une fois prêt.
+ */
+async function ancienGardien(b: Banc): Promise<EtatServeurs> {
+	const ancienCache = await dossierTemporaire();
+	await installerFaux(ancienCache, 'sens');
+	await installerFaux(ancienCache, 'reranker');
+	await symlink(join(b.racine, '.mnemo'), join(ancienCache, 'serveurs'), process.platform === 'win32' ? 'junction' : 'dir');
+	const g = spawn(process.execPath, [MAIN, 'modeles', 'garde'], { cwd: b.racine, env: { ...b.env, MNEMO_MODELES: ancienCache }, stdio: 'ignore' });
+	processus.push(g.pid!);
+	const local = join(b.racine, '.mnemo');
+	await attendreQue(async () => (await lireEtatServeurs(local))?.gardien.etat === 'pret');
+	const etat = (await lireEtatServeurs(local))!;
+	processus.push(etat.sens!.pid, etat.reranker!.pid);
+	return etat;
+}
+
+describe('migration : ancien gardien d’un dossier', () => {
+	it('aucun ancien état : rien à faire', async () => {
+		const b = await banc();
+		expect(await migrerAncienGardien(b.racine, b.env)).toBeNull();
+	});
+
+	it('mnemo modeles arreter : l’ancien gardien et ses serveurs arrêtés, ses fichiers retirés, le reste de .mnemo gardé', async () => {
+		const b = await banc();
+		const ancien = await ancienGardien(b);
+		await writeFile(join(b.racine, '.mnemo', 'autre.json'), '{}');
+		const lignes: string[] = [];
+		vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => {
+			lignes.push(a.join(' '));
+		});
+		await commandeModeles(['arreter'], { dossier: b.modeles, racine: b.racine });
+		expect(lignes.join('\n')).toContain('Serveurs arrêtés');
+		await attendreQue(() => [ancien.gardien.pid, ancien.sens!.pid, ancien.reranker!.pid].every((pid) => !pidVivant(pid)));
+		expect((await readdir(join(b.racine, '.mnemo'))).filter((f) => f.startsWith('modeles'))).toEqual([]);
+		expect(existsSync(join(b.racine, '.mnemo', 'autre.json'))).toBe(true);
+		expect(await migrerAncienGardien(b.racine, b.env)).toBeNull();
+	}, 30_000);
+
+	it('l’ancien gardien arrêté sans toucher au gardien de la machine', async () => {
+		const b = await banc();
+		const machine = await demarrer(b);
+		const ancien = await ancienGardien(b);
+		expect(await migrerAncienGardien(b.racine, b.env)).toBe('arrete');
+		await attendreQue(() => [ancien.gardien.pid, ancien.sens!.pid, ancien.reranker!.pid].every((pid) => !pidVivant(pid)));
+		expect(pidVivant(machine.gardien.pid) && pidVivant(machine.sens!.pid)).toBe(true);
+		expect((await readdir(join(b.racine, '.mnemo'))).filter((f) => f.startsWith('modeles'))).toEqual([]);
+	}, 30_000);
+
+	it('un ancien état qui nomme un processus étranger : laissé en vie, état retiré', async () => {
+		const b = await banc();
+		const etranger = processusEtranger();
+		const local = join(b.racine, '.mnemo');
+		await ecrireEtatServeurs(local, {
+			gardien: { pid: etranger, depuis: new Date().toISOString(), etat: 'pret' },
+			sens: { port: await portLibre(), cle: 'a'.repeat(64), modele: 'bge-m3-q8_0.gguf', pid: etranger, depuis: new Date().toISOString() },
+		});
+		await writeFile(join(local, 'modeles.log'), 'ancien journal\n');
+		expect(await migrerAncienGardien(b.racine, b.env)).toBe('perime');
+		await attendre(300);
+		expect(pidVivant(etranger)).toBe(true);
+		expect((await readdir(local)).filter((f) => f.startsWith('modeles'))).toEqual([]);
+	});
+});
+
 describe('journal des modèles', () => {
 	it('vidé quand il dépasse sa borne', async () => {
-		const racine = await dossierTemporaire();
-		const { journal } = cheminsModeles(racine);
-		// sans `.mnemo/`, rien n'est écrit (le dossier n'est jamais recréé)
-		await journaliser(racine, 'perdue');
-		expect(existsSync(join(racine, '.mnemo'))).toBe(false);
-		await mkdir(join(racine, '.mnemo'));
-		await journaliser(racine, 'premiere');
-		await journaliser(racine, 'x'.repeat(200), 100);
-		await journaliser(racine, 'troisieme', 100);
+		const serveurs = join(await dossierTemporaire(), 'serveurs');
+		const { journal } = cheminsModeles(serveurs);
+		// sans le dossier, rien n'est écrit (le journal ne le crée pas)
+		await journaliser(serveurs, 'perdue');
+		expect(existsSync(serveurs)).toBe(false);
+		await mkdir(serveurs);
+		await journaliser(serveurs, 'premiere');
+		await journaliser(serveurs, 'x'.repeat(200), 100);
+		await journaliser(serveurs, 'troisieme', 100);
 		const texte = await readFile(journal, 'utf8');
 		expect(texte).not.toContain('premiere');
 		expect(texte).toContain('troisieme');
