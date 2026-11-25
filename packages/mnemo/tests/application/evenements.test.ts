@@ -9,6 +9,8 @@ import { proposer } from '../../src/application/proposer.ts';
 import { porteursRecents } from '../../src/application/porteurs-recents.ts';
 import { aprioriDesGestes } from '../../src/application/apriori.ts';
 import { affiner } from '../../src/application/affiner.ts';
+import { modelesActifs } from '../../src/application/note-du-classement.ts';
+import { coupuresDesInjections, reactiverInjection } from '../../src/application/suivi-injection.ts';
 import type { DemandeAffinage } from '../../src/application/affiner.ts';
 import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
@@ -886,6 +888,36 @@ describe('traiterEvenement : injection automatique', () => {
 		expect(await etat.gestes({ limite: null })).toEqual([]);
 		await Promise.all(taches);
 		expect((await etat.gestes({ limite: null })).map((g) => g.geste)).toEqual(['injectee_auto']);
+	});
+
+	it('suivi : une série d’écarts après les injections coupe le niveau sans intervention ; réactivé par l’utilisateur ou un nouvel apprentissage', async () => {
+		const { dep, etat, pil } = await memoire();
+		const AUTRE = '22222222-2222-4333-8444-555555555555';
+		await etat.creer(session({ id: AUTRE }));
+		// 17 fiches injectées par Mnemo dans une autre session, puis écartées : la fenêtre ne peut plus passer
+		for (let i = 0; i < 17; i++) {
+			await etat.noterGeste({ geste: 'injectee_auto', session: AUTRE, fiche: `notes/n${i}.md`, empreinte: null, horodatageMs: Date.parse('2026-11-25T11:00:00.000Z') + i, note: { niveau: 'sens' } });
+			await etat.noterGeste({ geste: 'ecartee_ici', session: AUTRE, fiche: `notes/n${i}.md`, empreinte: null, horodatageMs: Date.parse('2026-11-25T11:00:00.000Z') + i, note: null });
+		}
+		// le filtre du suivi : ses sortes, sans vecteur
+		const lus = await etat.gestes({ sortes: ['injectee_auto'], sansVecteur: true, limite: null });
+		expect(lus).toHaveLength(17);
+		expect(lus.every((g) => g.vecteur === null && g.geste === 'injectee_auto')).toBe(true);
+		const coupee = await traiterEvenement(dep, pil, message(10, 'montant exact des avoirs annulés en novembre'), local);
+		expect(coupee.contexte ?? '').not.toContain('Fiches injectées par Mnemo');
+		expect((await etat.servis(ID, 1))[0]).toMatchObject({ calibree: false });
+		expect((await coupuresDesInjections(etat, modelesActifs(dep))).sens).toMatchObject({ injections: 17, ecartees: 17, motif: '17 des 17 dernières fiches injectées par Mnemo ont été écartées' });
+		// réactivée par l'utilisateur, hors session : geste noté, l'injection revient
+		expect(await reactiverInjection(dep, etat, modelesActifs(dep), { session: '', horodatageMs: Date.parse('2026-11-25T12:00:00.000Z') })).toEqual(['sens']);
+		expect((await etat.gestes({ sortes: ['injection_reactivee'], limite: null }))[0]).toMatchObject({ session: '', fiche: '', note: { niveau: 'sens' } });
+		expect(await reactiverInjection(dep, etat, modelesActifs(dep), { session: '', horodatageMs: Date.parse('2026-11-25T12:00:01.000Z') })).toEqual([]);
+		expect((await traiterEvenement(dep, pil, message(11, 'montant exact des avoirs annulés en novembre'), local)).contexte).toContain('Fiches injectées par Mnemo');
+		// un apprentissage plus récent que la coupure la lève aussi
+		const etat2 = await contexte();
+		dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens: modele({ apprisLe: '2026-11-25T13:00:00.000Z' }) }, installes: { sens: null, reranker: null } });
+		for (let i = 0; i < 17; i++) await etat2.etat.noterGeste({ geste: 'injectee_auto', session: ID, fiche: `notes/n${i}.md`, empreinte: null, horodatageMs: Date.parse('2026-11-25T11:00:00.000Z') + i, note: { niveau: 'sens' } });
+		for (let i = 0; i < 17; i++) await etat2.etat.noterGeste({ geste: 'ecartee_ici', session: ID, fiche: `notes/n${i}.md`, empreinte: null, horodatageMs: Date.parse('2026-11-25T11:30:00.000Z') + i, note: null });
+		expect((await coupuresDesInjections(etat2.etat, modelesActifs(dep))).sens).toBeNull();
 	});
 
 	it('rien après un outil, rien en différé : l’affinage qui met une fiche au seuil ne l’injecte pas', async () => {

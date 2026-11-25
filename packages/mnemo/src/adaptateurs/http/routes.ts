@@ -1,5 +1,5 @@
 import { ENTETE_REMPLACEMENT, ROUTES } from '@mnemo/contrat';
-import type { BilanAmorceVue, ReponseEcarteesToujours, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseArretModeles, ReponseNiveauModeles, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
+import type { BilanAmorceVue, ReponseEcarteesToujours, ReponseInjectionAutomatique, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseArretModeles, ReponseNiveauModeles, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
 import { avertissementsDe, CARACTERES_INVISIBLES, CHEMINS_LOT_MAX, demandeTout, estNiveauModeles, modelesPermis, NIVEAUX_MODELES, nomAffichable, OBJECTIF_MAX, PROFIL_TRAVAIL, SAUF_MAX } from '@mnemo/commun';
 import type { AvecAvertissements, NiveauModeles } from '@mnemo/commun';
 import { amorcer, marquerTraitees } from '../../application/amorcer.ts';
@@ -19,6 +19,8 @@ import type { DureeDuReranker } from '../../application/duree-reranker.ts';
 import { affiner } from '../../application/affiner.ts';
 import type { DemandeAffinage } from '../../application/affiner.ts';
 import { traiterEvenement } from '../../application/evenements.ts';
+import { modelesActifs } from '../../application/note-du-classement.ts';
+import { coupuresDesInjections, reactiverInjection } from '../../application/suivi-injection.ts';
 import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
 import { notesDuClassement, noteDuPorteur, porteursRecents, vecteurDuPorteur } from '../../application/porteurs-recents.ts';
@@ -48,7 +50,7 @@ import type { EvenementHook, Session } from '../../domaine/session.ts';
 import { deposerFichier, ErreurEspaceInsuffisant, ErreurTropVolumineux, tropVolumineux, verifierDepot } from '../../infra/fichiers-dossier.ts';
 import { vueModeles } from './diffusion-modeles.ts';
 import { cheminDeVue, vueFiche, vueGraphe } from './memoire-vues.ts';
-import { estTraceDeDebut, titreDeFiche, titresDeLIndex as titresIndex, vueEcarte, vueEcarteeToujours, vueServie, vueSession, vueSessionTerminee } from './vues.ts';
+import { estTraceDeDebut, titreDeFiche, titresDeLIndex as titresIndex, vueCoupures, vueEcarte, vueEcarteeToujours, vueServie, vueSession, vueSessionTerminee } from './vues.ts';
 
 /** Chemin d'un dépôt (`?vers=`) selon `cheminDeDepot` du domaine ; refus lisible (400). */
 function cheminDuDepot(vers: string | null): string {
@@ -361,6 +363,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		const actives = (await pil.etat.ecarteesToujours()).filter((e) => e.retablieMs === null);
 		return ok({ ecarteesToujours: actives.map((e) => vueEcarteeToujours(e, titres)) } satisfies ReponseEcarteesToujours);
 	};
+	/** Les niveaux de modèle dont l'injection automatique est coupée par le suivi, lus dans le journal des gestes. */
+	const coupures = async () => vueCoupures(await coupuresDesInjections(pil.etat, modelesActifs(dep)));
 	const session = async (id: string): Promise<Session> => {
 		const s = estUuid(id) ? await pil.etat.lire(id) : null;
 		if (s === null) throw new ErreurHttp(404, 'Session inconnue.');
@@ -540,7 +544,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				// le panneau n'affiche que le dernier classement : les autres entrées partent sans le leur, que la base ne lit même pas
 				const lues = await luesDe(r.id);
 				const titres = await titresDeLIndex();
-				return ok({ servis: (await pil.etat.servis(r.id, 200, undefined, { classement: 'dernier' })).filter((e) => !estTraceDeDebut(e)).map((e) => vueServie(e, titres)), lues });
+				return ok({ servis: (await pil.etat.servis(r.id, 200, undefined, { classement: 'dernier' })).filter((e) => !estTraceDeDebut(e)).map((e) => vueServie(e, titres)), lues, coupures: await coupures() });
 			},
 		},
 		{ methode: 'GET', chemin: ROUTES.modeles, action: async () => ok(vueModeles(await ctx.modeles.etat())) },
@@ -640,6 +644,21 @@ export function routes(ctx: ContexteRoutes): Route[] {
 			},
 		},
 		{ methode: 'GET', chemin: ROUTES.ecarteesToujours, action: ecarteesToujours },
+		{ methode: 'GET', chemin: ROUTES.injectionAutomatique, action: async () => ok({ coupures: await coupures() } satisfies ReponseInjectionAutomatique) },
+		{
+			methode: 'POST',
+			chemin: ROUTES.injectionAutomatique,
+			corps: 'json',
+			// réactivation de l'injection automatique coupée par le suivi : un geste par niveau réactivé, dans la session donnée
+			action: async (r) => {
+				const d = champs(await r.json(), { session: { requis: false, max: 100 }, niveau: { requis: false, max: 20 } });
+				if (d.niveau !== undefined && d.niveau !== 'complets' && d.niveau !== 'sens') throw new ErreurHttp(400, 'niveau : « complets » ou « sens » attendu.');
+				const s = d.session === undefined ? null : await session(d.session);
+				const reactives = await reactiverInjection(dep, pil.etat, modelesActifs(dep), { session: s?.id ?? '', horodatageMs: Date.now(), ...(d.niveau === undefined ? {} : { niveau: d.niveau }) });
+				if (reactives.length > 0) ctx.journal(`injection automatique réactivée par l'utilisateur : ${reactives.join(', ')}.`);
+				return ok({ coupures: await coupures() } satisfies ReponseInjectionAutomatique);
+			},
+		},
 		{
 			methode: 'POST',
 			chemin: ROUTES.ecarteesToujours,

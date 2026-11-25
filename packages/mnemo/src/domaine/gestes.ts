@@ -6,9 +6,11 @@
 /**
  * `injectee_main` : fiche demandée (➤), partie au message ; `ecartee_ici` : ✗ pour la session ; `ecartee_toujours` : écartée
  * pour toutes les sessions ; `retablie` : un écart annulé ; `lue_apres_carte` : lue par l'outil `lire` après une carte qui la
- * proposait ; `injectee_auto` : injectée par Mnemo sans geste de l'utilisateur.
+ * proposait ; `injectee_auto` : injectée par Mnemo sans geste de l'utilisateur (sa note dit le niveau du modèle) ;
+ * `injection_reactivee` : l'utilisateur réactive l'injection automatique coupée par le suivi (pas un geste sur une fiche :
+ * `fiche` vide, le niveau dans la note ; session vide si fait hors session).
  */
-export const GESTES = ['injectee_main', 'ecartee_ici', 'ecartee_toujours', 'retablie', 'lue_apres_carte', 'injectee_auto'] as const;
+export const GESTES = ['injectee_main', 'ecartee_ici', 'ecartee_toujours', 'retablie', 'lue_apres_carte', 'injectee_auto', 'injection_reactivee'] as const;
 export type Geste = (typeof GESTES)[number];
 
 /** Qui a fait le geste : l'utilisateur (➤, ✗, rétablir), Claude (lecture après une carte) ou Mnemo seul (`auto`). */

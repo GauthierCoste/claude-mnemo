@@ -1,8 +1,9 @@
-import type { EcarteeToujoursVue, EcarteVue, EntreeServieVue, SessionTermineeVue, SessionVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
+import type { CoupureInjectionVue, EcarteeToujoursVue, EcarteVue, EntreeServieVue, SessionTermineeVue, SessionVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
 import { estMinimal } from '../../application/episode.ts';
 import type { SessionTerminee } from '../../application/historique.ts';
 import type { Ecarte, EcarteeToujours, EntreeServie } from '../../application/ports.ts';
 import type { SuggestionEcarteeToujours } from '../../domaine/apriori-gestes.ts';
+import type { CoupuresDInjection } from '../../domaine/suivi-injection.ts';
 import { nomDeLaFiche } from '../../domaine/chemin.ts';
 import { dialogueOuvert } from '../../domaine/session.ts';
 import { texteDossierNonRattache } from '../../domaine/rattachement.ts';
@@ -37,6 +38,11 @@ export function vueSession(s: Session, terminal: boolean, suggestions: readonly 
 
 function vueSuggestion(s: SuggestionEcarteeToujours): SuggestionEcarteeToujoursVue {
 	return { chemin: s.fiche, sessions: s.sessions.length, jours: s.jours };
+}
+
+/** Les niveaux coupés par le suivi des injections, Complets d'abord. */
+export function vueCoupures(c: CoupuresDInjection): CoupureInjectionVue[] {
+	return [c.complets, c.sens].flatMap((x) => (x === null ? [] : [{ niveau: x.niveau, injections: x.injections, ecartees: x.ecartees, depuisMs: x.depuisMs, motif: x.motif }]));
 }
 
 export function vueEcarteeToujours(e: EcarteeToujours, titres: ReadonlyMap<string, string>): EcarteeToujoursVue {

@@ -11,8 +11,11 @@ import { memeEchelle, variablesDeNote, VARIABLES_DU_NIVEAU } from './modele-de-n
 import type { CoefficientsNote, EchelleDesSignaux, IdentiteDesModeles, ModeleDeNote, NiveauDeNote, SignauxDeNote } from './modele-de-note.ts';
 import { sigmoide } from './regression-logistique.ts';
 
-/** Un modèle accepté et utilisable ; appris mais refusé (ou d'autres GGUF) ; jamais appris. */
-export type EtatDuModele = 'accepte' | 'refuse' | 'non_appris';
+/**
+ * Un modèle accepté et utilisable ; appris mais refusé (ou d'autres GGUF) ; accepté mais coupé par le suivi des injections
+ * (`suivi-injection.ts` : trop d'écarts ; traité comme refusé : il ordonne, sans % ni injection) ; jamais appris.
+ */
+export type EtatDuModele = 'accepte' | 'refuse' | 'coupe' | 'non_appris';
 
 /**
  * Le modèle a-t-il été appris pour d'autres fichiers GGUF que ceux installés ? Le Sens seul ne compare que celui du sens, le

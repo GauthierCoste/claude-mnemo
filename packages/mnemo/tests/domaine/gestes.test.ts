@@ -19,7 +19,7 @@ describe('gestes', () => {
 			{ geste: 'retablie', fiche: 'c.md', nombre: 2 },
 		]);
 		expect(comptes.total).toBe(8);
-		expect(comptes.parGeste).toEqual({ injectee_main: 1, ecartee_ici: 2, ecartee_toujours: 0, retablie: 2, lue_apres_carte: 3, injectee_auto: 0 });
+		expect(comptes.parGeste).toEqual({ injectee_main: 1, ecartee_ici: 2, ecartee_toujours: 0, retablie: 2, lue_apres_carte: 3, injectee_auto: 0, injection_reactivee: 0 });
 		expect(comptes.parFiche).toEqual([
 			{ fiche: 'a.md', total: 4, parGeste: { injectee_main: 1, lue_apres_carte: 3 } },
 			{ fiche: 'b.md', total: 2, parGeste: { ecartee_ici: 2 } },

@@ -148,7 +148,7 @@ describe('mnemo banc contexte --gestes', () => {
 			{ geste: 'lue_apres_carte', fiche: 'a.md', nombre: 1 },
 		]);
 		expect(gestesEnTexte(comptes).split('\n')).toEqual([
-			'Gestes : 3 (injectee_main 1, ecartee_ici 1, ecartee_toujours 0, retablie 0, lue_apres_carte 1, injectee_auto 0)',
+			'Gestes : 3 (injectee_main 1, ecartee_ici 1, ecartee_toujours 0, retablie 0, lue_apres_carte 1, injectee_auto 0, injection_reactivee 0)',
 			'  a.md : 2 (injectee_main 1, lue_apres_carte 1)',
 			'  b.md : 1 (ecartee_ici 1)',
 		]);

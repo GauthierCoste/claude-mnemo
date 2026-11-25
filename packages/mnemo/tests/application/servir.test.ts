@@ -4,6 +4,8 @@ import { rendreServi, servir, TITRE_INJECTEES_PAR_MNEMO } from '../../src/applic
 import type { DemandeServir, Servi } from '../../src/application/servir.ts';
 import type { Dependances, Sens } from '../../src/application/ports.ts';
 import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
+import { modelesActifs } from '../../src/application/note-du-classement.ts';
+import { avecLesCoupures } from '../../src/domaine/suivi-injection.ts';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
 import { echelleDesSignaux, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
@@ -363,6 +365,17 @@ describe('servir : injection automatique (note de confiance acceptée)', () => {
 		const s = await servir(dep, demande({ dureeReranker: duree }));
 		expect(injectees(s)).toEqual([AVOIRS]);
 		expect(s.calcul.injectees[0]!.niveau).toBe('complets');
+	});
+
+	it('niveau coupé par le suivi : aucune injection, ni % ; la fiche reste une piste', async () => {
+		const dep = await memoireNotee();
+		avecModeles(dep, { sens: modele() });
+		const coupure = { niveau: 'sens' as const, injections: 20, ecartees: 17, depuisMs: 1, motif: 'm' };
+		const s = await servir(dep, demande({ modeles: avecLesCoupures(modelesActifs(dep), { complets: null, sens: coupure }) }));
+		expect(injectees(s)).toEqual([]);
+		expect(s.calcul.calibree).toBe(false);
+		expect(s.calcul.classement.every((l) => l.p === null)).toBe(true);
+		expect(cartes(s)).toContain(AVOIRS);
 	});
 
 	it('ni à un message muet, ni à l’outil `contexte`', async () => {

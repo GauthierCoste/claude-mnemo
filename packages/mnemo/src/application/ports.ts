@@ -821,9 +821,10 @@ export interface EtatSessions {
 	comptesGestes(): Promise<GesteCompte[]>;
 	/**
 	 * Gestes du journal durable, les plus récents d'abord : ceux de `fiche`, depuis `depuisMs` (inclus), de rang `depuisRang` ou
-	 * plus (ordre d'écriture), `limite` au plus (null : tous).
+	 * plus (ordre d'écriture), de ces `sortes` seulement, `limite` au plus (null : tous) ; `sansVecteur` : sans lire les vecteurs
+	 * (rendus null).
 	 */
-	gestes(filtre: { fiche?: string; depuisMs?: number; depuisRang?: number; limite: number | null }): Promise<GesteNote[]>;
+	gestes(filtre: { fiche?: string; depuisMs?: number; depuisRang?: number; sortes?: readonly Geste[]; sansVecteur?: boolean; limite: number | null }): Promise<GesteNote[]>;
 	/** Écarte une fiche toujours (sans effet si elle l'est déjà : `deja_ecartee`). Le geste se note à part (`noterGeste`). */
 	ecarterToujours(e: Omit<EcarteeToujours, 'retablieMs'>): Promise<'ecartee' | 'deja_ecartee'>;
 	/** Rétablit une fiche écartée toujours (l'instant est gardé) : son écart, rétabli ; null si elle ne l'était pas. */

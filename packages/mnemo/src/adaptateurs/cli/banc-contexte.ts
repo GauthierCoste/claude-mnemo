@@ -380,11 +380,11 @@ async function extraire(racine: string, fichier: string, o: Options): Promise<vo
 	}
 }
 
-/** Date locale du jour, AAAA-MM-JJ. */
-const dateDuJour = (): string => {
-	const d = new Date();
-	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+/**
+ * Instant de l'apprentissage (ISO, UTC) : `apprisLe` du modèle. Le suivi des injections ne compte que celles d'après lui, à la
+ * milliseconde (un apprentissage accepté plus récent qu'une coupure la lève).
+ */
+const instantDApprentissage = (): string => new Date().toISOString();
 
 /**
  * `--apprendre` : la note de confiance apprise sur les jugements (empreintes vérifiées sur l'index lu tel qu'il est), le module
@@ -405,7 +405,7 @@ async function apprendre(racine: string, fichier: string, o: Options): Promise<v
 		}
 		// l'échelle des signaux : les réglages de la mémoire, ceux avec lesquels le banc a calculé le signal de session
 		const echelle = echelleDesSignaux(lireReglagesDuDossier(racine).reglages.contexte);
-		const options = { empreinteDe, empreintes: o.empreintes, date: dateDuJour(), installes: ggufInstalles(), echelle, ...(o.module === null ? {} : { module: o.module }) };
+		const options = { empreinteDe, empreintes: o.empreintes, date: instantDApprentissage(), installes: ggufInstalles(), echelle, ...(o.module === null ? {} : { module: o.module }) };
 		const { rapport, texte } = await apprendreAuBanc(racine, cas, options).catch((e: unknown) => {
 			throw e instanceof ErreurCli ? e : enErreurCli(e);
 		});

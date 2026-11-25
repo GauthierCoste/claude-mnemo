@@ -18,6 +18,7 @@ import type { DemandeAffinage } from './affiner.ts';
 import { classementDuJournal } from './classement-du-message.ts';
 import { modelesActifs, requeteDesModeles } from './note-du-classement.ts';
 import { servir } from './servir.ts';
+import { modelesSuivis } from './suivi-injection.ts';
 import type { DemandeServir, Servi } from './servir.ts';
 import { verifierAction } from './verifier-action.ts';
 import { noterGeste } from './gestes.ts';
@@ -374,8 +375,8 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 	const exclusDefinitivement = await exclusionDefinitive(pil.etat, reglages.apriori);
 	// requête du classement : le message seul, ou joint au message porteur d'avant (variante jointe, message court ou anaphorique) ;
 	// celle avec laquelle la note de confiance a été apprise, s'il y en a une
-	// les modèles de la note : lus une fois pour le message (hook, puis affinage)
-	const modeles = modelesActifs(dep);
+	// les modèles de la note : lus une fois pour le message (hook, puis affinage), avec les coupures du suivi des injections
+	const modeles = await modelesSuivis(pil.etat, modelesActifs(dep));
 	const variante = reglages.varianteRequete ?? requeteDesModeles(modeles) ?? VARIANTE_DE_LA_REQUETE;
 	const precedent = session !== null && muet === null && precedentUtile(message, variante) ? await messagePorteurPrecedent(pil.etat, session.id, entree.horodatageMs) : null;
 	const requete = requeteDuMessage(message, precedent, variante);

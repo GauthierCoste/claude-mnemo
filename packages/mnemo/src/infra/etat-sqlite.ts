@@ -336,7 +336,8 @@ function signalerPanneDeGeste(erreur: unknown): void {
 }
 
 function ligneVersGeste(l: Ligne): GesteNote {
-	const octets = l.vecteur as Uint8Array | null;
+	// lu sans sa colonne (`sansVecteur`) : pas de vecteur
+	const octets = (l.vecteur as Uint8Array | null | undefined) ?? null;
 	const modele = l.modele_vecteur as string | null;
 	return {
 		rang: Number(l.rang),
@@ -956,7 +957,9 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 		async noterGeste(g) {
 			try {
 				ecrire(() => {
-					const s = base.prepare('SELECT dossier, position, messages_porteurs, dernier_message FROM sessions WHERE id = ?').get(g.session) as Ligne | undefined;
+					const connue = base.prepare('SELECT dossier, position, messages_porteurs, dernier_message FROM sessions WHERE id = ?').get(g.session) as Ligne | undefined;
+					// la réactivation de l'injection automatique est un réglage de la machine : notée aussi hors session (dossier vide)
+					const s: Ligne | undefined = connue ?? (g.geste === 'injection_reactivee' ? { dossier: '', position: null, messages_porteurs: 0, dernier_message: null } : undefined);
 					if (s === undefined) return;
 					// texte et rang du message viennent ensemble : du geste, sinon du dernier message porteur de la session
 					const porteur = g.porteur ?? { texte: (s.dernier_message as string | null) ?? null, rang: Number(s.messages_porteurs) };
@@ -1051,10 +1054,16 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 				conditions.push('horodatage_ms >= ?');
 				parametres.push(filtre.depuisMs);
 			}
+			if (filtre.sortes !== undefined) {
+				if (filtre.sortes.length === 0) return [];
+				conditions.push(`geste IN (${filtre.sortes.map(() => '?').join(', ')})`);
+				parametres.push(...filtre.sortes);
+			}
+			const colonnes = filtre.sansVecteur === true ? 'rang, horodatage_ms, geste, origine, session, dossier, position, fiche, empreinte, message, rang_message, note' : '*';
 			const ou = conditions.length === 0 ? '' : `WHERE ${conditions.join(' AND ')}`;
 			// LIMIT -1 : sans limite (SQLite)
 			return reessayer(() =>
-				(base.prepare(`SELECT * FROM gestes ${ou} ORDER BY horodatage_ms DESC, rang DESC LIMIT ?`).all(...parametres, filtre.limite ?? -1) as Ligne[]).map(ligneVersGeste),
+				(base.prepare(`SELECT ${colonnes} FROM gestes ${ou} ORDER BY horodatage_ms DESC, rang DESC LIMIT ?`).all(...parametres, filtre.limite ?? -1) as Ligne[]).map(ligneVersGeste),
 			);
 		},
 

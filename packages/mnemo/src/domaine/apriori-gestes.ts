@@ -111,6 +111,9 @@ export function voixDesGestes(gestes: readonly GesteDApriori[]): Voix[] {
 			case 'injectee_auto':
 				// jamais positive : Mnemo l'a choisie seul ; un écart qui la suit est négatif comme tout écart
 				break;
+			case 'injection_reactivee':
+				// un réglage, pas un geste sur une fiche
+				break;
 		}
 	}
 	return [...parSession.values()].flat();

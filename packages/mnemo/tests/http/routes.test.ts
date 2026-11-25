@@ -10,6 +10,7 @@ import { PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
 import type { GesteANoter } from '../../src/application/ports.ts';
+import { echelleDesSignaux, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { texteDuRefus } from '../../src/domaine/refus-outil.ts';
 import { ecrirePlugin } from '../../src/infra/claude.ts';
@@ -163,7 +164,7 @@ describe('routes : sessions', () => {
 		const r = await api(c).get(chemin(ROUTES.servis, UUID));
 		expect(r.statut).toBe(200);
 		// la demande reste dans l'état (trace des écartés) : la vue ne la montre pas
-		expect(r.corps).toEqual({ servis: [{ session: UUID, moment: 'debut', horodatageMs: 5, ids: ['projets/alpha/alpha.md'], texte: 'Contexte', ms: 12, sens: false, classement, muet: null, cartes: [], titres: { 'projets/alpha/alpha.md': 'alpha' } }], lues: [] });
+		expect(r.corps).toEqual({ servis: [{ session: UUID, moment: 'debut', horodatageMs: 5, ids: ['projets/alpha/alpha.md'], texte: 'Contexte', ms: 12, sens: false, classement, muet: null, cartes: [], titres: { 'projets/alpha/alpha.md': 'alpha' } }], lues: [], coupures: [] });
 		expect((await api(c).get(chemin(ROUTES.servis, '22222222-2222-4333-8444-555555555555'))).statut).toBe(404);
 	});
 
@@ -335,6 +336,43 @@ describe('routes : écartés', () => {
 		expect((await api(c).supprimer(ecartes('projets/alpha/alpha.md'))).statut).toBe(409);
 		// aucun échec n'est noté comme un geste
 		expect(await c.etat.gestes({ limite: null })).toEqual([]);
+	});
+});
+
+describe('routes : injection automatique (suivi et réactivation)', () => {
+	const T = Date.parse('2026-11-25T11:00:00.000Z');
+	/** Un modèle Sens seul accepté, appris avant 17 injections automatiques toutes écartées : le niveau est coupé. */
+	async function coupee() {
+		const c = await serviceFaux();
+		await c.etat.creer(sessionFixe(UUID));
+		const sens = { ...modeleNonAppris(), apprisLe: '2026-11-25T10:00:00.000Z', refus: [], accepte: true, echelle: echelleDesSignaux(c.dep.reglages().contexte), biais: 3, poids: { cosinusRelatif: 0 } };
+		c.dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens }, installes: { sens: null, reranker: null } });
+		for (let i = 0; i < 17; i++) {
+			await c.etat.noterGeste({ geste: 'injectee_auto', session: UUID, fiche: `n${i}.md`, empreinte: null, horodatageMs: T + i, note: { niveau: 'sens' } });
+			await c.etat.noterGeste({ geste: 'ecartee_ici', session: UUID, fiche: `n${i}.md`, empreinte: null, horodatageMs: T + 100 + i, note: null });
+		}
+		return c;
+	}
+	const COUPURE = { niveau: 'sens', injections: 17, ecartees: 17, depuisMs: T + 116, motif: '17 des 17 dernières fiches injectées par Mnemo ont été écartées' };
+
+	it('GET et `servis` disent la coupure ; POST la réactive (geste noté dans la session), une seconde fois sans geste', async () => {
+		const c = await coupee();
+		expect((await api(c).get(ROUTES.injectionAutomatique)).corps).toEqual({ coupures: [COUPURE] });
+		expect((await api(c).get(chemin(ROUTES.servis, UUID))).corps).toMatchObject({ coupures: [COUPURE] });
+		const r = await api(c).post(ROUTES.injectionAutomatique, { session: UUID });
+		expect(r.statut).toBe(200);
+		expect(r.corps).toEqual({ coupures: [] });
+		expect((await api(c).post(ROUTES.injectionAutomatique, { niveau: 'sens' })).corps).toEqual({ coupures: [] });
+		expect((await c.etat.gestes({ sortes: ['injection_reactivee'], limite: null })).map((g) => [g.session, g.fiche, g.note?.['niveau']])).toEqual([[UUID, '', 'sens']]);
+		expect((await api(c).get(chemin(ROUTES.servis, UUID))).corps).toMatchObject({ coupures: [] });
+	});
+
+	it('refus : niveau inconnu, champ inconnu (400), session inconnue (404) ; rien n’est réactivé', async () => {
+		const c = await coupee();
+		expect((await api(c).post(ROUTES.injectionAutomatique, { niveau: 'tout' })).statut).toBe(400);
+		expect((await api(c).post(ROUTES.injectionAutomatique, { pirate: 1 })).statut).toBe(400);
+		expect((await api(c).post(ROUTES.injectionAutomatique, { session: '22222222-2222-4333-8444-555555555555' })).statut).toBe(404);
+		expect((await api(c).get(ROUTES.injectionAutomatique)).corps).toEqual({ coupures: [COUPURE] });
 	});
 });
 

@@ -268,6 +268,17 @@ export type EcarteeToujoursVue = { chemin: string; titre: string; horodatageMs: 
 /** Réponse de `ecarteesToujours` (GET, POST, DELETE) : toutes les fiches écartées toujours, les plus anciennes d'abord. */
 export type ReponseEcarteesToujours = { ecarteesToujours: EcarteeToujoursVue[] };
 
+/**
+ * L'injection automatique coupée pour un niveau de modèle par le suivi (trop d'écarts) : sur les `injections` dernières fiches
+ * injectées par Mnemo à ce niveau, `ecartees` ont été écartées ensuite dans leur session ; `depuisMs` : le dernier écart
+ * compté ; `motif` : « N des 100 dernières fiches injectées par Mnemo ont été écartées ». Elle revient avec un nouvel
+ * apprentissage accepté, ou quand l'utilisateur la réactive (`injectionAutomatique` POST).
+ */
+export type CoupureInjectionVue = { niveau: 'complets' | 'sens'; injections: number; ecartees: number; depuisMs: number; motif: string };
+
+/** Réponse de `injectionAutomatique` (GET, POST) : les niveaux coupés (vide : aucun). */
+export type ReponseInjectionAutomatique = { coupures: CoupureInjectionVue[] };
+
 /** Du service vers le client (WebSocket). */
 export type MessageServeur =
 	| { type: 'session'; session: SessionVue }
@@ -311,7 +322,10 @@ export type MessageClient =
  * - `reprise` POST → `{ session }` ;
  * - `bilan` POST → `{ session }` : Claude rédige l'épisode ;
  * - `abandon` POST → `{ session }` : terminée sans bilan ;
- * - `servis` GET → `{ servis: EntreeServieVue[]; lues: LueVue[] }` (panneau Contexte ; seule la plus récente porte son classement d'une entrée ancienne ; `lues` : fiches que la session a lues, avec l'heure de leur dernière lecture, la plus récente d'abord ; un service plus ancien envoie des chemins seuls) ;
+ * - `servis` GET → `{ servis: EntreeServieVue[]; lues: LueVue[]; coupures?: CoupureInjectionVue[] }` (panneau Contexte ; seule la plus récente porte son classement d'une entrée ancienne ; `lues` : fiches que la session a lues, avec l'heure de leur dernière lecture, la plus récente d'abord ; un service plus ancien envoie des chemins seuls ; `coupures` : l'injection automatique coupée par le suivi, absente d'un service plus ancien) ;
+ * - `injectionAutomatique` GET → `ReponseInjectionAutomatique` ; POST `{ session?, niveau? }` (`session` : celle du geste, 404
+ *   inconnue ; absente : hors session ; `niveau` : `complets` ou `sens`, absent : tous) réactive l'injection automatique des
+ *   niveaux coupés (geste `injection_reactivee` noté par niveau réactivé) → `ReponseInjectionAutomatique` ;
  * - `ecartes` GET → `{ ecartes: EcarteVue[] }` ; POST `{ id }` (un id des classements récents de la session : 404 sinon ; 409
  *   session terminée) écarte cet élément des prochains calculs de la session ; DELETE `?id=` le rétablit (409 session
  *   terminée) ; les deux rendent `{ ecartes }` et diffusent `ecartes` (aussi diffusé vide quand la session se termine) ;
@@ -421,6 +435,7 @@ export const ROUTES = {
 	ecartes: '/api/sessions/:id/ecartes',
 	aServir: '/api/sessions/:id/a-servir',
 	ecarteesToujours: '/api/ecartees-toujours',
+	injectionAutomatique: '/api/injection-automatique',
 	fenetres: '/api/fenetres',
 	quotas: '/api/quotas',
 	modeles: '/api/modeles',
