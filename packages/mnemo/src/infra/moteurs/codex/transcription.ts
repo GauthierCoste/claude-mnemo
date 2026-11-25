@@ -1,8 +1,9 @@
-import { readdir, realpath } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { extname, isAbsolute, join, relative } from 'node:path';
+import { join } from 'node:path';
 import type { LectureFenetre } from '../../../application/ports.ts';
 import { telemetrieDeCodex } from '../../../domaine/moteurs/codex/telemetrie.ts';
+import { cheminReelPermis, racinesReelles } from '../../chemin-permis.ts';
 import { lignesDeLaFin } from '../../fin-de-fichier.ts';
 import { dossierCodex } from './dossier-codex.ts';
 
@@ -26,12 +27,6 @@ export type ReglagesTranscriptionCodex = {
 	maintenant?: () => number;
 };
 
-/** Vrai si `chemin` (réel) est dans `racine` (réelle), sans en être la racine. */
-function dans(racine: string, chemin: string): boolean {
-	const r = relative(racine, chemin);
-	return r !== '' && !r.startsWith('..') && !isAbsolute(r);
-}
-
 const deuxChiffres = (n: number): string => String(n).padStart(2, '0');
 
 /**
@@ -46,19 +41,10 @@ export function lectureTranscriptionCodex(r: ReglagesTranscriptionCodex = {}): L
 	const maintenant = r.maintenant ?? Date.now;
 
 	/** Dossiers des transcriptions, chemins réels ; ceux qui n'existent pas sont omis. */
-	async function racines(): Promise<string[]> {
-		const candidates = [...new Set([join(dossierCodex(env()), 'sessions'), join(accueil, '.codex', 'sessions')])];
-		const reelles = await Promise.all(candidates.map((c) => realpath(c).catch(() => null)));
-		return [...new Set(reelles.filter((c): c is string => c !== null))];
-	}
+	const racines = (): Promise<string[]> => racinesReelles([join(dossierCodex(env()), 'sessions'), join(accueil, '.codex', 'sessions')]);
 
 	/** Le chemin réel du fichier s'il est une transcription permise ; null sinon. */
-	async function permis(chemin: string, permises: readonly string[]): Promise<string | null> {
-		if (extname(chemin) !== '.jsonl') return null;
-		const reel = await realpath(chemin).catch(() => null);
-		if (reel === null || extname(reel) !== '.jsonl' || !permises.some((racine) => dans(racine, reel))) return null;
-		return reel;
-	}
+	const permis = (chemin: string, permises: readonly string[]): Promise<string | null> => cheminReelPermis(chemin, permises, '.jsonl');
 
 	/** La transcription du `fil`, la plus récente des jours parcourus ; null si introuvable. */
 	async function parFil(fil: string, permises: readonly string[]): Promise<string | null> {

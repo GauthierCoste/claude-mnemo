@@ -1,3 +1,5 @@
+import { segmentsDeCle } from '../toml-lecture.ts';
+
 /**
  * Approbation des hooks par l'utilisateur dans Codex (`/hooks`), lue dans `config.toml` sans l'écrire : Codex 0.171 y note
  * `[hooks.state."<chemin de hooks.json>:<événement>:<groupe>:<commande>"]` avec `trusted_hash = "sha256:…"` (chaîne de base
@@ -5,58 +7,6 @@
  * voit donc pas si une approbation est périmée (entrée changée depuis).
  */
 export type ApprobationHooks = { etat: 'approuves' | 'a_approuver' | 'inconnu'; motif: string };
-
-/** Clé TOML pointée (`a."b.c".'d'`) en segments ; null si elle est mal formée. */
-export function segmentsDeCle(texte: string): string[] | null {
-	const segments: string[] = [];
-	let i = 0;
-	const blancs = () => {
-		while (i < texte.length && (texte[i] === ' ' || texte[i] === '\t')) i++;
-	};
-	for (;;) {
-		blancs();
-		const c = texte[i];
-		if (c === '"') {
-			let s = '';
-			i++;
-			for (;;) {
-				const d = texte[i];
-				if (d === undefined) return null;
-				i++;
-				if (d === '"') break;
-				if (d !== '\\') {
-					s += d;
-					continue;
-				}
-				const e = texte[i++];
-				const simples: Record<string, string> = { '"': '"', '\\': '\\', b: '\b', t: '\t', n: '\n', f: '\f', r: '\r' };
-				if (e !== undefined && Object.hasOwn(simples, e)) s += simples[e];
-				else if (e === 'u' || e === 'U') {
-					const n = e === 'u' ? 4 : 8;
-					const hex = texte.slice(i, i + n);
-					if (!/^[0-9a-fA-F]+$/u.test(hex) || hex.length !== n) return null;
-					s += String.fromCodePoint(Number.parseInt(hex, 16));
-					i += n;
-				} else return null;
-			}
-			segments.push(s);
-		} else if (c === "'") {
-			const fin = texte.indexOf("'", i + 1);
-			if (fin === -1) return null;
-			segments.push(texte.slice(i + 1, fin));
-			i = fin + 1;
-		} else {
-			const nu = /^[A-Za-z0-9_-]+/u.exec(texte.slice(i));
-			if (nu === null) return null;
-			segments.push(nu[0]);
-			i += nu[0].length;
-		}
-		blancs();
-		if (i === texte.length) return segments;
-		if (texte[i] !== '.') return null;
-		i++;
-	}
-}
 
 /** Position du premier `stop` hors des chaînes de `ligne`, ou -1. */
 function horsChaines(ligne: string, stop: string): number {

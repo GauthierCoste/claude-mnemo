@@ -1,14 +1,14 @@
 import { estModele } from '@mnemo/commun';
-import { separerFrontmatter } from '../../../domaine/fiche.ts';
-import { listeValeursToml, valeurToml } from '../../../domaine/moteurs/codex/toml.ts';
-import { texteDesHooks } from '../../../domaine/moteurs/hooks-du-profil.ts';
+import { listeValeursToml, valeurToml } from '../../../domaine/moteurs/toml.ts';
+import { motifSansFil } from '../../../domaine/moteurs/fil.ts';
 import { OUTILS_MNEMO_PERMIS } from '../../../domaine/moteurs/outils-permis.ts';
 import type { Profil } from '../../../domaine/profil.ts';
 import { estUuid } from '../../../domaine/session.ts';
 import type { Session } from '../../../domaine/session.ts';
 import type { AppelPlugin, ContextePreparation, Dependances, FichierPlugin, Lancement, ModeLancement } from '../../ports.ts';
+import { consigneAvecSkills } from '../consigne-avec-skills.ts';
+import { environnementAvec, VARIABLES_DU_SERVEUR_MCP, variablesDeSession } from '../environnement-de-session.ts';
 import { skillsDeSession } from '../skills-de-session.ts';
-import type { SkillDeSession } from '../skills-de-session.ts';
 
 /**
  * Variables que `codex` ne reçoit jamais : `CODEX_API_KEY`, la clé d'API propre à Codex, qui prendrait le pas sur l'abonnement.
@@ -36,56 +36,14 @@ export const LIGNE_ARGUMENTS_MAX = 30_000;
  */
 export const longueurSurLaLigne = (args: readonly string[]): number => args.reduce((total, a) => total + a.length + (a.match(/["\\]/gu)?.length ?? 0) + 3, 0);
 
-/**
- * Variables de la session que le serveur MCP `mnemo` lancé par Codex reçoit (`env_vars`) : Codex ne transmet à un serveur
- * MCP qu'un petit nombre de variables de son environnement.
- */
-const VARIABLES_DU_SERVEUR_MCP = ['MNEMO_SESSION', 'MNEMO_MOTEUR', 'MNEMO_PROJET', 'MNEMO_RACINE'];
-
 /** Fichier de session qui garde la consigne passée à Codex (`developer_instructions`), pour qu'on puisse la relire. */
 const CONSIGNE = 'consigne.md';
 
-/** Longueur au plus d'une description de skill dans la consigne : elle n'est qu'un indice, la skill se lit par `lire`. */
-const DESCRIPTION_MAX = 300;
-
-/** Identifiant de session de Codex (`fil`), borné comme l'accepte le service. */
-const FIL_MAX = 200;
-
-/** Description d'une skill (frontmatter de son `SKILL.md`), sur une ligne ; « » si elle n'en a pas ou s'il est illisible. */
-function descriptionDe(skill: SkillDeSession): string {
-	try {
-		const valeur = separerFrontmatter(`${skill.dossier}/SKILL.md`, skill.texte).entete['description'];
-		if (typeof valeur !== 'string') return '';
-		const ligne = valeur.replace(/\s+/gu, ' ').trim();
-		return ligne.length <= DESCRIPTION_MAX ? ligne : `${ligne.slice(0, DESCRIPTION_MAX - 1)}…`;
-	} catch {
-		return '';
-	}
-}
-
 /**
- * Consigne d'une session Codex (`developer_instructions`) : celle du profil, puis la liste des skills de la session. Codex ne
- * lit de skills que dans le dépôt et chez l'utilisateur : rien n'est écrit dans le dossier du projet, chaque skill
- * est nommée avec sa description et l'identifiant de son `SKILL.md`, lu par l'outil `lire` de Mnemo quand elle s'applique.
+ * Consigne d'une session Codex (`developer_instructions`) : celle du profil, puis la liste des skills de la session
+ * (`consigneAvecSkills`) ; Codex ne lit de skills que dans le dépôt et chez l'utilisateur.
  */
-export function consigneCodex(profil: Pick<Profil, 'consigne'>, skills: readonly SkillDeSession[]): string {
-	const consigne = profil.consigne.trim();
-	if (skills.length === 0) return `${consigne}\n`;
-	const lignes = skills.map((s) => {
-		const description = descriptionDe(s);
-		return `- ${s.nom}${description === '' ? '' : ` : ${description}`} (\`${s.dossier}/SKILL.md\`)`;
-	});
-	return [
-		consigne,
-		'',
-		'## Skills de Mnemo',
-		'',
-		'Ces skills sont dans la mémoire Mnemo, pas sur le disque du projet. Quand l\'une s\'applique à ta tâche, lis d\'abord son `SKILL.md` avec l\'outil `lire` de Mnemo (identifiant entre parenthèses), puis suis-la ; ses autres fichiers sont dans le même dossier (`lister`).',
-		'',
-		...lignes,
-		'',
-	].join('\n');
-}
+export const consigneCodex = consigneAvecSkills;
 
 /** Fichiers de session de Codex : sa consigne seulement (avec la liste des skills), relue par `preparerCodex`. */
 export async function fichiersDeSessionCodex(dep: Dependances, session: Session, profil: Profil, _appel: AppelPlugin): Promise<FichierPlugin[]> {
@@ -94,9 +52,10 @@ export async function fichiersDeSessionCodex(dep: Dependances, session: Session,
 
 /** Pourquoi la session Codex ne peut pas être reprise : son `fil` (identifiant chez Codex) n'est pas connu ; null sinon. */
 export function motifSansRepriseCodex(session: Pick<Session, 'fil'>): string | null {
-	const fil = session.fil ?? '';
-	if (fil !== '' && fil.length <= FIL_MAX) return null;
-	return 'session Codex dont l\'identifiant chez Codex est inconnu (aucun hook reçu : hooks de Mnemo absents ou non approuvés dans Codex, ou aucun message envoyé) : elle ne peut pas être reprise';
+	return motifSansFil(
+		session,
+		'session Codex dont l\'identifiant chez Codex est inconnu (aucun hook reçu : hooks de Mnemo absents ou non approuvés dans Codex, ou aucun message envoyé) : elle ne peut pas être reprise',
+	);
 }
 
 /** Ce que reçoivent les arguments de `codex`. */
@@ -166,10 +125,7 @@ export function environnementPermisCodex(env: Record<string, string | undefined>
  * de Codex, communs à toutes les sessions, en tirent ce que le plugin d'une session Claude Code déclare).
  */
 export function environnementCodex(env: Record<string, string | undefined>, session: Session, profil: Pick<Profil, 'hooks'>, racine: string): Record<string, string> {
-	const ajouts: Record<string, string> = { MNEMO_SESSION: session.id, MNEMO_MOTEUR: 'codex', MNEMO_PROJET: session.projet, MNEMO_RACINE: racine, MNEMO_HOOKS: texteDesHooks(profil.hooks) };
-	const resultat = environnementPermisCodex(env);
-	for (const cle of Object.keys(resultat)) if (cle.toUpperCase() in ajouts) delete resultat[cle];
-	return { ...resultat, ...ajouts };
+	return environnementAvec(environnementPermisCodex(env), variablesDeSession('codex', session, profil, racine));
 }
 
 /**

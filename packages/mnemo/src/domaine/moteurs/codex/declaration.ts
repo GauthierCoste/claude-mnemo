@@ -1,6 +1,7 @@
 import { citerPosix, citerPowerShell } from '../../citer.ts';
 import { estObjet } from '../../valeurs.ts';
-import { listeValeursToml, valeurToml } from './toml.ts';
+import { estLancementDeMnemo, lanceCeMnemo as lanceCeMnemoMcp } from '../declaration-mnemo.ts';
+import { listeValeursToml, valeurToml } from '../toml.ts';
 
 /**
  * Déclaration `mnemo` telle que `codex mcp get mnemo --json` la rend (Codex 0.171 : `{ name, enabled, transport: { type,
@@ -69,12 +70,12 @@ export function reglagesDansConfig(texte: string): string[] {
 
 /** Elle lance exactement `<node> <main> mcp`. */
 export function lanceCeMnemo(d: DeclarationCodex, node: string, main: string): boolean {
-	return d.stdio && d.commande === node && d.args.length === 2 && d.args[0] === main && d.args[1] === 'mcp';
+	return d.stdio && lanceCeMnemoMcp(d, node, main);
 }
 
 /** Une déclaration de Mnemo, quel que soit son chemin : `<…>/adaptateurs/cli/main.ts mcp`. */
 export function estDeclarationMnemo(d: DeclarationCodex): boolean {
-	return d.stdio && d.args.length === 2 && /adaptateurs[\\/]cli[\\/]main\.ts$/u.test(d.args[0]!) && d.args[1] === 'mcp';
+	return d.stdio && estLancementDeMnemo(d);
 }
 
 /** Commande à copier-coller : chaque chemin entre apostrophes (POSIX ou PowerShell). */

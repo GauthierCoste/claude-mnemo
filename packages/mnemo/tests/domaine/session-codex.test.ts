@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { modelesDuCatalogue } from '../../src/domaine/moteurs/codex/modeles.ts';
 import { TOUCHES_CODEX } from '../../src/domaine/moteurs/codex/touches.ts';
-import { chaineToml, listeToml, listeValeursToml, valeurToml } from '../../src/domaine/moteurs/codex/toml.ts';
+import { chaineToml, listeToml, listeValeursToml, valeurToml } from '../../src/domaine/moteurs/toml.ts';
 import { refusDeVersionCodex, versionDeCodex } from '../../src/domaine/moteurs/codex/version.ts';
 import { effetDuHook, hooksDuTexte, texteDesHooks } from '../../src/domaine/moteurs/hooks-du-profil.ts';
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { approbationDesHooks, etatsDansConfig, segmentsDeCle } from '../../src/domaine/moteurs/codex/approbation-hooks.ts';
+import { approbationDesHooks, etatsDansConfig } from '../../src/domaine/moteurs/codex/approbation-hooks.ts';
+import { segmentsDeCle } from '../../src/domaine/moteurs/toml-lecture.ts';
 
 const CHEMIN = '/maison/a/.codex/hooks.json';
 const CLES = ['stop:0:0', 'session_end:1:0'];
