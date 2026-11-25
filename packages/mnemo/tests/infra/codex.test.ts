@@ -11,7 +11,7 @@ import { trouverCodex } from '../../src/infra/moteurs/codex/trouver-codex.ts';
 import { DELAI_MODELES_MS, modelesCodex } from '../../src/infra/moteurs/codex/modeles.ts';
 import { reglagesMcpCodex } from '../../src/infra/moteurs/codex/reglages-mcp.ts';
 import { DELAI_VERSION_MS, versionCodex } from '../../src/infra/moteurs/codex/version.ts';
-import { executeurReel } from '../../src/adaptateurs/cli/executeur.ts';
+import { executeurReel } from '../../src/infra/executeur.ts';
 import { MOTEURS, MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { commandesDuHook } from '../../src/domaine/moteurs/codex/hooks-installes.ts';
@@ -467,6 +467,36 @@ describe('version de Codex (codex --version)', () => {
 		maintenant += 11 * 60_000;
 		await version(commande, {}, executer);
 		expect(appels).toHaveLength(2);
+		// relire : sans le cache
+		expect(await version(commande, {}, executer, { relire: true })).toBe('0.172.0');
+		expect(appels).toHaveLength(3);
+	});
+
+	it('illisible : gardée une minute seulement ; délai garanti même si l’exécuteur ne rend jamais la main', async () => {
+		vi.useFakeTimers();
+		try {
+			let maintenant = 0;
+			let appels = 0;
+			const jamais: Executer = () => (appels++, new Promise(() => {}));
+			const version = versionCodex(() => maintenant);
+			const commande = { commande: '/bin/codex', avant: [] };
+			const lue = version(commande, {}, jamais);
+			await vi.advanceTimersByTimeAsync(DELAI_VERSION_MS + 1000);
+			expect(await lue).toBeNull();
+			maintenant += 30_000;
+			expect(await version(commande, {}, jamais)).toBeNull();
+			expect(appels).toBe(1);
+			maintenant += 31_000;
+			const relue = version(commande, {}, async () => (appels++, { code: 0, sortie: 'codex-cli 0.173.0', erreur: '' }));
+			expect(await relue).toBe('0.173.0');
+			expect(appels).toBe(2);
+			// modèles : le même délai garanti
+			const modeles = modelesCodex(() => maintenant)({ executer: jamais, commande, env: {} });
+			await vi.advanceTimersByTimeAsync(DELAI_MODELES_MS + 1000);
+			expect(await modeles).toEqual([]);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });
 

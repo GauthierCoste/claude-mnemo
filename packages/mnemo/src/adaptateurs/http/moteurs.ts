@@ -1,7 +1,8 @@
 /**
  * Route des moteurs (`ROUTES.moteurs`) : chaque agent de code du service, sa commande trouvée au démarrage, sa version et ses
  * modèles (Réglages › Profils) ; avec `poste=1`, ce que vérifie `mnemo verifier-poste` (déclaration MCP, hooks du poste et
- * leur approbation), chaque point non satisfaisant avec la commande qui y remédie (Réglages › Système). Lecture seule.
+ * leur approbation), la commande cherchée de nouveau et la version relue (« Relire »), chaque point non satisfaisant avec
+ * la commande qui y remédie (Réglages › Système). Lecture seule ; une seule vérification du poste en vol à la fois.
  */
 import { ROUTES } from '@mnemo/contrat';
 import type { MoteurVue, PointMoteurVue, ReponseMoteurs } from '@mnemo/contrat';
@@ -38,10 +39,30 @@ const COMMANDES: Record<MoteurVue['id'], { declarer: string; remplacer: string; 
 	},
 };
 
-/** Version lue (en cache) ; null : le moteur ne la donne pas, ou elle est illisible. */
-async function versionDe(moteur: Moteur, commande: CommandeMoteur | null, p: PosteDesMoteurs): Promise<string | null> {
+/** Version lue (en cache, sauf `relire`) ; null : le moteur ne la donne pas, ou elle est illisible. */
+async function versionDe(moteur: Moteur, commande: CommandeMoteur | null, p: PosteDesMoteurs, relire: boolean): Promise<string | null> {
 	if (commande === null || moteur.version === undefined) return null;
-	return moteur.version(commande, p.env).catch(() => null);
+	return moteur.version(commande, p.env, p.executer, { relire }).catch(() => null);
+}
+
+/** Le service garde la commande trouvée à son démarrage : en prendre une autre demande de le redémarrer. */
+const REDEMARRER: Remede = { texte: 'mnemo arreter', dans: 'terminal', puis: 'mnemo ouvrir' };
+const chemin = (c: CommandeMoteur): string => c.avant[0] ?? c.commande;
+const memeCommande = (a: CommandeMoteur | null, b: CommandeMoteur | null): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Point « commande » : celle du service (trouvée à son démarrage), comparée à celle trouvée maintenant (`trouvee`, cherchée
+ * de nouveau pour le poste : moteur installé, déplacé ou retiré depuis).
+ */
+function pointCommande(moteur: Moteur, commande: CommandeMoteur | null, trouvee: CommandeMoteur | null): PointMoteurVue {
+	const c = { cle: 'commande', libelle: 'Commande' } as const;
+	const introuvable = COMMANDES[moteur.id].introuvable;
+	if (memeCommande(commande, trouvee)) return commande === null ? { ...c, ok: false, etat: 'introuvable', detail: introuvable } : { ...c, ok: true, etat: 'trouvée', detail: chemin(commande) };
+	if (commande === null) {
+		return { ...c, ok: false, etat: 'trouvée depuis le démarrage', detail: `${chemin(trouvee!)} : le service, démarré sans ${moteur.nom}, ne la prend qu'en redémarrant.`, remede: REDEMARRER };
+	}
+	if (trouvee === null) return { ...c, ok: false, etat: 'introuvable maintenant', detail: `Le service lance encore ${chemin(commande)}, trouvée à son démarrage ; ${introuvable}.` };
+	return { ...c, ok: false, etat: 'changée', detail: `Le service lance ${chemin(commande)}, trouvée à son démarrage ; trouvée maintenant : ${chemin(trouvee)}. Il ne la prend qu'en redémarrant.`, remede: REDEMARRER };
 }
 
 /** Points de la déclaration MCP, des hooks du poste et de leur approbation. */
@@ -79,22 +100,18 @@ async function pointsDuPoste(duService: MoteurDuService, p: PosteDesMoteurs): Pr
 	return points;
 }
 
-/** Vue d'un moteur ; `poste` : avec ses points vérifiés. */
+/** Vue d'un moteur ; `poste` : avec ses points vérifiés, la commande cherchée de nouveau et la version relue. */
 async function vueMoteur(duService: MoteurDuService, p: PosteDesMoteurs, poste: boolean): Promise<MoteurVue> {
 	const { moteur, commande } = duService;
 	const [version, modeles] = await Promise.all([
-		versionDe(moteur, commande, p),
+		versionDe(moteur, commande, p, poste),
 		moteur.modeles({ executer: p.executer, commande, env: p.env }).catch((): readonly string[] => []),
 	]);
 	const tropAncien = moteur.refusDeVersion?.(version) ?? null;
 	const indisponible = commande === null ? `${moteur.nom} introuvable sur ce poste (${COMMANDES[moteur.id].introuvable}).` : tropAncien === null ? null : `${tropAncien}.`;
 	const vue: MoteurVue = { id: moteur.id, nom: moteur.nom, indisponible, manuel: commande === null && moteur.sansCommande === 'manuel', version, modeles: [...modeles] };
 	if (!poste) return vue;
-	const points: PointMoteurVue[] = [
-		commande === null
-			? { cle: 'commande', libelle: 'Commande', ok: false, etat: 'introuvable', detail: COMMANDES[moteur.id].introuvable }
-			: { cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée', detail: commande.avant[0] ?? commande.commande },
-	];
+	const points: PointMoteurVue[] = [pointCommande(moteur, commande, moteur.trouver(p.env, p.plateforme))];
 	if (commande !== null && moteur.version !== undefined) {
 		points.push(
 			version === null
@@ -109,13 +126,19 @@ async function vueMoteur(duService: MoteurDuService, p: PosteDesMoteurs, poste: 
 }
 
 export function routesMoteurs(p: PosteDesMoteurs): Route[] {
+	const lire = (poste: boolean): Promise<MoteurVue[]> => Promise.all(Object.values(p.moteurs).flatMap((m) => (m === undefined ? [] : [vueMoteur(m, p, poste)])));
+	// une seule vérification du poste à la fois (plusieurs commandes par moteur) : les appels pendant celle en cours la partagent
+	let posteEnVol: Promise<MoteurVue[]> | null = null;
+	const lirePoste = (): Promise<MoteurVue[]> =>
+		(posteEnVol ??= lire(true).finally(() => {
+			posteEnVol = null;
+		}));
 	return [
 		{
 			methode: 'GET',
 			chemin: ROUTES.moteurs,
 			action: async (r) => {
-				const poste = r.params.get('poste') === '1';
-				const moteurs = await Promise.all(Object.values(p.moteurs).flatMap((m) => (m === undefined ? [] : [vueMoteur(m, p, poste)])));
+				const moteurs = r.params.get('poste') === '1' ? await lirePoste() : await lire(false);
 				return { statut: 200, corps: { moteurs } satisfies ReponseMoteurs };
 			},
 		},

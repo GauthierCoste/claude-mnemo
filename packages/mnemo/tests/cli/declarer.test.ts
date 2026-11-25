@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { commandeDeclarer } from '../../src/adaptateurs/cli/declaration.ts';
 import type { Executer } from '../../src/application/ports.ts';
 import { commandeManuelle, declarerServeurMcp, redeclarerServeurMcp, retirerServeurMcp } from '../../src/infra/moteurs/claude-code/declaration-mcp.ts';
-import { executeurReel } from '../../src/adaptateurs/cli/executeur.ts';
+import { executeurReel } from '../../src/infra/executeur.ts';
 
 const MAIN = '/chemin/absolu/main.ts';
 /** `claude` tel que `trouverClaude` le rend sur un poste POSIX. */

@@ -940,8 +940,8 @@ export type MoteurDuPoste = {
 	declarationMcp: DeclarationMcp;
 	/** Hooks installés pour tout le poste (Codex) ; absent : le moteur les prend des fichiers de chaque session (Claude Code). */
 	hooksDuPoste?: HooksDuPoste;
-	/** Version du moteur (`--version`, en cache ; `executer` : tests) ; null : illisible. Absent : non lue. */
-	version?(commande: CommandeMoteur, env: Record<string, string | undefined>, executer?: Executer): Promise<string | null>;
+	/** Version du moteur (`--version`, en cache ; `relire` : sans le cache) ; null : illisible. Absent : non lue. */
+	version?(commande: CommandeMoteur, env: Record<string, string | undefined>, executer?: Executer, options?: { relire?: boolean }): Promise<string | null>;
 	/** Motif de refus d'une version trop ancienne pour lancer des sessions ; null : elle convient, ou elle est illisible. */
 	refusDeVersion?(version: string | null): string | null;
 };

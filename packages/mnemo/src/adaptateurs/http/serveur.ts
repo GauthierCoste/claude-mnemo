@@ -26,7 +26,7 @@ import { routesReglages } from './reglages.ts';
 import { routesClaudeDesktop } from './claude-desktop.ts';
 import { routesMoteurs } from './moteurs.ts';
 import type { PosteDesMoteurs } from './moteurs.ts';
-import { executeurReel } from '../cli/executeur.ts';
+import { executeurReel } from '../../infra/executeur.ts';
 import type { AppClaude } from './claude-desktop.ts';
 import { fichierConfigClaudeDesktop } from '../../infra/config-claude-desktop.ts';
 import { nodeDurable } from '../../infra/node-durable.ts';

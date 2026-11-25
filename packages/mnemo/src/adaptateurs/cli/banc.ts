@@ -23,7 +23,7 @@ import { arreterServeurs, lireEtatServeurs, pidVivant } from '../../infra/modele
 import { appelPlugin, dependancesReelles } from '../../infra/systeme.ts';
 import type { Executer } from '../../application/ports.ts';
 import { AUCUNE_MEMOIRE, ErreurCli } from './erreurs.ts';
-import { executeurReel } from './executeur.ts';
+import { executeurReel } from '../../infra/executeur.ts';
 import { trouverRacine } from './racine.ts';
 import { DOSSIER_MEMOIRE } from '../../domaine/dossier-memoire.ts';
 import { estObjet } from '../../domaine/valeurs.ts';

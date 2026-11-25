@@ -504,6 +504,10 @@ describe('Pilote : moteur de la session', () => {
 		expect(await c.pilote.reprendreAuDemarrage()).toEqual([ID_C]);
 		expect(c.terminaux.lances).toHaveLength(1);
 		expect(await c.etat.lire(ID_B)).toMatchObject({ etat: 'a_relire', moteur: 'gemini' });
+		// pause et reprise impossibles, dit par le motif (l'interface grise ses boutons) ; pause refusée même sans rien qui tourne
+		expect(c.pilote.motifSansReprise((await c.etat.lire(ID_B))!)).toBe('moteur « gemini » sans implémentation dans ce service : la session ne peut pas être relancée');
+		await expect(c.pilote.pause(ID_B)).rejects.toThrow(/^Pause impossible : moteur « gemini »/u);
+		expect(c.pilote.motifSansReprise((await c.etat.lire(ID_C))!)).toBeNull();
 	});
 
 	it('moteur et modèle du profil enregistrés au lancement (--model) ; la reprise garde ceux de la session après un changement du profil', async () => {
@@ -694,6 +698,10 @@ describe('Pilote : sessions Codex', () => {
 		await expect(c.pilote.reprendre(ID_A)).rejects.toThrow(/identifiant chez Codex est inconnu/u);
 		await expect(c.pilote.ligneDeReprise(ID_A)).rejects.toThrow(ErreurRepriseImpossible);
 		await expect(c.pilote.terminer(ID_A, { bilan: true })).rejects.toThrow(ErreurRepriseImpossible);
+		await c.etat.modifier(ID_A, { etat: 'a_relire' });
+		await expect(c.pilote.pause(ID_A)).rejects.toThrow(/^Pause impossible : .*identifiant chez Codex est inconnu/u);
+		expect(await c.etat.lire(ID_A)).toMatchObject({ etat: 'a_relire' });
+		await c.etat.modifier(ID_A, { etat: 'en_pause' });
 		expect(c.terminaux.lances).toHaveLength(0);
 		expect(await c.pilote.reprendreAuDemarrage()).toEqual([ID_B]);
 		const t = c.terminaux.lances[0]!;

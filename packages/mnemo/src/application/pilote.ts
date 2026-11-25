@@ -39,12 +39,12 @@ export type Pilote = {
 	arreterTout(): Promise<void>;
 	enCours(id: string): boolean;
 	/**
-	 * Pourquoi la session ne peut être ni mise en pause ni reprise par son moteur (Codex : son `fil` encore inconnu) ; null :
-	 * elle le peut, ou son moteur est inconnu de ce service.
+	 * Pourquoi la session ne peut être ni mise en pause ni reprise par son moteur (Codex : son `fil` encore inconnu ; moteur
+	 * sans implémentation dans ce service) ; null : elle le peut.
 	 */
 	motifSansReprise(s: Session): string | null;
 	/**
-	 * Termine une session. `bilan` : Claude rédige l'épisode (consigne tapée dans le terminal ; une session qui ne tourne pas
+	 * Termine une session. `bilan` : l'agent rédige l'épisode (consigne tapée dans le terminal ; une session qui ne tourne pas
 	 * est d'abord reprise), puis la session est arrêtée à son premier `arret` ; rend la session dès la consigne tapée. Sans
 	 * bilan : abandonnée et arrêtée (épisode minimal).
 	 */
@@ -113,6 +113,8 @@ const NON_COMMENCEE =
 	'la session n\'a pas encore commencé chez son moteur (aucun hook `debut` reçu : une question attend peut-être l\'utilisateur dans son terminal, comme l\'approbation du dossier par Codex, ou aucun message n\'a encore été envoyé) ; rien n\'y est tapé';
 
 /** Raison pour laquelle la session ne peut pas tourner avec son moteur dans ce service. */
+/** Motif d'une session dont le moteur n'a pas d'implémentation ici (sans point final : repris dans une phrase). */
+const motifMoteurInconnu = (moteur: string): string => `moteur « ${moteur} » sans implémentation dans ce service : la session ne peut pas être relancée`;
 const moteurIndisponible = (moteur: string): string => `Moteur « ${moteur} » sans implémentation dans ce service : la session ne peut pas être relancée.`;
 const repriseImpossible = (motif: string): string => `Reprise impossible : ${motif}.`;
 
@@ -365,6 +367,11 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	const moteurDe = (session: Pick<Session, 'moteur'>): MoteurDuService | null => {
 		const id = session.moteur ?? MOTEUR_PAR_DEFAUT;
 		return estIdMoteur(id) ? (pil.moteurs[id] ?? null) : null;
+	};
+	/** Motif qui empêche pause et reprise : celui du moteur, ou son absence de ce service. */
+	const motifSansReprise = (s: Session): string | null => {
+		const duService = moteurDe(s);
+		return duService === null ? motifMoteurInconnu(s.moteur ?? MOTEUR_PAR_DEFAUT) : duService.moteur.motifSansReprise(s);
 	};
 	/** Ce que la ligne de commande d'un processus lancé pour la session contient (son uuid, à défaut de moteur connu). */
 	const marqueDe = (s: Session): string => moteurDe(s)?.moteur.marqueDeSession(s.id) ?? s.id;
@@ -786,15 +793,15 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			await enLancement.get(id);
 			const s = await pil.etat.lire(id);
 			if (s === null || s.etat === 'terminee') return s;
+			if (!vivants.has(id) && s.etat === 'en_pause') return s;
+			// une pause qu'aucune reprise ne suivrait : refusée, que la session tourne ici ou non ; l'abandon reste possible
+			const sansReprise = motifSansReprise(s);
+			if (sansReprise !== null) throw new ErreurRepriseImpossible(`Pause impossible : ${sansReprise} ; abandonne-la à la place.`);
 			if (!vivants.has(id)) {
 				// rien à arrêter ici (mode dégradé, processus fini) : la session n'est plus relancée au démarrage
-				if (s.etat === 'en_pause') return s;
 				if (s.pid !== null && (await pil.hote.processus(s.pid, marqueDe(s))) === 'session') return s;
 				return modifier(id, { etat: 'en_pause' });
 			}
-			// une pause qu'aucune reprise ne suivrait : refusée, l'abandon reste possible
-			const sansReprise = vivants.get(id)!.moteur.motifSansReprise(s);
-			if (sansReprise !== null) throw new ErreurRepriseImpossible(`Pause impossible : ${sansReprise} ; abandonne-la à la place.`);
 			await modifier(id, { arretAttendu: 'pause' });
 			await arreterSession(id);
 			return pil.etat.lire(id);
@@ -889,9 +896,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			return vivants.has(id);
 		},
 
-		motifSansReprise(s) {
-			return moteurDe(s)?.moteur.motifSansReprise(s) ?? null;
-		},
+		motifSansReprise,
 
 		taper(id, ligne) {
 			if (arrete) return Promise.resolve();

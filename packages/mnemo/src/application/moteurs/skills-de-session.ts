@@ -26,14 +26,22 @@ async function skillsDuDossier(dep: Dependances, dossier: string, garder: (nom: 
 
 /**
  * Skills d'une session, quel que soit le moteur : celles du profil (`profils/<nom>/skills/`, ses skills par défaut
- * manquantes d'abord déposées, un commit), puis celles de `_mnemo/skills/` retenues par `skillsMemoire` et par leur champ
- * `projets` ; à nom égal, celle du profil gagne.
+ * manquantes d'abord déposées, un commit), puis celles de `_mnemo/skills/` retenues (`skillsRetenues`).
  */
 export async function skillsDeSession(dep: Dependances, session: Pick<Session, 'projet'>, profil: Pick<Profil, 'nom' | 'skillsMemoire'>): Promise<SkillDeSession[]> {
 	await deposerSkillsParDefaut(dep, profil.nom);
+	return skillsRetenues(dep, session.projet, profil);
+}
+
+/**
+ * Skills retenues, sans rien écrire (aussi pour l'aperçu du profil) : celles du profil, puis celles de `_mnemo/skills/`
+ * retenues par `skillsMemoire` et par leur champ `projets` (`projet` absent : ce filtre n'est pas appliqué) ; à nom égal,
+ * celle du profil gagne.
+ */
+export async function skillsRetenues(dep: Dependances, projet: string | undefined, profil: Pick<Profil, 'nom' | 'skillsMemoire'>): Promise<SkillDeSession[]> {
 	const duProfil = await skillsDuDossier(dep, dossierSkillsDuProfil(profil.nom), () => true);
 	const noms = new Set(duProfil.map((s) => s.nom));
 	const retenue = (nom: string) => profil.skillsMemoire === 'tous' || profil.skillsMemoire.includes(nom);
-	const deLaMemoire = await skillsDuDossier(dep, DOSSIERS_FIXES.skills, (nom, texte) => !noms.has(nom) && retenue(nom) && skillPourProjet(texte, session.projet));
+	const deLaMemoire = await skillsDuDossier(dep, DOSSIERS_FIXES.skills, (nom, texte) => !noms.has(nom) && retenue(nom) && (projet === undefined || skillPourProjet(texte, projet)));
 	return [...duProfil, ...deLaMemoire];
 }

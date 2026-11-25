@@ -6,7 +6,7 @@ import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
 import { MOTEURS_DU_POSTE } from '../../infra/moteurs/moteurs.ts';
 import { nodeDurable } from '../../infra/node-durable.ts';
 import { ErreurCli } from './erreurs.ts';
-import { executeurReel } from './executeur.ts';
+import { executeurReel } from '../../infra/executeur.ts';
 
 const USAGE = `Usage : mnemo declarer (--remplacer | --retirer) [--moteur <${IDS_MOTEURS.join(' | ')}>] [--json]
   --remplacer : remet la déclaration MCP de Mnemo au moteur (portée utilisateur) sur ce Node et ce Mnemo, si elle existe

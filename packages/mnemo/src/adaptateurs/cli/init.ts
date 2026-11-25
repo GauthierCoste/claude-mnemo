@@ -20,7 +20,7 @@ import type { Piece } from '../../infra/modeles/catalogue.ts';
 import { dependancesReelles } from '../../infra/systeme.ts';
 import { nodeDurable } from '../../infra/node-durable.ts';
 import { ErreurCli } from './erreurs.ts';
-import { executeurReel } from './executeur.ts';
+import { executeurReel } from '../../infra/executeur.ts';
 import { journalInit } from './init-journal.ts';
 import { lireOptionsInit } from './init-options.ts';
 import type { ChoixExplicite } from './init-options.ts';

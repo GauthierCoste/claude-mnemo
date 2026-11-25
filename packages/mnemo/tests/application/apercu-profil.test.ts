@@ -39,4 +39,15 @@ describe('aperçu du profil selon son moteur', () => {
 		expect(blocs.some((b) => b.origine === 'plugin')).toBe(false);
 		expect(blocs.find((b) => b.origine === 'hors_mnemo')?.elements?.map((e) => e.nom)).toEqual(['AGENTS.md', 'Skills de Codex']);
 	});
+
+	it('Codex : la liste de la consigne vient de la même source que la session (champ projets appliqué avec un projet), sans rien écrire', async () => {
+		const dep = fauxPorts();
+		await dep.coffre.ecrire('skills/devis/SKILL.md', '---\nname: devis\ndescription: Rédiger un devis.\nprojets: [alpha]\n---\n# Devis\n');
+		await enregistrerProfil(dep, 'redaction', { ...EDITABLE, moteur: 'codex' }, null);
+		const avant = await dep.coffre.lire('profils/redaction/redaction.md');
+		expect((await apercuProfil(dep, 'redaction', 'alpha')).blocs[0]?.texte).toContain('- devis : ');
+		expect((await apercuProfil(dep, 'redaction', 'beta')).blocs[0]?.texte).not.toContain('- devis : ');
+		expect((await apercuProfil(dep, 'redaction')).blocs[0]?.texte).toContain('- devis : ');
+		expect(await dep.coffre.lire('profils/redaction/redaction.md')).toBe(avant);
+	});
 });

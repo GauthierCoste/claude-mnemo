@@ -6,7 +6,7 @@ import { MOTEUR_CODEX } from '../../infra/moteurs/codex.ts';
 import { versionCodex } from '../../infra/moteurs/codex/version.ts';
 import { nodeDurable } from '../../infra/node-durable.ts';
 import { ErreurCli } from './erreurs.ts';
-import { executeurReel } from './executeur.ts';
+import { executeurReel } from '../../infra/executeur.ts';
 
 const USAGE = 'Usage : mnemo verifier-poste [--json]';
 const DELAI_GIT_MS = 10_000;

@@ -1,11 +1,14 @@
 import { execFile } from 'node:child_process';
-import type { CommandeMoteur, Executer } from '../../../application/ports.ts';
+import type { Executer, MoteurDuPoste } from '../../../application/ports.ts';
 import { environnementPermisCodex } from '../../../application/moteurs/codex/session.ts';
 import { versionDeCodex } from '../../../domaine/moteurs/codex/version.ts';
+import { avecDelaiGaranti, MARGE_DELAI_MS } from '../../delai-garanti.ts';
 
 /** Délai de `codex --version`. */
 export const DELAI_VERSION_MS = 5000;
+/** Une version lue sert ce temps ; illisible (échec, délai), moins longtemps : Codex peut être installé ou réparé entre-temps. */
 const GARDE_MS = 10 * 60_000;
+const GARDE_ECHEC_MS = 60_000;
 
 /** Exécuteur minimal (sans shell) : code et sorties ; rejette si le programme ne se lance pas ou dépasse le délai. */
 const executerSansShell: Executer = (commande, args, options = {}) =>
@@ -18,20 +21,28 @@ const executerSansShell: Executer = (commande, args, options = {}) =>
 		enfant.stdin?.end();
 	});
 
+type EnCache = { jusquaMs: number; version: Promise<string | null> };
+
 /**
- * Version de Codex lue par `codex --version` (sous `DELAI_VERSION_MS`, l'environnement des sessions), gardée en cache par
- * commande ; null : illisible, en échec ou trop lente (rien n'est alors empêché). `maintenant` : tests.
+ * Version de Codex lue par `codex --version` (sous `DELAI_VERSION_MS`, garanti par un minuteur, l'environnement des
+ * sessions), gardée en cache par commande ; null : illisible, en échec ou trop lente (rien n'est alors empêché), gardé
+ * une minute seulement. `relire` : sans le cache (Réglages › Système, « Relire »). `maintenant` : tests.
  */
-export function versionCodex(maintenant: () => number = Date.now): (commande: CommandeMoteur, env: Record<string, string | undefined>, executer?: Executer) => Promise<string | null> {
-	const cache = new Map<string, { jusquaMs: number; version: Promise<string | null> }>();
-	return (commande, env, executer = executerSansShell) => {
+export function versionCodex(maintenant: () => number = Date.now): NonNullable<MoteurDuPoste['version']> {
+	const cache = new Map<string, EnCache>();
+	return (commande, env, executer = executerSansShell, options = {}) => {
 		const cle = JSON.stringify([commande.commande, commande.avant]);
 		const garde = cache.get(cle);
-		if (garde !== undefined && garde.jusquaMs > maintenant()) return garde.version;
-		const version = executer(commande.commande, [...commande.avant, '--version'], { env: environnementPermisCodex(env), delaiMs: DELAI_VERSION_MS })
+		if (options.relire !== true && garde !== undefined && garde.jusquaMs > maintenant()) return garde.version;
+		const entree: EnCache = { jusquaMs: maintenant() + GARDE_MS, version: Promise.resolve(null) };
+		const lue = executer(commande.commande, [...commande.avant, '--version'], { env: environnementPermisCodex(env), delaiMs: DELAI_VERSION_MS })
 			.then((r) => (r.code === 0 ? versionDeCodex(r.sortie) : null))
 			.catch(() => null);
-		cache.set(cle, { jusquaMs: maintenant() + GARDE_MS, version });
-		return version;
+		entree.version = avecDelaiGaranti(lue, DELAI_VERSION_MS + MARGE_DELAI_MS, null).then((version) => {
+			if (version === null) entree.jusquaMs = Math.min(entree.jusquaMs, maintenant() + GARDE_ECHEC_MS);
+			return version;
+		});
+		cache.set(cle, entree);
+		return entree.version;
 	};
 }
