@@ -213,11 +213,12 @@ const ETAT_INERTE: EtatSessions = {
  * attente bornée ; occupé au-delà, l'événement ne change pas l'état, et la première opération en échec coupe les suivantes.
  */
 async function traiterIci(racine: string, entree: EntreeHook, temps: { debutMs: number; echeance: number }): Promise<ReponseHook> {
-	const [{ dependancesReelles, preparerDossierLocal }, { ouvrirEtat }, { MARGE_SORTIE_MS, traiterEvenement }, { depotGit }] = await Promise.all([
+	const [{ dependancesReelles, preparerDossierLocal }, { ouvrirEtat }, { MARGE_SORTIE_MS, traiterEvenement }, { depotGit }, { dependancesDeSession }] = await Promise.all([
 		import('../../infra/systeme.ts'),
 		import('../../infra/etat-sqlite.ts'),
 		import('../../application/evenements.ts'),
 		import('../../infra/depot-git.ts'),
+		import('../../application/modeles-de-session.ts'),
 	]);
 	let etat: EtatSessions = ETAT_INERTE;
 	try {
@@ -229,8 +230,11 @@ async function traiterIci(racine: string, entree: EntreeHook, temps: { debutMs: 
 	const indexEnLecture = entree.evenement === 'outil' ? { indexEnLecture: { finMs: temps.echeance - MARGE_SORTIE_MS } } : {};
 	const dep = dependancesReelles(racine, { attenteVerrou: ATTENTE_VERROU_FIN, ...indexEnLecture });
 	const depot = depotGit(racine, { delaiMs: DELAI_GIT_FIN_MS });
+	const etatDuHook = uneFois(etat);
+	// les modèles de la session bornés par son niveau, relu à chaque appel (état en panne : ceux de la machine)
+	const depDuHook = entree.session === '' ? dep : dependancesDeSession(dep, etatDuHook, entree.session);
 	try {
-		return await traiterEvenement(dep, { etat: uneFois(etat), depot }, entree, { froid: 'si-budget', racine, sansCasse: SANS_CASSE, delaiGitMs: DELAI_GIT_FIN_MS, ...temps });
+		return await traiterEvenement(depDuHook, { etat: etatDuHook, depot }, entree, { froid: 'si-budget', racine, sansCasse: SANS_CASSE, delaiGitMs: DELAI_GIT_FIN_MS, ...temps });
 	} finally {
 		// git du dépôt de la session (lecture seule) encore en cours à l'échéance : tué, rien ne survit au hook
 		depot.arreter();

@@ -1,4 +1,5 @@
 import { OBJECTIF_MAX, PROFIL_ARCHIVISTE } from '@mnemo/commun';
+import type { NiveauModeles } from '@mnemo/commun';
 import { validerDossier } from './dossiers.ts';
 import { dialogueOuvert, ETATS_RELANCES, objectifDe } from '../domaine/session.ts';
 import type { Session } from '../domaine/session.ts';
@@ -56,6 +57,12 @@ export type Pilote = {
 	 * écrit) ; null si elle est inconnue ou terminée.
 	 */
 	ligneDeReprise(id: string, consigne?: string): Promise<string | null>;
+	/**
+	 * Niveau des modèles propre à la session (null : le retirer, elle suit celui de la machine). Ses outils MCP et ses hooks le
+	 * relisent à chaque appel : il vaut aussitôt, sans relancer la session, et il est gardé à la reprise. Rend la session
+	 * (null si elle est inconnue) ; les écouteurs (`surChangement`) l'apprennent.
+	 */
+	niveauModeles(id: string, niveau: NiveauModeles | null): Promise<Session | null>;
 };
 
 const COLONNES = 120;
@@ -732,6 +739,10 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			const s = await pil.etat.lire(id);
 			if (s === null || s.etat === 'terminee') return null;
 			return (await preparer(s, 'reprise', consigne)).manuel().manuel;
+		},
+
+		niveauModeles(id, niveau) {
+			return modifier(id, { niveauModeles: niveau });
 		},
 
 		terminer(id, options) {

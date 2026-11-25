@@ -14,6 +14,7 @@ import { ecrirePlugin } from '../../src/infra/claude.ts';
 import { appeler, jusqua, serviceFaux } from '../aides/service-faux.ts';
 import { traiterEvenement } from '../../src/application/evenements.ts';
 import { DEPOT_ABSENT } from '../aides/faux-ports.ts';
+import { fauxSens } from '../aides/faux-sens.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import type { ContexteService } from '../aides/service-faux.ts';
 
@@ -329,6 +330,23 @@ describe('routes : hook', () => {
 		expect(r.corps).toEqual(expect.any(Object));
 		const s = await c.etat.lire(UUID);
 		expect(s).toMatchObject({ etat: 'travaille', objectif: 'Où en est Alpha ?' });
+	});
+
+	it('POST hook message : les modèles suivent le niveau de la session, relu à chaque hook (coupés : aucun appel au sens)', async () => {
+		const c = await serviceFaux();
+		const sens = fauxSens();
+		c.dep.sens = sens;
+		await c.dep.coffre.ecrire('projets/alpha/inventaire.md', `---\nid: 01ABD\ntype: sujet\nupdated: 2026-11-01\n---\n# Inventaire Alpha\n\nL'inventaire d'Alpha est fait chaque mois.\n`);
+		await c.etat.creer(sessionFixe(UUID));
+		const entree = { evenement: 'message' as const, session: UUID, cwd: join(c.racine, 'alpha'), prompt: 'Vérifie l’inventaire mensuel des machines du projet Alpha.' };
+		// sans niveau propre : le sens est appelé pour le message
+		expect((await api(c).post(ROUTES.hook, { ...entree, horodatageMs: Date.now() })).statut).toBe(200);
+		expect(sens.appels).toHaveLength(1);
+		// coupés pour la session, en cours de route : plus aucun appel, le contexte est servi par les mots
+		await c.etat.modifier(UUID, { niveauModeles: 'coupes' });
+		const r = await api(c).post(ROUTES.hook, { ...entree, horodatageMs: Date.now() + 1 });
+		expect(r.statut).toBe(200);
+		expect(sens.appels).toHaveLength(1);
 	});
 
 	it('POST hook message : réponse qui n’arriverait pas avant l’échéance du hook → aucune fiche notée servie ; le calcul local du hook les sert', async () => {

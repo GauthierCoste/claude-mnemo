@@ -439,6 +439,21 @@ describe('Pilote : pause et reprise', () => {
 		expect(c.pilote.enCours(s.id)).toBe(true);
 	});
 
+	it('niveauModeles : noté, signalé, gardé à la pause et à la reprise ; null le retire', async () => {
+		const c = await contexte();
+		const s = await lancee(c, { profil: 'travail', dossier: 'alpha' });
+		expect(s.niveauModeles).toBeUndefined();
+		const vus: Session[] = [];
+		c.pilote.surChangement((x) => vus.push(x));
+		expect(await c.pilote.niveauModeles(s.id, 'sens')).toMatchObject({ niveauModeles: 'sens' });
+		expect(vus.at(-1)).toMatchObject({ id: s.id, niveauModeles: 'sens' });
+		await c.pilote.pause(s.id);
+		expect(await c.pilote.reprendre(s.id)).toMatchObject({ etat: 'attend', niveauModeles: 'sens' });
+		const retire = await c.pilote.niveauModeles(s.id, null);
+		expect(retire).not.toHaveProperty('niveauModeles');
+		expect(await c.pilote.niveauModeles('inconnue', 'coupes')).toBeNull();
+	});
+
 	it('deux reprendre en même temps → un seul terminal ; reprendre une session qui tourne → rien', async () => {
 		const c = await contexte();
 		const s = await lancee(c, { profil: 'travail', dossier: 'alpha' });

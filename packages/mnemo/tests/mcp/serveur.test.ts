@@ -3,6 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { NiveauModeles } from '@mnemo/commun';
 import { avertissementIndex } from '../../src/application/synchroniser.ts';
 import { borner, NOMS_OUTILS } from '../../src/adaptateurs/mcp/outils.ts';
 import { extractionDifferee } from '../../src/application/extraction-differee.ts';
@@ -21,6 +22,7 @@ import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 const VERSION_ESSAI = vi.hoisted(() => '9.9.9-essai');
 vi.mock('../../src/infra/version.ts', () => ({ versionMnemo: () => VERSION_ESSAI }));
 import { fauxPorts } from '../aides/faux-ports.ts';
+import { fauxSens } from '../aides/faux-sens.ts';
 
 const RACINE = resolve('/coffre-test');
 const FICHE_PROPOSABLE = 'projets/alpha/inventaire.md';
@@ -377,6 +379,31 @@ describe('serveur mnemo mcp', () => {
 		const sansCarte = await appeler(client, 'contexte', { question: 'zzzxqv' });
 		expect(sansCarte.texte).toContain('Facture Alpha en euros.');
 		expect(sansCarte.texte.endsWith('Aucune piste pour cette question.')).toBe(true);
+	});
+
+	it('session lancée par Mnemo : ses modèles suivent son niveau, relu à chaque appel (coupés : aucun appel au sens ni au reranker)', async () => {
+		const dep = await memoire();
+		const sens = fauxSens();
+		const notes: string[] = [];
+		dep.sens = sens;
+		dep.reranker = { noter: async (requete, textes) => (notes.push(requete), textes.map(() => 0.5)) };
+		let niveau: NiveauModeles | undefined = 'coupes';
+		dep.sessions = {
+			fichesServiesLuesOuEcrites: async () => [],
+			noterFicheServieLueOuEcrite: async () => {},
+			noterCarteProposee: async () => {},
+			journaliser: async () => {},
+			injectionsManuelles: async () => [],
+			lire: async (id) => ({ id, profil: 'travail', dossier: 'h1', position: '', projet: 'divers', objectif: null, etat: 'travaille', creeeMs: 1, majMs: 1, arretAttendu: null, bilanDemandeMs: null, commitDebut: null, branche: null, pid: null, ...(niveau === undefined ? {} : { niveauModeles: niveau }) }),
+		};
+		const client = await connecter({ racineDossier: RACINE, dossierProjet: resolve(RACINE, 'h1'), dep, origine: { session: 's1', projet: 'divers' } });
+		expect((await appeler(client, 'chercher', { requete: 'inventaire' })).texte).toContain('inventaire');
+		expect(sens.appels.filter((a) => a.textes.includes('inventaire'))).toEqual([]);
+		expect(notes).toEqual([]);
+		// la session suit de nouveau la machine : le sens est appelé pour la requête
+		niveau = undefined;
+		await appeler(client, 'chercher', { requete: 'inventaire' });
+		expect(sens.appels.filter((a) => a.textes.includes('inventaire'))).not.toEqual([]);
 	});
 
 	it('session lancée par Mnemo : chaque carte rendue par contexte est notée proposée', async () => {

@@ -24,8 +24,14 @@ async function ouvrir(): Promise<{ etat: EtatSessions; chemin: string; dossier: 
 	return { etat, chemin, dossier };
 }
 
+/** Retire ce que la version 12 a ajouté (niveau des modèles d'une session). */
+function sansVersion12(base: DatabaseSync): void {
+	base.exec('ALTER TABLE sessions DROP COLUMN niveau_modeles');
+}
+
 /** Retire ce que la version 10 a ajouté (injections à la main, compteur de messages porteurs). */
 function sansVersion10(base: DatabaseSync): void {
+	sansVersion12(base);
 	base.exec('DROP TABLE injections_manuelles');
 	base.exec('ALTER TABLE sessions DROP COLUMN messages_porteurs');
 }
@@ -617,6 +623,51 @@ describe('etat.sqlite', () => {
 		const verif = new DatabaseSync(chemin);
 		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
 		verif.close();
+	});
+
+	it('migration depuis la version 11 : sessions gardées, sans niveau des modèles (elles suivent la machine)', async () => {
+		const { etat, chemin } = await ouvrir();
+		await etat.creer(session('s1', { pid: 4 }));
+		etat.fermer();
+		ouverts.pop();
+		const base = new DatabaseSync(chemin);
+		sansVersion12(base);
+		base.exec('PRAGMA user_version = 11');
+		base.close();
+		const rouvert = ouvrirEtat(chemin);
+		ouverts.push(rouvert);
+		const lue = await rouvert.lire('s1');
+		expect(lue).toMatchObject({ pid: 4 });
+		expect(lue).not.toHaveProperty('niveauModeles');
+		expect(await rouvert.modifier('s1', { niveauModeles: 'coupes' })).toMatchObject({ niveauModeles: 'coupes' });
+		const verif = new DatabaseSync(chemin);
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
+		verif.close();
+	});
+
+	it('niveau des modèles d’une session : absent à la création, posé, gardé à la réouverture, retiré par null ; invalide ignoré', async () => {
+		const { etat, chemin } = await ouvrir();
+		await etat.creer(session('s1'));
+		await etat.creer(session('s2', { niveauModeles: 'sens' }));
+		expect(await etat.lire('s1')).not.toHaveProperty('niveauModeles');
+		expect(await etat.lire('s2')).toMatchObject({ niveauModeles: 'sens' });
+		expect(await etat.modifier('s1', { niveauModeles: 'coupes' })).toMatchObject({ niveauModeles: 'coupes' });
+		// une valeur qui n'est pas un niveau n'est pas écrite
+		expect(await etat.modifier('s1', { niveauModeles: 'aucun' as never })).toMatchObject({ niveauModeles: 'coupes' });
+		// une session terminée peut encore en changer (le champ n'est pas son état)
+		await etat.modifier('s2', { etat: 'terminee' });
+		expect(await etat.modifier('s2', { niveauModeles: 'complets' })).toMatchObject({ niveauModeles: 'complets' });
+		etat.fermer();
+		ouverts.pop();
+		// écrit à la main hors des niveaux : ignoré à la lecture
+		const base = new DatabaseSync(chemin);
+		base.prepare("UPDATE sessions SET niveau_modeles = 'bizarre' WHERE id = 's2'").run();
+		base.close();
+		const rouvert = ouvrirEtat(chemin);
+		ouverts.push(rouvert);
+		expect(await rouvert.lire('s1')).toMatchObject({ niveauModeles: 'coupes' });
+		expect(await rouvert.lire('s2')).not.toHaveProperty('niveauModeles');
+		expect(await rouvert.modifier('s1', { niveauModeles: null })).not.toHaveProperty('niveauModeles');
 	});
 
 	it('fiches de travail : ignorées pour une session inconnue, retirées avec la session', async () => {

@@ -1,3 +1,5 @@
+import type { NiveauModeles } from '@mnemo/commun';
+
 export type EtatSession = 'travaille' | 'attend' | 'a_relire' | 'en_pause' | 'terminee';
 export type EvenementHook = 'debut' | 'message' | 'outil' | 'apres_outil' | 'arret' | 'fin';
 /** Origine d'un `SessionStart` (champ `source` de Claude Code). */
@@ -45,6 +47,11 @@ export type Session = {
 	episodeMs?: number | null;
 	/** Vrai si aucune fiche ne couvre le dossier de la session (`dossier_projet`) : sa position est alors la racine. */
 	dossierNonRattache?: boolean;
+	/**
+	 * Niveau des modèles propre à la session ; absent, elle suit celui de la machine. Elle a le plus restrictif des deux
+	 * (`niveauEffectif`). Gardé à la reprise.
+	 */
+	niveauModeles?: NiveauModeles;
 };
 
 /** Un dialogue de Claude Code (permission) attend peut-être l'utilisateur : la dernière chose vue est une `Notification`. */

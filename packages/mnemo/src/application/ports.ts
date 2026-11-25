@@ -1,4 +1,4 @@
-import type { RaisonCarte } from '@mnemo/commun';
+import type { NiveauModeles, RaisonCarte } from '@mnemo/commun';
 import type { RaisonMuet } from '../domaine/message-muet.ts';
 import type { CauseArret, EvenementHook, Session } from '../domaine/session.ts';
 import type { ElementIndexe, GenreElement, Lien, StatutElement } from '../domaine/elements.ts';
@@ -576,7 +576,10 @@ export interface EtatSessions {
 		horodatageMs: number,
 		complement?: { objectif?: string; commitDebut?: string | null; branche?: string | null; arret?: CauseArret },
 	): Promise<Session | null>;
-	/** Une session `terminee` garde son `etat` et son `arretAttendu` (les autres champs restent modifiables). */
+	/**
+	 * Une session `terminee` garde son `etat` et son `arretAttendu` (les autres champs restent modifiables). `niveauModeles` :
+	 * null le retire (la session suit le niveau de la machine) ; une valeur qui n'est pas un niveau est ignorée.
+	 */
 	modifier(
 		id: string,
 		champs: Partial<
@@ -584,7 +587,7 @@ export interface EtatSessions {
 				Session,
 				'etat' | 'arretAttendu' | 'pid' | 'bilanDemandeMs' | 'bilanLuMs' | 'commitDebut' | 'branche' | 'demarrageMachineMs' | 'lanceMs' | 'vuVivantMs' | 'episodeMs' | 'position' | 'projet' | 'dossierNonRattache'
 			>
-		>,
+		> & { niveauModeles?: NiveauModeles | null },
 	): Promise<Session | null>;
 	/** Battement : `vuVivantMs` de ces sessions, en une écriture courte ; ne compte pas comme une modification (`derniereModificationMs`). */
 	battre(ids: string[], vuVivantMs: number): Promise<void>;

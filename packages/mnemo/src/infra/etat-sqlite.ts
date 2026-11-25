@@ -1,5 +1,6 @@
 import { closeSync, openSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { estNiveauModeles } from '@mnemo/commun';
 import type { ActionSurFiche, Classe, EntreeServie, EtatSessions, Lots } from '../application/ports.ts';
 import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
 import type { RaisonMuet } from '../domaine/message-muet.ts';
@@ -7,7 +8,7 @@ import { etatApres } from '../domaine/session.ts';
 import type { ArretAttendu, CauseArret, EtatSession, EvenementHook, Session } from '../domaine/session.ts';
 
 /** Version du schéma (`PRAGMA user_version`). L'état n'est pas jetable : une autre version est une erreur, jamais un effacement. */
-export const VERSION_ETAT = 11;
+export const VERSION_ETAT = 12;
 /** Migration 3 → 4 : les sessions terminées depuis plus longtemps n'entrent plus dans le rattrapage des épisodes. */
 const RATTRAPAGE_MAX_MS = 7 * 86_400_000;
 const ATTENTE_VERROU_MS = 2000;
@@ -132,7 +133,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 	episode_ms INTEGER,
 	dossier_non_rattache INTEGER NOT NULL DEFAULT 0,
 	perimetre_propose_ms INTEGER,
-	messages_porteurs INTEGER NOT NULL DEFAULT 0
+	messages_porteurs INTEGER NOT NULL DEFAULT 0,
+	niveau_modeles TEXT
 );
 CREATE TABLE IF NOT EXISTS servis (
 	rang INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -221,6 +223,8 @@ function ligneVersSession(l: Ligne): Session {
 		dernierArret: (l.dernier_arret as CauseArret | null) ?? null,
 		episodeMs: (l.episode_ms as number | null) ?? null,
 		dossierNonRattache: l.dossier_non_rattache === 1,
+		// une valeur qui n'est pas un niveau est ignorée : la session suit le niveau de la machine
+		...(estNiveauModeles(l.niveau_modeles) ? { niveauModeles: l.niveau_modeles } : {}),
 	};
 }
 
@@ -279,7 +283,7 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				// versions précédentes : la trace du processus (1 → 2), le bilan lu (2 → 3), le dernier arrêt et l'épisode écrit
 				// (3 → 4), la demande et le classement des entrées servies et les écartés (4 → 5), le dossier non rattaché
 				// (5 → 6), les fiches servies, lues ou écrites par chaque session (6 → 7), les cartes proposées, le journal des actions et le journal servi enrichi (7 → 8), l'empreinte lue des fiches (8 → 9), les injections à la main et le
-				// compteur de messages porteurs (9 → 10), les lots d'informations (10 → 11) s'ajoutent, rien n'est perdu
+				// compteur de messages porteurs (9 → 10), les lots d'informations (10 → 11), le niveau des modèles d'une session (11 → 12) s'ajoutent, rien n'est perdu
 				if (version === 1) for (const colonne of ['demarrage_machine_ms', 'lance_ms', 'vu_vivant_ms']) base.exec(`ALTER TABLE sessions ADD COLUMN ${colonne} INTEGER`);
 				if (version <= 2) base.exec('ALTER TABLE sessions ADD COLUMN bilan_lu_ms INTEGER');
 				if (version <= 3) {
@@ -313,6 +317,9 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 					base.exec(SCHEMA_INJECTIONS_MANUELLES);
 				}
 				base.exec(SCHEMA_LOTS);
+				// 11 → 12 : le niveau des modèles propre à une session (absent : elle suit celui de la machine)
+				const colonnesSessions = (base.prepare('PRAGMA table_info(sessions)').all() as Ligne[]).map((c) => c.name);
+				if (!colonnesSessions.includes('niveau_modeles')) base.exec('ALTER TABLE sessions ADD COLUMN niveau_modeles TEXT');
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
 			} else if (version !== VERSION_ETAT) {
 				throw new ErreurEtat(
@@ -434,8 +441,8 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 					.prepare(
 						`INSERT INTO sessions (id, profil, dossier, position, projet, objectif, etat, creee_ms, maj_ms, arret_attendu,
 							bilan_demande_ms, commit_debut, branche, pid, ecrit_ms, demarrage_machine_ms, lance_ms, vu_vivant_ms, bilan_lu_ms, dernier_arret, episode_ms,
-							dossier_non_rattache)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+							dossier_non_rattache, niveau_modeles)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					)
 					.run(
 						s.id,
@@ -460,6 +467,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 						s.dernierArret ?? null,
 						s.episodeMs ?? null,
 						s.dossierNonRattache === true ? 1 : 0,
+						estNiveauModeles(s.niveauModeles) ? s.niveauModeles : null,
 					);
 			});
 		},
@@ -517,7 +525,10 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 					position: 'position',
 					projet: 'projet',
 					dossierNonRattache: 'dossier_non_rattache',
+					niveauModeles: 'niveau_modeles',
 				};
+				// un niveau des modèles invalide est ignoré (null : retiré, la session suit le niveau de la machine)
+				if (champs.niveauModeles !== undefined && champs.niveauModeles !== null && !estNiveauModeles(champs.niveauModeles)) delete colonnes.niveauModeles;
 				// une session terminée ne bouge plus : ni son état, ni la raison de son arrêt
 				if (actuelle.etat === 'terminee') {
 					delete colonnes.etat;

@@ -2,6 +2,7 @@ import { isAbsolute, relative, sep } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { PROFIL_TRAVAIL, PROJET_PAR_DEFAUT } from '@mnemo/commun';
 import { extractionDifferee } from '../../application/extraction-differee.ts';
+import { modelesDeSession, niveauPropreDe } from '../../application/modeles-de-session.ts';
 import { positionDuProjet } from '../../application/position.ts';
 import type { Position } from '../../application/position.ts';
 import type { Dependances } from '../../application/ports.ts';
@@ -55,8 +56,8 @@ async function instructionsHorsSession(dep: Dependances, position: Position): Pr
  * instructions calculées ici, une fois (statiques pour la session : une consigne ajoutée en cours de session est servie
  * par `contexte` et par les hooks, pas par les instructions). Rien ne doit empêcher le démarrage : position et
  * instructions ont un repli. L'index des dépendances créées ici est fermé à la fermeture du serveur.
- * `origine` (session lancée par Mnemo) : instructions réduites à une ligne, les écritures portent la session et son projet, et
- * l'état des sessions est lu (en lecture seule) pour l'épisode de la session.
+ * `origine` (session lancée par Mnemo) : instructions réduites à une ligne, les écritures portent la session et son projet,
+ * l'état des sessions est lu (en lecture seule) pour l'épisode de la session, et les modèles suivent le niveau de la session.
  */
 export async function creerServeur(options: {
 	racineDossier: string | null;
@@ -76,6 +77,12 @@ export async function creerServeur(options: {
 	const etat = origine !== null && dep.sessions === undefined ? etatParesseux(racineDossier) : null;
 	if (origine !== null) dep.origine = origine;
 	if (etat !== null) dep.sessions = etat;
+	// ses modèles bornés par le niveau propre de la session, relu à chaque appel (changé en cours de session : vaut aussitôt)
+	if (origine !== null && dep.sessions !== undefined) {
+		const { sens, reranker } = modelesDeSession(dep, niveauPropreDe(dep.sessions, origine.session));
+		dep.sens = sens;
+		dep.reranker = reranker;
+	}
 	let position: Position = { chemin: '' };
 	try {
 		position = { chemin: (await positionDuProjet(dep, relatifDuProjet(racineDossier, dossierProjet))).chemin };

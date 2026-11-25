@@ -14,6 +14,7 @@ import { deplacer, destinationDuDeplacement } from '../../application/deplacer.t
 import { BORNES_DOCUMENTS, documentsDeLaMemoire, SANS_BORNE } from '../../application/documents.ts';
 import { ecarterDuClassement } from '../../application/ecarter.ts';
 import { traiterEvenement } from '../../application/evenements.ts';
+import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
 import { fenetreDeTranscription } from '../../infra/fenetre-transcription.ts';
 import type { EntreeHook } from '../../application/evenements.ts';
@@ -543,7 +544,9 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const entree = entreeHook(brut);
 				const echeance = echeanceDuHook(brut, entree.evenement);
 				const transcription = transcriptionDuHook(brut);
-				const reponse = await traiterEvenement(dep, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, rattachee: (id) => pilote.reecrirePlugin(id) });
+				// les modèles de la session bornés par son niveau (relu à chaque appel)
+				const depDuHook = entree.session === '' ? dep : dependancesDeSession(dep, pil.etat, entree.session);
+				const reponse = await traiterEvenement(depDuHook, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, rattachee: (id) => pilote.reecrirePlugin(id) });
 				if (entree.session !== '' && transcription !== undefined && (entree.evenement === 'message' || entree.evenement === 'apres_outil' || entree.evenement === 'arret' || entree.evenement === 'debut')) {
 					// hors du chemin du hook : sa réponse n'attend pas la lecture
 					void relireFenetre(entree.session, transcription, entree.cwd).catch(() => {});
