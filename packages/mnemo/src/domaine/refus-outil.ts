@@ -6,7 +6,7 @@ import { messageDErreur } from './texte.ts';
 export const ENTREE_HOOK_MAX_OCTETS = 1024 * 1024;
 
 /** Pourquoi une action d'outil n'a pas pu être vérifiée contre les consignes vérifiées (refus, ou accord selon `selonIndicateur`). */
-export const CAUSES_NON_VERIFIEE = ['entree_trop_grosse', 'entree_illisible', 'chemin_trop_long', 'commande_trop_longue', 'consigne_illisible', 'delai_depasse', 'erreur_interne'] as const;
+export const CAUSES_NON_VERIFIEE = ['entree_trop_grosse', 'entree_illisible', 'chemin_trop_long', 'commande_trop_longue', 'commande_illisible', 'consigne_illisible', 'delai_depasse', 'erreur_interne'] as const;
 export type CauseNonVerifiee = (typeof CAUSES_NON_VERIFIEE)[number];
 
 export const estCauseNonVerifiee = (valeur: unknown): valeur is CauseNonVerifiee => (CAUSES_NON_VERIFIEE as readonly unknown[]).includes(valeur);
@@ -17,6 +17,7 @@ const LIBELLES: Record<CauseNonVerifiee, { raison: string; suite: string }> = {
 	entree_illisible: { raison: 'son entrée n\'est pas un JSON lisible qui nomme l\'outil', suite: 'Réessaie-la ou demande à l\'utilisateur.' },
 	chemin_trop_long: { raison: `un chemin dépasse ${LONGUEUR_MAX_CHEMIN} caractères`, suite: 'Utilise un chemin plus court.' },
 	commande_trop_longue: { raison: `la commande dépasse ${LONGUEUR_MAX_COMMANDE} caractères`, suite: 'Découpe-la en commandes plus courtes.' },
+	commande_illisible: { raison: 'elle envoie une saisie à un processus déjà lancé, que Mnemo ne peut pas comparer aux commandes interdites', suite: 'Lance plutôt la commande voulue avec l\'outil de commande.' },
 	consigne_illisible: { raison: 'une consigne vérifiée ne peut pas être appliquée', suite: 'Demande à l\'utilisateur de réparer cette consigne dans la mémoire.' },
 	delai_depasse: { raison: 'la vérification n\'a pas fini dans son délai', suite: 'Réessaie-la dans un instant.' },
 	erreur_interne: { raison: 'erreur interne', suite: 'Réessaie-la ou demande à l\'utilisateur.' },

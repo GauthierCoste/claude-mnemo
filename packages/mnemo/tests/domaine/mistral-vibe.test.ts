@@ -18,12 +18,19 @@ describe('outils de Mistral Vibe', () => {
 		expect(OUTILS_MISTRAL_VIBE.cheminsEcrits({ nom: 'file_system.edit', entree: { path: 'a.md' } })).toEqual(['a.md']);
 		expect(OUTILS_MISTRAL_VIBE.cheminsEcrits({ nom: 'file_system.write_file', entree: { file_path: 3 } })).toBe('illisible');
 		expect(OUTILS_MISTRAL_VIBE.cheminsEcrits({ nom: 'file_system.read_file', entree: { file_path: '/p/a' } })).toBeNull();
+		expect(OUTILS_MISTRAL_VIBE.cheminsEcrits({ nom: 'file_system.grep', entree: { path: '/p' } })).toBeNull();
+		// un outil de fichiers inconnu qui porte un chemin : une écriture (prudence) ; sans chemin : rien
+		expect(OUTILS_MISTRAL_VIBE.cheminsEcrits({ nom: 'file_system.move', entree: { path: '/p/b' } })).toEqual(['/p/b']);
+		expect(OUTILS_MISTRAL_VIBE.cheminsEcrits({ nom: 'file_system.delete', entree: { file_path: 4 } })).toBe('illisible');
+		expect(OUTILS_MISTRAL_VIBE.cheminsEcrits({ nom: 'file_system.status', entree: {} })).toBeNull();
+		expect(OUTILS_MISTRAL_VIBE.cheminsEcrits({ nom: 'process.write', entree: { path: '/p/a' } })).toBeNull();
 	});
 
 	it('commande : bash et process.start (command), un shell -c déplié ; autre outil : non concerné', () => {
 		expect(OUTILS_MISTRAL_VIBE.commande({ nom: 'file_system.bash', entree: { command: 'git push --force', timeout: 120 } })).toBe('git push --force');
 		expect(OUTILS_MISTRAL_VIBE.commande({ nom: 'process.start', entree: { command: ['/bin/bash', '-c', 'rm -rf x'] } })).toBe('rm -rf x');
 		expect(OUTILS_MISTRAL_VIBE.commande({ nom: 'file_system.bash', entree: {} })).toBe('');
+		expect(OUTILS_MISTRAL_VIBE.commande({ nom: 'process.write', entree: { process_id: 'p1', input: 'rm -rf x\n' } })).toEqual({ illisible: true });
 		expect(OUTILS_MISTRAL_VIBE.commande({ nom: 'mcp_mnemo.lire', entree: { id: 'x' } })).toBeNull();
 		expect(OUTILS_MISTRAL_VIBE.prefixeMcp).toBe('mcp_mnemo.');
 	});

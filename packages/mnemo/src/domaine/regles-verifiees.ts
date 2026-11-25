@@ -234,10 +234,10 @@ function decouperCommandes(ligne: string): string[] {
 	return commandes;
 }
 
-/** Commandes simples de l'entrée de l'outil de commande du moteur ; null pour un autre outil. */
-export function commandesDe(action: ActionOutil, outils: OutilsDuMoteur): string[] | null {
+/** Commandes simples de l'entrée de l'outil de commande du moteur ; null pour un autre outil ; `illisible` : elles ne se lisent pas. */
+export function commandesDe(action: ActionOutil, outils: OutilsDuMoteur): string[] | null | 'illisible' {
 	const commande = outils.commande(action);
-	return commande === null ? null : decouperCommandes(commande);
+	return commande === null ? null : typeof commande === 'string' ? decouperCommandes(commande) : 'illisible';
 }
 
 /**
@@ -417,9 +417,11 @@ function motifDeChemins(regle: Regle, action: ActionOutil, contexte: ContexteVer
 }
 
 function motifDeCommandes(regle: Regle, action: ActionOutil, outils: OutilsDuMoteur): Correspondance {
-	const commandes = commandesDe(action, outils);
-	if (commandes === null) return null;
-	if (outils.commande(action)!.length > LONGUEUR_MAX_COMMANDE) return { cause: 'commande_trop_longue' };
+	const commande = outils.commande(action);
+	if (commande === null) return null;
+	if (typeof commande !== 'string') return { cause: 'commande_illisible' };
+	if (commande.length > LONGUEUR_MAX_COMMANDE) return { cause: 'commande_trop_longue' };
+	const commandes = decouperCommandes(commande);
 	for (const commande of commandes) {
 		const formes = formesDeCommande(commande);
 		for (const motif of regle.motifs) {

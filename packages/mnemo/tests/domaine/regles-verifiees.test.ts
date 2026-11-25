@@ -5,6 +5,7 @@ import type { Regle } from '../../src/domaine/consigne.ts';
 import { TOLERANCE } from '../aides/charge.ts';
 import { OUTILS_CLAUDE_CODE as CC } from '../../src/domaine/moteurs/claude-code/outils.ts';
 import { OUTILS_CODEX } from '../../src/domaine/moteurs/codex/outils.ts';
+import { OUTILS_MISTRAL_VIBE } from '../../src/domaine/moteurs/mistral-vibe/outils.ts';
 
 const RACINE = '/home/u/dossier';
 const ecrire = (chemin: string, nom = 'Write'): ActionOutil => ({ nom, entree: { file_path: chemin, content: 'x' } });
@@ -372,5 +373,17 @@ describe('outils de Codex', () => {
 		expect(verifier([{ texte: 'Pas de .env.', regle: chemins }], { nom: 'apply_patch', entree: {} }, ctx)).toEqual({ refus: true, cause: 'entree_illisible', detail: null });
 		expect(verifier([{ texte: 'Pas de push forcé.', regle: commandes }], { nom: 'apply_patch', entree: {} }, ctx)).toEqual({ refus: false });
 		expect(verifier([{ texte: 'Pas de .env.', regle: chemins }], bash("apply_patch <<'EOF'\n*** Begin Patch\n*** Update File: .env\n*** End Patch\nEOF"), ctx)).toMatchObject({ refus: true, motif: '**/.env' });
+	});
+});
+
+describe('Mistral Vibe : saisie envoyée à un processus (process.write)', () => {
+	it('refusée par prudence s’il y a des commandes interdites (non comparable), permise sinon', () => {
+		const ctx = { racine: RACINE, cwd: RACINE, sansCasse: false, outils: OUTILS_MISTRAL_VIBE };
+		const saisie: ActionOutil = { nom: 'process.write', entree: { process_id: 'p1', input: 'git push --force\n' } };
+		const commandes: Regle = { type: 'commandes_interdites', motifs: ['git push --force'] };
+		const chemins: Regle = { type: 'chemins_interdits', motifs: ['.env'] };
+		expect(verifier([{ texte: 'pas de push forcé', regle: commandes }], saisie, ctx)).toEqual({ refus: true, cause: 'commande_illisible', detail: null });
+		expect(verifier([{ texte: 'pas de .env', regle: chemins }], saisie, ctx)).toEqual({ refus: false });
+		expect(commandesDe(saisie, OUTILS_MISTRAL_VIBE)).toBe('illisible');
 	});
 });
