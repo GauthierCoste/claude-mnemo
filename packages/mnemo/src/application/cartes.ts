@@ -102,6 +102,11 @@ export type DemandeCartes = {
 	 * (spec § 3.4), au message même. Jamais ailleurs : ni outil `contexte`, ni affinage, ni message muet.
 	 */
 	injecter?: boolean;
+	/**
+	 * Fiches injectées par Mnemo au message porteur précédent puis retirées faute de temps : notées à nouveau ; au seuil, injectées
+	 * en priorité (dans le plafond) ; sinon, au seuil des pistes, proposées en piste hors du quota ; dessous, oubliées.
+	 */
+	remises?: readonly string[];
 	/** Chemin → empreinte injectée (`null` : jamais injectée). */
 	dejaServies: ReadonlyMap<string, string | null>;
 	/** Chemin → empreinte de la fiche à sa lecture ou écriture (`null` : inconnue, la fiche compte comme vue quelle que soit sa version). */
@@ -513,12 +518,15 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		calibree = note.calibree;
 		// Injection automatique (spec § 3.4), au message même : les candidates qu'un modèle accepté met au seuil, non vues par la
 		// session, entières, au plus `injectionsParMessage` ; une fiche trop longue, ou qu'il n'est plus temps de lire, reste une piste.
+		const remises = new Set(d.remises ?? []);
 		if (d.injecter === true && d.classer && reglages.injectionsParMessage > 0) {
 			const vue = (chemin: string): boolean => {
 				const deja = dejaDe(chemin);
 				return deja === 'injectee' || deja === 'lue';
 			};
-			for (const chemin of injectables(note.lignes.map((l) => l.chemin), (c) => note.notes.get(c), reglages.seuilInjection, vue)) {
+			const auSeuil = injectables(note.lignes.map((l) => l.chemin), (c) => note.notes.get(c), reglages.seuilInjection, vue);
+			// les fiches remises d'abord, puis les nouvelles
+			for (const chemin of [...auSeuil.filter((c) => remises.has(c)), ...auSeuil.filter((c) => !remises.has(c))]) {
 				if (injectees.length >= reglages.injectionsParMessage || Date.now() >= d.fin - RESERVE_APRES_INJECTION_MS) break;
 				const brut = await dep.coffre.lire(chemin);
 				const texte = brut === null ? null : sansFaitsInactifs(brut, jour);
@@ -540,12 +548,11 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		if (note.parNote) {
 			// Une note apprise (acceptée ou non) : à chaque message classé, les nouvelles qui atteignent le seuil des pistes, dans
 			// l'ordre de la note, au plus `pistesParMessage`.
-			pistes = d.classer
-				? note.lignes
-						.filter((l) => !dejaVue(l.chemin) && !injecteesIci.has(l.chemin) && !nommeesRetenues.has(l.chemin) && auSeuilDePiste(note.notes.get(l.chemin), reglages.seuilPiste))
-						.slice(0, reglages.pistesParMessage)
-						.map((l) => parChemin.get(l.chemin)!)
+			// Une fiche remise qui n'est plus injectée : en piste hors du quota, si elle atteint encore le seuil des pistes.
+			const eligibles = d.classer
+				? note.lignes.filter((l) => !dejaVue(l.chemin) && !injecteesIci.has(l.chemin) && !nommeesRetenues.has(l.chemin) && auSeuilDePiste(note.notes.get(l.chemin), reglages.seuilPiste))
 				: [];
+			pistes = [...eligibles.filter((l) => remises.has(l.chemin)), ...eligibles.filter((l) => !remises.has(l.chemin)).slice(0, reglages.pistesParMessage)].map((l) => parChemin.get(l.chemin)!);
 		} else {
 			// Règle provisoire (aucune note apprise, ou le sens n'a rien noté) : les premières nouvelles de l'ordre, sans seuil, seulement
 			// si la demande en veut. Sans le sens, il faut que les mots trouvent la fiche ou qu'un signal la désigne : la date seule ne dit

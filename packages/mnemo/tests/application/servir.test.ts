@@ -438,6 +438,40 @@ describe('servir : injection automatique (note de confiance acceptée)', () => {
 		expect(injectees(await servir(dep, demande({ message: 'ok', muet: 'sans_contenu', demandees: [REMISES] })))).toEqual([AVOIRS]);
 	});
 
+	describe('fiche remise (retirée faute de temps au message porteur précédent)', () => {
+		it('au seuil : injectée en priorité, avant les nouvelles, dans le plafond', async () => {
+			const dep = await memoireNotee();
+			avecModeles(dep, { sens: modele({ biais: 3, poids: { cosinusRelatif: 0 } }) });
+			avecReglages(dep, { injectionsParMessage: 1 });
+			const [meilleure] = injectees(await servir(dep, demande()));
+			const autre = [AVOIRS, FACTURES, REMISES].find((c) => c !== meilleure)!;
+			expect(injectees(await servir(dep, demande({ remises: [autre] })))).toEqual([autre]);
+			// plafond 2 : la remise, puis la meilleure des nouvelles
+			avecReglages(dep, { injectionsParMessage: 2 });
+			expect(injectees(await servir(dep, demande({ remises: [autre] })))).toEqual([autre, meilleure]);
+		});
+
+		it('plus au seuil d’injection mais au seuil des pistes : proposée en piste, même hors du quota', async () => {
+			const dep = await memoireNotee();
+			avecModeles(dep, { sens: modele() });
+			avecReglages(dep, { seuilInjection: 100, pistesParMessage: 0 });
+			expect(cartes(await servir(dep, demande()))).toEqual([]);
+			const s = await servir(dep, demande({ remises: [AVOIRS] }));
+			expect(injectees(s)).toEqual([]);
+			expect(cartes(s)).toEqual([AVOIRS]);
+			expect(s.calcul.classement.find((l) => l.chemin === AVOIRS)).toMatchObject({ piste: true });
+		});
+
+		it('sous le seuil des pistes : oubliée', async () => {
+			const dep = await memoireNotee();
+			avecModeles(dep, { sens: modele() });
+			avecReglages(dep, { seuilInjection: 100, seuilPiste: 100, pistesParMessage: 0 });
+			const s = await servir(dep, demande({ remises: [AVOIRS] }));
+			expect(injectees(s)).toEqual([]);
+			expect(cartes(s)).toEqual([]);
+		});
+	});
+
 	describe('réserve après injection', () => {
 		afterEach(() => vi.restoreAllMocks());
 		it('plus le temps de lire la fiche suivante (moins de 20 ms avant la fin du calcul) : elle n’est pas injectée, elle devient une piste', async () => {

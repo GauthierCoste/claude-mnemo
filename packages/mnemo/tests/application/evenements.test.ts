@@ -1058,6 +1058,84 @@ describe('traiterEvenement : injection automatique', () => {
 		expect(apres.contexte).toContain('Fiches injectées par Mnemo');
 	});
 
+	describe('fiche injectée par Mnemo retirée faute de temps : remise au message porteur suivant', () => {
+		afterEach(() => vi.restoreAllMocks());
+		const PROMPT = 'montant exact des avoirs annulés en novembre';
+		/** À la lecture d'Avoirs pour l'injecter, l'horloge saute à `resteMs` de l'échéance (une fois). */
+		function horlogeAuBord(dep: Awaited<ReturnType<typeof memoire>>['dep'], echeance: number, resteMs: number) {
+			const reel = Date.now.bind(Date);
+			let decalage = 0;
+			vi.spyOn(Date, 'now').mockImplementation(() => reel() + decalage);
+			const lire = dep.coffre.lire.bind(dep.coffre);
+			dep.coffre.lire = async (chemin) => {
+				const texte = await lire(chemin);
+				if (chemin === AVOIRS && decalage === 0) decalage = echeance - resteMs - reel();
+				return texte;
+			};
+			return () => {
+				vi.restoreAllMocks();
+				dep.coffre.lire = lire;
+			};
+		}
+		async function retiree(echeanceDansMs = 10_000) {
+			const c = await memoire();
+			const remises = fichesDemandees();
+			const echeance = Date.now() + echeanceDansMs;
+			const retablir = horlogeAuBord(c.dep, echeance, 45);
+			const r = await traiterEvenement(c.dep, c.pil, message(10, PROMPT), { ...local, echeance, remises });
+			retablir();
+			expect(r.contexte ?? '').not.toContain('Un avoir annule une facture.');
+			return { ...c, remises };
+		}
+
+		it('remise au message porteur suivant, notée à nouveau et injectée ; un message muet entre-temps ne la prend pas', async () => {
+			const { dep, etat, pil, remises } = await retiree();
+			expect(remises.voir(ID)).toEqual([AVOIRS]);
+			await traiterEvenement(dep, pil, message(11, 'ok'), { ...local, remises });
+			expect(remises.voir(ID)).toEqual([AVOIRS]);
+			const r = await traiterEvenement(dep, pil, message(12, PROMPT), { ...local, remises });
+			expect(r.contexte).toContain('Un avoir annule une facture.');
+			expect(remises.voir(ID)).toEqual([]);
+			expect((await etat.gestes({ sortes: ['injectee_auto'], limite: null })).map((g) => g.fiche)).toEqual([AVOIRS]);
+		});
+
+		it('remise aussi quand elle est retirée après les écritures', async () => {
+			const { dep, etat, pil } = await memoire();
+			const remises = fichesDemandees();
+			const echeance = Date.now() + 10_000;
+			const reel = Date.now.bind(Date);
+			let decalage = 0;
+			vi.spyOn(Date, 'now').mockImplementation(() => reel() + decalage);
+			const journaliser = etat.journaliser.bind(etat);
+			etat.journaliser = async (e) => {
+				await journaliser(e);
+				decalage = echeance + 1 - reel();
+			};
+			const r = await traiterEvenement(dep, pil, message(10, PROMPT), { ...local, echeance, remises });
+			expect(r.contexte ?? '').not.toContain('Un avoir annule une facture.');
+			expect(remises.voir(ID)).toEqual([AVOIRS]);
+		});
+
+		it('pour un seul message suivant : retirée encore, elle n’est pas remise une seconde fois', async () => {
+			const { dep, pil, remises } = await retiree();
+			const echeance = Date.now() + 10_000;
+			const retablir = horlogeAuBord(dep, echeance, 45);
+			await traiterEvenement(dep, pil, message(11, PROMPT), { ...local, echeance, remises });
+			retablir();
+			expect(remises.voir(ID)).toEqual([]);
+		});
+
+		it('un /clear l’efface ; une autre session ne la reçoit pas', async () => {
+			const { dep, etat, pil, remises } = await retiree();
+			const AUTRE = '44444444-2222-4333-8444-555555555555';
+			await etat.creer(session({ id: AUTRE }));
+			await traiterEvenement(dep, pil, entree('message', 11, { session: AUTRE, prompt: 'bonjour, une question sur le catalogue' }), { ...local, remises });
+			expect(remises.voir(ID)).toEqual([AVOIRS]);
+			await traiterEvenement(dep, pil, entree('debut', 12, { source: 'clear' }), { ...local, remises });
+			expect(remises.voir(ID)).toEqual([]);
+		});
+	});
+
 	it('session inconnue : aucune injection automatique', async () => {
 		const { dep, etat, pil } = await memoire();
 		const r = await traiterEvenement(dep, pil, message(10, 'montant exact des avoirs annulés en novembre'), local);

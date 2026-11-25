@@ -90,6 +90,11 @@ export type ReglagesEvenement = {
 	/** Le service : fiches que l'utilisateur a demandé d'injecter, injectées entières au prochain message de la session (jamais après un outil). */
 	demandees?: FichesDemandees;
 	/**
+	 * Le service : fiches injectées par Mnemo retirées faute de temps, remises au message porteur suivant de la session (un seul ;
+	 * un /clear ou /compact les efface). Sans lui (`mnemo hook` sans service), rien n'est remis.
+	 */
+	remises?: Pick<FichesDemandees, 'prendre' | 'remettre'>;
+	/**
 	 * Le service : dernier message porteur de chaque session (rang, position, vecteur), noté à chaque message porteur ; les gestes
 	 * en reprennent le vecteur. Sans lui (`mnemo hook` sans service), seule l'injection à la main garde le vecteur de son message.
 	 */
@@ -353,6 +358,7 @@ async function servirEvenement(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 			// /clear, /compact : Claude n'a plus les fiches injectées, elles redeviennent à servir
 			if (session !== null && (entree.source === 'clear' || entree.source === 'compact')) {
 				await pil.etat.oublierInjections(session.id).catch(() => {});
+				reglages.remises?.prendre(session.id);
 				// sa trace au journal : le message d'avant ne remonte pas au-delà (au hook comme au banc) ; rien n'y est servi
 				await pil.etat
 					.journaliser({ session: session.id, moment: 'debut', horodatageMs: entree.horodatageMs, ids: [], texte: '', ms: 0, sens: false, demande: null, classement: [], muet: null, cartes: [], position: session.position })
@@ -556,14 +562,22 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 		session !== null && raisonDeMutisme(entree.prompt ?? '') === null
 			? await pil.etat.noterMessagePorteur(session.id, (entree.prompt ?? '').slice(0, DEMANDE_MAX)).catch(() => null)
 			: null;
+	// les fiches injectées par Mnemo retirées faute de temps au message porteur précédent : prises par ce message porteur seul
+	const remises = session !== null && rang !== null ? (reglages.remises?.prendre(session.id) ?? []) : [];
 	const lue = await demandeDe(dep, pil, session, entree, reglages, fin);
-	const demande = demandees.length === 0 ? lue : { ...lue, demandees };
+	const demande = { ...(demandees.length === 0 ? lue : { ...lue, demandees }), ...(remises.length === 0 ? {} : { remises }) };
+	/** Retirées faute de temps : remises au message porteur suivant (pas celles déjà remises à celui-ci : un seul message suivant). */
+	const remettre = (chemins: readonly string[]) => {
+		const aRemettre = chemins.filter((c) => !remises.includes(c));
+		if (session !== null && aRemettre.length > 0) reglages.remises?.remettre(session.id, aRemettre);
+	};
 	const calcule = await servir(dep, demande);
 	// les injections automatiques : décidées ici, avant toute écriture, avec le temps d'écrire leurs traces puis de répondre ;
 	// sinon elles ne partent pas (ni notées servies, ni journalisées, ni suivies) et restent injectables à un message suivant.
 	// Leur trace « servie » et leur geste ne s'écrivent que si la réponse part (dernier contrôle, puis livraison par la route).
 	const auto = session !== null && calcule.calcul.injectees.length > 0 && aTemps(reglages, MARGE_INJECTION_AUTO_MS);
 	const servi = auto ? calcule : sansInjectionsAutomatiques(calcule);
+	if (!auto) remettre(calcule.calcul.injectees.map((f) => f.chemin));
 	const classement = classementDuJournal(servi.calcul.classement);
 	// le classement que voyait l'utilisateur quand il a demandé une fiche : lu avant d'être remplacé par celui de ce message
 	const precedent = session === null ? null : (reglages.porteurs?.lire(session.id) ?? null);
@@ -583,6 +597,7 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 		// elles restent injectables à un message suivant
 		const autoPart = auto && injecte && (reglages.aLaReponse !== undefined ? aTemps(reglages) : aTemps(reglages, MARGE_ECRITURE_MS));
 		if (auto && !autoPart) {
+			remettre(servi.calcul.injectees.map((f) => f.chemin));
 			texte = sansInjectionsAutomatiques(servi).texte;
 			injecte = texte !== '';
 		}

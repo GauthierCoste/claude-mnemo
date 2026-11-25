@@ -427,6 +427,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		return ok(vueModeles(await ctx.modeles.etat()));
 	};
 	const demandees = fichesDemandees();
+	/** Fiches injectées par Mnemo retirées faute de temps, remises au message porteur suivant de leur session. */
+	const remises = fichesDemandees();
 	/** Le reranker de `d` compté (appels en cours) et mesuré (appels « injection ») par le service ; une enveloppe par appel. */
 	const avecRerankerMesure = (d: Dependances): Dependances => (ctx.dureeReranker === undefined ? d : { ...d, reranker: ctx.dureeReranker.envelopper(d.reranker) });
 	/** Dernier message porteur de chaque session (vecteur compris) : les gestes de l'interface le reprennent. */
@@ -876,6 +878,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 					sansCasse: ctx.sansCasse,
 					enFond: ctx.enFond,
 					demandees,
+					remises,
 					porteurs,
 					apriori,
 					...(ctx.suivi === undefined ? {} : { suivi: ctx.suivi }),
