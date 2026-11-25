@@ -1,10 +1,8 @@
 # Coming next
 
-> **Next work item: connect Mistral's terminal coding agent and GitHub Copilot CLI.** Each one starts with a round 0 of
-> measurements, as Codex did: MCP declaration, hooks (events, inputs, approval), resuming a session, and where the context
-> window and the quotas can be read. Then each becomes an implementation of the `Moteur` port (launch, keys, hooks, tools,
-> telemetry, MCP declaration), so that the pilot, the hooks and the interface stay as they are. Opening Mnemo to Codex
-> (25/11/2026) is done.
+> **Next work item: measure Mistral Vibe and GitHub Copilot CLI with real accounts.** Both are connected (25/11/2026),
+> but they were measured without an account, against a local fake model: each point below marked "not measured" needs a
+> real session before they are called done. Then Windows, for the three optional engines.
 
 ## Done
 
@@ -17,6 +15,14 @@
   `lire`; context gauge and ChatGPT quotas read from the transcript, shown next to the Claude ones. `verifier-poste` and
   Settings › Système › Moteurs show the state of each engine and the command that fixes it. See
   [installation.md](installation.md#codex) and [usage.md](usage.md#codex-sessions).
+- **Mistral Vibe and GitHub Copilot CLI as engines.** Two more implementations of the `Moteur` port, next to Claude Code
+  and Codex. Mistral Vibe 3.1.5 or later (`mnemo init --mistral`): MCP block and `mnemo-…` hooks in `~/.vibe`,
+  instruction and skills in an agent profile of the session, resume with `vibe --resume`. GitHub Copilot CLI 1.0.116 or
+  later (`mnemo init --copilot`): `mnemo` entry of `mcp-config.json` and a hooks file of its own, instruction through an
+  instructions folder of the session, identity given at launch (`--session-id`), trust question and first message left to
+  you, wrap-up and instructions passed with the restart when the session has not started. Both: context and reminders,
+  checked instructions, context gauge, state in Settings › Système › Moteurs, profiles and sessions in the interface; no
+  readable quotas. See [installation.md](installation.md#mistral-vibe) and [usage.md](usage.md#mistral-vibe-sessions).
 - **One score for search**: `score = base + Σ weights` (position + 0.10, confidence − 0.05 × (1 − c), memory + 0.05,
   freshness + 0.05 × 2^(−age/365); settings `recherche.poids…`, 0 to 0.5). The base spreads results (bm25 gap kept); the
   recall threshold (`seuil_rappel`, 0.4) applies to the relevance, so a weight never lets a result in. Each result shows
@@ -36,6 +42,25 @@
   deduplication), « extra copies » and « ties at the top » are in the bench and pass without models (see [banc.md](banc.md)).
 
 ## Left to do
+
+- **Mistral Vibe and GitHub Copilot CLI with real accounts.** Measured so far against a local fake model, without an
+  account. To measure with a real Mistral account and a real Copilot subscription: the real list of models and the
+  default model, the real context window, the screens after sign-in, whether Copilot reads the macOS keychain, and the
+  points still marked "not measured": Vibe's `process.start`, `question_asked` and `turn_failed`, the `post_tool` of
+  `file_system.edit`, the approval asked by a sub-agent, `/clear`; Copilot's `str_replace_editor`, `write_bash`,
+  `/clear` (`sessionEnd` `clear`), the `elicitation_dialog` notification, the MCP server declared once without
+  `--additional-mcp-config`; `VIBE_HOME` and `COPILOT_HOME` written with `~`.
+- **Windows for the optional engines.** Not measured: `vibe.exe` and its hooks run by `cmd.exe` (or by PowerShell or Git
+  Bash when Vibe is set so, where the `MNEMO_MOTEUR` guard is not read), `copilot.exe` and the npm shim, Copilot hooks run
+  by PowerShell, the Codex hooks under a non-POSIX login shell.
+- **A dialog that stays shown after its answer.** After an approved command, Codex keeps showing « Attend ta réponse »
+  until the next tool or the end of the turn (its `PostToolUse` hook only covers patches and Mnemo tools, and changing it
+  makes every user approve the hooks again); after Escape on a Copilot approval, nothing tells Mnemo, until the next
+  message.
+- **Quotas of Mistral and Copilot.** Neither tool writes them where Mnemo can read them (outside their APIs); shown as
+  « non communiqués » until one does.
+- **The desktop app** must add the engines `mistral-vibe` and `copilot-cli` and the `init` steps `mistral`,
+  `mistral_hooks`, `copilot` and `copilot_hooks` at its next upgrade of the contract.
 
 - **Archivist on any engine.** The archivist and its benches run on Claude Code (`claude -p`); make its engine a setting.
 - **Import Codex's own memory**, as `mnemo amorce` imports Claude Code's.

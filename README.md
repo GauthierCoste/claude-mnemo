@@ -1,8 +1,8 @@
 # Mnemo
 
-Mnemo is an IDE for working with coding agent sessions (Claude Code and Codex) rather than with files. Your sessions
-run side by side in one window, each in its own terminal; they share a memory you can read, edit and clean up; and for
-each session you see what it has been given from that memory.
+Mnemo is an IDE for working with coding agent sessions (Claude Code, Codex, Mistral Vibe and GitHub Copilot CLI) rather
+than with files. Your sessions run side by side in one window, each in its own terminal; they share a memory you can
+read, edit and clean up; and for each session you see what it has been given from that memory.
 
 The memory is a plain folder of Markdown notes, versioned with git. The agent reads from it at each message and writes
 to it as it learns; every change is a commit you can see. At each message, Mnemo searches that memory locally (words,
@@ -13,7 +13,7 @@ wall of text: the agent stays focused and reads what it needs.
 
 ## What it does
 
-- **Sessions.** Each session is a real `claude` or `codex` in a terminal inside the interface, started in a project
+- **Sessions.** Each session is a real `claude`, `codex`, `vibe` or `copilot` in a terminal inside the interface, started in a project
   folder. A grid groups them by project with their state (working, waiting for you, paused, to review, finished); zoom
   one with ⌥1 to ⌥9 and the others fold into a side rail. A thin gauge under each title bar shows how full the agent's
   context window is (or how close it is to the automatic summary when Claude Code's `autoCompactWindow` is set; amber
@@ -24,15 +24,18 @@ wall of text: the agent stays focused and reads what it needs.
   silent message ("ok, go") gets none. The Contexte panel lists what was injected and proposed, and the notes the
   session read. A click injects a whole note by hand at the next message; another stops suggesting a note for the rest
   of the session.
-- **Profiles.** A profile sets what a session receives: its engine (Claude Code or Codex) and model, its instruction, the
+- **Profiles.** A profile sets what a session receives: its engine (Claude Code, Codex, Mistral Vibe or GitHub Copilot
+  CLI) and model, its instruction, the
   memory skills, the Claude Code plugins switched on (every other installed plugin is switched off), the hooks, where it
   starts, and an avatar shown on its sessions. A read-only preview shows everything a session of the profile receives,
   and where each part comes from.
-- **Claude Code and Codex.** Each profile chooses its engine and model; a session keeps the ones it was started with.
-  Codex gets the memory through MCP, the context and reminders through its hooks, the checked instructions, sessions
-  started and resumed from the interface, and its ChatGPT quotas next to the Claude ones in the title bar. Claude Code
+- **Four engines.** Each profile chooses its engine and model; a session keeps the ones it was started with. Codex,
+  Mistral Vibe and GitHub Copilot CLI get the memory through MCP, the context and reminders through their hooks, the
+  checked instructions, and sessions started, resumed and wrapped up from the interface. Codex also shows its ChatGPT
+  quotas next to the Claude ones in the title bar; Mistral Vibe and Copilot do not report readable quotas. Claude Code
   plugins, the archivist and the import of Claude Code's own memory stay with Claude Code. See
-  [installation.md](docs/installation.md#codex).
+  [installation.md](docs/installation.md#codex), [Mistral Vibe](docs/installation.md#mistral-vibe) and
+  [GitHub Copilot CLI](docs/installation.md#github-copilot-cli).
 - **Search that knows where you are.** One score ranks every result: how well it matches (words, meaning, a local
   reranker, the links between notes), plus small weights for being close to the current project, trusted, part of the
   memory rather than an imported document, and recent. A weight moves a result up or down but never lets an irrelevant
@@ -73,11 +76,13 @@ wall of text: the agent stays focused and reads what it needs.
 - **Sessions** started from Mnemo get what their engine reads. Claude Code gets a plugin generated for the session
   (`.mnemo/plugins/<session>/`): the instruction of the profile, the memory skills, the hooks, and Claude Code's own
   auto-memory turned off. Codex gets the instruction on its command line, with the skills listed in it (read with the
-  `lire` tool), its own memory turned off, and the Mnemo hooks installed once for the machine. The hooks are built to
+  `lire` tool), its own memory turned off, and the Mnemo hooks installed once for the machine. Mistral Vibe and Copilot
+  get the same instruction and skill list through a file in the session folder of Mnemo (an agent profile for Vibe, an
+  instructions file for Copilot), never in your project, and the Mnemo hooks installed once for the machine. The hooks are built to
   stay out of the way: short time limits, and a hook that fails lets the session carry on. When the profile keeps it, a
   `PreToolUse` hook also refuses actions that break an instruction you marked as checked. Treat it as a safety net, not
-  a sandbox: sessions keep your usual Claude Code or Codex permissions.
-- **A plain `claude` or `codex`** started by hand still gets the MCP tools of the memory (and, for `claude` in a folder
+  a sandbox: sessions keep the usual permissions of their engine.
+- **A plain `claude`, `codex`, `vibe` or `copilot`** started by hand still gets the MCP tools of the memory (and, for `claude` in a folder
   under the memory, the instructions for that folder at startup), just not the per-message context.
 - **Documents** (PDF, Word, `.eml`, `.mbox`, text files) are indexed where they are, never copied. Every fact points
   back to the passage it came from. Scanned PDFs, images and spreadsheets can be dropped and kept, but they are not
@@ -94,8 +99,8 @@ You'll need:
 - macOS (Apple silicon or Intel) or Windows (x64 or ARM; being adapted, see [Status](#status));
 - Node.js 24 or later, git and pnpm (`npm install -g pnpm`);
 - the `claude` command line tool, signed in with your subscription;
-- optionally, Codex 0.171 or later, signed in with your ChatGPT subscription (see
-  [installation.md](docs/installation.md#codex)).
+- optionally, Codex 0.171 or later, Mistral Vibe 3.1.5 or later, or GitHub Copilot CLI 1.0.116 or later, each signed in
+  by you (see [installation.md](docs/installation.md#codex)).
 
 No build tools are needed: the session terminals (node-pty) come prebuilt for macOS and Windows.
 
@@ -111,8 +116,8 @@ run `pnpm installer` inside it.)
 `pnpm installer` installs the dependencies, builds the interface and runs `mnemo init`, which asks you a few things:
 
 1. the folder that holds your projects (the memory goes into its `_mnemo/`; an existing memory is reused as is);
-2. whether to declare the Mnemo MCP server to Claude Code (`mnemo init --codex` also declares it to Codex and installs
-   the Mnemo hooks there);
+2. whether to declare the Mnemo MCP server to Claude Code (`mnemo init --codex`, `--mistral` or `--copilot` also
+   declares it to that engine and installs the Mnemo hooks there);
 3. whether to download the optional local models (about 1.3 GB; no by default);
 4. whether to install the `mnemo` command (`~/.local/bin/mnemo`; yes by default);
 5. whether to install the Mnemo launcher (`~/Applications/Mnemo.app`, which opens the interface in a browser window;
@@ -132,7 +137,7 @@ terminal). Everything else is in [docs/usage.md](docs/usage.md).
 
 Everything stays on your machine. The service only listens on `127.0.0.1`, behind a token, and the models run locally.
 The only thing Mnemo downloads is the optional models, once, from fixed addresses with checked SHA-256 hashes. Your
-sessions talk to Anthropic or OpenAI like any other Claude Code or Codex session. Secrets it recognises (API keys,
+sessions talk to Anthropic, OpenAI, Mistral or GitHub like any other session of their engine. Secrets it recognises (API keys,
 tokens, private keys) are masked before anything is written or indexed. What the web interface does and does not protect is written down in
 [docs/usage.md](docs/usage.md#what-the-web-version-protects-and-what-it-does-not).
 
@@ -142,10 +147,10 @@ Version 1.6.2. Mnemo runs on macOS (Apple silicon and Intel) and is being adapte
 tried in real use yet; Linux has not been used. The CI runs the type check and the tests at each push on Linux and
 Windows with Node.js 24, and on macOS with Node.js 26. The interface runs in the browser for now.
 
-**Next: [coming next](docs/coming-next.md).** Mnemo now runs Codex sessions next to Claude Code ones, each profile
-choosing its engine and model. Next come two more coding agents, Mistral's terminal agent and GitHub Copilot CLI, each
-starting with a round of measurements. Managing skills from the interface comes after: today they are files in
-`_mnemo/skills/` and in each profile's folder.
+**Next: [coming next](docs/coming-next.md).** Mnemo runs Claude Code, Codex, Mistral Vibe and GitHub Copilot CLI
+sessions side by side, each profile choosing its engine and model. Mistral Vibe and Copilot were measured without an
+account; a round of measurements with real accounts comes next, before they are called done, then Windows. Managing
+skills from the interface comes after: today they are files in `_mnemo/skills/` and in each profile's folder.
 
 The interface, the command line messages and the note keywords are in French. This README and the docs are in English.
 Help towards an English interface is welcome.

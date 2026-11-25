@@ -1,7 +1,7 @@
 # Installing Mnemo
 
 Mnemo gives a folder a structured, versioned memory (Markdown files in a git repository) and injects it into coding
-agent sessions: Claude Code, and Codex if you want it. It runs entirely on your machine: a small local service (HTTP
+agent sessions: Claude Code, and Codex, Mistral Vibe or GitHub Copilot CLI if you want them. It runs entirely on your machine: a small local service (HTTP
 API and web interface on `127.0.0.1`), a command line tool (`mnemo`), and optional local models for search by meaning.
 
 The interface and the command line messages are in French; this guide is in English.
@@ -14,6 +14,8 @@ The interface and the command line messages are in French; this guide is in Engl
 | git | Any recent version; the memory is a git repository. |
 | Claude Code | The official `claude` command line tool, signed in with your own subscription. Mnemo never uses an API key. |
 | Codex | Optional: 0.171 or later, signed in with your ChatGPT subscription. See [Codex](#codex). |
+| Mistral Vibe | Optional: 3.1.5 or later, signed in by you. See [Mistral Vibe](#mistral-vibe). |
+| GitHub Copilot CLI | Optional: 1.0.116 or later, signed in by you with a Copilot subscription. See [GitHub Copilot CLI](#github-copilot-cli). |
 | pnpm | Only to install from the sources: `npm install -g pnpm` (Node.js 25 and later no longer ship corepack). |
 | Build tools | None on macOS and Windows: the session terminals (`node-pty`) come prebuilt. On Linux, node-pty is compiled at install time (`python3`, `make`, a C++ compiler); without them, Mnemo still works in a degraded mode where you paste the `claude …` command into your own terminal. |
 | Browser | Any recent browser for the interface. Chrome, Edge or Brave can open it as an app window. |
@@ -40,7 +42,7 @@ Details:
 - **Local models** (optional): about 1.3 GB in a cache outside the folder: llama.cpp engine 12 MB, meaning model
   bge-m3 about 605 MB, reranker bge-reranker-v2-m3 about 606 MB.
 - **Service**: about 130 MB of RAM when idle on a fresh memory (measured on macOS); a larger memory and open sessions add
-  to it (estimate: under 250 MB for the service itself). Each session is a separate `claude` or `codex` process with its
+  to it (estimate: under 250 MB for the service itself). Each session is a separate `claude`, `codex`, `vibe` or `copilot` process with its
   own memory use.
 - **Local models while running**: about 1.6 GB of RAM for both servers together once loaded (measured on macOS, about
   0.8 GB each, even when idle); about 1.7 GB measured under load. One set of servers serves the whole machine, however
@@ -85,9 +87,11 @@ If `~/.local/bin` is not in your `PATH`, it prints the line to add. After a Node
 ### Updating
 
 After an update (`git pull`, then `pnpm installer`), restart what was already running: stop the service (`mnemo arreter`,
-from the Mnemo folder), then open Mnemo again, and restart the Claude Code and Codex sessions opened before the update.
+from the Mnemo folder), then open Mnemo again, and restart the sessions opened before the update.
 Until then, they run the old code, and only one set of models should run for the machine. If you use Codex, run
-`mnemo verifier-poste`: when the update changed the Mnemo hooks, approve them again in Codex (`/hooks`).
+`mnemo verifier-poste`: when the update changed the Mnemo hooks, approve them again in Codex (`/hooks`). For Mistral
+Vibe and Copilot, `mnemo verifier-poste` says when the hooks are out of date, and `mnemo declarer --moteur mistral-vibe
+--remplacer` (or `--moteur copilot-cli`) rewrites them; neither asks for an approval.
 
 ## The questions of `mnemo init`
 
@@ -118,8 +122,9 @@ plug a new installation into a memory you already have (give its folder at the f
 declares a Mnemo MCP server pointing to another copy of Mnemo, `init` leaves it and prints the two commands that replace
 it (`claude mcp remove mnemo --scope user`, then `claude mcp add …`); `mnemo declarer --remplacer` does both at once.
 `--codex` also declares the MCP server to Codex and installs the Mnemo hooks there (see [Codex](#codex)); without it,
-Codex is never touched. Explicit options (`--mcp`, `--sans-modeles`…) decide a step without asking, and `--json` gives one JSON line per event,
-for a program that drives the installation; `mnemo verifier-poste` checks git, Claude Code and Codex first (see
+Codex is never touched. `--mistral` and `--copilot` do the same for Mistral Vibe and GitHub Copilot CLI (see
+[Mistral Vibe](#mistral-vibe) and [GitHub Copilot CLI](#github-copilot-cli)). Explicit options (`--mcp`, `--sans-modeles`…) decide a step without asking, and `--json` gives one JSON line per event,
+for a program that drives the installation; `mnemo verifier-poste` checks git, Claude Code and the optional engines first (see
 [usage.md](usage.md#command-line)).
 
 ## First opening
@@ -174,6 +179,96 @@ terminal says when your own settings may change what they get.
 To remove both the declaration and the hooks: `mnemo declarer --moteur codex --retirer`. It removes only what runs this
 Node.js and this Mnemo.
 
+## Mistral Vibe
+
+Mistral Vibe (Mistral's terminal coding agent) is optional. Mnemo needs **Mistral Vibe 3.1.5 or later** (`vibe
+--version`). Mnemo looks for `vibe` in `MNEMO_VIBE`, then in the `PATH`, then in `~/.local/bin`.
+
+1. **Install it** (with [uv](https://docs.astral.sh/uv/)):
+
+   ```sh
+   uv tool install --python 3.14 mistral-vibe
+   ```
+
+2. **Sign in yourself.** Run `vibe` once in a terminal: its setup asks how to sign in (browser or API key). Mnemo never
+   signs in for you, never reads your key and never changes how Vibe signs in: a session started by Mnemo uses the same
+   sign-in as your own `vibe`.
+3. **Declare.** From the Mnemo folder:
+
+   ```sh
+   mnemo init --mistral
+   ```
+
+   It writes one `[[mcp_servers]]` block named `mnemo` in `~/.vibe/config.toml` (or `$VIBE_HOME/config.toml`), so every
+   Vibe session reads and writes the memory, even one started outside Mnemo, and one `[[hooks]]` block per event, named
+   `mnemo-<event>`, in `~/.vibe/hooks.toml`. Everything else in these files is kept as it is, line endings included.
+   The hooks do nothing outside a session started by Mnemo. Vibe runs them without an approval step. Without `vibe` on
+   the computer, the hooks are installed anyway and the declaration is printed as a command to paste later.
+4. **Check.** `mnemo verifier-poste` prints a Mistral Vibe line (where it was found, its version, the MCP declaration,
+   the hooks), and **Settings › Système › Moteurs** shows the same with the command to run when something is missing.
+
+What Mnemo writes, and nothing else: the `mnemo` block of `config.toml` and the `mnemo-…` blocks of `hooks.toml`. For each
+session, an agent profile with the instruction of the profile (`mnemo-<session>.toml`) goes into the session folder of
+Mnemo (`.mnemo/plugins/<session>/`), never into `~/.vibe` or into your project; the session gets it, the memory server and
+the Mnemo tools through environment variables (`VIBE_AGENT_PATHS`, `VIBE_MCP_SERVERS`, `VIBE_TOOLS`), merged with yours.
+A `mnemo` block that carries your own settings (environment, working folder, disabled tools…) is left as it is, and
+the command says what to change by hand; a block turned off with `disabled = true` stays off.
+
+To remove both the declaration and the hooks: `mnemo declarer --moteur mistral-vibe --retirer`. It removes only what
+runs this Node.js and this Mnemo, and gives back the file as it was before.
+
+**Trust.** Vibe asks « Trust this folder? » only for a project that has its own Vibe settings (a `.vibe/` folder, or
+`.agents/skills/`). Answer it yourself in the terminal of the session: Mnemo never does.
+
+**If you use `enabled_tools` or `enabled_agents`** in `config.toml`: they are allow-lists, so a session only gets the
+Mnemo tools (`mnemo_*`) and its agent profile (`mnemo-<session>`) if they are listed there. Mnemo does not add them.
+
+## GitHub Copilot CLI
+
+GitHub Copilot CLI is optional. Mnemo needs **Copilot CLI 1.0.116 or later** (`copilot --version`) and a Copilot
+subscription. Mnemo looks for `copilot` in `MNEMO_COPILOT`, then in the `PATH`, then in Homebrew and in
+`~/.npm-global/bin` (on Windows, `copilot.exe`, then the npm shim, also in `%APPDATA%\npm`).
+
+1. **Install it**, with npm or Homebrew:
+
+   ```sh
+   npm install -g @github/copilot
+   # or
+   brew install copilot-cli
+   ```
+
+2. **Sign in yourself.** Run `copilot`, then type `/login` and follow the steps. Mnemo never signs in for you and never
+   reads your token.
+3. **Declare.** From the Mnemo folder:
+
+   ```sh
+   mnemo init --copilot
+   ```
+
+   It writes the `mnemo` entry of `mcpServers` in `~/.copilot/mcp-config.json` (or `$COPILOT_HOME`), so every Copilot
+   session reads and writes the memory, even one started outside Mnemo; the other servers and settings of that file are
+   kept, with its indentation, line endings and byte order mark. It also writes the Mnemo hooks in a file of their own,
+   `~/.copilot/hooks/mnemo.json`; Copilot reads every file of that folder, without an approval step. The hooks do
+   nothing outside a session started by Mnemo.
+4. **Check.** `mnemo verifier-poste` prints a GitHub Copilot CLI line, and **Settings › Système › Moteurs** shows the
+   same with the command to run when something is missing.
+
+What Mnemo writes, and nothing else: the `mnemo` entry of `mcp-config.json` and `hooks/mnemo.json`. It never rewrites a
+`mcp-config.json` with comments, nor a `mnemo` entry that carries your own settings (`env`, `cwd`, a restricted `tools`
+list…): the command gives the entry to paste instead. A `mnemo` entry turned off in `disabledMcpServers` (`settings.json`)
+stays off. It never writes hooks into `.claude/settings.json`: if a repository has Claude Code hooks there, Copilot runs
+them too, and the Mnemo ones among them do nothing in a Copilot session. For each session, an instructions file with the
+instruction of the profile goes into the session folder of Mnemo (`.mnemo/plugins/<session>/.github/instructions/`),
+added in front of your own `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`; nothing is written into your project.
+
+To remove both the declaration and the hooks: `mnemo declarer --moteur copilot-cli --retirer`. If `hooks/mnemo.json`
+holds anything Mnemo did not write, it is left as it is and the message says why.
+
+**Trust and first message.** Copilot asks « Do you trust the files in this folder? » at each start, with « Yes » chosen
+by default. Answer it yourself in the terminal of the session: Mnemo never presses a key there, and never passes
+`--trust-folder`. Copilot sends nothing to Mnemo before your first message: until then, the interface shows the session
+as « Attend ton premier message » (waiting for your first message).
+
 ## Claude app (Claude Desktop)
 
 To use the memory from the Claude app too, open the settings, **App Claude** tab, click « Brancher la mémoire », then
@@ -193,7 +288,7 @@ next to M on a US keyboard), then the **Système** tab (the **Profils** tab mana
 [usage.md](usage.md#managing-profiles); the **App Claude** tab, the MCP servers of the Claude app, see
 [usage.md](usage.md#connecting-the-claude-app)). The groups are listed on the left, by how often you will use them: injected
 context, memory, archivist, search, projects, models, service, interface; the last one, **Moteurs** (engines), is read-only
-and shows the state of Claude Code and Codex on this computer. Each setting shows a one-line explanation, its default, and "Rétablir le défaut" (reset to
+and shows the state of each engine (Claude Code, Codex, Mistral Vibe, GitHub Copilot CLI) on this computer. Each setting shows a one-line explanation, its default, and "Rétablir le défaut" (reset to
 default); changes are saved only when you click "Enregistrer" (save; leaving the page with unsaved changes asks first).
 They are stored in `.mnemo/reglages.json` (only the values that differ from the defaults). A missing or invalid value
 falls back to its default with a warning, never a crash.
@@ -243,8 +338,9 @@ version) are kept, and so are invalid entries you did not touch (they stay liste
 3. Remove the launcher and the command: `mnemo lanceur --retirer` and `mnemo commande --retirer` (each removes only
    what Mnemo created).
 4. Remove the installed web app, if any: in its window menu, "Uninstall Mnemo".
-5. Remove the MCP declaration: `claude mcp remove mnemo --scope user`; for Codex, the declaration and the hooks:
-   `mnemo declarer --moteur codex --retirer`.
+5. Remove the MCP declaration: `claude mcp remove mnemo --scope user`; for Codex, Mistral Vibe and GitHub Copilot CLI,
+   the declaration and the hooks: `mnemo declarer --moteur codex --retirer` (or `--moteur mistral-vibe`, `--moteur
+   copilot-cli`).
 6. Delete the models cache (models, engine, and the state and level of the servers): `~/Library/Caches/mnemo` on macOS,
    `~/.cache/mnemo` (or `$XDG_CACHE_HOME/mnemo`) on Linux, or the folder named by `MNEMO_MODELES`.
 7. Delete the local state of each Mnemo folder: its `.mnemo/` folder (index, settings, token, logs).
