@@ -214,15 +214,23 @@ function poser(table: { [cle: string]: ValeurToml }, cle: string[], valeur: Vale
 /** Une table (en ligne ou non), pas une chaîne, un booléen, un tableau ni un littéral brut. */
 export const estTableToml = (v: ValeurToml | undefined): v is { [cle: string]: ValeurToml } => typeof v === 'object' && !Array.isArray(v) && !(v instanceof LitteralToml);
 
-/** Les entrées du texte, dans l'ordre ; null s'il n'est pas lisible ainsi (TOML invalide, ou une forme que cette lecture ne suit pas). */
+/** Marque d'ordre des octets qu'un éditeur sous Windows peut mettre en tête d'un fichier UTF-8 : sautée, jamais retirée. */
+const BOM = '\uFEFF';
+
+/**
+ * Les entrées du texte, dans l'ordre ; null s'il n'est pas lisible ainsi (TOML invalide, ou une forme que cette lecture ne
+ * suit pas). Un BOM en tête est sauté : les places restent celles du texte, BOM compris, et aucune entrée ne le couvre.
+ */
 export function entreesToml(texte: string): EntreeToml[] | null {
 	const l = new Lecteur(texte);
+	const avantTout = texte.startsWith(BOM) ? BOM.length : 0;
+	l.i = avantTout;
 	const entrees: EntreeToml[] = [];
 	try {
 		for (;;) {
 			l.blancsEtLignes();
 			if (l.c() === undefined) return entrees;
-			const debut = texte.lastIndexOf('\n', l.i - 1) + 1;
+			const debut = Math.max(texte.lastIndexOf('\n', l.i - 1) + 1, avantTout);
 			if (l.c() === '[') {
 				const tableau = texte.startsWith('[[', l.i);
 				l.i += tableau ? 2 : 1;

@@ -60,6 +60,15 @@ describe('lecture TOML par entrées', () => {
 		expect(entreesToml('a = "\\u00e9\\t"\n')![0]).toMatchObject({ valeur: 'é\t' });
 	});
 
+	it('BOM en tête (éditeur sous Windows) : sauté, les places restent celles du texte, et un retrait le garde', () => {
+		const texte = '\uFEFF[[b]]\nc = 1\n[[b]]\nc = 2\n';
+		const entrees = entreesToml(texte)!;
+		expect(entrees[0]).toMatchObject({ genre: 'tableau', cle: ['b'], debut: 1 });
+		expect(entrees[1]).toMatchObject({ genre: 'valeur', cle: ['c'], valeur: new LitteralToml('1') });
+		expect(sansPlages(texte, elementsDuTableau(entrees, 'b')!.elements[0]!.plages)).toBe('\uFEFF[[b]]\nc = 2\n');
+		expect(entreesToml('\uFEFFmodel = "x"\n')![0]).toMatchObject({ cle: ['model'], valeur: 'x', debut: 1 });
+	});
+
 	it('refuse ce qu’il ne lit pas sûrement', () => {
 		for (const mauvais of ['a = "ouvert\n', 'a = [1, 2\n', '[table\n', 'a b = 1\n', 'a = 1 b = 2\n', 'a = """x\n']) expect(entreesToml(mauvais), mauvais).toBeNull();
 	});
