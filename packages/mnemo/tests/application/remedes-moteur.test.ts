@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { avertissementDesHooks } from '../../src/application/moteurs/avertissements-de-session.ts';
 import { remedesDuMoteur } from '../../src/application/moteurs/remedes.ts';
 import { lireOptionsInit } from '../../src/adaptateurs/cli/init-options.ts';
+import { IDS_MOTEURS } from '../../src/domaine/moteurs/moteur.ts';
 import { MOTEURS_DU_POSTE, MOTEURS_FACULTATIFS } from '../../src/infra/moteurs/moteurs.ts';
 
 describe('remèdes des moteurs', () => {
@@ -20,5 +21,9 @@ describe('remèdes des moteurs', () => {
 		expect(texte).toContain('« mnemo init --mistral »');
 		expect(avertissementDesHooks(MOTEURS_DU_POSTE.codex, { etat: 'perime', chemin: '/h/.codex/hooks.json' })).toContain('« mnemo declarer --moteur codex --remplacer »');
 		for (const m of MOTEURS_FACULTATIFS) expect(lireOptionsInit([m.installation.optionInit]).moteurs).toEqual([m.id]);
+	});
+
+	it('registre : chaque identifiant a son moteur du poste', () => {
+		for (const id of IDS_MOTEURS) expect(MOTEURS_DU_POSTE[id]?.id).toBe(id);
 	});
 });
