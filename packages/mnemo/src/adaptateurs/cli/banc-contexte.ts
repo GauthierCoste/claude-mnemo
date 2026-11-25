@@ -17,6 +17,7 @@ import type { InjectionManuelle } from '../../domaine/signal-injection.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
 import { ouvrirJournalEnLecture } from '../../infra/journal-en-lecture.ts';
 import { dependancesReelles, etatParesseux } from '../../infra/systeme.ts';
+import { apprendreAuBanc } from './banc-apprendre.ts';
 import { enregistrerCas, jugerAuTerminal } from './banc-juger.ts';
 import { AUCUNE_MEMOIRE, ErreurCli } from './erreurs.ts';
 import { prendreVerrouBanc } from './verrou-banc.ts';
@@ -28,6 +29,7 @@ const USAGE_CONTEXTE = [
 	'        mnemo banc contexte --completer [--json]',
 	'        mnemo banc contexte --juger',
 	'        mnemo banc contexte --gestes [--json]',
+	'        mnemo banc contexte --apprendre [--empreintes exclure|garder] [--json]',
 ].join('\n');
 /** Messages extraits par défaut, et au plus par session (variété : 20 sessions au moins pour 120 messages). */
 const NOMBRE_PAR_DEFAUT = 50;
@@ -199,11 +201,12 @@ type Options = {
 	juger: boolean;
 	recalculer: boolean;
 	gestes: boolean;
+	apprendre: boolean;
 	empreintes: 'exclure' | 'garder';
 };
 
 export function lireOptionsContexte(args: readonly string[]): Options {
-	const o: Options = { json: false, extraire: false, completer: false, session: null, nombre: null, parSession: null, juger: false, recalculer: false, gestes: false, empreintes: 'exclure' };
+	const o: Options = { json: false, extraire: false, completer: false, session: null, nombre: null, parSession: null, juger: false, recalculer: false, gestes: false, apprendre: false, empreintes: 'exclure' };
 	const refus = (motif: string) => new ErreurCli(`${motif}\n${USAGE_CONTEXTE}`, 2);
 	const entier = (option: string, valeur: string | undefined): number => {
 		const n = Number(valeur);
@@ -217,6 +220,7 @@ export function lireOptionsContexte(args: readonly string[]): Options {
 		else if (a === '--recalculer') o.recalculer = true;
 		else if (a === '--gestes') o.gestes = true;
 		else if (a === '--completer') o.completer = true;
+		else if (a === '--apprendre') o.apprendre = true;
 		else if (a === '--extraire') {
 			o.extraire = true;
 			const suivant = args[k + 1];
@@ -237,10 +241,10 @@ export function lireOptionsContexte(args: readonly string[]): Options {
 			k += 1;
 		} else throw refus(a.startsWith('--') ? `Option inconnue : « ${a} ».` : `Argument inattendu : « ${a} ».`);
 	}
-	if ([o.extraire, o.completer, o.juger, o.recalculer].filter(Boolean).length > 1) throw refus('--extraire, --completer, --juger et --recalculer ne vont pas ensemble.');
+	if ([o.extraire, o.completer, o.juger, o.recalculer, o.apprendre].filter(Boolean).length > 1) throw refus('--extraire, --completer, --juger, --recalculer et --apprendre ne vont pas ensemble.');
 	if ((o.nombre !== null || o.parSession !== null) && !o.extraire) throw refus("--nombre et --par-session ne vont qu'avec --extraire.");
 	if (o.juger && o.json) throw refus('--juger ne va pas avec --json.');
-	if (o.gestes && (o.extraire || o.completer || o.juger || o.recalculer || o.empreintes !== 'exclure')) throw refus("--gestes ne va qu'avec --json.");
+	if (o.gestes && (o.extraire || o.completer || o.juger || o.recalculer || o.apprendre || o.empreintes !== 'exclure')) throw refus("--gestes ne va qu'avec --json.");
 	return o;
 }
 
@@ -362,12 +366,39 @@ async function extraire(racine: string, fichier: string, o: Options): Promise<vo
 	}
 }
 
+/** Date locale du jour, AAAA-MM-JJ. */
+const dateDuJour = (): string => {
+	const d = new Date();
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/**
+ * `--apprendre` : la note de confiance apprise sur les jugements (empreintes vérifiées sur l'index lu tel qu'il est), le module
+ * de coefficients et le rapport écrits.
+ */
+async function apprendre(racine: string, fichier: string, o: Options): Promise<void> {
+	const cas = (await lireCasDuFichier(fichier)).filter((c) => c.candidates !== undefined);
+	if (cas.length === 0) throw new ErreurCli(`Aucun message jugé dans ${fichier}. Ajoutez-en avec --extraire, puis --juger.`);
+	const dep = dependancesEnLecture(racine);
+	let empreinteDe: Map<string, string>;
+	try {
+		empreinteDe = new Map((await dep.index.fiches()).map((f) => [f.chemin, f.empreinte]));
+	} finally {
+		dep.index.fermer();
+	}
+	const { rapport, texte } = await apprendreAuBanc(racine, cas, { empreinteDe, empreintes: o.empreintes, date: dateDuJour() }).catch((e: unknown) => {
+		throw enErreurCli(e);
+	});
+	console.log(o.json ? JSON.stringify(rapport, null, 2) : texte);
+}
+
 /**
  * `mnemo banc contexte` : rejoue les cas étiquetés à la main et mesure les messages jugés de `.mnemo/banc-contexte.json`
  * (sans `claude`, sans rien écrire dans `.mnemo`) ; `--recalculer` recalcule les signaux avec les modèles. `--extraire
  * [<session>]` ajoute des messages réels à juger, avec leurs fiches figées ; `--completer` relance l'extraction sur les cas
  * existants ; `--juger` les fait juger une fiche à la fois ; `--json` rend aussi les paires jugées et leurs signaux bruts.
- * `--gestes` : comptes du journal durable des gestes, par geste et par fiche (sans texte de message).
+ * `--gestes` : comptes du journal durable des gestes, par geste et par fiche (sans texte de message). `--apprendre` : apprend la
+ * note de confiance et écrit son module de coefficients et le rapport.
  */
 export async function commandeContexte(args: string[]): Promise<void> {
 	const o = lireOptionsContexte(args);
@@ -386,6 +417,7 @@ export async function commandeContexte(args: string[]): Promise<void> {
 	const fichier = fichierBancContexte(racine);
 
 	if (o.extraire || o.completer) return extraire(racine, fichier, o);
+	if (o.apprendre) return apprendre(racine, fichier, o);
 	if (o.juger) {
 		const rendre = prendreVerrouBanc(fichier, '--juger');
 		try {

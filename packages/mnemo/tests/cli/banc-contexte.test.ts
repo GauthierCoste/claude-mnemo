@@ -80,6 +80,7 @@ describe('options de mnemo banc contexte', () => {
 		expect(lireOptionsContexte([])).toMatchObject({ empreintes: 'exclure' });
 		expect(lireOptionsContexte(['--empreintes', 'garder'])).toMatchObject({ empreintes: 'garder' });
 		expect(lireOptionsContexte(['--gestes', '--json'])).toMatchObject({ gestes: true, json: true });
+		expect(lireOptionsContexte(['--apprendre', '--empreintes', 'garder', '--json'])).toMatchObject({ apprendre: true, empreintes: 'garder', json: true });
 	});
 
 	it('combinaisons refusées', () => {
@@ -92,6 +93,8 @@ describe('options de mnemo banc contexte', () => {
 		expect(() => lireOptionsContexte(['--completer', '--par-session', '3'])).toThrow('--par-session');
 		expect(() => lireOptionsContexte(['--empreintes', 'oublier'])).toThrow('exclure');
 		expect(() => lireOptionsContexte(['--gestes', '--juger'])).toThrow('--gestes');
+		expect(() => lireOptionsContexte(['--apprendre', '--recalculer'])).toThrow('ne vont pas ensemble');
+		expect(() => lireOptionsContexte(['--gestes', '--apprendre'])).toThrow('--gestes');
 	});
 });
 
