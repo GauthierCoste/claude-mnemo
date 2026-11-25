@@ -31,7 +31,7 @@ const ETATS_MCP: Record<Exclude<EtatMcpVerifie['etat'], 'echec' | 'desactive'>, 
 };
 
 /** Codex : facultatif ; trouvé, sa version (`codex --version`), sa déclaration MCP (`codex mcp get`) et ses hooks de Mnemo (`hooks.json`, `config.toml`) sont lus, sans rien changer. */
-async function verifierCodex(d: DependancesPoste): Promise<PosteVerifie['codex']> {
+async function verifierCodex(d: DependancesPoste): Promise<PosteVerifieComplet['codex']> {
 	const commande = d.codex();
 	if (commande === null) return { ok: false, motif: 'Codex introuvable (commande codex absente du PATH et de ChatGPT.app, ou MNEMO_CODEX invalide).' };
 	const lu = await MOTEUR_CODEX.declarationMcp.lire({ executer: d.executer, main: d.main, commande, plateforme: d.plateforme, env: d.env, delaiMs: DELAI_CODEX_MS });
@@ -68,7 +68,10 @@ function versionGit(sortie: string): string {
  * `git` du système répond en erreur), le `claude` que lanceront les sessions (`trouverClaude`), la version de Node ; et
  * Codex, facultatif (trouvé ou non, et sa déclaration MCP).
  */
-export async function verifierPoste(d: DependancesPoste): Promise<PosteVerifie> {
+/** Le poste vu par ce Mnemo : le bloc `codex` y est toujours (facultatif dans le contrat, pour un Mnemo plus ancien). */
+export type PosteVerifieComplet = PosteVerifie & { codex: NonNullable<PosteVerifie['codex']> };
+
+export async function verifierPoste(d: DependancesPoste): Promise<PosteVerifieComplet> {
 	let git: PosteVerifie['git'];
 	try {
 		const r = await d.executer('git', ['--version'], { delaiMs: DELAI_GIT_MS });
@@ -108,10 +111,12 @@ export async function commandeVerifierPoste(args: string[], partiel: Partial<Dep
 	ecrire(poste.git.ok ? `git : ${poste.git.version}` : `git : absent — ${poste.git.motif}`);
 	ecrire(poste.claude.ok ? `Claude Code : ${poste.claude.chemin}` : `Claude Code : absent — ${poste.claude.motif}`);
 	const { codex } = poste;
-	const mcp = codex.mcp === undefined ? '' : ` — ${codex.mcp.etat === 'echec' ? `déclaration MCP illisible : ${codex.mcp.motif ?? ''}` : codex.mcp.etat === 'desactive' ? `serveur MCP ${MOTIF_DESACTIVE}` : ETATS_MCP[codex.mcp.etat]}`;
-	const hooks = codex.hooks === undefined ? '' : ` — ${ligneHooks(codex.hooks)}`;
-	const version = codex.version === undefined ? '' : ` (${codex.version}${MOTEUR_CODEX.refusDeVersion!(codex.version) === null ? '' : ', trop ancien : 0.171 ou plus requis'})`;
-	ecrire(codex.ok ? `Codex : ${codex.chemin}${version}${mcp}${hooks}` : `Codex : absent (facultatif) — ${codex.motif}`);
+	if (codex !== undefined) {
+		const mcp = codex.mcp === undefined ? '' : ` — ${codex.mcp.etat === 'echec' ? `déclaration MCP illisible : ${codex.mcp.motif ?? ''}` : codex.mcp.etat === 'desactive' ? `serveur MCP ${MOTIF_DESACTIVE}` : ETATS_MCP[codex.mcp.etat]}`;
+		const hooks = codex.hooks === undefined ? '' : ` — ${ligneHooks(codex.hooks)}`;
+		const version = codex.version === undefined ? '' : ` (${codex.version}${MOTEUR_CODEX.refusDeVersion!(codex.version) === null ? '' : ', trop ancien : 0.171 ou plus requis'})`;
+		ecrire(codex.ok ? `Codex : ${codex.chemin}${version}${mcp}${hooks}` : `Codex : absent (facultatif) — ${codex.motif}`);
+	}
 	ecrire(`Node : ${poste.node.version}`);
 	if (!poste.git.ok || !poste.claude.ok) throw new ErreurCli('Poste incomplet : installez ce qui manque, puis relancez « mnemo verifier-poste ».', 1);
 }
