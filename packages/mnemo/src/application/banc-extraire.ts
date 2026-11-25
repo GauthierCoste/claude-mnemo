@@ -11,9 +11,7 @@ import { designe } from './banc-contexte.ts';
 import type { CandidateAJuger, CasContexte, Jugement, VarianteRequete } from './banc-contexte.ts';
 import { candidatesDuBanc, chargerMemoireDuBanc, LISTES_DU_BANC, presentationDe, signauxDuMessage } from './banc-signaux.ts';
 import type { ListeDuBanc, Signaux } from './banc-signaux.ts';
-import type { Dependances, EtatSessions } from './ports.ts';
-import { SANS_EXTRACTION, synchroniser } from './synchroniser.ts';
-import { vectoriser } from './vectoriser.ts';
+import type { Dependances, EntreeServie } from './ports.ts';
 
 /** Entrées lues par session : tout le journal gardé (200 entrées au plus). */
 const ENTREES_PAR_SESSION = 200;
@@ -25,21 +23,36 @@ const ENTREES_PAR_SESSION = 200;
  */
 export type RequeteJointe = (message: string, precedent: string | null) => string | null;
 
+/** Ce que le banc lit d'une session et de son journal. */
+export type SessionDuJournal = { id: string; profil: string; dossier: string; position: string };
+export type EntreeDuJournal = Pick<EntreeServie, 'moment' | 'horodatageMs' | 'demande' | 'muet' | 'position'>;
+/**
+ * Lecture du journal des sessions, **sans jamais l'écrire ni le migrer** : la base est celle du service en marche, peut-être
+ * d'une autre version de Mnemo (`infra/journal-en-lecture.ts`).
+ */
+export type LectureDuJournal = {
+	/** Toutes les sessions connues, terminées comprises. */
+	sessions(): Promise<SessionDuJournal[]>;
+	session(id: string): Promise<SessionDuJournal | null>;
+	/** Les `limite` dernières entrées `message` de la session, les plus récentes d'abord. */
+	messages(session: string, limite: number): Promise<EntreeDuJournal[]>;
+};
+
 /**
  * Les messages porteurs (non muets, avec un texte) du journal, de toutes les sessions connues (terminées comprises, hors
  * archiviste), ou de la seule `session`. Chacun avec son rang parmi les messages porteurs de sa session, sa position, son
  * groupe (dossier de la session) et le message porteur d'avant.
  */
-export async function messagesDuJournal(etat: EtatSessions, session?: string): Promise<MessageDuJournal[]> {
+export async function messagesDuJournal(journal: LectureDuJournal, session?: string): Promise<MessageDuJournal[]> {
 	const sessions =
 		session === undefined
-			? (await etat.lister({ archivees: true })).filter((s) => s.profil !== PROFIL_ARCHIVISTE)
-			: await etat.lire(session).then((s) => (s === null ? [] : [s]));
+			? (await journal.sessions()).filter((s) => s.profil !== PROFIL_ARCHIVISTE)
+			: await journal.session(session).then((s) => (s === null ? [] : [s]));
 	if (session !== undefined && sessions.length === 0) throw new Error(`Session inconnue : ${session}`);
 	const messages: MessageDuJournal[] = [];
 	for (const s of sessions) {
-		const journal = await etat.servis(s.id, ENTREES_PAR_SESSION, 'message');
-		const porteurs = journal
+		const entrees = await journal.messages(s.id, ENTREES_PAR_SESSION);
+		const porteurs = entrees
 			.filter((e) => e.moment === 'message' && e.muet === null && e.demande !== null && e.demande.trim() !== '' && raisonDeMutisme(e.demande) === null)
 			.sort((a, b) => a.horodatageMs - b.horodatageMs);
 		porteurs.forEach((e, i) => {
@@ -71,12 +84,11 @@ export type BilanExtraction = { cas: CasContexte[]; sansCandidate: number; model
 /**
  * Un cas à juger par message : les candidates figées (union des têtes du sens, des mots et du reranker, pour le message seul
  * et, si elle diffère, pour la requête jointe), présentées par leur titre et la première ligne de leur synthèse, avec leurs
- * signaux bruts. L'index est synchronisé et vectorisé d'abord. Un message sans aucune candidate n'est pas gardé (compté).
+ * signaux bruts. L'index est lu tel qu'il est, jamais synchronisé ni vectorisé : celui du service en marche, qu'une autre
+ * version de Mnemo ne doit pas écrire. Un message sans aucune candidate n'est pas gardé (compté).
  */
 export async function extraireJugements(dep: Dependances, messages: readonly MessageDuJournal[], options: OptionsExtraction = {}): Promise<BilanExtraction> {
 	const demarrer = options.demarrer ?? true;
-	await synchroniser(dep, SANS_EXTRACTION);
-	await vectoriser(dep, { budgetMs: Infinity, demarrer, compter: false });
 	const memoire = await chargerMemoireDuBanc(dep);
 	const cas: CasContexte[] = [];
 	let sansCandidate = 0;

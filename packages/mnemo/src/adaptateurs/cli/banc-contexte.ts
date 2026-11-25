@@ -10,7 +10,8 @@ import { LISTES_DU_BANC } from '../../application/banc-signaux.ts';
 import type { Signaux } from '../../application/banc-signaux.ts';
 import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
-import { dependancesReelles, etatParesseux } from '../../infra/systeme.ts';
+import { ouvrirJournalEnLecture } from '../../infra/journal-en-lecture.ts';
+import { dependancesReelles } from '../../infra/systeme.ts';
 import { enregistrerCas, jugerAuTerminal } from './banc-juger.ts';
 import { AUCUNE_MEMOIRE, ErreurCli } from './erreurs.ts';
 import { trouverRacine } from './racine.ts';
@@ -189,18 +190,31 @@ function avancement(libelle: string): (faits: number, total: number) => void {
 	};
 }
 
+/** Index lu tel qu'il est : celui du service en marche, jamais écrit, synchronisé ni reconstruit par le banc. */
+const LECTURE_MAX_MS = 30 * 60_000;
+const dependancesEnLecture = (racine: string) => dependancesReelles(racine, { indexEnLecture: { finMs: Date.now() + LECTURE_MAX_MS } });
+const enErreurCli = (e: unknown) => new ErreurCli(e instanceof Error ? e.message : String(e));
+
 async function extraire(racine: string, fichier: string, existants: CasContexte[], o: Options): Promise<void> {
-	const etat = etatParesseux(racine);
-	const dep = dependancesReelles(racine);
+	// l'état des sessions est lu sans migration ni écriture : le service en marche (une autre version, peut-être) le garde tel quel
+	let lecture: ReturnType<typeof ouvrirJournalEnLecture>;
 	try {
-		const journal = await messagesDuJournal(etat, o.session ?? undefined).catch((e: unknown) => {
-			throw new ErreurCli(e instanceof Error ? e.message : String(e));
+		lecture = ouvrirJournalEnLecture(join(racine, DOSSIER_LOCAL, 'etat.sqlite'));
+	} catch (e) {
+		throw enErreurCli(e);
+	}
+	const dep = dependancesEnLecture(racine);
+	try {
+		const journal = await messagesDuJournal(lecture, o.session ?? undefined).catch((e: unknown) => {
+			throw enErreurCli(e);
 		});
 		// une session nommée : tous ses messages porteurs ; sinon, un choix varié parmi toutes les sessions
 		const choix = o.session === null ? { nombre: o.nombre ?? NOMBRE_PAR_DEFAUT, parSession: PAR_SESSION } : { nombre: o.nombre ?? Infinity, parSession: Infinity };
 		const choisis = messagesAExtraire(journal, existants, choix);
 		if (!o.json) console.error(`${choisis.length} message(s) à extraire (sur ${journal.length} messages porteurs au journal) ; calcul des fiches à juger, modèles compris…`);
-		const bilan = await extraireJugements(dep, choisis, { avancement: avancement('Messages') });
+		const bilan = await extraireJugements(dep, choisis, { avancement: avancement('Messages') }).catch((e: unknown) => {
+			throw enErreurCli(e);
+		});
 		const { cas, ajoutes, completes } = fusionnerCas(existants, bilan.cas);
 		await mkdir(dirname(fichier), { recursive: true });
 		await enregistrerCas(fichier, cas);
@@ -215,12 +229,12 @@ async function extraire(racine: string, fichier: string, existants: CasContexte[
 			[
 				`${ajoutes} message(s) ajouté(s), ${completes} complété(s), ${fiches} fiches à juger (${bilan.cas.length === 0 ? 0 : Math.round(fiches / bilan.cas.length)} par message)${bilan.sansCandidate === 0 ? '' : ` ; ${bilan.sansCandidate} sans aucune fiche candidate, laissé(s)`}.`,
 				...(absents.length === 0 ? [] : [`Attention : modèle absent (${absents.join(', ')}) : les fiches à juger ne viennent que des autres listes.`]),
-				`À juger : ${p.messages - p.messagesJuges} message(s). Lancez : mnemo banc contexte --juger`,
+				`À juger : ${p.messages - p.messagesJuges} message(s). Ensuite : la même commande avec --juger (au lieu de --extraire)`,
 			].join('\n'),
 		);
 	} finally {
 		dep.index.fermer();
-		etat.fermer();
+		lecture.fermer();
 	}
 }
 
@@ -250,10 +264,18 @@ export async function commandeContexte(args: string[]): Promise<void> {
 	const etiquetes = existants.filter((c) => c.candidates === undefined);
 	const avecCandidates = existants.filter((c) => c.candidates !== undefined);
 	if (existants.length === 0) throw new ErreurCli(`Aucun cas dans ${fichier}. Ajoutez-en avec : mnemo banc contexte --extraire`);
-	const dep = dependancesReelles(racine);
+	// index en lecture seule : un index pas à jour fait échouer le rejeu des cas étiquetés (sa synchronisation), sans rien écrire
+	const dep = dependancesEnLecture(racine);
 	try {
-		const etiquetage = etiquetes.length === 0 ? null : await rejouerCas(dep, etiquetes);
-		const jugements = avecCandidates.length === 0 ? null : await rejouerJugements(dep, avecCandidates, { recalculer: o.recalculer, ...(o.recalculer ? { avancement: avancement('Rejeu') } : {}) });
+		const etiquetage = etiquetes.length === 0 ? null : await rejouerCas(dep, etiquetes).catch((e: unknown) => {
+			throw new ErreurCli(`Rejeu des cas étiquetés impossible sur l'index tel qu'il est (le banc ne l'écrit jamais ; laisser le service le synchroniser) : ${e instanceof Error ? e.message : String(e)}`);
+		});
+		const jugements =
+			avecCandidates.length === 0
+				? null
+				: await rejouerJugements(dep, avecCandidates, { recalculer: o.recalculer, ...(o.recalculer ? { avancement: avancement('Rejeu') } : {}) }).catch((e: unknown) => {
+						throw enErreurCli(e);
+					});
 		if (o.json) {
 			console.log(JSON.stringify({ ...(etiquetage === null ? {} : { mesure: etiquetage.mesure, echecs: etiquetage.echecs }), ...(jugements === null ? {} : { jugements }) }, null, 2));
 		} else {

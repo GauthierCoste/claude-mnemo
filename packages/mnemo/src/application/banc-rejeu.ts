@@ -19,7 +19,6 @@ import { estJuge } from './banc-juger.ts';
 import { candidatesDuBanc, chargerMemoireDuBanc, signauxDuMessage } from './banc-signaux.ts';
 import type { Signaux } from './banc-signaux.ts';
 import type { Dependances } from './ports.ts';
-import { SANS_EXTRACTION, synchroniser } from './synchroniser.ts';
 
 export type NiveauBanc = 'complets' | 'sens' | 'ordre';
 export const NIVEAUX_DU_BANC: readonly NiveauBanc[] = ['complets', 'sens', 'ordre'];
@@ -255,7 +254,7 @@ export function mesurerJugements(messages: readonly MessageRejoue[], options: Op
 
 /**
  * Rejoue les messages jugés (complets, non sautés) : signaux de l'extraction, ou recalculés avec les modèles
- * (`recalculer`), puis paires et mesures par niveau et variante. Les indécises sont exclues des paires, et comptées.
+ * (`recalculer`, sur l'index tel qu'il est, jamais synchronisé), puis paires et mesures par niveau et variante. Les indécises sont exclues des paires, et comptées.
  */
 export async function rejouerJugements(dep: Dependances, cas: readonly CasContexte[], options: OptionsRejeu = {}): Promise<RejeuJugements> {
 	const juges = cas.filter(estJuge);
@@ -265,7 +264,6 @@ export async function rejouerJugements(dep: Dependances, cas: readonly CasContex
 	const jugementsDe = (c: CasContexte) =>
 		new Map(Object.entries(c.jugements ?? {}).flatMap(([chemin, j]) => (j === 'indecise' ? [] : [[chemin, j === 'pertinente'] as [string, boolean]])));
 	if (options.recalculer === true) {
-		await synchroniser(dep, SANS_EXTRACTION);
 		const memoire = await chargerMemoireDuBanc(dep);
 		modeles = { sens: false, reranker: false };
 		for (const [i, c] of juges.entries()) {

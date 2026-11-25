@@ -4,7 +4,8 @@ import type { CasContexte } from '../../src/application/banc-contexte.ts';
 import { extraireJugements, fusionnerCas, messagesDuJournal } from '../../src/application/banc-extraire.ts';
 import { rejouerJugements } from '../../src/application/banc-rejeu.ts';
 import type { Signaux } from '../../src/application/banc-signaux.ts';
-import type { EntreeServie, EtatSessions, Reranker, Sens } from '../../src/application/ports.ts';
+import type { LectureDuJournal } from '../../src/application/banc-extraire.ts';
+import type { EntreeServie, Reranker, Sens } from '../../src/application/ports.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
 import type { MessageDuJournal } from '../../src/domaine/echantillon-banc.ts';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
@@ -221,21 +222,22 @@ describe('extraireJugements : mise en commun', () => {
 });
 
 describe('messagesDuJournal', () => {
-	const entree = (demande: string, horodatageMs: number, muet: EntreeServie['muet'] = null, position: string | null = null): EntreeServie => ({
-		session: 's', moment: 'message', horodatageMs, ids: [], texte: '', ms: 0, sens: false, demande, classement: [], muet, cartes: [], position,
+	const entree = (demande: string, horodatageMs: number, muet: EntreeServie['muet'] = null, position: string | null = null) => ({
+		moment: 'message' as const, horodatageMs, demande, muet, position,
 	});
 	const session = (id: string, profil = 'defaut') => ({ id, profil, dossier: `dossier-${id}`, position: 'organisations/clients/SVE' });
 
 	it('messages porteurs seulement (ni muets ni balises), dans l’ordre, avec rang, position, groupe et message d’avant ; jamais l’archiviste', async () => {
-		const journaux: Record<string, EntreeServie[]> = {
-			a: [entree('parle-moi de la maquette du site', 3, null, 'projets/X'), entree('oui', 2, 'sans_contenu'), entree('prépare la maquette ERP du chantier', 1)],
+		const journaux: Record<string, ReturnType<typeof entree>[]> = {
+			a: [entree('parle-moi de la maquette du site', 3, null, 'projets/X'), entree('oui', 2, 'sans_contenu'), entree('<task-notification>x</task-notification>', 4), entree('prépare la maquette ERP du chantier', 1)],
 			b: [entree('extraire les documents du dossier', 1)],
 		};
-		const etat = {
-			lister: async () => [session('a'), session('b', 'archiviste')],
-			servis: async (id: string) => journaux[id] ?? [],
-		} as unknown as EtatSessions;
-		const messages = await messagesDuJournal(etat);
+		const journal: LectureDuJournal = {
+			sessions: async () => [session('a'), session('b', 'archiviste')],
+			session: async () => null,
+			messages: async (id) => journaux[id] ?? [],
+		};
+		const messages = await messagesDuJournal(journal);
 		expect(messages.map((m) => [m.session, m.rang, m.message, m.position, m.groupe, m.precedent])).toEqual([
 			['a', 1, 'prépare la maquette ERP du chantier', 'organisations/clients/SVE', 'dossier-a', null],
 			['a', 2, 'parle-moi de la maquette du site', 'projets/X', 'dossier-a', 'prépare la maquette ERP du chantier'],
@@ -243,8 +245,8 @@ describe('messagesDuJournal', () => {
 	});
 
 	it('session nommée inconnue : erreur lisible', async () => {
-		const etat = { lire: async () => null, servis: async () => [] } as unknown as EtatSessions;
-		await expect(messagesDuJournal(etat, 'inconnue')).rejects.toThrow('Session inconnue');
+		const journal: LectureDuJournal = { sessions: async () => [], session: async () => null, messages: async () => [] };
+		await expect(messagesDuJournal(journal, 'inconnue')).rejects.toThrow('Session inconnue');
 	});
 });
 
