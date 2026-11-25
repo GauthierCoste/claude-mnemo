@@ -653,6 +653,12 @@ export type GesteNote = {
 	vecteur: VecteurDuMessage | null;
 };
 
+/**
+ * Une fiche écartée toujours (« Ne plus jamais suggérer ») : sortie des candidates partout, jusqu'à son rétablissement ;
+ * `session` : celle où le geste a été fait (null : hors session).
+ */
+export type EcarteeToujours = { fiche: string; session: string | null; horodatageMs: number };
+
 export interface EtatSessions {
 	creer(s: Session): Promise<void>;
 	lire(id: string): Promise<Session | null>;
@@ -742,8 +748,17 @@ export interface EtatSessions {
 	noterGeste(geste: GesteANoter): Promise<void>;
 	/** Nombre de gestes par sorte et par fiche, sans lire messages ni vecteurs. */
 	comptesGestes(): Promise<GesteCompte[]>;
-	/** Gestes du journal durable, les plus récents d'abord : ceux de `fiche`, depuis `depuisMs` (inclus), `limite` au plus (null : tous). */
-	gestes(filtre: { fiche?: string; depuisMs?: number; limite: number | null }): Promise<GesteNote[]>;
+	/**
+	 * Gestes du journal durable, les plus récents d'abord : ceux de `fiche`, depuis `depuisMs` (inclus), de rang `depuisRang` ou
+	 * plus (ordre d'écriture), `limite` au plus (null : tous).
+	 */
+	gestes(filtre: { fiche?: string; depuisMs?: number; depuisRang?: number; limite: number | null }): Promise<GesteNote[]>;
+	/** Écarte une fiche toujours (sans effet si elle l'est déjà : `deja_ecartee`). Le geste se note à part (`noterGeste`). */
+	ecarterToujours(e: EcarteeToujours): Promise<'ecartee' | 'deja_ecartee'>;
+	/** Rétablit une fiche écartée toujours : ce qui était noté de son écart, null si elle ne l'était pas. */
+	retablirToujours(fiche: string): Promise<EcarteeToujours | null>;
+	/** Fiches écartées toujours, les plus anciennes d'abord. */
+	ecarteesToujours(): Promise<EcarteeToujours[]>;
 	/** Instant de la dernière écriture, toutes sessions confondues (0 si aucune). */
 	derniereModificationMs(): Promise<number>;
 	/**

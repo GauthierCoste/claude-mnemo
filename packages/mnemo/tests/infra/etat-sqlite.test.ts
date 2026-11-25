@@ -24,9 +24,10 @@ async function ouvrir(): Promise<{ etat: EtatSessions; chemin: string; dossier: 
 	return { etat, chemin, dossier };
 }
 
-/** Retire ce que la version 13 a ajouté (journal durable des gestes, dernier message porteur, rang du message des entrées servies). */
+/** Retire ce que la version 13 a ajouté (journal durable des gestes, écartées toujours, dernier message porteur, rang du message des entrées servies). */
 function sansVersion13(base: DatabaseSync): void {
 	base.exec('DROP TABLE gestes');
+	base.exec('DROP TABLE ecartees_toujours');
 	base.exec('ALTER TABLE sessions DROP COLUMN dernier_message');
 	base.exec('ALTER TABLE servis DROP COLUMN rang_message');
 }
@@ -778,6 +779,37 @@ describe('etat.sqlite', () => {
 		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
 		expect(VERSION_ETAT).toBe(13);
 		verif.close();
+	});
+
+	it('écartées toujours : une fois chacune, gardées, rétablies ; une base en 13 sans leur table la reçoit à l’ouverture', async () => {
+		const { etat, chemin } = await ouvrir();
+		expect(await etat.ecarterToujours({ fiche: 'b.md', session: 's1', horodatageMs: 20 })).toBe('ecartee');
+		expect(await etat.ecarterToujours({ fiche: 'a.md', session: null, horodatageMs: 10 })).toBe('ecartee');
+		expect(await etat.ecarterToujours({ fiche: 'a.md', session: 's2', horodatageMs: 30 })).toBe('deja_ecartee');
+		expect(await etat.ecarteesToujours()).toEqual([
+			{ fiche: 'a.md', session: null, horodatageMs: 10 },
+			{ fiche: 'b.md', session: 's1', horodatageMs: 20 },
+		]);
+		expect(await etat.retablirToujours('b.md')).toEqual({ fiche: 'b.md', session: 's1', horodatageMs: 20 });
+		expect(await etat.retablirToujours('b.md')).toBeNull();
+		etat.fermer();
+		ouverts.pop();
+		const base = new DatabaseSync(chemin);
+		base.exec('DROP TABLE ecartees_toujours');
+		base.close();
+		const rouvert = ouvrirEtat(chemin);
+		ouverts.push(rouvert);
+		expect(await rouvert.ecarteesToujours()).toEqual([]);
+		expect(await rouvert.ecarterToujours({ fiche: 'a.md', session: null, horodatageMs: 40 })).toBe('ecartee');
+	});
+
+	it('gestes depuis un rang : ceux écrits ensuite seulement', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('s1'));
+		for (const fiche of ['a.md', 'b.md', 'c.md']) await etat.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche, empreinte: null, horodatageMs: 5 });
+		const tous = await etat.gestes({ limite: null });
+		const deuxieme = tous.find((g) => g.fiche === 'b.md')!.rang;
+		expect((await etat.gestes({ depuisRang: deuxieme, limite: null })).map((g) => g.fiche).sort()).toEqual(['b.md', 'c.md']);
 	});
 
 	it('dernier message porteur : texte et rang gardés ensemble ; rang écrit dans les entrées de message non muettes seulement', async () => {
