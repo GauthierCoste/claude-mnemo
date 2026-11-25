@@ -88,14 +88,17 @@ describe('consigne et environnement de copilot', () => {
 			fichiers: [],
 			racine: RACINE,
 			appel: APPEL,
-			env: { PATH: '/bin', COPILOT_HOME: '/c' },
+			env: { PATH: '/bin', COPILOT_HOME: '/c', COPILOT_GITHUB_TOKEN: 'gho', GITHUB_TOKEN: 'ghp', CODEX_API_KEY: 'k', Mistral_Api_Key: 'm', ANTHROPIC_BASE_URL: 'http://x', CLAUDECODE: '1' },
 		};
 		const l = preparerCopilotCli(c);
 		expect(l.args[0]).toBe(`--session-id=${ID}`);
 		expect(l.args.at(-1)).toBe('--interactive=Fais le bilan.');
 		expect(l.env).toMatchObject({ PATH: '/bin', COPILOT_HOME: '/c', ...DE_SESSION, COPILOT_CUSTOM_INSTRUCTIONS_DIRS: '/r/.mnemo/plugins/x' });
 		expect(Object.keys(l.ajouts).sort()).toEqual(['COPILOT_CUSTOM_INSTRUCTIONS_DIRS', 'MNEMO_HOOKS', 'MNEMO_MOTEUR', 'MNEMO_PROJET', 'MNEMO_RACINE', 'MNEMO_SESSION']);
-		expect(l.retirees).toEqual([]);
+		// variables d'un autre fournisseur retirées (sans la casse) ; COPILOT_GITHUB_TOKEN et GITHUB_TOKEN gardées
+		expect(l.env).toMatchObject({ COPILOT_GITHUB_TOKEN: 'gho', GITHUB_TOKEN: 'ghp' });
+		for (const v of ['CODEX_API_KEY', 'Mistral_Api_Key', 'ANTHROPIC_BASE_URL', 'CLAUDECODE']) expect(l.env).not.toHaveProperty(v);
+		expect(l.retirees).toEqual(['CODEX_API_KEY', 'Mistral_Api_Key', 'ANTHROPIC_BASE_URL', 'CLAUDECODE']);
 	});
 });
 

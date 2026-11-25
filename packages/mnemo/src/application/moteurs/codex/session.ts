@@ -7,7 +7,7 @@ import { estUuid } from '../../../domaine/session.ts';
 import type { Session } from '../../../domaine/session.ts';
 import type { AppelPlugin, ContextePreparation, Dependances, FichierPlugin, Lancement, ModeLancement } from '../../ports.ts';
 import { consigneAvecSkills } from '../consigne-avec-skills.ts';
-import { environnementAvec, VARIABLES_DU_SERVEUR_MCP, variablesDeSession } from '../environnement-de-session.ts';
+import { environnementAvec, environnementPermis, VARIABLES_DU_SERVEUR_MCP, variablesDeSession, variablesRetirees } from '../environnement-de-session.ts';
 import { skillsDeSession } from '../skills-de-session.ts';
 
 /**
@@ -106,11 +106,12 @@ export function argumentsCodex(a: AppelArgumentsCodex): string[] {
 
 const estInterditeCodex = (majuscules: string): boolean => VARIABLES_INTERDITES_CODEX.includes(majuscules);
 
-/** Environnement de l'utilisateur sans les variables interdites à Codex (comparées sans la casse), pour tout `codex` lancé par Mnemo. */
+/**
+ * Environnement de l'utilisateur sans les variables interdites à Codex ni celles d'un autre fournisseur (comparées sans la
+ * casse), pour tout `codex` lancé par Mnemo.
+ */
 export function environnementPermisCodex(env: Record<string, string | undefined>): Record<string, string> {
-	const resultat: Record<string, string> = {};
-	for (const [cle, valeur] of Object.entries(env)) if (valeur !== undefined && !estInterditeCodex(cle.toUpperCase())) resultat[cle] = valeur;
-	return resultat;
+	return environnementPermis('codex', env, estInterditeCodex);
 }
 
 /**
@@ -134,6 +135,6 @@ export function preparerCodex(c: ContextePreparation): Lancement {
 		args,
 		env: environnementCodex(c.env, c.session, c.profil, c.racine),
 		ajouts: environnementCodex({}, c.session, c.profil, c.racine),
-		retirees: Object.keys(c.env).filter((cle) => c.env[cle] !== undefined && estInterditeCodex(cle.toUpperCase())),
+		retirees: variablesRetirees('codex', c.env, estInterditeCodex),
 	};
 }

@@ -86,6 +86,11 @@ describe('consigne et environnement de vibe', () => {
 			env: {
 				PATH: '/bin',
 				MISTRAL_API_KEY: 'k',
+				OPENAI_API_KEY: 'sk',
+				anthropic_api_key: 'sk-ant',
+				CLAUDE_CODE_ENTRYPOINT: 'cli',
+				COPILOT_GITHUB_TOKEN: 'gho',
+				GH_TOKEN: 'ghp',
 				VIBE_MCP_SERVERS: JSON.stringify([{ name: 'autre', transport: 'stdio', command: 'x' }, { name: 'mnemo', transport: 'stdio', command: 'vieux' }]),
 				VIBE_TOOLS: JSON.stringify({ bash: { permission: 'ask' } }),
 				VIBE_AGENT_PATHS: '["/mes/agents"]',
@@ -104,7 +109,10 @@ describe('consigne et environnement de vibe', () => {
 		for (const o of OUTILS_MNEMO_PERMIS) expect(outils[`mnemo_${o}`]).toEqual({ permission: 'always' });
 		expect(JSON.parse(l.env.VIBE_AGENT_PATHS!)).toEqual(['/r/.mnemo/plugins/x', '/mes/agents']);
 		expect(Object.keys(l.ajouts).sort()).toEqual(['MNEMO_HOOKS', 'MNEMO_MOTEUR', 'MNEMO_PROJET', 'MNEMO_RACINE', 'MNEMO_SESSION', 'VIBE_AGENT_PATHS', 'VIBE_MCP_SERVERS', 'VIBE_TOOLS']);
-		expect(l.retirees).toEqual([]);
+		// variables d'un autre fournisseur retirées (sans la casse) ; MISTRAL_API_KEY et GH_TOKEN gardées
+		expect(l.env).toMatchObject({ GH_TOKEN: 'ghp' });
+		for (const v of ['OPENAI_API_KEY', 'anthropic_api_key', 'CLAUDE_CODE_ENTRYPOINT', 'COPILOT_GITHUB_TOKEN']) expect(l.env).not.toHaveProperty(v);
+		expect(l.retirees).toEqual(['OPENAI_API_KEY', 'anthropic_api_key', 'CLAUDE_CODE_ENTRYPOINT', 'COPILOT_GITHUB_TOKEN']);
 		// variables de l'utilisateur illisibles : celles de la session seules
 		const seules = preparerMistralVibe({ ...c, env: { VIBE_MCP_SERVERS: '{', VIBE_TOOLS: '[]', VIBE_AGENT_PATHS: 'x' } });
 		expect((JSON.parse(seules.env.VIBE_MCP_SERVERS!) as unknown[]).length).toBe(1);

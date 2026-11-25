@@ -5,10 +5,10 @@ import { valeurToml } from '../../../domaine/moteurs/toml.ts';
 import type { Profil } from '../../../domaine/profil.ts';
 import { estUuid } from '../../../domaine/session.ts';
 import type { Session } from '../../../domaine/session.ts';
-import { definies, estObjet } from '../../../domaine/valeurs.ts';
+import { estObjet } from '../../../domaine/valeurs.ts';
 import type { AppelPlugin, ContextePreparation, Dependances, FichierPlugin, Lancement } from '../../ports.ts';
 import { consigneAvecSkills } from '../consigne-avec-skills.ts';
-import { environnementAvec, VARIABLES_DU_SERVEUR_MCP, variablesDeSession } from '../environnement-de-session.ts';
+import { environnementAvec, environnementPermis, VARIABLES_DU_SERVEUR_MCP, variablesDeSession, variablesRetirees } from '../environnement-de-session.ts';
 import { skillsDeSession } from '../skills-de-session.ts';
 
 /**
@@ -116,9 +116,12 @@ export function environnementMistralVibe(env: Record<string, string | undefined>
 	return { ...deSession, ...variablesDeVibe(env, deSession, c.appel, c.dossierFichiers) };
 }
 
-/** Lancement de `vibe` : arguments (`argumentsMistralVibe`), environnement ; pour la ligne à coller, les variables de la session. */
+/**
+ * Lancement de `vibe` : arguments (`argumentsMistralVibe`), environnement sans les variables d'un autre fournisseur ; pour la
+ * ligne à coller, les variables de la session et celles retirées.
+ */
 export function preparerMistralVibe(c: ContextePreparation): Lancement {
 	const args = argumentsMistralVibe({ session: c.session, profil: c.profil, mode: c.mode, racine: c.racine, ...(c.objectif === undefined ? {} : { objectif: c.objectif }) });
 	const ajouts = environnementMistralVibe(c.env, c);
-	return { args, env: environnementAvec(definies(c.env), ajouts), ajouts, retirees: [] };
+	return { args, env: environnementAvec(environnementPermis('mistral-vibe', c.env), ajouts), ajouts, retirees: variablesRetirees('mistral-vibe', c.env) };
 }

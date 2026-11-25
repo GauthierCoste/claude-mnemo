@@ -8,6 +8,7 @@ import { consignesVerifieesPossibles } from '../../../domaine/refus-outil.ts';
 import { estUuid } from '../../../domaine/session.ts';
 import type { EvenementHook, Session } from '../../../domaine/session.ts';
 import type { AppelPlugin, ContextePreparation, Dependances, FichierPlugin, Lancement, PluginInstalle } from '../../ports.ts';
+import { environnementAvec, environnementPermis, variablesRetirees } from '../environnement-de-session.ts';
 import { skillsDeSession } from '../skills-de-session.ts';
 
 /**
@@ -176,19 +177,13 @@ export function premierMessage(objectif?: string): string[] {
 }
 
 /**
- * Environnement de `claude` : celui de l'utilisateur, sans les variables interdites (comparées sans la casse, comme sous
- * Windows), plus la session Mnemo (lue par `mnemo hook` et `mnemo mcp`), son moteur (`MNEMO_MOTEUR` : les hooks d'un autre
+ * Environnement de `claude` : celui de l'utilisateur, sans les variables interdites (`estInterdite`) ni celles d'un autre
+ * fournisseur (`estDUnAutreFournisseur`), comparées sans la casse comme sous Windows, plus la session Mnemo (lue par `mnemo hook` et `mnemo mcp`), son moteur (`MNEMO_MOTEUR` : les hooks d'un autre
  * moteur lancé depuis la session, qui hérite de `MNEMO_SESSION`, restent inertes) et l'auto-mémoire coupée.
  */
 export function environnementClaude(env: Record<string, string | undefined>, session: Session, racine: string): Record<string, string> {
 	const ajouts: Record<string, string> = { MNEMO_SESSION: session.id, MNEMO_MOTEUR: 'claude-code', MNEMO_PROJET: session.projet, MNEMO_RACINE: racine, CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' };
-	const resultat: Record<string, string> = {};
-	for (const [cle, valeur] of Object.entries(env)) {
-		const majuscules = cle.toUpperCase();
-		if (valeur === undefined || estInterdite(majuscules) || majuscules in ajouts) continue;
-		resultat[cle] = valeur;
-	}
-	return { ...resultat, ...ajouts };
+	return environnementAvec(environnementPermis('claude-code', env, estInterdite), ajouts);
 }
 
 /**
@@ -201,6 +196,6 @@ export function preparerClaudeCode(c: ContextePreparation): Lancement {
 		args,
 		env: environnementClaude(c.env, c.session, c.racine),
 		ajouts: environnementClaude({}, c.session, c.racine),
-		retirees: Object.keys(c.env).filter((cle) => c.env[cle] !== undefined && estInterdite(cle.toUpperCase())),
+		retirees: variablesRetirees('claude-code', c.env, estInterdite),
 	};
 }

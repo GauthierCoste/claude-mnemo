@@ -5,12 +5,12 @@ import type { Moteur } from '../../application/ports.ts';
 import { OUTILS_COPILOT_CLI } from '../../domaine/moteurs/copilot-cli/outils.ts';
 import { TOUCHES_COPILOT_CLI } from '../../domaine/moteurs/copilot-cli/touches.ts';
 import { refusDeVersionCopilotCli } from '../../domaine/moteurs/copilot-cli/version.ts';
-import { definies } from '../../domaine/valeurs.ts';
 import { DECLARATION_MCP_COPILOT_CLI } from './copilot-cli/declaration-mcp.ts';
 import { HOOKS_DU_POSTE_COPILOT_CLI } from './copilot-cli/hooks-du-poste.ts';
 import { modelesCopilotCli } from './copilot-cli/modeles.ts';
 import { lectureTranscriptionCopilotCli } from './copilot-cli/transcription.ts';
 import { trouverCopilot } from './copilot-cli/trouver-copilot.ts';
+import { environnementPermis } from '../../application/moteurs/environnement-de-session.ts';
 import { versionParCommande } from './version-par-commande.ts';
 
 /**
@@ -41,7 +41,7 @@ export const MOTEUR_COPILOT_CLI: Moteur = {
 	declarationMcp: DECLARATION_MCP_COPILOT_CLI,
 	hooksDuPoste: HOOKS_DU_POSTE_COPILOT_CLI,
 	// sans mise à jour automatique pendant la lecture de la version
-	version: versionParCommande((env) => definies({ ...env, COPILOT_AUTO_UPDATE: 'false' })),
+	version: versionParCommande((env) => environnementPermis('copilot-cli', { ...env, COPILOT_AUTO_UPDATE: 'false' })),
 	refusDeVersion: refusDeVersionCopilotCli,
 	// l'identifiant de la session chez Copilot (`--session-id=<uuid>`) : la marque dans la ligne de commande
 	marqueDeSession: (uuid) => uuid,

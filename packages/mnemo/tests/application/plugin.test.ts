@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { argumentsClaude, assemblerPlugin, enabledPluginsDe, environnementClaude } from '../../src/application/moteurs/claude-code/plugin.ts';
+import { argumentsClaude, assemblerPlugin, enabledPluginsDe, environnementClaude, estInterdite } from '../../src/application/moteurs/claude-code/plugin.ts';
+import { variablesRetirees } from '../../src/application/moteurs/environnement-de-session.ts';
 import type { PluginInstalle } from '../../src/application/ports.ts';
 import type { FichierPlugin } from '../../src/application/ports.ts';
 import { empreinte } from '../../src/domaine/empreinte.ts';
@@ -401,6 +402,13 @@ describe('environnementClaude', () => {
 			'/m',
 		);
 		expect(Object.keys(env).filter((k) => !k.startsWith('MNEMO_') && k !== 'CLAUDE_CODE_DISABLE_AUTO_MEMORY').sort()).toEqual(['CLAUDE_CODE_AUTRE', 'CLAUDE_CODE_USE_POWERSHELL_TOOL']);
+	});
+
+	it("retire les clés et jetons d'un autre fournisseur (sans la casse), garde GH_TOKEN et GITHUB_TOKEN ; ligne à coller : variables retirées", () => {
+		const env = { PATH: '/usr/bin', OPENAI_API_KEY: 'sk', codex_api_key: 'k', MISTRAL_API_KEY: 'm', COPILOT_GITHUB_TOKEN: 'gho', GH_TOKEN: 'ghp', GITHUB_TOKEN: 'ghp2', ANTHROPIC_API_KEY: 'sk-ant' };
+		const resultat = environnementClaude(env, session(), '/m');
+		expect(Object.keys(resultat).filter((k) => !k.startsWith('MNEMO_') && k !== 'CLAUDE_CODE_DISABLE_AUTO_MEMORY').sort()).toEqual(['GH_TOKEN', 'GITHUB_TOKEN', 'PATH']);
+		expect(variablesRetirees('claude-code', env, estInterdite)).toEqual(['OPENAI_API_KEY', 'codex_api_key', 'MISTRAL_API_KEY', 'COPILOT_GITHUB_TOKEN', 'ANTHROPIC_API_KEY']);
 	});
 
 	it('retire les variables interdites quelle que soit leur casse (Windows)', () => {

@@ -145,7 +145,7 @@ describe('consigne et fichiers de session de Codex', () => {
 			fichiers: [{ chemin: 'consigne.md', texte: 'Consigne avec skills.\n' }],
 			racine: RACINE,
 			appel: APPEL,
-			env: { PATH: '/bin', OPENAI_API_KEY: 'sk', CODEX_API_KEY: 'k' },
+			env: { PATH: '/bin', OPENAI_API_KEY: 'sk', CODEX_API_KEY: 'k', ANTHROPIC_API_KEY: 'sk-ant', CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli', MISTRAL_API_KEY: 'm', COPILOT_GITHUB_TOKEN: 'gho', GH_TOKEN: 'ghp' },
 		};
 		const l = preparerCodex(c);
 		expect(configs(l.args).get('developer_instructions')).toBe("'''Consigne avec skills.\n'''");
@@ -153,8 +153,10 @@ describe('consigne et fichiers de session de Codex', () => {
 		expect(l.env).toMatchObject({ PATH: '/bin', MNEMO_MOTEUR: 'codex', MNEMO_SESSION: ID });
 		expect(l.env).not.toHaveProperty('CODEX_API_KEY');
 		expect(l.env).toHaveProperty('OPENAI_API_KEY', 'sk');
+		expect(l.env).toHaveProperty('GH_TOKEN', 'ghp');
+		for (const v of ['ANTHROPIC_API_KEY', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'MISTRAL_API_KEY', 'COPILOT_GITHUB_TOKEN']) expect(l.env).not.toHaveProperty(v);
 		expect(l.ajouts).toEqual({ MNEMO_SESSION: ID, MNEMO_MOTEUR: 'codex', MNEMO_PROJET: 'alpha', MNEMO_RACINE: RACINE, MNEMO_HOOKS: PROFIL.hooks.join(',') });
-		expect(l.retirees).toEqual(['CODEX_API_KEY']);
+		expect(l.retirees).toEqual(['CODEX_API_KEY', 'ANTHROPIC_API_KEY', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'MISTRAL_API_KEY', 'COPILOT_GITHUB_TOKEN']);
 	});
 });
 

@@ -10,8 +10,8 @@ import { hooksDuPosteMistralVibe } from './mistral-vibe/hooks-toml.ts';
 import { modelesMistralVibe } from './mistral-vibe/modeles.ts';
 import { lectureTranscriptionMistralVibe } from './mistral-vibe/transcription.ts';
 import { trouverVibe } from './mistral-vibe/trouver-vibe.ts';
+import { environnementPermis } from '../../application/moteurs/environnement-de-session.ts';
 import { versionParCommande } from './version-par-commande.ts';
-import { definies } from '../../domaine/valeurs.ts';
 
 
 /**
@@ -40,7 +40,7 @@ export const MOTEUR_MISTRAL_VIBE: Moteur = {
 	declarationMcp: DECLARATION_MCP_MISTRAL_VIBE,
 	// Vibe lance les hooks par le shell de la plateforme : celle de ce processus
 	hooksDuPoste: hooksDuPosteMistralVibe(process.platform),
-	version: versionParCommande(definies),
+	version: versionParCommande((env) => environnementPermis('mistral-vibe', env)),
 	refusDeVersion: refusDeVersionMistralVibe,
 	marqueDeSession: agentDeSession,
 	motifSansReprise: motifSansRepriseMistralVibe,

@@ -3,10 +3,9 @@ import { OUTILS_MNEMO_PERMIS } from '../../../domaine/moteurs/outils-permis.ts';
 import type { Profil } from '../../../domaine/profil.ts';
 import { estUuid } from '../../../domaine/session.ts';
 import type { Session } from '../../../domaine/session.ts';
-import { definies } from '../../../domaine/valeurs.ts';
 import type { AppelPlugin, ContextePreparation, Dependances, FichierPlugin, Lancement } from '../../ports.ts';
 import { consigneAvecSkills } from '../consigne-avec-skills.ts';
-import { environnementAvec, VARIABLES_DU_SERVEUR_MCP, variablesDeSession } from '../environnement-de-session.ts';
+import { environnementAvec, environnementPermis, VARIABLES_DU_SERVEUR_MCP, variablesDeSession, variablesRetirees } from '../environnement-de-session.ts';
 import { skillsDeSession } from '../skills-de-session.ts';
 
 /**
@@ -88,13 +87,14 @@ export function variablesDeCopilot(env: Record<string, string | undefined>, doss
 }
 
 /**
- * Lancement de `copilot` : arguments (`argumentsCopilotCli`), environnement de l'utilisateur plus la session Mnemo
+ * Lancement de `copilot` : arguments (`argumentsCopilotCli`), environnement de l'utilisateur (sans les variables d'un autre
+ * fournisseur) plus la session Mnemo
  * (`variablesDeSession` : sans `MNEMO_MOTEUR`, les hooks de Mnemo de `hooks/mnemo.json` restent inertes) et la consigne
- * (`variablesDeCopilot`) ; pour la ligne à coller, ces variables.
+ * (`variablesDeCopilot`) ; pour la ligne à coller, ces variables et celles retirées.
  */
 export function preparerCopilotCli(c: ContextePreparation): Lancement {
 	const deSession = variablesDeSession('copilot-cli', c.session, c.profil, c.racine);
 	const args = argumentsCopilotCli({ session: c.session, profil: c.profil, racine: c.racine, deSession, appel: c.appel, ...(c.objectif === undefined ? {} : { objectif: c.objectif }) });
 	const ajouts = { ...deSession, ...variablesDeCopilot(c.env, c.dossierFichiers) };
-	return { args, env: environnementAvec(definies(c.env), ajouts), ajouts, retirees: [] };
+	return { args, env: environnementAvec(environnementPermis('copilot-cli', c.env), ajouts), ajouts, retirees: variablesRetirees('copilot-cli', c.env) };
 }
