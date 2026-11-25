@@ -133,6 +133,8 @@ export function ClassementEnDirect(p: {
 	const idsEcartes = ecartes.map((e) => e.id);
 	const horsJeu = (id: string) => estEcarte(id, idsEcartes) || jamais.has(chemin(id));
 	const derniere = derniereEntree(p.entrees);
+	// sans message porteur encore, un message muet dit pourquoi rien n’est proposé
+	const muetSeul = derniere === null ? (p.entrees.reduce<(typeof p.entrees)[number] | null>((a, e) => (a === null || e.horodatageMs > a.horodatageMs ? e : a), null)?.muet ?? null) : null;
 	const calibre = estCalibre(derniere);
 	const cle = cleDe(derniere);
 	const titres = titresConnus(p.entrees);
@@ -597,7 +599,7 @@ export function ClassementEnDirect(p: {
 					{jamaisIci.map(titre).join(', ')} : plus jamais suggérée{jamaisIci.length > 1 ? 's' : ''}. Se rétablit depuis la fiche, page Mémoire.
 				</p>
 			)}
-			{derniere?.muet != null && <p className={s.avis}>{LIBELLES_MUET[derniere.muet]}</p>}
+			{muetSeul !== null && <p className={s.avis}>{LIBELLES_MUET[muetSeul]}</p>}
 			{sansSens && demarrage?.pour === cle ? (
 				<p className={s.avis}>Modèles démarrés : les notes viendront au prochain message.</p>
 			) : avis?.motif === 'arretes' ? (
