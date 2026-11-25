@@ -81,6 +81,13 @@ describe('perimetreDe', () => {
 		expect(dans.has(SVE)).toBe(true);
 		expect(dans.has(GIT)).toBe(true);
 	});
+	it('une fiche rangée sous un lieu ascendant de la position est du périmètre, le lieu aussi', () => {
+		const { dans, ailleurs } = perimetreDe(SOUS, fiches, aretes);
+		expect(dans.has(OUTIL)).toBe(true);
+		expect(dans.has(SVE)).toBe(true);
+		expect(ailleurs.has(OUTIL)).toBe(false);
+		expect(dans.has(ERP)).toBe(false);
+	});
 	it("un ascendant de la position n'est pas d'ailleurs", () => {
 		const { ailleurs } = perimetreDe(SOUS, fiches, aretes);
 		expect(ailleurs.has(SVE)).toBe(false);

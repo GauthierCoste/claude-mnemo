@@ -21,6 +21,10 @@ export function lieuDeclare(chemin: string, declarants: ReadonlySet<string>): st
 	return null;
 }
 
+/**
+ * `dans` : fiches rangées sous la position, fiches dont le lieu déclaré est un ascendant de la position, voisines à un ou deux
+ * sauts ; `ailleurs` : fiches d'un autre lieu, fermées tant que leur lieu n'est pas nommé.
+ */
 export type Perimetre = { dans: Set<string>; ailleurs: Set<string> };
 
 /** Fiches reliées à un saut d'une fiche de `depart`, dans un sens ou dans l'autre. */
@@ -49,14 +53,17 @@ export function perimetreDe(position: string | null, fiches: readonly FicheDuGra
 	const unSaut = voisinsDe(new Set([position]), aretes);
 	const deuxSauts = voisinsDe(unSaut, aretes);
 
+	// fiches dont le lieu est un ascendant de la position (le client d'un projet, ses autres fiches) : du périmètre
+	const sousUnAscendant: string[] = [];
 	for (const { chemin } of fiches) {
 		if (chemin === position || rangee(chemin)) continue;
 		const lieu = lieuDeclare(chemin, declarants);
+		if (lieu !== null && lieu !== position && ascendants.has(lieu)) sousUnAscendant.push(chemin);
 		// Une fiche reliée directement à la position est du périmètre (lien écrit exprès), comme son lieu.
 		if (lieu !== null && lieu !== position && !ascendants.has(lieu) && !unSaut.has(lieu) && !unSaut.has(chemin)) ailleurs.add(chemin);
 	}
 	const existantes = new Set(fiches.map((f) => f.chemin));
-	const candidates = [...existantes].filter(rangee).concat([...unSaut], [...deuxSauts]);
+	const candidates = [...existantes].filter(rangee).concat(sousUnAscendant, [...unSaut], [...deuxSauts]);
 	for (const chemin of candidates) {
 		if (chemin !== position && existantes.has(chemin) && !ailleurs.has(chemin)) dans.add(chemin);
 	}
