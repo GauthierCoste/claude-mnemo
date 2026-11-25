@@ -1,7 +1,7 @@
 import type { CauseArret, EvenementHook, Session, SourceDeDebut } from '../domaine/session.ts';
 import { objectifDe } from '../domaine/session.ts';
 import { ecrireEpisodeMinimal } from './episode.ts';
-import type { Classe, Dependances, Pilotage } from './ports.ts';
+import type { Classe, Dependances, Pilotage, VecteurDuMessage } from './ports.ts';
 import type { NoteDuGeste } from '../domaine/gestes.ts';
 import { positionDeSession, positionNotee } from './dossiers-non-rattaches.ts';
 import type { Position } from './position.ts';
@@ -15,6 +15,8 @@ import { servir } from './servir.ts';
 import type { DemandeServir, Servi } from './servir.ts';
 import { verifierAction } from './verifier-action.ts';
 import { noterGeste } from './gestes.ts';
+import { exclusionDefinitive } from './apriori.ts';
+import type { AprioriDesGestes } from './apriori.ts';
 import { noteDuPorteur, notesDuClassement, vecteurDuPorteur } from './porteurs-recents.ts';
 import type { PorteursRecents } from './porteurs-recents.ts';
 import { refusDelai, refusSurErreur, reponseDe, selonIndicateur } from '../domaine/refus-outil.ts';
@@ -77,6 +79,12 @@ export type ReglagesEvenement = {
 	 * en reprennent le vecteur. Sans lui (`mnemo hook` sans service), seule l'injection à la main garde le vecteur de son message.
 	 */
 	porteurs?: PorteursRecents;
+	/**
+	 * Le service : l'a priori des gestes entre sessions (journalisé dans les signaux bruts, sans rien décider encore) et les
+	 * écartées toujours (hors des candidates). Sans lui (`mnemo hook` sans service), les écartées toujours actives sont relues
+	 * dans l'état et l'a priori vaut 0.
+	 */
+	apriori?: AprioriDesGestes;
 };
 
 /** Extrait de la demande gardé avec une entrée servie (et la trace d'un écarté) : large, la demande est journalisée presque entière. */
@@ -326,6 +334,10 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 	// seuls les messages comptent : un appel de l'outil `contexte` journalisé avant le premier message n'injecte aucun rappel
 	const rappels = session !== null && (await pil.etat.servis(session.id, 1, 'message').catch(() => [])).length === 0;
 	const premier = session !== null && muet === null && (await pil.etat.perimetrePropose(session.id).catch(() => 0)) === null;
+	const exclusDefinitivement = await exclusionDefinitive(pil.etat, reglages.apriori);
+	const apriori = reglages.apriori;
+	// les gestes de la session courante passent par le signal de session et l'écart, pas par l'a priori
+	const contexte = { maintenantMs: entree.horodatageMs, sessionCourante: session?.id ?? null, dossier: session?.dossier ?? null, position: session?.position ?? null };
 	return {
 		position: position.chemin,
 		message,
@@ -339,6 +351,8 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 		premier,
 		fin,
 		rappels,
+		exclusDefinitivement,
+		...(apriori === undefined ? {} : { aprioris: (vecteur: VecteurDuMessage | null) => apriori.aprioris({ ...contexte, vecteur }) }),
 	};
 }
 

@@ -7,6 +7,7 @@ import { dossiersNonRattaches } from '../../src/application/dossiers-non-rattach
 import { fichesDemandees } from '../../src/application/fiches-demandees.ts';
 import { proposer } from '../../src/application/proposer.ts';
 import { porteursRecents } from '../../src/application/porteurs-recents.ts';
+import { aprioriDesGestes } from '../../src/application/apriori.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
 import type { Sens } from '../../src/application/ports.ts';
 import { servirQuestion } from '../aides/servir.ts';
@@ -500,6 +501,46 @@ describe('traiterEvenement : contexte sobre au message', () => {
 		// un message muet sans rien à injecter n'est pas classé, ni journalisé
 		expect(await traiterEvenement(dep, pil, message(12, 'ok merci'), local)).toEqual({});
 		expect(await etat.servis(ID, 5)).toHaveLength(2);
+	});
+
+	it('hook local sans service : une écartée toujours (active) sort des candidates, une rétablie y revient ; a priori 0', async () => {
+		const { dep, etat, pil } = await memoire();
+		await dep.coffre.ecrire('projets/vela/ristournes.md', `${entete()}# Ristournes\n\nUne ristourne baisse le prix.\n`);
+		await etat.ecarterToujours({ fiche: AVOIRS, session: null, horodatageMs: 5 });
+		const r = await traiterEvenement(dep, pil, message(10, 'catalogue références'), local);
+		expect(r.contexte).not.toContain('Avoirs');
+		const premier = (await etat.servis(ID, 1))[0]!.classement;
+		expect(premier.map((c) => c.id)).toEqual(['projets/vela/ristournes.md']);
+		expect(premier[0]!.signaux?.apriori).toBe(0);
+		await etat.retablirToujours(AVOIRS, 6);
+		await traiterEvenement(dep, pil, message(11, 'catalogue références'), local);
+		expect((await etat.servis(ID, 1))[0]!.classement.map((c) => c.id)).toContain(AVOIRS);
+	});
+
+	it('service : a priori des gestes d’une autre session dans les signaux journalisés ; écartées lues dans la base tant qu’il n’est pas chargé', async () => {
+		const { dep, etat, pil } = await memoire();
+		await dep.coffre.ecrire('projets/vela/ristournes.md', `${entete()}# Ristournes\n\nUne ristourne baisse le prix.\n`);
+		const AUTRE = '22222222-2222-4333-8444-555555555555';
+		await etat.creer(session({ id: AUTRE }));
+		await etat.noterGeste({ geste: 'injectee_main', session: AUTRE, fiche: AVOIRS, empreinte: null, horodatageMs: 5 });
+		const apriori = aprioriDesGestes(etat, { horloge: () => 10 });
+		// pas encore chargé : l'écartée toujours est relue dans la base
+		await etat.ecarterToujours({ fiche: 'projets/vela/ristournes.md', session: null, horodatageMs: 6 });
+		expect(apriori.charge()).toBe(false);
+		await traiterEvenement(dep, pil, message(10, 'catalogue références'), { ...local, apriori });
+		expect((await etat.servis(ID, 1))[0]!.classement.map((c) => c.id)).toEqual([AVOIRS]);
+		await etat.retablirToujours('projets/vela/ristournes.md', 7);
+		await apriori.actualiser({ ecartees: true });
+		await traiterEvenement(dep, pil, message(11, 'catalogue références'), { ...local, apriori });
+		const classement = (await etat.servis(ID, 1))[0]!.classement;
+		const avoirs = classement.find((c) => c.id === AVOIRS)!;
+		expect(avoirs.signaux?.apriori).toBeGreaterThan(0);
+		// arrondi à 4 décimales, comme les autres signaux
+		expect(avoirs.signaux?.apriori).toBe(Math.round(avoirs.signaux!.apriori! * 10_000) / 10_000);
+		expect(classement.find((c) => c.id === 'projets/vela/ristournes.md')?.signaux?.apriori).toBe(0);
+		// l'a priori ne décide rien : même ordre que sans lui
+		await traiterEvenement(dep, pil, message(12, 'catalogue références'), local);
+		expect((await etat.servis(ID, 1))[0]!.classement.map((c) => c.id)).toEqual(classement.map((c) => c.id));
 	});
 
 	it('message muet (balise) : consignes seules, journal muet « balise », aucune carte notée', async () => {

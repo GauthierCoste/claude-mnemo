@@ -28,6 +28,8 @@ export type AprioriDesGestes = {
 	suggestions(session?: string): SuggestionEcarteeToujours[];
 	/** Fiches écartées toujours (lues à la dernière actualisation). */
 	ecarteesToujours(): ReadonlySet<string>;
+	/** Vrai dès la première lecture réussie du journal : avant, gestes et écartées toujours sont encore inconnus. */
+	charge(): boolean;
 	/** Les candidates, sans celles dont la fiche est écartée toujours : à appeler par le classement avant de noter. */
 	exclusDefinitivement<T extends string | { id: string } | { chemin: string }>(candidates: readonly T[]): T[];
 	/** Une session supprimée : le vecteur de ses messages quitte aussi la mémoire du service. */
@@ -201,6 +203,7 @@ export function aprioriDesGestes(etat: Pick<EtatSessions, 'gestes' | 'ecarteesTo
 		aprioris: (contexte) => aprioris(voix, contexte),
 		suggestions: (session) => (session === undefined ? visibles() : visibles().filter((s) => s.sessions.includes(session))),
 		ecarteesToujours: () => ecartees,
+		charge: () => charge,
 		exclusDefinitivement: (candidates) => sansEcarteesToujours(candidates, ecartees, idDe),
 		oublierSession(session) {
 			const touchees = new Set<string>();
@@ -216,4 +219,22 @@ export function aprioriDesGestes(etat: Pick<EtatSessions, 'gestes' | 'ecarteesTo
 		},
 		taille: () => ({ gestes: gestes.size, vecteurs: vecteurs.size }),
 	};
+}
+
+/**
+ * L'exclusion des écartées toujours pour un classement : celle de l'a priori du service s'il a déjà lu l'état ; sinon (hook
+ * local sans service, service pas encore chargé, outil `contexte`) les écartées actives (non rétablies) relues dans l'état.
+ * État illisible : aucune exclusion.
+ */
+export async function exclusionDefinitive(
+	etat: Pick<EtatSessions, 'ecarteesToujours'>,
+	apriori?: Pick<AprioriDesGestes, 'charge' | 'exclusDefinitivement'>,
+): Promise<(chemins: readonly string[]) => string[]> {
+	if (apriori?.charge() === true) return (chemins) => apriori.exclusDefinitivement(chemins);
+	// une erreur, même levée avant la promesse, vaut un état illisible
+	const lues = await Promise.resolve()
+		.then(() => etat.ecarteesToujours())
+		.catch((): EcarteeToujours[] => []);
+	const actives = new Set(lues.filter((e) => e.retablieMs === null).map((e) => e.fiche));
+	return (chemins) => sansEcarteesToujours(chemins, actives, (c) => c);
 }

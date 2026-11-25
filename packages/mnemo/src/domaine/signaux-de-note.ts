@@ -8,9 +8,10 @@
  * de la fiche) ; `cosinusRelatif` : ce cosinus moins la médiane des cosinus de toutes les fiches de la mémoire pour ce message ;
  * `bm25Relatif` : le bm25 de la fiche rapporté au meilleur de sa liste de mots (0 : les mots ne la trouvent pas ; null : le
  * message n'a pas de mots cherchables) ; `signalSession` : le poids des signaux de la session (voisine d'une fiche injectée à la
- * main), 0 sans signal.
+ * main), 0 sans signal ; `apriori` : l'a priori des gestes entre sessions (`domaine/apriori-gestes.ts`, en logit, borné à ±1),
+ * 0 sans geste ou sans le service qui le tient. Il est journalisé seulement : il ne change ni l'ordre ni les pistes.
  */
-export type SignauxBruts = { cosinus: number | null; cosinusRelatif: number | null; bm25Relatif: number | null; signalSession: number };
+export type SignauxBruts = { cosinus: number | null; cosinusRelatif: number | null; bm25Relatif: number | null; signalSession: number; apriori: number };
 
 /** Médiane ; null pour une liste vide. */
 export function mediane(valeurs: readonly number[]): number | null {

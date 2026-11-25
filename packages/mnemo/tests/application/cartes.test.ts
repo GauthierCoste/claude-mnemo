@@ -503,6 +503,40 @@ describe('calculerCartes : classement à chaque message porteur', () => {
 		expect(erp?.signaux.signalSession).toBeGreaterThan(0);
 		expect(erp?.raison).toBe('liee');
 	});
+
+	it('écartée toujours : absente des candidates, du classement et des fiches nommées', async () => {
+		const dep = await avecNeutre();
+		const vues: string[][] = [];
+		const exclusDefinitivement = (c: readonly string[]) => (vues.push([...c]), c.filter((x) => x !== NEUTRE && x !== YSALINE));
+		const c = await calculerCartes(dep, demande({ message: 'Maquette ERP, et Ysaline', exclusDefinitivement }));
+		// appelée une fois, sur toutes les fiches, avant toute note
+		expect(vues).toHaveLength(1);
+		expect(vues[0]).toEqual(expect.arrayContaining([NEUTRE, YSALINE, OUTIL]));
+		expect(classees(c)).not.toContain(NEUTRE);
+		expect(classees(c)).not.toContain(YSALINE);
+		expect(chemins(c)).not.toContain(YSALINE);
+		expect(classees(c)).toContain(OUTIL);
+	});
+
+	it('a priori des gestes : dans les signaux bruts (0 sans geste), sans changer ni l’ordre ni les pistes', async () => {
+		const dep = await avecNeutre();
+		dep.sens = sensParMots;
+		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
+		const sans = await calculerCartes(dep, demande({ message: 'la maquette des sites' }));
+		const dernier = sans.classement.at(-1)!.chemin;
+		let vecteurRecu: unknown = undefined;
+		const aprioris = (v: unknown) => ((vecteurRecu = v), new Map([[dernier, 1], [OUTIL, -0.5]]));
+		const avec = await calculerCartes(dep, demande({ message: 'la maquette des sites', aprioris }));
+		// le vecteur du message est donné à l'a priori (la ressemblance des messages)
+		expect(vecteurRecu).toEqual(avec.vecteur);
+		expect(classees(avec)).toEqual(classees(sans));
+		expect(chemins(avec)).toEqual(chemins(sans));
+		const ligne = (chemin: string) => avec.classement.find((l) => l.chemin === chemin)!;
+		expect(ligne(dernier).signaux.apriori).toBe(1);
+		expect(ligne(OUTIL).signaux.apriori).toBe(-0.5);
+		expect(avec.classement.filter((l) => l.chemin !== dernier && l.chemin !== OUTIL).every((l) => l.signaux.apriori === 0)).toBe(true);
+		expect(sans.classement.every((l) => l.signaux.apriori === 0)).toBe(true);
+	});
 });
 
 describe('calculerCartes : outil contexte (question)', () => {

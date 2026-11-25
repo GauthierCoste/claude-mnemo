@@ -275,8 +275,9 @@ export type Dependances = {
 	indicateur: IndicateurConsignes;
 	/** Écriture venue d'une session Mnemo : sa session et son dossier d'épisodes. */
 	origine?: { session: string; projet: string };
-	/** État des sessions : l'épisode d'une session (`origine`) y prend son début, son profil, sa branche ; l'outil `contexte` y lit ses fiches servies et injectées à la main, note les cartes proposées et journalise son appel. */
-	sessions?: Pick<EtatSessions, 'lire' | 'fichesServiesLuesOuEcrites' | 'noterFicheServieLueOuEcrite' | 'noterCarteProposee' | 'journaliser' | 'injectionsManuelles'>;
+	/** État des sessions : l'épisode d'une session (`origine`) y prend son début, son profil, sa branche ; l'outil `contexte` y lit ses fiches servies et injectées à la main, note les cartes proposées et journalise son appel ; les écartées toujours n'y sont jamais proposées. */
+	sessions?: Pick<EtatSessions, 'lire' | 'fichesServiesLuesOuEcrites' | 'noterFicheServieLueOuEcrite' | 'noterCarteProposee' | 'journaliser' | 'injectionsManuelles'> &
+		Partial<Pick<EtatSessions, 'ecarteesToujours'>>;
 	/** Extraction des documents en arrière-plan (processus qui durent : service, serveur MCP) ; la recherche la réveille. */
 	extractionDifferee?: ExtractionDifferee;
 	/** Plugins Claude Code installés et skills personnelles de l'utilisateur, en lecture seule. */
@@ -568,7 +569,8 @@ export type Classe = {
 	servi: boolean;
 	rang: number;
 	p?: number | null;
-	signaux?: SignauxBruts;
+	/** `apriori` : absent des entrées écrites avant l'a priori des gestes (lu comme 0). */
+	signaux?: Omit<SignauxBruts, 'apriori'> & { apriori?: number };
 	deja?: DejaDansLaSession;
 	piste?: boolean;
 	raison?: RaisonCarte;

@@ -8,7 +8,7 @@ const ligne = (i: number, surcharge: Partial<LigneDeClassement> = {}): LigneDeCl
 	titre: `F${i}`,
 	note: 0.812345678 - i / 1000,
 	p: null,
-	signaux: { cosinus: 0.812345678, cosinusRelatif: 0.1234567, bm25Relatif: null, signalSession: 0 },
+	signaux: { cosinus: 0.812345678, cosinusRelatif: 0.1234567, bm25Relatif: null, signalSession: 0, apriori: 0 },
 	deja: i === 1 ? 'injectee' : null,
 	raison: i === 0 ? 'perimetre' : null,
 	piste: i === 0,
@@ -23,7 +23,7 @@ describe('classementDuJournal', () => {
 			note: 0.8123,
 			servi: false,
 			rang: 1,
-			signaux: { cosinus: 0.8123, cosinusRelatif: 0.1235, bm25Relatif: null, signalSession: 0 },
+			signaux: { cosinus: 0.8123, cosinusRelatif: 0.1235, bm25Relatif: null, signalSession: 0, apriori: 0 },
 			piste: true,
 			raison: 'perimetre',
 		});

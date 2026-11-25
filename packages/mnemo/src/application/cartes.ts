@@ -85,6 +85,16 @@ export type DemandeCartes = {
 	injectees?: readonly InjectionManuelle[];
 	/** Fiches injectées entières à ce message à la demande de l'utilisateur : jamais candidates (exclues avant le plafond). */
 	demandees?: readonly string[];
+	/**
+	 * Les chemins donnés, sans les fiches écartées toujours (spec classement vivant § 4.4 : hors des candidates partout, jusqu'à
+	 * leur rétablissement) : `exclusDefinitivement` de l'a priori du service, ou la liste lue dans l'état. Absent : aucune.
+	 */
+	exclusDefinitivement?: (chemins: readonly string[]) => string[];
+	/**
+	 * A priori des gestes de chaque fiche pour ce message, selon son vecteur (null : pas de vecteur) ; une fiche absente vaut 0.
+	 * Journalisé dans les signaux bruts seulement : il ne change ni l'ordre ni les pistes (aucune note apprise ne l'utilise encore).
+	 */
+	aprioris?: (vecteur: VecteurDuMessage | null) => ReadonlyMap<string, number>;
 };
 /**
  * `positionFiche` : fiche de la position si elle existe dans l'index (injectée ou non) ; null sinon : il n'y a alors pas de périmètre à proposer.
@@ -217,11 +227,15 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 	const ecartees = new Set(d.ecartes);
 	const dejaVue = (chemin: string): boolean => ecartees.has(chemin) || dejaDe(chemin) !== null;
 	const demandees = new Set(d.demandees ?? []);
+	// écartées toujours : retirées une fois de toutes les fiches, avant toute note
+	const permises = d.exclusDefinitivement === undefined ? null : new Set(d.exclusDefinitivement(elements.map((e) => e.chemin)));
 	const jour = aujourdhui(dep);
 	// Candidate (spec classement vivant § 3.3) : indexée, d'un type proposable, non périmée (`perime_le` passé), ni la fiche de
-	// position, ni demandée à ce message, ni écartée. Le classement la garde même déjà injectée, lue ou proposée.
+	// position, ni demandée à ce message, ni écartée (dans la session, ou toujours). Le classement la garde même déjà injectée,
+	// lue ou proposée.
 	const candidate = (chemin: string): boolean =>
 		elementDe.has(chemin) &&
+		(permises === null || permises.has(chemin)) &&
 		!TYPES_NON_PROPOSABLES.has(type(chemin)) &&
 		!estExpire(elementDe.get(chemin)!, jour) &&
 		chemin !== positionFiche &&
@@ -329,7 +343,16 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		const horsClassement = [...cartesNommees, ...(carteDePosition === null ? [] : [carteDePosition])];
 		const aNoter = [...candidates, ...horsClassement];
 		vecteurDuCalcul = aNoter.length === 0 ? null : await vecteurDuMessage(dep, d.message, d.fin);
-		const m = await classerLeMessage(dep, { candidates, message: d.message, vecteur: vecteurDuCalcul?.valeurs ?? null, nombreDeFiches: elements.length, noter: noterPiste, date });
+		const aprioris = candidates.length === 0 || d.aprioris === undefined ? undefined : d.aprioris(vecteurDuCalcul);
+		const m = await classerLeMessage(dep, {
+			candidates,
+			message: d.message,
+			vecteur: vecteurDuCalcul?.valeurs ?? null,
+			nombreDeFiches: elements.length,
+			noter: noterPiste,
+			date,
+			...(aprioris === undefined ? {} : { aprioris }),
+		});
 		if (m.sens) mesure = 'sens';
 		const noteHorsClassement = (chemin: string): number | null => (mesure === 'aucune' ? null : noterPiste(chemin, m.base(chemin)).total);
 		// Pistes : les premières nouvelles de l'ordre (pas de seuil tant qu'aucune note apprise n'est acceptée), seulement si la demande

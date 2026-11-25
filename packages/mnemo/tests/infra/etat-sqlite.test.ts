@@ -865,6 +865,23 @@ describe('etat.sqlite', () => {
 		verif.close();
 	});
 
+	it('état déjà en 13 (développement) sans écartées toujours ni affinage : table et colonnes ajoutées, rien perdu', async () => {
+		const { etat, chemin } = await ouvrir();
+		await etat.creer(session('s1'));
+		await etat.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche: 'a.md', empreinte: null, horodatageMs: 5 });
+		etat.fermer();
+		ouverts.pop();
+		const base = new DatabaseSync(chemin);
+		base.exec('DROP TABLE ecartees_toujours');
+		base.exec('ALTER TABLE servis DROP COLUMN affinage');
+		base.close();
+		const rouvert = ouvrirEtat(chemin);
+		ouverts.push(rouvert);
+		expect(await rouvert.gestes({ limite: null })).toMatchObject([{ geste: 'ecartee_ici', fiche: 'a.md' }]);
+		expect(await rouvert.ecarterToujours({ fiche: 'a.md', session: 's1', horodatageMs: 10 })).toBe('ecartee');
+		expect(await rouvert.ecarteesToujours()).toEqual([{ fiche: 'a.md', session: 's1', horodatageMs: 10, retablieMs: null }]);
+	});
+
 	it('écartées toujours : une fois chacune, rétablies (instant gardé), écartées à nouveau', async () => {
 		const { etat } = await ouvrir();
 		expect(await etat.ecarterToujours({ fiche: 'b.md', session: 's1', horodatageMs: 20 })).toBe('ecartee');

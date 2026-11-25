@@ -100,11 +100,20 @@ export type MessageClasse = {
 /**
  * Classe les candidates : cosinus de toute la mémoire en un parcours (vecteur du message calculé une fois, par l'appelant), bm25
  * relatif sur les candidates, note provisoire (`noter` : sens plus poids) ; à note égale (sans modèle : poids seuls), les mots,
- * puis la plus récente, puis le chemin.
+ * puis la plus récente, puis le chemin. L'a priori des gestes n'entre que dans les signaux bruts : il ne change pas l'ordre.
  */
 export async function classerLeMessage(
 	dep: Dependances,
-	e: { candidates: readonly string[]; message: string; vecteur: Float32Array | null; nombreDeFiches: number; noter: (chemin: string, base: number) => Note; date: (chemin: string) => string },
+	e: {
+		candidates: readonly string[];
+		message: string;
+		vecteur: Float32Array | null;
+		nombreDeFiches: number;
+		noter: (chemin: string, base: number) => Note;
+		date: (chemin: string) => string;
+		/** A priori des gestes de chaque fiche pour ce message (absent : 0) : un signal brut journalisé, qui ne touche pas à l'ordre. */
+		aprioris?: ReadonlyMap<string, number>;
+	},
 ): Promise<MessageClasse> {
 	const cos = await cosinusDeLaMemoire(dep, e.vecteur, e.nombreDeFiches);
 	const cosinus = (chemin: string): number | null => cos?.parFiche.get(chemin) ?? null;
@@ -123,6 +132,7 @@ export async function classerLeMessage(
 			cosinusRelatif: cosinusRelatif(cosinus(n.chemin), cos?.mediane ?? null),
 			bm25Relatif: mots === null ? null : bm25(n.chemin),
 			signalSession: n.apports.reduce((somme, a) => somme + a.poids, 0),
+			apriori: e.aprioris?.get(n.chemin) ?? 0,
 		}),
 	};
 }
@@ -153,6 +163,7 @@ export function classementDuJournal(classement: readonly LigneDeClassement[], ma
 			cosinusRelatif: arrondi(l.signaux.cosinusRelatif),
 			bm25Relatif: arrondi(l.signaux.bm25Relatif),
 			signalSession: arrondi(l.signaux.signalSession),
+			apriori: arrondi(l.signaux.apriori),
 		},
 		...(l.deja === null ? {} : { deja: l.deja }),
 		...(l.piste ? { piste: true } : {}),

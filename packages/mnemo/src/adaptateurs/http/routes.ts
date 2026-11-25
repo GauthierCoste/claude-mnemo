@@ -686,7 +686,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const transcription = transcriptionDuHook(brut);
 				// les modèles de la session bornés par son niveau (relu à chaque appel)
 				const depDuHook = entree.session === '' ? dep : dependancesDeSession(dep, pil.etat, entree.session);
-				const reponse = await traiterEvenement(depDuHook, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, porteurs, rattachee: (id) => pilote.reecrirePlugin(id) });
+				const reponse = await traiterEvenement(depDuHook, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, porteurs, apriori, rattachee: (id) => pilote.reecrirePlugin(id) });
 				if (entree.session !== '' && transcription !== undefined && (entree.evenement === 'message' || entree.evenement === 'apres_outil' || entree.evenement === 'arret' || entree.evenement === 'debut')) {
 					// hors du chemin du hook : sa réponse n'attend pas la lecture
 					void relireFenetre(entree.session, transcription, entree.cwd).catch(() => {});

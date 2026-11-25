@@ -15,10 +15,11 @@ import { journaliserAvertissements } from '../../application/commun.ts';
 import { avertissementsDe } from '@mnemo/commun';
 import type { AvecAvertissements } from '@mnemo/commun';
 import type { Resultat } from '../../application/commun.ts';
-import type { Dependances } from '../../application/ports.ts';
+import type { Dependances, EtatSessions } from '../../application/ports.ts';
 import { LIMITE_SORTIE, presenterAvis, presenterFiche, presenterListing, presenterLotPropose, presenterResultat, presenterSource, presenterTrouves, presenterVoisins } from '../../application/presenter.ts';
 import { proposer } from '../../application/proposer.ts';
 import { cartesDuJournal, dejaLuesDe } from '../../application/cartes.ts';
+import { exclusionDefinitive } from '../../application/apriori.ts';
 import { servir } from '../../application/servir.ts';
 import { phraseDesTypes } from '../../application/types-du-coffre.ts';
 import { demandeDEntretien, TABLES_ARGUMENTS, TABLES_DEMANDE, validerArguments, validerDemande, validerRequete } from '../../application/validation.ts';
@@ -240,6 +241,8 @@ function outils(dep: Dependances, positionCourante: () => Promise<Position>, phr
 					premier: false,
 					fin: Date.now() + BUDGET_OUTIL_MS,
 					rappels: false,
+					// écartées toujours : hors des pistes partout, aussi pour une session qui n'est pas suivie (état de la machine)
+					...(dep.sessions?.ecarteesToujours === undefined ? {} : { exclusDefinitivement: await exclusionDefinitive(dep.sessions as Pick<EtatSessions, 'ecarteesToujours'>) }),
 				});
 				if (suivie !== null) {
 					const horodatageMs = Date.now();
