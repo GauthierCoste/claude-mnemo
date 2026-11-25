@@ -14,6 +14,8 @@ import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
 const FAUX_LLAMA = join(import.meta.dirname, '../aides/faux-llama.mjs');
 const PIECES = piecesPourPlateforme('darwin', 'arm64')!;
+/** Surveillance du gardien toutes les 200 ms : un niveau changé est vu vite. */
+const SURVEILLANCE_RAPIDE = { MNEMO_MODELES_SURVEILLANCE_MS: '200' };
 
 type Banc = { racine: string; serveurs: string; env: NodeJS.ProcessEnv; gguf: { sens: string; reranker: string } };
 
@@ -43,12 +45,12 @@ async function installerFaux(modeles: string, nom: 'sens' | 'reranker'): Promise
 	return join(dossier, piece.fichier);
 }
 
-async function banc(): Promise<Banc> {
+async function banc(options: { env?: Record<string, string> } = {}): Promise<Banc> {
 	const racine = await dossierTemporaire();
 	const modeles = await dossierTemporaire();
 	await mkdir(join(racine, '.mnemo'), { recursive: true });
 	const gguf = { sens: await installerFaux(modeles, 'sens'), reranker: await installerFaux(modeles, 'reranker') };
-	const env: NodeJS.ProcessEnv = { ...process.env, MNEMO_MODELES: modeles, MNEMO_LLAMA_SERVEUR: FAUX_LLAMA, MNEMO_MODELES_INACTIVITE_MS: '60000' };
+	const env: NodeJS.ProcessEnv = { ...process.env, MNEMO_MODELES: modeles, MNEMO_LLAMA_SERVEUR: FAUX_LLAMA, MNEMO_MODELES_INACTIVITE_MS: '60000', ...options.env };
 	const serveurs = dossierServeurs(env, process.platform, homedir());
 	serveursOuverts.push(serveurs);
 	return { racine, serveurs, env, gguf };
@@ -150,19 +152,45 @@ describe('niveau des modèles de la machine', () => {
 		expect(relance.reranker).toBeUndefined();
 	}, 30_000);
 
-	it('ajouter un modèle ne lance rien et n’arrête pas le gardien en marche', async () => {
-		const b = await banc();
+	it('ajouter un modèle ne lance rien au changement ; la surveillance arrête le gardien, le prochain usage lance tous les modèles permis', async () => {
+		const b = await banc({ env: SURVEILLANCE_RAPIDE });
 		// coupés, rien en marche : passer à « sens » ne lance rien
 		await changerNiveau(b.env, 'coupes');
 		expect(await changerNiveau(b.env, 'sens')).toEqual({ ancien: 'coupes', niveau: 'sens', arret: null });
 		await attendre(300);
 		expect(await lancements(b)).toHaveLength(0);
-		// sens en marche : passer à « complets » le laisse tel quel, sans lancer le reranker
+		// sens en marche : passer à « complets » ne lance rien et n'arrête rien sur le moment
 		const etat = await demarrer(b);
 		expect(await changerNiveau(b.env, 'complets')).toEqual({ ancien: 'sens', niveau: 'complets', arret: null });
-		await attendre(300);
 		expect(pidVivant(etat.gardien.pid)).toBe(true);
+		// à la surveillance suivante, le gardien s'arrête (le reranker, permis et installé, n'est pas servi), sans relance
+		await attendreQue(() => !pidVivant(etat.gardien.pid) && !pidVivant(etat.sens!.pid));
+		expect(await readFile(cheminsModeles(b.serveurs).journal, 'utf8')).toContain('arrêt (niveau changé)');
 		expect(await lancements(b)).toHaveLength(1);
-		expect((await lireEtatServeurs(b.serveurs))!.reranker).toBeUndefined();
+		// le prochain usage relance le gardien avec le sens et le reranker
+		expect(await rerankerLlama(b.racine, { env: b.env }).noter('q', ['a'], { budgetMs: 15_000, demarrer: true })).not.toBeNull();
+		const relance = (await lireEtatServeurs(b.serveurs))!;
+		expect(relance.sens).toBeDefined();
+		expect(relance.reranker).toBeDefined();
+	}, 30_000);
+
+	it('niveau écrit pendant que le gardien est prêt (sans changerNiveau) : un modèle servi exclu l’arrête à la surveillance suivante', async () => {
+		const b = await banc({ env: SURVEILLANCE_RAPIDE });
+		const etat = await demarrer(b);
+		expect(etat.reranker).toBeDefined();
+		// comme un niveau écrit entre la lecture du gardien et sa publication : aucun arrêt demandé
+		await writeFile(join(b.serveurs, FICHIER_NIVEAU), JSON.stringify({ niveau: 'sens' }));
+		await attendreQue(() => !pidVivant(etat.gardien.pid) && !pidVivant(etat.reranker!.pid) && !pidVivant(etat.sens!.pid));
+		expect(await readFile(cheminsModeles(b.serveurs).journal, 'utf8')).toContain('arrêt (niveau changé)');
+		expect(existsSync(cheminsModeles(b.serveurs).etat)).toBe(false);
+	}, 30_000);
+
+	it('niveau inchangé : la surveillance laisse le gardien en marche', async () => {
+		const b = await banc({ env: SURVEILLANCE_RAPIDE });
+		await changerNiveau(b.env, 'sens');
+		const etat = await demarrer(b);
+		await attendre(1000);
+		expect(pidVivant(etat.gardien.pid)).toBe(true);
+		expect(await readFile(cheminsModeles(b.serveurs).journal, 'utf8')).not.toContain('niveau changé');
 	}, 30_000);
 });

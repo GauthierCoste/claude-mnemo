@@ -89,7 +89,7 @@ type Serveur = { type: TypeServeur; gguf: string; enfant: ChildProcess; entree: 
  * modèle installé (sens, reranker) et permis par le niveau de la machine lu à son démarrage (`serveurs/niveau.json`), écrit
  * `serveurs/modeles.json` (`dossierServeurs`, seul dossier qu'il crée), les arrête tous après l'inactivité reçue à son
  * lancement (`inactiviteTransmise`) sans requête, si l'un meurt, si un autre gardien le remplace, si `modeles.json`
- * disparaît, ou sur signal ; retire alors `modeles.json` s'il le nomme encore. Un modèle qui ne
+ * disparaît, si le niveau change (un modèle servi exclu, ou un modèle exclu au démarrage permis), ou sur signal ; retire alors `modeles.json` s'il le nomme encore. Un modèle qui ne
  * démarre pas n'empêche pas l'autre de servir. `MNEMO_LLAMA_SERVEUR` (tests seulement) remplace le moteur : un script
  * `.mjs`/`.js` est lancé par Node.
  */
@@ -184,28 +184,32 @@ export async function garder(env: NodeJS.ProcessEnv = process.env): Promise<void
 		const installes = etats.filter((e) => e.piece.nom !== 'moteur' && e.installee).map((e) => ({ type: e.piece.nom as TypeServeur, gguf: e.chemin }));
 		if (moteur === undefined) return arreter('moteur llama.cpp absent', true);
 		if (installes.length === 0) return arreter('aucun modèle installé', true);
-		// seuls les modèles permis par le niveau de la machine, lu maintenant : un changement qui en retire un arrête ce gardien
-		const niveau = await lireNiveau(dossier);
-		const permis = modelesPermis(niveau);
-		const modeles = installes.filter((m) => permis[m.type]);
-		if (modeles.length === 0) return arreter(`aucun modèle permis par le niveau « ${niveau} »`);
 
-		// Un seul gardien pour la machine : sous le verrou, laisser la place à un autre qui démarre ou qui sert déjà.
+		// Un seul gardien pour la machine : sous le verrou, laisser la place à un autre qui démarre ou qui sert déjà. Le niveau est
+		// lu sous ce même verrou (`changerNiveau` l'écrit sous lui) : seuls les modèles permis sont lancés ; un niveau changé
+		// ensuite est vu par la surveillance.
 		await preparerDossierServeurs(dossier);
-		const place = await verrouModeles(dossier).avec(async () => {
+		let modeles: typeof installes = [];
+		const place = await verrouModeles(dossier).avec(async (): Promise<'place' | 'occupee' | 'aucun'> => {
 			const ancien = await lireEtatServeurs(dossier);
 			if (ancien !== null && ancien.gardien.pid !== process.pid) {
-				if (await autreGardienActif(ancien)) return false;
+				if (await autreGardienActif(ancien)) return 'occupee';
 			}
+			const permis = modelesPermis(await lireNiveau(dossier));
+			modeles = installes.filter((m) => permis[m.type]);
+			if (modeles.length === 0) return 'aucun';
 			// serveurs d'un gardien disparu, même tué en plein chargement : retrouvés par le registre
 			await nettoyerLancesSousVerrou(dossier, process.pid, env);
 			await publier();
-			return true;
+			return 'place';
 		});
-		if (!place) {
+		if (place === 'occupee') {
 			await journal('un autre gardien est déjà en marche');
 			process.exit(0);
 		}
+		if (place === 'aucun') return arreter(`aucun modèle permis par le niveau « ${await lireNiveau(dossier)} »`);
+		/** Modèles installés que le niveau excluait au démarrage : permis ensuite, ils font relancer le gardien. */
+		const exclusAuDemarrage = installes.filter((m) => !modeles.includes(m)).map((m) => m.type);
 
 		// Lancement des serveurs.
 		const lancer = async (type: TypeServeur, gguf: string, essai: number): Promise<Serveur> => {
@@ -307,7 +311,7 @@ export async function garder(env: NodeJS.ProcessEnv = process.env): Promise<void
 		const mort = [...serveurs.values()].find((s) => s.enfant.exitCode !== null || s.enfant.signalCode !== null);
 		if (mort !== undefined) return arreter(`${mort.type} arrêté`, true);
 
-		// Surveillance : inactivité, remplacement par un autre gardien, état disparu.
+		// Surveillance : inactivité, remplacement par un autre gardien, état disparu, niveau changé.
 		const debut = Date.now();
 		let verification = false;
 		surveillance = setInterval(
@@ -324,6 +328,10 @@ export async function garder(env: NodeJS.ProcessEnv = process.env): Promise<void
 					} catch {
 						/* aucune requête encore */
 					}
+					// niveau changé : un modèle servi exclu, ou un modèle installé exclu au démarrage et permis maintenant ; le prochain
+					// usage relance le gardien avec les modèles permis (rien n'est lancé au moment du changement)
+					const permis = modelesPermis(await lireNiveau(dossier));
+					if ([...serveurs.keys()].some((t) => !permis[t]) || exclusAuDemarrage.some((t) => permis[t])) return arreter('niveau changé');
 					const decision = decisionSurInactivite({ inactifDepuisMs: Date.now() - derniere, inactiviteMs });
 					if (decision.arreter) return arreter(decision.motif);
 					// serveurs d'un gardien disparu qui chargeaient encore au démarrage : arrêtés dès qu'ils répondent
