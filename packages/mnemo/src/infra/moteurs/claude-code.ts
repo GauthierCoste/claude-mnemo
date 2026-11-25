@@ -1,6 +1,7 @@
 import { HOOKS_CLAUDE_CODE } from '../../application/moteurs/claude-code/hooks.ts';
 import { assemblerPlugin, preparerClaudeCode } from '../../application/moteurs/claude-code/plugin.ts';
 import type { LectureFenetre, Moteur } from '../../application/ports.ts';
+import { ALIAS_CLAUDE_CODE } from '../../domaine/moteurs/claude-code/modeles.ts';
 import { OUTILS_CLAUDE_CODE } from '../../domaine/moteurs/claude-code/outils.ts';
 import { quotasDeLimites } from '../../domaine/moteurs/claude-code/quotas.ts';
 import { TOUCHES_CLAUDE_CODE } from '../../domaine/moteurs/claude-code/touches.ts';
@@ -29,8 +30,8 @@ export const MOTEUR_CLAUDE_CODE: Moteur = {
 	id: 'claude-code',
 	nom: 'Claude Code',
 	commandeParDefaut: 'claude',
-	// liste courte au lot 7 ; d'ici là, le modèle par défaut et la saisie libre
-	modeles: async () => [],
+	// les alias de `--model`, sans commande à lancer
+	modeles: async () => ALIAS_CLAUDE_CODE,
 	// introuvable : la ligne à coller, avec `claude`
 	sansCommande: 'manuel',
 	trouver: (env, plateforme) => trouverClaude(env, plateforme as NodeJS.Platform),

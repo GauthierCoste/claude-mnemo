@@ -8,6 +8,7 @@ import type { ReglagesService, Service } from '../../src/adaptateurs/http/serveu
 import type { AppClaude } from '../../src/adaptateurs/http/claude-desktop.ts';
 import { retirerPlugin } from '../../src/infra/plugin-fichiers.ts';
 import { moteursDeTest } from './moteurs.ts';
+import type { PosteDesMoteurs } from '../../src/adaptateurs/http/moteurs.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
 import { preparerDossierLocal } from '../../src/infra/systeme.ts';
 import { dossierTemporaire } from './dossier-temporaire.ts';
@@ -62,7 +63,7 @@ export function etatModelesFaux(): EtatModeles {
  */
 export async function serviceFaux(
 	reglages: ReglagesService = {},
-	options: { pil?: (pil: Pilotage) => void; avant?: (etat: EtatSessions, racine: string) => Promise<void>; interface?: string; dossierClaude?: string; portFixePar?: string; appClaude?: Partial<Omit<AppClaude, 'racine'>> } = {},
+	options: { pil?: (pil: Pilotage) => void; avant?: (etat: EtatSessions, racine: string) => Promise<void>; interface?: string; dossierClaude?: string; portFixePar?: string; appClaude?: Partial<Omit<AppClaude, 'racine'>>; moteurs?: Partial<PosteDesMoteurs> } = {},
 ): Promise<ContexteService> {
 	const racine = await dossierTemporaire();
 	const dep = fauxPorts();
@@ -134,7 +135,9 @@ export async function serviceFaux(
 	const journal: string[] = [];
 	// app Claude : jamais le vrai fichier ; un dossier absent par défaut (app non installée), faux Node et faux main.ts
 	const appClaude = { fichier: join(racine, 'app-claude-absente', 'claude_desktop_config.json'), maison: racine, node: '/opt/node/bin/node', main: '/opt/mnemo/main.ts', ...options.appClaude };
-	const service = await demarrerService({ racine, dep, pil, reglages: { journal: (m) => journal.push(m), ...reglages }, interface: options.interface ?? join(racine, 'interface-absente'), dossierClaude, modeles, appClaude, ...(options.portFixePar === undefined ? {} : { portFixePar: options.portFixePar }) });
+	// moteurs : jamais une vraie commande lancée (exécuteur qui refuse), faux Node et faux main.ts
+	const moteurs: Partial<PosteDesMoteurs> = { executer: async () => Promise.reject(new Error('aucune commande dans les essais')), node: '/opt/node/bin/node', main: '/opt/mnemo/main.ts', ...options.moteurs };
+	const service = await demarrerService({ racine, dep, pil, reglages: { journal: (m) => journal.push(m), ...reglages }, interface: options.interface ?? join(racine, 'interface-absente'), dossierClaude, modeles, appClaude, moteurs, ...(options.portFixePar === undefined ? {} : { portFixePar: options.portFixePar }) });
 	services.push(service);
 	// relance du démarrage faite : les sessions créées ensuite par le test ne sont pas relancées par elle
 	await service.pret;

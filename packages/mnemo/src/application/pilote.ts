@@ -39,6 +39,11 @@ export type Pilote = {
 	arreterTout(): Promise<void>;
 	enCours(id: string): boolean;
 	/**
+	 * Pourquoi la session ne peut être ni mise en pause ni reprise par son moteur (Codex : son `fil` encore inconnu) ; null :
+	 * elle le peut, ou son moteur est inconnu de ce service.
+	 */
+	motifSansReprise(s: Session): string | null;
+	/**
 	 * Termine une session. `bilan` : Claude rédige l'épisode (consigne tapée dans le terminal ; une session qui ne tourne pas
 	 * est d'abord reprise), puis la session est arrêtée à son premier `arret` ; rend la session dès la consigne tapée. Sans
 	 * bilan : abandonnée et arrêtée (épisode minimal).
@@ -882,6 +887,10 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 
 		enCours(id) {
 			return vivants.has(id);
+		},
+
+		motifSansReprise(s) {
+			return moteurDe(s)?.moteur.motifSansReprise(s) ?? null;
 		},
 
 		taper(id, ligne) {

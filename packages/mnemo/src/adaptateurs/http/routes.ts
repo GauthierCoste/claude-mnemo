@@ -322,7 +322,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	const { dep, pil, pilote } = ctx;
 	/** Recherche complète en cours par clé de remplacement (la suivante de même clé l'abandonne). */
 	const recherchesEnCours = new Map<string, AbortController>();
-	const vue = (s: Session) => vueSession(s, pilote.enCours(s.id));
+	const vue = (s: Session) => vueSession(s, pilote.enCours(s.id), pilote.motifSansReprise(s));
 	const session = async (id: string): Promise<Session> => {
 		const s = estUuid(id) ? await pil.etat.lire(id) : null;
 		if (s === null) throw new ErreurHttp(404, 'Session inconnue.');

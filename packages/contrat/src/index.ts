@@ -30,6 +30,18 @@ export type SessionVue = {
 	dialogueOuvert: boolean;
 	/** Niveau des modèles propre à la session ; null : elle suit le niveau de la machine (le plus restrictif des deux s'applique). */
 	niveauModeles: NiveauModeles | null;
+	/**
+	 * Moteur enregistré au lancement (`IdMoteur`, ou un identifiant inconnu de ce service gardé tel quel) ; absent : Claude Code
+	 * (session d'avant les moteurs).
+	 */
+	moteur?: string;
+	/** Modèle enregistré au lancement ; absent ou « » : le modèle par défaut du moteur. */
+	modele?: string;
+	/**
+	 * Pourquoi la session ne peut être ni mise en pause ni reprise (Codex : son identifiant chez Codex est encore inconnu),
+	 * rédigé par le service ; absent : elle le peut (session non terminée seulement).
+	 */
+	sansReprise?: string;
 };
 
 /**
@@ -307,9 +319,9 @@ export type MessageClient =
  * - `profils` GET → `ReponseProfils` : les profils du paquet et ceux de `profils/` ;
  * - `profil` GET → `ProfilDetailVue` (404 inconnu) ; PUT `EnregistrementProfil` → `ReponseEcritureProfil` (400 `RefusProfil`, 409 la fiche a changé) ; DELETE → `ReponseEcritureProfil` ;
  * - `profilDupliquer` POST `{ nom }` → `ReponseEcritureProfil` (201) ; `profilApercu` GET `?projet=` → `ApercuProfilVue` ;
- * - `pause` POST → `{ session }` ;
- * - `reprise` POST → `{ session }` ;
- * - `bilan` POST → `{ session }` : Claude rédige l'épisode ;
+ * - `pause` POST → `{ session }` (409 : la session ne peut pas être reprise, `SessionVue.sansReprise`) ;
+ * - `reprise` POST → `{ session }` (409 : de même) ;
+ * - `bilan` POST → `{ session }` : l'agent de la session rédige l'épisode ;
  * - `abandon` POST → `{ session }` : terminée sans bilan ;
  * - `servis` GET → `{ servis: EntreeServieVue[]; lues: LueVue[] }` (panneau Contexte ; seule la plus récente porte son classement d'une entrée ancienne ; `lues` : fiches que la session a lues, avec l'heure de leur dernière lecture, la plus récente d'abord ; un service plus ancien envoie des chemins seuls) ;
  * - `ecartes` GET → `{ ecartes: EcarteVue[] }` ; POST `{ id }` (un id des classements récents de la session : 404 sinon ; 409
@@ -378,6 +390,8 @@ export type MessageClient =
  *   qui demande à l'archiviste de poser leur `dossier_projet` part comme celle de `sourcesTraiter` ; 409 si aucun n'est à rattacher ;
  * - `sourcesMarquerTraite` POST `{ chemins }` → `ReponseMarquerTraite` : retire la marque « à traiter » sans rien créer
  *   (un commit par fiche ; celles déjà traitées sont ignorées) ;
+ * - `moteurs` GET (`?poste=1` : avec les points vérifiés du poste, plus lent) → `ReponseMoteurs` : chaque moteur, sa commande
+ *   trouvée au démarrage du service, sa version et ses modèles (en cache, quelques secondes au plus à la première lecture) ;
  * - `reglages` GET → `ReglagesVue` ; PUT `{ valeurs: { "<cle>": valeur | null } }` → `ReglagesVue` (voir `ReglagesVue`) ;
  * - `claudeDesktop` GET → `ClaudeDesktopVue` : la configuration de l'app Claude (Claude Desktop), sans valeur de variable ;
  * - `claudeDesktopMnemo` PUT (sans corps) → `ClaudeDesktopVue` : branche ou met à jour l'entrée `mnemo` ; DELETE → `ClaudeDesktopVue` : la retire ;
@@ -447,6 +461,7 @@ export const ROUTES = {
 	sourcesTraiterToutes: '/api/memoire/sources/traiter-toutes',
 	sourcesMarquerTraite: '/api/memoire/sources/marquer-traite',
 	dossiersTraiter: '/api/memoire/dossiers-non-rattaches/traiter',
+	moteurs: '/api/moteurs',
 	reglages: '/api/reglages',
 	claudeDesktop: '/api/claude-desktop',
 	claudeDesktopMnemo: '/api/claude-desktop/mnemo',
@@ -457,6 +472,36 @@ export const ROUTES = {
 	lotRejeter: '/api/lots/:id/rejeter',
 	ws: '/ws',
 } as const;
+
+/**
+ * Un point vérifié d'un moteur sur le poste (`moteurs?poste=1`) : `cle` ; `libelle` à montrer ; `ok` (null : inconnu, à
+ * vérifier) ; `etat`, court ; `detail`, le motif ; `remede` : la commande qui y remédie, `dans` un terminal ou dans le moteur.
+ */
+export type PointMoteurVue = {
+	cle: 'commande' | 'version' | 'mcp' | 'hooks' | 'approbation';
+	libelle: string;
+	ok: boolean | null;
+	etat: string;
+	detail?: string;
+	remede?: { texte: string; dans: 'terminal' | 'moteur' };
+};
+
+/**
+ * Un moteur (agent de code) connu du service : `nom` à montrer ; `indisponible` : pourquoi ses sessions ne se lancent pas ici
+ * (introuvable, version trop ancienne), null sinon ; `manuel` : introuvable, ses sessions se lancent par une ligne à coller
+ * (Claude Code) au lieu d'être refusées ; `version` (null : non lue ou illisible) ; `modeles` : liste indicative (saisie
+ * libre permise ; vide : seulement le modèle par défaut) ; `poste` : les points vérifiés, avec `poste=1` seulement.
+ */
+export type MoteurVue = {
+	id: IdMoteur;
+	nom: string;
+	indisponible: string | null;
+	manuel: boolean;
+	version: string | null;
+	modeles: string[];
+	poste?: PointMoteurVue[];
+};
+export type ReponseMoteurs = { moteurs: MoteurVue[] };
 
 /** Fichiers d'un genre importés par `amorce` : nouveaux, modifiés (réécrits), inchangés. */
 export type CompteAmorceVue = { nouvelles: number; modifiees: number; inchangees: number };

@@ -664,6 +664,7 @@ describe('Pilote : sessions Codex', () => {
 		await expect(c.pilote.terminer(s.id, { bilan: true })).rejects.toThrow(/Bilan impossible : la session n'a pas encore commencé/u);
 		await expect(c.pilote.pause(s.id)).rejects.toThrow(ErreurRepriseImpossible);
 		await expect(c.pilote.pause(s.id)).rejects.toThrow(/^Pause impossible : .*identifiant chez Codex est inconnu.*abandonne-la/u);
+		expect(c.pilote.motifSansReprise((await c.etat.lire(s.id))!)).toMatch(/identifiant chez Codex est inconnu/u);
 		expect(t.ecrits).toEqual([]);
 		expect(await c.etat.lire(s.id)).toMatchObject({ arretAttendu: null, bilanDemandeMs: null });
 		c.terminaux.arretFinit = true;
@@ -678,6 +679,7 @@ describe('Pilote : sessions Codex', () => {
 		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
 		const t = c.terminaux.lances[0]!;
 		await c.etat.appliquer(s.id, 'debut', Date.now() + 1000, { fil: 'fil-a' });
+		expect(c.pilote.motifSansReprise((await c.etat.lire(s.id))!)).toBeNull();
 		await c.pilote.confier(s.id, 'Fais ceci');
 		expect(t.ecrits).toEqual(['Fais ceci', '\r']);
 		c.terminaux.arretFinit = true;

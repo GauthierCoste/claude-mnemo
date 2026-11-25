@@ -9,9 +9,11 @@ import type { Session } from '../../domaine/session.ts';
 
 /**
  * Ce que l'API montre d'une session : les champs du contrat, rien de plus (ni pid, ni trace du processus, ni arrêt attendu).
- * `terminal` : un terminal de ce service est attaché à la session.
+ * `terminal` : un terminal de ce service est attaché à la session ; `sansReprise` : pourquoi son moteur ne peut ni la mettre
+ * en pause ni la reprendre (`Pilote.motifSansReprise`), ignoré pour une session terminée. `moteur` et `modele` : seulement
+ * s'ils sont enregistrés (absents : Claude Code, modèle par défaut).
  */
-export function vueSession(s: Session, terminal: boolean): SessionVue {
+export function vueSession(s: Session, terminal: boolean, sansReprise: string | null = null): SessionVue {
 	return {
 		id: s.id,
 		profil: s.profil,
@@ -29,6 +31,9 @@ export function vueSession(s: Session, terminal: boolean): SessionVue {
 		terminal,
 		dialogueOuvert: dialogueOuvert(s),
 		niveauModeles: s.niveauModeles ?? null,
+		...(s.moteur === undefined ? {} : { moteur: s.moteur }),
+		...(s.modele === undefined || s.modele === '' ? {} : { modele: s.modele }),
+		...(sansReprise === null || s.etat === 'terminee' ? {} : { sansReprise }),
 	};
 }
 
