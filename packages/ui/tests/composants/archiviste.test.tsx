@@ -57,7 +57,7 @@ function session(id: string, e: Partial<SessionVue> = {}): SessionVue {
 		branche: 'main',
 		terminal: true,
 		dialogueOuvert: false,
-		dossierNonRattache: null,
+		dossierNonRattache: null, niveauModeles: null,
 		...e,
 	};
 }

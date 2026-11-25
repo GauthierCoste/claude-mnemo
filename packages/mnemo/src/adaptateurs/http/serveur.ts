@@ -34,6 +34,7 @@ import { ENTETES_SECURITE, hoteValide, jetonDeLEntete, jetonDuWebSocket, jetonVa
 import { dossierInterface, servirInterface } from './statique.ts';
 import { racineAffichee, titresDeLIndex } from './vues.ts';
 import { creerHub } from './websocket.ts';
+import { diffuserModeles } from './diffusion-modeles.ts';
 import { routesLots } from './lots.ts';
 import { versionMnemo } from '../../infra/version.ts';
 
@@ -52,6 +53,8 @@ const SURVEILLANCE_VERROU_MS = 1000;
 export type ReglagesService = {
 	pingMs?: number;
 	sondageMs?: number;
+	/** Sondage de secours de l'état des modèles (`SONDAGE_MODELES_MS` par défaut). */
+	sondageModelesMs?: number;
 	battementMs?: number;
 	journal?: (message: string) => void;
 	/**
@@ -304,6 +307,14 @@ export async function demarrerService(options: {
 		...(reglages.pingMs === undefined ? {} : { pingMs: reglages.pingMs }),
 		...(reglages.sondageMs === undefined ? {} : { sondageMs: reglages.sondageMs }),
 	});
+	// état des modèles de la machine, diffusé quand il change (surveillance de ses fichiers, sondage de secours)
+	const modeles = options.modeles ?? modelesLocaux(racine);
+	const diffusionModeles = diffuserModeles({
+		modeles,
+		diffuser: hub.diffuser,
+		journal,
+		...(reglages.sondageModelesMs === undefined ? {} : { sondageMs: reglages.sondageModelesMs }),
+	});
 	/** Processus de session tenus ici : session → pid. */
 	const pids = new Map<string, number>();
 	pilote.surChangement((s) => {
@@ -331,7 +342,8 @@ export async function demarrerService(options: {
 			etatGit: etatsGit(pil.depot),
 			dossiers,
 			memoireClaude: memoireClaude(dossierClaude),
-			modeles: options.modeles ?? modelesLocaux(racine),
+			modeles,
+			relireModeles: diffusionModeles.relire,
 			projetsClaude: projetsClaude(racine, () => dossiersAAmorcer(dossiers), { dossierClaude }),
 			journal,
 			depotMax,
@@ -484,6 +496,7 @@ export async function demarrerService(options: {
 			});
 		});
 	} catch (erreur) {
+		diffusionModeles.fermer();
 		hub.fermer();
 		verrou.liberer();
 		throw erreur;
@@ -507,6 +520,7 @@ export async function demarrerService(options: {
 				await Promise.race([differee.arreter(), new Promise<void>((r) => (minuteur = setTimeout(r, ATTENTE_EXTRACTION_ARRET_MS)))]);
 				clearTimeout(minuteur);
 			}
+			diffusionModeles.fermer();
 			hub.fermer();
 			await new Promise<void>((resoudre) => {
 				serveur.close(() => resoudre());

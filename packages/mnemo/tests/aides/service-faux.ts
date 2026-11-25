@@ -2,7 +2,7 @@ import { request } from 'node:http';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach } from 'vitest';
-import type { EtatSessions, Modeles, Pilotage } from '../../src/application/ports.ts';
+import type { EtatModeles, EtatSessions, Modeles, Pilotage } from '../../src/application/ports.ts';
 import { demarrerService } from '../../src/adaptateurs/http/serveur.ts';
 import type { ReglagesService, Service } from '../../src/adaptateurs/http/serveur.ts';
 import type { AppClaude } from '../../src/adaptateurs/http/claude-desktop.ts';
@@ -32,10 +32,27 @@ export type ContexteService = {
 	existants: Set<string>;
 	/** Lignes du journal du service (jamais sur stderr), sauf si le test passe son propre `journal`. */
 	journal: string[];
-	/** Faux modèles : état du reranker réglable, démarrages comptés (jamais de vrai llama-server). */
-	modeles: Modeles & { reranker: 'absent' | 'arrete' | 'pret'; demarrages: number };
+	/**
+	 * Faux modèles (jamais de vrai llama-server) : `vue` réglable, gestes notés (`gestes`), `signaler()` appelle les rappels
+	 * de la surveillance, `surveillances` : celles en cours.
+	 */
+	modeles: Modeles & { vue: EtatModeles; gestes: string[]; signaler(): void; surveillances: number };
 };
 
+
+/** État des modèles d'un faux service : installés, complets, arrêtés, rien en cours. */
+export function etatModelesFaux(): EtatModeles {
+	const piece = (modele: string) => ({ modele, editeur: 'BAAI', quantification: 'Q8_0', octets: 635_000_000, empreinte: 'aa473d51' });
+	return {
+		installes: true,
+		niveau: 'complets',
+		gardien: 'arrete',
+		sens: 'arrete',
+		reranker: 'arrete',
+		pieces: { sens: piece('bge-m3'), reranker: piece('bge-reranker-v2-m3'), moteur: { version: 'b11671', plateforme: 'macOS arm64' } },
+		activites: [],
+	};
+}
 
 /**
  * Service démarré sur un faux pilotage : mémoire en mémoire (`fauxPorts`), état réel dans un dossier temporaire, terminaux
@@ -78,14 +95,34 @@ export async function serviceFaux(
 	// interface : un dossier absent par défaut (les tests ne dépendent pas de `packages/ui/dist`)
 	// configuration de Claude Code : jamais la vraie (~/.claude) ; un dossier absent par défaut
 	const dossierClaude = options.dossierClaude ?? join(racine, 'configuration-claude-absente');
+	const rappels = new Set<() => void>();
 	const modeles: ContexteService['modeles'] = {
-		reranker: 'arrete',
-		demarrages: 0,
-		async etatReranker() {
-			return modeles.reranker;
+		vue: etatModelesFaux(),
+		gestes: [],
+		surveillances: 0,
+		async etat() {
+			return structuredClone(modeles.vue);
 		},
 		async demarrer() {
-			modeles.demarrages++;
+			modeles.gestes.push('demarrer');
+		},
+		async arreter() {
+			modeles.gestes.push('arreter');
+		},
+		async changerNiveau(niveau) {
+			modeles.gestes.push(`niveau ${niveau}`);
+			modeles.vue = { ...modeles.vue, niveau };
+		},
+		surveiller(rappel) {
+			rappels.add(rappel);
+			modeles.surveillances = rappels.size;
+			return () => {
+				rappels.delete(rappel);
+				modeles.surveillances = rappels.size;
+			};
+		},
+		signaler() {
+			for (const r of rappels) r();
 		},
 	};
 	const journal: string[] = [];

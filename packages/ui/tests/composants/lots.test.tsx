@@ -38,7 +38,7 @@ const ARCHIVISTE: SessionVue = {
 	branche: 'main',
 	terminal: true,
 	dialogueOuvert: false,
-	dossierNonRattache: null,
+	dossierNonRattache: null, niveauModeles: null,
 };
 
 const FIL_VIDE: FilVue = { commits: [], tronque: false, aConfirmer: [], montees: [], modifications: [] };

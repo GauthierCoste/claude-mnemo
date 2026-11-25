@@ -6,7 +6,7 @@ import { modelesPermis } from '@mnemo/commun';
 import type { OperationModele } from '@mnemo/commun';
 import { messageDErreur } from '../../domaine/texte.ts';
 import type { Modeles, OptionsModele, Reranker, Sens } from '../../application/ports.ts';
-import { avecActivite } from './activite.ts';
+import { avecActivite, dossierActivite } from './activite.ts';
 import { piecesPourPlateforme } from './catalogue.ts';
 import type { Piece } from './catalogue.ts';
 import { dossierModeles, dossierServeurs } from './dossier.ts';
@@ -15,8 +15,10 @@ import type { ReponseLocale } from './http-local.ts';
 import { inactiviteDuDossier } from './inactivite.ts';
 import { dossierPiece } from './installer.ts';
 import { journaliser } from './journal.ts';
-import { lireNiveau } from './niveau.ts';
-import { cheminsModeles, oublierServeur, serveurPret } from './serveurs.ts';
+import { changerNiveau, lireNiveau } from './niveau.ts';
+import { surveillerDossiers } from '../surveillance-dossiers.ts';
+import { lireEtatModeles } from './etat-modeles.ts';
+import { arreterServeurs, cheminsModeles, oublierServeur, serveurPret } from './serveurs.ts';
 import type { OptionsServeur } from './serveurs.ts';
 import type { EntreeServeur, TypeServeur } from './serveurs.ts';
 
@@ -217,30 +219,40 @@ export function rerankerLlama(racine: string, options: OptionsClient = {}): Rera
 	};
 }
 
-/** Lecture de l'état des serveurs : brève (un serveur prêt répond tout de suite). */
-const LECTURE_ETAT_MS = 300;
 /** Démarrage demandé : le gardien est lancé, on n'attend pas son chargement au-delà. */
 const ATTENTE_DEMARRAGE_MS = 1000;
 
-/** Les modèles de la machine, vus du service du dossier `racine` : l'état seul ne lance rien ; `demarrer` (geste de l'utilisateur). */
+/** Fichiers de `serveurs/` qui changent l'état affiché : l'état du gardien, le niveau (et leurs temporaires), le dossier d'activité. */
+const FICHIERS_D_ETAT = /^(modeles\.json|niveau\.json|activite$)/u;
+
+/**
+ * Les modèles de la machine, vus du service du dossier `racine` : l'état seul ne lance rien (`lireEtatModeles`) ; `demarrer`
+ * (geste de l'utilisateur) ; `arreter` (`arreterServeurs`, le niveau ne change pas) ; `changerNiveau` ; `surveiller` :
+ * `serveurs/` (état, niveau) et `serveurs/activite/`, créés s'il le faut.
+ */
 export function modelesLocaux(racine: string, options: OptionsClient = {}): Modeles {
 	const disponibles = piecesDisponibles(options);
 	const lieu = lieuDesServeurs(racine, options);
-	const installes = () => {
-		const d = disponibles();
-		return d.moteur && d.reranker !== null;
-	};
+	const env = options.env ?? process.env;
+	const plateforme = options.plateforme ?? process.platform;
 	return {
-		async etatReranker() {
-			if (!installes()) return 'absent';
-			return (await serveurPret(lieu.dossier(), 'reranker', { finMs: Date.now() + LECTURE_ETAT_MS, demarrage: 'jamais', ...lieu.serveur })) === null ? 'arrete' : 'pret';
-		},
+		etat: () => lireEtatModeles(options),
 		async demarrer() {
 			// le gardien lance tous les modèles permis : il suffit d'en demander un, permis et installé ; aucun (`coupes`) : rien
 			const d = disponibles();
 			const permis = modelesPermis(await lireNiveau(lieu.dossier()));
 			const type = (['reranker', 'sens'] as const).find((t) => permis[t] && d[t] !== null);
 			if (d.moteur && type !== undefined) await serveurPret(lieu.dossier(), type, { finMs: Date.now() + ATTENTE_DEMARRAGE_MS, demarrage: 'attendre', ...lieu.serveur });
+		},
+		async arreter() {
+			await arreterServeurs(lieu.dossier(), env);
+		},
+		async changerNiveau(niveau) {
+			await changerNiveau(env, niveau, plateforme);
+		},
+		surveiller(rappel) {
+			const dossier = lieu.dossier();
+			return surveillerDossiers([{ chemin: dossier, filtre: (nom) => nom === null || FICHIERS_D_ETAT.test(nom) }, { chemin: dossierActivite(dossier) }], rappel);
 		},
 	};
 }

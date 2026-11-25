@@ -1,7 +1,7 @@
 import { ENTETE_REMPLACEMENT, ROUTES } from '@mnemo/contrat';
-import type { BilanAmorceVue, DossierVue, EtatModelesVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
-import { avertissementsDe, CARACTERES_INVISIBLES, CHEMINS_LOT_MAX, demandeTout, nomAffichable, OBJECTIF_MAX, PROFIL_TRAVAIL, SAUF_MAX } from '@mnemo/commun';
-import type { AvecAvertissements } from '@mnemo/commun';
+import type { BilanAmorceVue, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
+import { avertissementsDe, CARACTERES_INVISIBLES, CHEMINS_LOT_MAX, demandeTout, estNiveauModeles, NIVEAUX_MODELES, nomAffichable, OBJECTIF_MAX, PROFIL_TRAVAIL, SAUF_MAX } from '@mnemo/commun';
+import type { AvecAvertissements, NiveauModeles } from '@mnemo/commun';
 import { amorcer, marquerTraitees } from '../../application/amorcer.ts';
 import { journaliserAvertissements } from '../../application/commun.ts';
 import { confierLesDepots, confierLesFichesATraiter, lancerSession, traiterLesDossiers, traiterLesFiches } from '../../application/archiviste.ts';
@@ -40,6 +40,7 @@ import { estCauseNonVerifiee } from '../../domaine/refus-outil.ts';
 import { estSourceDeDebut, estUuid } from '../../domaine/session.ts';
 import type { EvenementHook, Session } from '../../domaine/session.ts';
 import { deposerFichier, ErreurEspaceInsuffisant, ErreurTropVolumineux, tropVolumineux, verifierDepot } from '../../infra/fichiers-dossier.ts';
+import { vueModeles } from './diffusion-modeles.ts';
 import { cheminDeVue, vueFiche, vueGraphe } from './memoire-vues.ts';
 import { titreDeFiche, titresDeLIndex as titresIndex, vueEcarte, vueServie, vueSession, vueSessionTerminee } from './vues.ts';
 
@@ -67,6 +68,16 @@ const STATUT_ERREUR_DOSSIER: Record<GenreErreurDossier, number> = { refuse: 400,
 function erreurDeDossier(erreur: unknown): unknown {
 	if (erreur instanceof ErreurDossier) return new ErreurHttp(STATUT_ERREUR_DOSSIER[erreur.genre], erreur.message);
 	return erreur;
+}
+
+/** `{ niveau }` d'un corps : un niveau des modèles (`null` aussi, si `nul` : la session suit le niveau de la machine) ; 400 sinon. */
+function niveauDuCorps(corps: unknown, nul: true): NiveauModeles | null;
+function niveauDuCorps(corps: unknown, nul: false): NiveauModeles;
+function niveauDuCorps(corps: unknown, nul: boolean): NiveauModeles | null {
+	const niveau = estObjet(corps) ? corps['niveau'] : undefined;
+	if (estNiveauModeles(niveau) || (nul && niveau === null)) return niveau;
+	const permis = NIVEAUX_MODELES.map((n) => `« ${n} »`).join(', ');
+	throw new ErreurHttp(400, `Champ « niveau » invalide : ${permis}${nul ? ', ou null (comme partout)' : ''} attendu.`);
 }
 
 /** Corps JSON d'une requête : 1 Mo au plus. Dépôt de fichier : en flux, `ContexteRoutes.depotMax` au plus. */
@@ -124,8 +135,10 @@ export type ContexteRoutes = {
 	/** Mémoire native de Claude Code (lue, jamais écrite) et instructions des projets, pour `amorce`. */
 	memoireClaude: MemoireClaude;
 	projetsClaude: ProjetsClaude;
-	/** Modèles locaux : état du reranker, démarrage sur un geste de l'utilisateur. */
+	/** Modèles locaux de la machine : état, démarrage et arrêt sur un geste de l'utilisateur, niveau. */
 	modeles: Modeles;
+	/** L'état des modèles a pu changer (un geste) : relu, et diffusé s'il a changé. */
+	relireModeles(): void;
 	/** Journal du service (avis d'un import, avertissements d'une écriture faite…). */
 	journal: (message: string) => void;
 	/** Taille maximale d'un dépôt (`TAILLE_MAX_DOCUMENT` en service ; abaissée par les tests). */
@@ -321,6 +334,12 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		if (apres === null) throw new ErreurHttp(404, 'Session inconnue.');
 		return ok({ session: vue(apres) });
 	};
+	/** Un geste sur les modèles de la machine, puis leur nouvel état, rendu et diffusé aux autres clients. */
+	const apresGesteModeles = (geste: () => Promise<void>) => async (): Promise<Reponse> => {
+		await geste();
+		ctx.relireModeles();
+		return ok(vueModeles(await ctx.modeles.etat()));
+	};
 	const demandees = fichesDemandees();
 	/** Fiches à injecter au prochain message de la session, rendues et diffusées après un changement. */
 	const aServirDiffuses = (id: string, chemins: string[]): Reponse => {
@@ -434,14 +453,30 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				return ok({ servis: (await pil.etat.servis(r.id, 200)).map((e, i) => vueServie(i === 0 ? e : { ...e, classement: [] }, titres)), lues });
 			},
 		},
-		{ methode: 'GET', chemin: ROUTES.modeles, action: async () => ok({ reranker: await ctx.modeles.etatReranker() } satisfies EtatModelesVue) },
+		{ methode: 'GET', chemin: ROUTES.modeles, action: async () => ok(vueModeles(await ctx.modeles.etat())) },
+		{ methode: 'POST', chemin: ROUTES.modelesDemarrer, corps: 'json', action: apresGesteModeles(() => ctx.modeles.demarrer()) },
+		{ methode: 'POST', chemin: ROUTES.modelesArreter, corps: 'json', action: apresGesteModeles(() => ctx.modeles.arreter()) },
 		{
-			methode: 'POST',
-			chemin: ROUTES.modelesDemarrer,
+			methode: 'PUT',
+			chemin: ROUTES.modelesNiveau,
 			corps: 'json',
-			action: async () => {
-				await ctx.modeles.demarrer();
-				return ok({ reranker: await ctx.modeles.etatReranker() } satisfies EtatModelesVue);
+			action: async (r) => {
+				const niveau = niveauDuCorps(await r.json(), false);
+				return apresGesteModeles(() => ctx.modeles.changerNiveau(niveau))();
+			},
+		},
+		{
+			methode: 'PUT',
+			chemin: ROUTES.sessionModeles,
+			corps: 'json',
+			action: async (r) => {
+				const niveau = niveauDuCorps(await r.json(), true);
+				const s = await session(r.id);
+				if (s.etat === 'terminee') throw new ErreurHttp(409, 'Session terminée : son niveau des modèles ne sert plus.');
+				// la vue changée part aux clients par l'écouteur des sessions du pilote
+				const apres = await pilote.niveauModeles(s.id, niveau);
+				if (apres === null) throw new ErreurHttp(404, 'Session inconnue.');
+				return ok({ session: vue(apres) });
 			},
 		},
 		{

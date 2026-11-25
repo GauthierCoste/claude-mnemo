@@ -10,7 +10,7 @@ vi.mock('../../src/terminal/Terminal.tsx', () => ({ Terminal: (p: { session: str
 afterEach(cleanup);
 
 function session(id: string, etat: SessionVue['etat']): SessionVue {
-	return { id, profil: 'travail', dossier: 'erp-saas', position: 'projets/erp-saas', projet: 'erp-saas', objectif: `Objectif ${id}`, etat, creeeMs: 1, majMs: 1, bilanDemandeMs: null, commitDebut: null, branche: 'main', terminal: true, dialogueOuvert: false, dossierNonRattache: null };
+	return { id, profil: 'travail', dossier: 'erp-saas', position: 'projets/erp-saas', projet: 'erp-saas', objectif: `Objectif ${id}`, etat, creeeMs: 1, majMs: 1, bilanDemandeMs: null, commitDebut: null, branche: 'main', terminal: true, dialogueOuvert: false, dossierNonRattache: null, niveauModeles: null };
 }
 
 const attendre = () => act(async () => new Promise((r) => setTimeout(r, 50)));

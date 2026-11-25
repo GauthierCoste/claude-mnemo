@@ -28,4 +28,10 @@ describe('vueSession', () => {
 		expect(vueSession(archiviste({ dernierArret: 'notification' }), true).dialogueOuvert).toBe(true);
 		expect(vueSession(archiviste({ etat: 'travaille', dernierArret: 'notification' }), true).dialogueOuvert).toBe(false);
 	});
+
+	it('niveauModeles : celui de la session, null si elle suit le niveau de la machine', () => {
+		expect(vueSession(archiviste({}), false).niveauModeles).toBeNull();
+		expect(vueSession(archiviste({ niveauModeles: 'sens' }), false).niveauModeles).toBe('sens');
+		expect(vueSession(archiviste({ niveauModeles: 'coupes' }), false).niveauModeles).toBe('coupes');
+	});
 });

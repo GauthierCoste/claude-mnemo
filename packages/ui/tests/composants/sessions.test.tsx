@@ -41,7 +41,7 @@ function session(id: string, dossier: string, rang: number, e: Partial<SessionVu
 		branche: 'main',
 		terminal: true,
 		dialogueOuvert: false,
-		dossierNonRattache: null,
+		dossierNonRattache: null, niveauModeles: null,
 		...e,
 	};
 }

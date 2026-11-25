@@ -215,7 +215,7 @@ describe('interface de bout en bout, contre le vrai service', () => {
 		expect(complete.trouves.some((t) => t.chemin === 'clients/clients.md')).toBe(true);
 		// aucun modèle installé : rien n'a été lancé, et aucune note
 		expect(complete.trouves.every((t) => t.note === null)).toBe(true);
-		expect(await api.lire<EtatModelesVue>(ROUTES.modeles)).toEqual({ reranker: 'absent' });
+		expect(await api.lire<EtatModelesVue>(ROUTES.modeles)).toMatchObject({ installes: false, sens: 'absent', reranker: 'absent', gardien: 'arrete', activites: [] });
 	});
 
 	it('session travail : lancée, relue, écho du faux claude, taille, pause', async (ctx) => {

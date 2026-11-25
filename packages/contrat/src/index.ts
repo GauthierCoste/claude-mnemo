@@ -3,7 +3,7 @@
  * l'importe pas ; seuls l'adaptateur HTTP du service et ses clients (interface web) s'y réfèrent, et, pour les sorties
  * `--json` de `mnemo init`, `mnemo verifier-poste` et `mnemo declarer`, la CLI et les programmes qui les lisent.
  */
-import type { AvecAvertissements, Avatar, GroupeReglage, LanceurDeProfil, RaisonCarte } from '@mnemo/commun';
+import type { AvancementModele, AvecAvertissements, Avatar, GroupeReglage, LanceurDeProfil, NiveauModeles, OperationModele, RaisonCarte } from '@mnemo/commun';
 
 export type EtatSessionVue = 'travaille' | 'attend' | 'a_relire' | 'en_pause' | 'terminee';
 
@@ -28,6 +28,8 @@ export type SessionVue = {
 	terminal: boolean;
 	/** Vrai si un dialogue de Claude Code (permission) attend l'utilisateur ; `attend` seul est aussi l'état de repos. */
 	dialogueOuvert: boolean;
+	/** Niveau des modèles propre à la session ; null : elle suit le niveau de la machine (le plus restrictif des deux s'applique). */
+	niveauModeles: NiveauModeles | null;
 };
 
 /**
@@ -203,8 +205,37 @@ export type EntreeServieVue = {
 /** Une fiche lue par la session (outil `lire`) : son chemin et l'heure de sa dernière lecture. */
 export type LueVue = { chemin: string; horodatageMs: number };
 
-/** Modèles locaux, pour les notes du classement : `absent` (non installés), `arrete` (installés, aucun serveur prêt), `pret`. */
-export type EtatModelesVue = { reranker: 'absent' | 'arrete' | 'pret' };
+/**
+ * Un modèle local : `absent` (lui ou le moteur non installé), `exclu` (installé, mais exclu par le niveau de la machine),
+ * `arrete` (permis, aucun serveur prêt : en veille ou en chargement), `pret` (servi, et le serveur a prouvé son identité).
+ */
+export type EtatModeleVue = 'absent' | 'exclu' | 'arrete' | 'pret';
+
+/** Un modèle installé : nom, éditeur, quantification, taille du fichier, début (8 caractères) de son SHA-256. */
+export type PieceModeleVue = { modele: string; editeur: string; quantification: string; octets: number; empreinte: string };
+
+/**
+ * Un appel en cours aux modèles, sur toute la machine : ce qu'il fait, sa session (null : hors session, ou inconnue), le
+ * dossier Mnemo qui l'a fait (sa racine, chemin absolu), son début, et l'avancement d'une vectorisation (`total` null : pas
+ * encore compté).
+ */
+export type ActiviteModeleVue = { operation: OperationModele; session: string | null; dossier: string; depuisMs: number; avancement: AvancementModele | null };
+
+/**
+ * Les modèles locaux de la machine (partagés par tous les dossiers Mnemo) : `installes` (le moteur et au moins un modèle),
+ * `niveau` de la machine, `gardien` (`arrete` : aucun ; `demarrage` : modèles en chargement ; `pret` ; `echec` : le dernier
+ * démarrage a échoué, il y a moins d'une minute), l'état de chaque modèle, les pièces installées (null : absente), et les
+ * appels en cours, du plus ancien au plus récent.
+ */
+export type EtatModelesVue = {
+	installes: boolean;
+	niveau: NiveauModeles;
+	gardien: 'arrete' | 'demarrage' | 'pret' | 'echec';
+	sens: EtatModeleVue;
+	reranker: EtatModeleVue;
+	pieces: { sens: PieceModeleVue | null; reranker: PieceModeleVue | null; moteur: { version: string; plateforme: string } | null };
+	activites: ActiviteModeleVue[];
+};
 
 /** Un élément écarté pour une session (« ne plus suggérer ») : une fiche emporte ses éléments. Effacé à la fin de la session. */
 export type EcarteVue = { id: string; titre: string; horodatageMs: number };
@@ -222,6 +253,8 @@ export type MessageServeur =
 	| { type: 'lues'; session: string; lues: LueVue[] }
 	| { type: 'fenetre'; session: string; fenetre: FenetreVue }
 	| { type: 'quotas'; quotas: QuotasVue }
+	/** L'état des modèles locaux a changé (niveau, gardien, appels en cours) : la vue entière, comme `GET modeles`. */
+	| { type: 'modeles'; modeles: EtatModelesVue }
 	| { type: 'memoire'; modifieeMs: number }
 	/** Les lots d'informations ont changé (proposé par l'archiviste, validé, rejeté, écarté) : relire `GET lots`. */
 	| { type: 'lots'; version: string }
@@ -258,8 +291,15 @@ export type MessageClient =
  * - `fenetres` GET → `ReponseFenetres` : la fenêtre de contexte connue de chaque session (message `fenetre` à chaque changement) ;
  * - `quotas` GET → `ReponseQuotas` ; POST `{ rate_limits }` (de `mnemo ligne-etat`, tel que Claude Code le donne à sa ligne
  *   d'état) → `ReponseQuotas` : les quotas du compte, diffusés (message `quotas`) quand ils changent ; 400 sans fenêtre lisible ;
- * - `modeles` GET → `EtatModelesVue` ;
- * - `modelesDemarrer` POST → `EtatModelesVue` : lance les modèles installés (geste de l'utilisateur ; sans attendre leur chargement) ;
+ * - `modeles` GET → `EtatModelesVue` (diffusée aussi, message `modeles`, à chaque changement : niveau, gardien, appels en cours) ;
+ * - `modelesDemarrer` POST → `EtatModelesVue` : lance les modèles installés et permis par le niveau (geste de l'utilisateur ;
+ *   sans attendre leur chargement) ;
+ * - `modelesArreter` POST → `EtatModelesVue` : arrête les modèles de la machine sans changer le niveau (le prochain usage les relance) ;
+ * - `modelesNiveau` PUT `{ niveau: NiveauModeles }` → `EtatModelesVue` : niveau de la machine (un niveau qui retire un modèle
+ *   arrête les modèles en marche ; un niveau qui en ajoute ne lance rien) ; 400 : niveau invalide ;
+ * - `sessionModeles` PUT `{ niveau: NiveauModeles | null }` (null : suivre le niveau de la machine) → `{ session }` : niveau
+ *   propre à la session, valable dès son prochain appel aux modèles (message `session` diffusé) ; 400 : niveau invalide ;
+ *   404 : session inconnue ; 409 : session terminée ;
  * - `hook` POST : un événement de `mnemo hook`, avec `echeanceMs` facultatif (instant où le hook cesse d'attendre : au-delà, rien
  *   n'est noté servi ; absent, une attente prudente est supposée) et `transcription` facultatif (chemin de la transcription de
  *   Claude Code, lu pour la seule jauge de la fenêtre de contexte) ;
@@ -349,6 +389,9 @@ export const ROUTES = {
 	quotas: '/api/quotas',
 	modeles: '/api/modeles',
 	modelesDemarrer: '/api/modeles/demarrer',
+	modelesArreter: '/api/modeles/arreter',
+	modelesNiveau: '/api/modeles/niveau',
+	sessionModeles: '/api/sessions/:id/modeles',
 	hook: '/api/hook',
 	memoire: '/api/memoire',
 	memoireListe: '/api/memoire/liste',

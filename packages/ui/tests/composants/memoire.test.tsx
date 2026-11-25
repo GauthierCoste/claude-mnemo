@@ -96,7 +96,7 @@ const SESSION_S1: SessionVue = {
 	branche: null,
 	terminal: true,
 	dialogueOuvert: false,
-	dossierNonRattache: null,
+	dossierNonRattache: null, niveauModeles: null,
 };
 
 const VUE_MARC: FicheVue = {

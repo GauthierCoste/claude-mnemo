@@ -345,12 +345,43 @@ export interface Sens {
 }
 
 /**
- * Les modèles locaux vus du service (panneau Contexte) : état du reranker (`absent` : moteur ou modèle non installé ;
- * `arrete` : installé, aucun serveur prêt ; `pret`), et démarrage sur un geste de l'utilisateur, sans attendre le chargement.
+ * Un modèle local : `absent` (lui ou le moteur non installé), `exclu` (par le niveau de la machine), `arrete` (permis, aucun
+ * serveur prêt), `pret` (servi, identité du serveur vérifiée).
+ */
+export type EtatModele = 'absent' | 'exclu' | 'arrete' | 'pret';
+/** Un modèle installé : son identité, la taille de son fichier, le début de son SHA-256. */
+export type PieceModele = { modele: string; editeur: string; quantification: string; octets: number; empreinte: string };
+/** Un appel en cours aux modèles (n'importe quel dossier Mnemo de la machine) ; `dossier` : sa racine. Jamais de texte. */
+export type ActiviteEnCours = { operation: OperationModele; session: string | null; dossier: string; depuisMs: number; avancement: AvancementModele | null };
+
+/**
+ * Les modèles locaux de la machine, vus du service : `installes` (le moteur et au moins un modèle), `niveau` de la machine,
+ * `gardien` (`arrete` : aucun en marche ; `demarrage` ; `pret` ; `echec` : dernier démarrage en échec il y a moins d'une
+ * minute), état de chaque modèle, pièces installées, appels en cours (du plus ancien au plus récent).
+ */
+export type EtatModeles = {
+	installes: boolean;
+	niveau: NiveauModeles;
+	gardien: 'arrete' | 'demarrage' | 'pret' | 'echec';
+	sens: EtatModele;
+	reranker: EtatModele;
+	pieces: { sens: PieceModele | null; reranker: PieceModele | null; moteur: { version: string; plateforme: string } | null };
+	activites: ActiviteEnCours[];
+};
+
+/**
+ * Les modèles locaux vus du service : leur état (lecture brève, ne lance rien) ; `demarrer` (geste de l'utilisateur : les
+ * modèles permis, sans attendre leur chargement) ; `arreter` (sans changer le niveau) ; `changerNiveau` (celui de la machine :
+ * retirer un modèle arrête les modèles en marche) ; `surveiller` : `rappel` est appelé quand l'état a pu changer (fichiers
+ * d'état, de niveau, d'activité), sans garantie qu'il ait changé ni que chaque changement soit vu (un sondage complète) ;
+ * rend la fonction qui arrête la surveillance.
  */
 export interface Modeles {
-	etatReranker(): Promise<'absent' | 'arrete' | 'pret'>;
+	etat(): Promise<EtatModeles>;
 	demarrer(): Promise<void>;
+	arreter(): Promise<void>;
+	changerNiveau(niveau: NiveauModeles): Promise<void>;
+	surveiller(rappel: () => void): () => void;
 }
 
 export interface Reranker {

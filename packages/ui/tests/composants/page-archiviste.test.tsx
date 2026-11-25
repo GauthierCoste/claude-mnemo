@@ -50,7 +50,7 @@ const SESSION: SessionVue = {
 	branche: 'main',
 	terminal: true,
 	dialogueOuvert: false,
-	dossierNonRattache: null,
+	dossierNonRattache: null, niveauModeles: null,
 };
 const ARCHIVISTE: SessionVue = { ...SESSION, id: 'arch', profil: 'archiviste', dossier: '', objectif: null, projet: '', position: '' };
 

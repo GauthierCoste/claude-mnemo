@@ -4,6 +4,7 @@
  */
 import { ErreurApi, type Api } from './api.ts';
 import { lotsDemo } from './demo-lots.ts';
+import { creerModelesDemo } from './demo-modeles.ts';
 import { creerClaudeDesktopDemo } from './demo-claude-desktop.ts';
 import { creerProfilsDemo } from './demo-profils.ts';
 import type { Connexion, EtatConnexion, FluxTerminal } from './connexion.ts';
@@ -31,7 +32,6 @@ import {
 	type CarteVue,
 	type ClassementVue,
 	type EcarteVue,
-	type EtatModelesVue,
 	type EntreeServieVue,
 	type LueVue,
 	type MessageClient,
@@ -67,7 +67,7 @@ import {
 	type ReponseFenetres,
 	type ReponseQuotas,
 } from '@mnemo/contrat';
-import { A_TRAITER_MAX, avecAvertissements, consigneATraiter, demandeTout, DOCUMENTS_MAX, ECHANTILLON_NATURE, motifSiNonCherchable, plier, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL, TAILLE_MAX_DOCUMENT, tailleLisible } from '@mnemo/commun';
+import { A_TRAITER_MAX, avecAvertissements, consigneATraiter, demandeTout, DOCUMENTS_MAX, estNiveauModeles, ECHANTILLON_NATURE, motifSiNonCherchable, plier, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL, TAILLE_MAX_DOCUMENT, tailleLisible } from '@mnemo/commun';
 
 const MINUTE = 60_000;
 const LATENCE_MS = 90;
@@ -235,6 +235,7 @@ function vueSession(s: SessionDemo, maintenant: number): SessionVue {
 		branche: s.branche,
 		terminal: s.terminal ?? true,
 		dialogueOuvert: false,
+		niveauModeles: null,
 	};
 }
 
@@ -809,7 +810,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			case ROUTES.documents:
 				return documents(demandeTout((cle) => params[cle]));
 			case ROUTES.modeles:
-				return { reranker: 'pret' } satisfies EtatModelesVue;
+				return modelesDemo.etat();
 			case ROUTES.reglages:
 				return reglagesDemo();
 			case ROUTES.sante:
@@ -943,6 +944,10 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			return { session: s };
 		}
 		switch (chemin) {
+			case ROUTES.modelesDemarrer:
+				return modelesDemo.demarrer();
+			case ROUTES.modelesArreter:
+				return modelesDemo.arreter();
 			case ROUTES.sessions: {
 				const maintenant = Date.now();
 				const s: SessionVue = {
@@ -961,6 +966,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 					branche: 'main',
 					terminal: true,
 					dialogueOuvert: false,
+					niveauModeles: null,
 				};
 				monde.sessions.push(s);
 				monde.servis.set(s.id, []);
@@ -1050,6 +1056,18 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 
 	// Réglages de la démo : en mémoire ; comme le service, le port changé attend un redémarrage
 	const profilsDemo = creerProfilsDemo();
+	const modelesDemo = creerModelesDemo(connexion.diffuser);
+	/** Niveau des modèles propre à une session (null : comme partout), diffusé comme le fait le service. */
+	const niveauDeSession = (id: string, corps: unknown): { session: SessionVue } => {
+		const niveau = (corps as { niveau?: unknown } | null)?.niveau;
+		if (niveau !== null && !estNiveauModeles(niveau)) throw new ErreurApi('Champ « niveau » invalide.', 400);
+		const i = monde.sessions.findIndex((x) => x.id === id);
+		if (i < 0) throw introuvable('Session');
+		const session = { ...monde.sessions[i]!, niveauModeles: niveau };
+		monde.sessions[i] = session;
+		connexion.diffuser({ type: 'session', session });
+		return { session };
+	};
 	const claudeDesktopDemo = creerClaudeDesktopDemo();
 	/** Route de profil (`:id`) du chemin, décodée ; undefined sinon. */
 	const profilDe = (route: string, chemin: string) => {
@@ -1101,6 +1119,9 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 				if (app !== undefined) return app as T;
 				const profil = profilDe(ROUTES.profil, chemin);
 				if (profil !== undefined) return ecritureProfil(profilsDemo.enregistrer(profil, corps), profil) as T;
+				if (chemin === ROUTES.modelesNiveau) return modelesDemo.niveau(corps) as T;
+				const reglee = sessionDe(chemin, 'modeles');
+				if (reglee) return niveauDeSession(reglee, corps) as T;
 				if (chemin !== ROUTES.reglages) throw new ErreurApi('Route inconnue (données de démonstration).', 404);
 				return remplacerReglages(corps) as T;
 			}),

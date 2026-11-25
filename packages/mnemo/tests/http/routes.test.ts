@@ -19,7 +19,7 @@ import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import type { ContexteService } from '../aides/service-faux.ts';
 
 const chemin = (route: string, id: string) => route.replace(':id', id);
-const CLES_VUE = ['bilanDemandeMs', 'branche', 'commitDebut', 'creeeMs', 'dialogueOuvert', 'dossier', 'dossierNonRattache', 'etat', 'id', 'majMs', 'objectif', 'position', 'profil', 'projet', 'terminal'];
+const CLES_VUE = ['bilanDemandeMs', 'branche', 'commitDebut', 'creeeMs', 'dialogueOuvert', 'dossier', 'dossierNonRattache', 'etat', 'id', 'majMs', 'niveauModeles', 'objectif', 'position', 'profil', 'projet', 'terminal'];
 
 function api(c: ContexteService) {
 	const { port, jeton } = c.service;
@@ -258,19 +258,6 @@ describe('routes : historique et retrait d’une session terminée', () => {
 		await c.etat.modifier(vue.id, { etat: 'terminee' });
 		expect((await api(c).supprimer(chemin(ROUTES.session, vue.id))).statut).toBe(409);
 		expect(await c.etat.lire(vue.id)).not.toBeNull();
-	});
-});
-
-describe('routes : modèles', () => {
-	it('GET modeles : état du reranker ; POST modeles/demarrer : démarrage demandé, état rendu', async () => {
-		const c = await serviceFaux();
-		expect((await api(c).get(ROUTES.modeles)).corps).toEqual({ reranker: 'arrete' });
-		c.modeles.reranker = 'absent';
-		expect((await api(c).get(ROUTES.modeles)).corps).toEqual({ reranker: 'absent' });
-		const r = await api(c).post(ROUTES.modelesDemarrer);
-		expect(r.statut).toBe(200);
-		expect(r.corps).toEqual({ reranker: 'absent' });
-		expect(c.modeles.demarrages).toBe(1);
 	});
 });
 

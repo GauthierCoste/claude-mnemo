@@ -3,6 +3,7 @@
  * `sessions` / `session` du WebSocket (une seule lecture initiale, aucune requête périodique).
  */
 import { PARAMETRES_TOUT } from '@mnemo/commun';
+import type { NiveauModeles } from '@mnemo/commun';
 import {
 	ROUTES,
 	type EcarteVue,
@@ -338,17 +339,31 @@ export function useFenetre(session: string): FenetreVue | null {
 }
 
 /**
- * État des modèles locaux (notes du classement), lu seulement quand `utile` ; `demarrer` : geste de l'utilisateur, qui lance
- * les modèles installés (le service n'attend pas leur chargement).
+ * État des modèles locaux de la machine, lu seulement quand `utile`, puis tenu par les messages `modeles` (et par la réponse
+ * d'un geste) ; `demarrer` (geste de l'utilisateur : le service n'attend pas leur chargement), `arreter`, `changerNiveau`
+ * (celui de la machine).
  */
-export function useModeles(utile: boolean): { etat: EtatModelesVue | undefined; demarrer(): Promise<void> } {
-	const { api } = useClient();
+export function useModeles(utile: boolean): {
+	etat: EtatModelesVue | undefined;
+	demarrer(): Promise<void>;
+	arreter(): Promise<void>;
+	changerNiveau(niveau: NiveauModeles): Promise<void>;
+} {
+	const { api, connexion } = useClient();
 	const base = useRessource(utile ? 'modeles' : null, () => api.lire<EtatModelesVue>(ROUTES.modeles));
-	const [apres, setApres] = useState<EtatModelesVue | null>(null);
+	const [recu, setRecu] = useState<EtatModelesVue | null>(null);
+	// écoute même quand l'état n'est pas utile : un état reçu reste ainsi le plus récent
+	useEffect(() => connexion.surMessage((m) => m.type === 'modeles' && setRecu(m.modeles)), [connexion]);
 	return {
-		etat: apres ?? base.donnees,
+		etat: recu ?? base.donnees,
 		async demarrer() {
-			setApres(await api.envoyer<EtatModelesVue>(ROUTES.modelesDemarrer, undefined));
+			setRecu(await api.envoyer<EtatModelesVue>(ROUTES.modelesDemarrer, undefined));
+		},
+		async arreter() {
+			setRecu(await api.envoyer<EtatModelesVue>(ROUTES.modelesArreter, undefined));
+		},
+		async changerNiveau(niveau) {
+			setRecu(await api.remplacer<EtatModelesVue>(ROUTES.modelesNiveau, { niveau }));
 		},
 	};
 }

@@ -38,7 +38,7 @@ function session(id: string, dossier: string, e: Partial<SessionVue> = {}): Sess
 		branche: 'main',
 		terminal: true,
 		dialogueOuvert: false,
-		dossierNonRattache: null,
+		dossierNonRattache: null, niveauModeles: null,
 		...e,
 	};
 }

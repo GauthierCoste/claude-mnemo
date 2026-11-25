@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { correspondNettement, demandeAuMoteur, motsDe, projetDeFiche, projetUtilisable, resultatsPalette, SESSIONS_MAX, TROUVES_MAX, type EntreePalette } from '../../src/palette/resultats.ts';
 
 function session(id: string, objectif: string, e: Partial<SessionVue> = {}): SessionVue {
-	return { id, profil: 'travail', dossier: 'erp-saas', position: 'projets/erp-saas', projet: 'erp-saas', objectif, etat: 'attend', creeeMs: 1, majMs: 1, bilanDemandeMs: null, commitDebut: null, branche: null, terminal: true, dialogueOuvert: false, dossierNonRattache: null, ...e };
+	return { id, profil: 'travail', dossier: 'erp-saas', position: 'projets/erp-saas', projet: 'erp-saas', objectif, etat: 'attend', creeeMs: 1, majMs: 1, bilanDemandeMs: null, commitDebut: null, branche: null, terminal: true, dialogueOuvert: false, dossierNonRattache: null, niveauModeles: null, ...e };
 }
 function fiche(chemin: string, titre: string): FicheGraphe {
 	return { chemin, titre, type: chemin.startsWith('sources/') ? 'source' : 'sujet', alias: [], etats: [], faitsActifs: 1, categories: {}, dates: [], branche: '', parent: null };

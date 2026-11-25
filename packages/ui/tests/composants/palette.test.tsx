@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 function session(id: string, objectif: string, e: Partial<SessionVue> = {}): SessionVue {
-	return { id, profil: 'travail', dossier: 'erp-saas', position: 'projets/erp-saas', projet: 'erp-saas', objectif, etat: 'attend', creeeMs: 1, majMs: 1, bilanDemandeMs: null, commitDebut: null, branche: 'main', terminal: true, dialogueOuvert: false, dossierNonRattache: null, ...e };
+	return { id, profil: 'travail', dossier: 'erp-saas', position: 'projets/erp-saas', projet: 'erp-saas', objectif, etat: 'attend', creeeMs: 1, majMs: 1, bilanDemandeMs: null, commitDebut: null, branche: 'main', terminal: true, dialogueOuvert: false, dossierNonRattache: null, niveauModeles: null, ...e };
 }
 
 function fiche(chemin: string, titre: string, alias: string[] = []): FicheGraphe {

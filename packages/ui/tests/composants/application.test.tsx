@@ -11,7 +11,7 @@ vi.mock('../../src/terminal/Terminal.tsx', () => ({ Terminal: (p: { session: str
 afterEach(cleanup);
 
 function session(id: string, etat: SessionVue['etat'], profil = 'travail'): SessionVue {
-	return { id, profil, dossier: 'erp-saas', position: 'projets/erp-saas', projet: 'erp-saas', objectif: `Objectif ${id}`, etat, creeeMs: 1, majMs: 1, bilanDemandeMs: null, commitDebut: null, branche: 'main', terminal: true, dialogueOuvert: false, dossierNonRattache: null };
+	return { id, profil, dossier: 'erp-saas', position: 'projets/erp-saas', projet: 'erp-saas', objectif: `Objectif ${id}`, etat, creeeMs: 1, majMs: 1, bilanDemandeMs: null, commitDebut: null, branche: 'main', terminal: true, dialogueOuvert: false, dossierNonRattache: null, niveauModeles: null };
 }
 
 const REPONSES = {

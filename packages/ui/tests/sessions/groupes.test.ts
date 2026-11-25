@@ -4,7 +4,7 @@ import { PROFIL_ARCHIVISTE } from '@mnemo/commun';
 import { destinationDeSession, grouperSessions } from '../../src/sessions/groupes.ts';
 
 function session(id: string, dossier: string, creeeMs: number, e: Partial<SessionVue> = {}): SessionVue {
-	return { id, profil: 'travail', dossier, position: '', projet: dossier, objectif: id, etat: 'travaille', creeeMs, majMs: creeeMs, bilanDemandeMs: null, commitDebut: null, branche: 'main', terminal: true, dialogueOuvert: false, dossierNonRattache: null, ...e };
+	return { id, profil: 'travail', dossier, position: '', projet: dossier, objectif: id, etat: 'travaille', creeeMs, majMs: creeeMs, bilanDemandeMs: null, commitDebut: null, branche: 'main', terminal: true, dialogueOuvert: false, dossierNonRattache: null, niveauModeles: null, ...e };
 }
 
 describe('grouperSessions', () => {

@@ -1,0 +1,70 @@
+import { homedir } from 'node:os';
+import { modelesPermis } from '@mnemo/commun';
+import type { EtatModele, EtatModeles } from '../../application/ports.ts';
+import { lireActivites } from './activite.ts';
+import { dossierModeles, dossierServeurs } from './dossier.ts';
+import { lireNiveau } from './niveau.ts';
+import { piecesInstallees } from './pieces-installees.ts';
+import { AGE_MAX_DEMARRAGE_MS, lireEtatServeurs, PAUSE_APRES_ECHEC_MS, pidVivant, verifierServeur } from './serveurs.ts';
+import type { EtatServeurs, TypeServeur } from './serveurs.ts';
+
+/** Vérification d'un serveur pour l'état : brève (un serveur prêt répond tout de suite, et n'est vérifié qu'une fois). */
+const LECTURE_ETAT_MS = 300;
+
+/** `env` : celui de la machine (`MNEMO_MODELES` isole les tests, `MNEMO_LLAMA_SERVEUR` remplace le moteur) ; `plateforme`, `arch` : pour les pièces. */
+export type OptionsEtatModeles = { env?: NodeJS.ProcessEnv; plateforme?: NodeJS.Platform; arch?: string };
+
+const age = (depuis: string, maintenant: number) => maintenant - (Date.parse(depuis) || 0);
+
+/**
+ * Phase du gardien d'après `modeles.json` : aucun état, ou gardien mort, `arrete` ; un échec de moins d'une minute, `echec`
+ * (comme un gardien mort en plein démarrage récent, qui n'a pas pu l'écrire : les appels ne le relancent pas pendant ce
+ * temps) ; un démarrage bloqué depuis plus de 3 min, `echec` aussi (un autre peut le remplacer).
+ */
+export function phaseDuGardien(etat: EtatServeurs | null, maintenant: number = Date.now()): EtatModeles['gardien'] {
+	if (etat === null) return 'arrete';
+	const { pid, depuis, etat: phase } = etat.gardien;
+	if (phase === 'echec') return age(depuis, maintenant) < PAUSE_APRES_ECHEC_MS ? 'echec' : 'arrete';
+	if (!pidVivant(pid)) return phase === 'demarrage' && age(depuis, maintenant) < PAUSE_APRES_ECHEC_MS ? 'echec' : 'arrete';
+	if (phase === 'demarrage') return age(depuis, maintenant) < AGE_MAX_DEMARRAGE_MS ? 'demarrage' : 'echec';
+	return 'pret';
+}
+
+/**
+ * État des modèles de la machine, pour l'interface : pièces installées, niveau, gardien, état de chaque modèle (prêt : servi
+ * par un gardien vivant, serveur vérifié avec sa clé), appels en cours. Une lecture brève, qui ne lance rien ; les fichiers
+ * d'activité des processus morts sont retirés au passage (`lireActivites`).
+ */
+export async function lireEtatModeles(options: OptionsEtatModeles = {}): Promise<EtatModeles> {
+	const env = options.env ?? process.env;
+	const plateforme = options.plateforme ?? process.platform;
+	const arch = options.arch ?? process.arch;
+	const serveurs = dossierServeurs(env, plateforme, homedir());
+	const [pieces, niveau, etat, activites] = await Promise.all([
+		piecesInstallees(dossierModeles(env, plateforme, homedir()), plateforme, arch),
+		lireNiveau(serveurs),
+		lireEtatServeurs(serveurs),
+		lireActivites(serveurs),
+	]);
+	const remplacant = env['MNEMO_LLAMA_SERVEUR'];
+	const moteur = pieces.moteur !== null || (remplacant !== undefined && remplacant !== '');
+	const permis = modelesPermis(niveau);
+	const finMs = Date.now() + LECTURE_ETAT_MS;
+	const etatDe = async (type: TypeServeur): Promise<EtatModele> => {
+		if (!moteur || pieces[type] === null) return 'absent';
+		if (!permis[type]) return 'exclu';
+		const entree = etat?.[type];
+		if (etat === null || entree === undefined || !pidVivant(etat.gardien.pid)) return 'arrete';
+		return (await verifierServeur(entree, finMs)) ? 'pret' : 'arrete';
+	};
+	const [sens, reranker] = await Promise.all([etatDe('sens'), etatDe('reranker')]);
+	return {
+		installes: moteur && (pieces.sens !== null || pieces.reranker !== null),
+		niveau,
+		gardien: phaseDuGardien(etat),
+		sens,
+		reranker,
+		pieces,
+		activites: activites.map(({ operation, session, dossier, depuisMs, avancement }) => ({ operation, session, dossier, depuisMs, avancement })),
+	};
+}

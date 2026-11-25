@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { avertissementNonCherchable, consigneATraiter } from '@mnemo/commun';
-import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseProfils, type ReponseValidationLot, type SessionTermineeVue, type SessionVue } from '@mnemo/contrat';
+import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EtatModelesVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseProfils, type ReponseValidationLot, type SessionTermineeVue, type SessionVue } from '@mnemo/contrat';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ErreurApi } from '../../src/client/api.ts';
@@ -116,6 +116,30 @@ describe('mode démo', () => {
 		expect(recus.at(-1)?.id).toBe(r.session.id);
 		const { sessions: liste } = await api.lire<{ sessions: SessionVue[] }>(ROUTES.sessions);
 		expect(liste.some((s) => s.id === r.session.id)).toBe(true);
+	});
+
+	it('modèles : vue complète plausible ; niveau, arrêt, démarrage diffusés (`modeles`) ; niveau d’une session diffusé (`session`)', async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		const { api, connexion } = creerClientDemo();
+		const recus: EtatModelesVue[] = [];
+		const sessions: SessionVue[] = [];
+		connexion.surMessage((m) => {
+			if (m.type === 'modeles') recus.push(m.modeles);
+			if (m.type === 'session') sessions.push(m.session);
+		});
+		const etat = await api.lire<EtatModelesVue>(ROUTES.modeles);
+		expect(etat).toMatchObject({ installes: true, niveau: 'complets', gardien: 'pret', sens: 'pret', reranker: 'pret', activites: [] });
+		expect(etat.pieces).toMatchObject({ sens: { modele: 'bge-m3', editeur: 'BAAI', quantification: 'Q8_0' }, reranker: { modele: 'bge-reranker-v2-m3' }, moteur: { version: 'b11671', plateforme: 'macOS arm64' } });
+		expect(await api.remplacer<EtatModelesVue>(ROUTES.modelesNiveau, { niveau: 'sens' })).toMatchObject({ niveau: 'sens', gardien: 'arrete', sens: 'arrete', reranker: 'exclu' });
+		expect(recus.at(-1)).toMatchObject({ niveau: 'sens', reranker: 'exclu' });
+		expect(await api.envoyer<EtatModelesVue>(ROUTES.modelesDemarrer)).toMatchObject({ gardien: 'demarrage' });
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(recus.at(-1)).toMatchObject({ gardien: 'pret', sens: 'pret', reranker: 'exclu' });
+		expect(await api.envoyer<EtatModelesVue>(ROUTES.modelesArreter)).toMatchObject({ gardien: 'arrete', sens: 'arrete' });
+		const id = '9e02b6f4-8d1a-4c37-b5e9-2a6f0c8d4e13';
+		const r = await api.remplacer<{ session: SessionVue }>(ROUTES.sessionModeles.replace(':id', id), { niveau: 'coupes' });
+		expect(r.session).toMatchObject({ id, niveauModeles: 'coupes' });
+		expect(sessions.at(-1)).toMatchObject({ id, niveauModeles: 'coupes' });
 	});
 
 	it('terminal : relecture à l’abonnement, écho de la saisie', async () => {

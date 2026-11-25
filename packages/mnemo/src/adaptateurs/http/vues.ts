@@ -28,6 +28,7 @@ export function vueSession(s: Session, terminal: boolean): SessionVue {
 		branche: s.branche,
 		terminal,
 		dialogueOuvert: dialogueOuvert(s),
+		niveauModeles: s.niveauModeles ?? null,
 	};
 }
 
