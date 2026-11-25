@@ -407,6 +407,17 @@ describe('routes : injection automatique (suivi et réactivation)', () => {
 		expect((await api(c).get(chemin(ROUTES.servis, UUID))).corps).toMatchObject({ coupures: [] });
 	});
 
+	it('le geste de réactivation ne s’écrit pas : la route répond une erreur, rien n’est réactivé ni journalisé comme tel', async () => {
+		const c = await coupee();
+		const noter = c.etat.noterGeste.bind(c.etat);
+		c.etat.noterGeste = async (g) => (g.geste === 'injection_reactivee' ? Promise.reject(new Error('base occupée')) : noter(g));
+		const r = await api(c).post(ROUTES.injectionAutomatique, { session: UUID });
+		expect(r.statut).toBeGreaterThanOrEqual(500);
+		expect(c.journal.some((l) => l.includes('réactivée'))).toBe(false);
+		c.etat.noterGeste = noter;
+		expect((await api(c).get(ROUTES.injectionAutomatique)).corps).toEqual({ coupures: [COUPURE] });
+	});
+
 	it('refus : niveau inconnu, champ inconnu (400), session inconnue (404) ; rien n’est réactivé', async () => {
 		const c = await coupee();
 		expect((await api(c).post(ROUTES.injectionAutomatique, { niveau: 'tout' })).statut).toBe(400);

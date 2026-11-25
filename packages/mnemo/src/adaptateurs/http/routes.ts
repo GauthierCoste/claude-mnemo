@@ -742,7 +742,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const d = champs(await r.json(), { session: { requis: false, max: 100 }, niveau: { requis: false, max: 20 } });
 				if (d.niveau !== undefined && d.niveau !== 'complets' && d.niveau !== 'sens') throw new ErreurHttp(400, 'niveau : « complets » ou « sens » attendu.');
 				const s = d.session === undefined ? null : await session(d.session);
-				const reactives = await reactiverInjection(dep, pil.etat, modelesActifs(dep), { session: s?.id ?? '', horodatageMs: Date.now(), ...(d.niveau === undefined ? {} : { niveau: d.niveau }) }).catch((e: unknown) => {
+				const reactives = await reactiverInjection(pil.etat, modelesActifs(dep), { session: s?.id ?? '', horodatageMs: Date.now(), ...(d.niveau === undefined ? {} : { niveau: d.niveau }) }).catch((e: unknown) => {
 					// état de coupure inconnu : aucun geste, l'utilisateur réessaie
 					if (e instanceof SuiviIllisible) throw new ErreurHttp(503, 'Suivi des injections illisible : réessayez.');
 					throw e;

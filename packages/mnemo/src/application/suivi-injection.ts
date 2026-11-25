@@ -11,8 +11,7 @@ import { AUCUNE_COUPURE, avecLesCoupures, coupureDuNiveau, FENETRE_SUIVI, instan
 import type { CoupuresDInjection, GesteDuSuivi } from '../domaine/suivi-injection.ts';
 import type { ModelesDeNote } from '../domaine/note-de-confiance.ts';
 import type { NiveauDeNote } from '../domaine/modele-de-note.ts';
-import { noterGeste } from './gestes.ts';
-import type { Dependances, EtatSessions, GesteNote } from './ports.ts';
+import type { EtatSessions, GesteNote } from './ports.ts';
 
 const NIVEAUX: readonly NiveauDeNote[] = ['complets', 'sens'];
 
@@ -162,10 +161,10 @@ export class SuiviIllisible extends Error {
 /**
  * Réactive l'injection automatique des niveaux coupés (`niveau` : celui-là seulement) : un geste `injection_reactivee` par
  * niveau, noté dans `session` (vide : hors session). Rend les niveaux réactivés (aucun : rien n'était coupé). Journal des
- * gestes illisible : lève `SuiviIllisible`, sans rien noter (aucun geste pour un niveau dont la coupure est inconnue).
+ * gestes illisible : lève `SuiviIllisible`, sans rien noter (aucun geste pour un niveau dont la coupure est inconnue) ; un
+ * geste qui ne s'écrit pas lève aussi (la réactivation n'a pas eu lieu, la route répond une erreur).
  */
 export async function reactiverInjection(
-	dep: Pick<Dependances, 'index'>,
 	etat: Pick<EtatSessions, 'gestes' | 'noterGeste'>,
 	modeles: ModelesDeNote,
 	o: { session: string; horodatageMs: number; niveau?: NiveauDeNote },
@@ -177,8 +176,9 @@ export async function reactiverInjection(
 		throw new SuiviIllisible();
 	}
 	const reactives = NIVEAUX.filter((n) => coupures[n] !== null && (o.niveau === undefined || o.niveau === n));
+	// écrit directement (pas `noterGeste`, qui tait les pannes) : un geste non écrit fait échouer la réactivation
 	for (const niveau of reactives) {
-		await noterGeste(dep, etat, { geste: 'injection_reactivee', session: o.session, fiche: '', empreinte: null, horodatageMs: o.horodatageMs, note: { niveau, motif: coupures[niveau]!.motif } });
+		await etat.noterGeste({ geste: 'injection_reactivee', session: o.session, fiche: '', empreinte: null, horodatageMs: o.horodatageMs, note: { niveau, motif: coupures[niveau]!.motif } });
 	}
 	return reactives;
 }
