@@ -69,4 +69,15 @@ describe('approbation des hooks de Mnemo dans config.toml', () => {
 		const enLigne = `[hooks]\nstate = { ${CLES.map((c, i) => `"${CHEMIN}:${c}" = { trusted_hash = "sha256:${i}" }`).join(', ')} }\n`;
 		expect(approbationDesHooks(enLigne, [CHEMIN], CLES).etat).toBe('approuves');
 	});
+
+	it('un TOML que Mnemo ne lit pas ailleurs dans config.toml : hooks.state relu ligne à ligne, l’approbation reste lue', () => {
+		const ailleurs = '[profiles.a]\nliste = [1,\n';
+		expect(etatsDansConfig(ailleurs).illisible).toBe(false);
+		expect(approbationDesHooks(`model = "x"\n${approuve(CLES[0]!)}${approuve(CLES[1]!)}${ailleurs}`, [CHEMIN], CLES).etat).toBe('approuves');
+		expect(approbationDesHooks(`${ailleurs}${approuve(CLES[0]!)}`, [CHEMIN], CLES)).toEqual({ etat: 'a_approuver', motif: expect.stringMatching(/^1 hook\(s\) de Mnemo sur 2/u) });
+		expect(approbationDesHooks(`${ailleurs}${approuve(CLES[0]!)}enabled = false\n${approuve(CLES[1]!)}`, [CHEMIN], CLES).etat).toBe('a_approuver');
+		expect(approbationDesHooks(`${ailleurs}[hooks.state."${CHEMIN}:${CLES[0]!}"]\ntrusted_hash = 'sha256:a'\n[hooks.state.'${CHEMIN}:${CLES[1]!}']\ntrusted_hash = "sha256:b"\n`, [CHEMIN], CLES).etat).toBe('approuves');
+		// une table en ligne de hooks.state dans un tel fichier : non suivie, inconnu
+		expect(approbationDesHooks(`${ailleurs}[hooks]\nstate = { "${CHEMIN}:${CLES[0]!}" = { trusted_hash = "x" } }\n`, [CHEMIN], CLES).etat).toBe('inconnu');
+	});
 });

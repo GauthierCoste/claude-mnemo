@@ -3,7 +3,6 @@ import { dirname, join } from 'node:path';
 import type { CommandeMoteur } from '../../../application/ports.ts';
 import { dossiersDuPath, estExecutable, estFichier } from '../executables.ts';
 import { cibleDuShim, SHIM } from '../shim-npm.ts';
-import { trouverSousWindows } from '../trouver-sous-windows.ts';
 
 /** Exécutable de Codex fourni avec l'app ChatGPT (macOS). */
 export const CODEX_DE_CHATGPT = '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex';
@@ -27,6 +26,25 @@ function sansScriptDuBundle(chemin: string): string | null {
 	return estFichier(executable) ? executable : null;
 }
 
+/** Windows : `codex.exe` d'abord dans tout le PATH, puis un shim npm `codex.cmd` remplacé par sa cible. */
+function trouverSousWindows(dossiers: string[]): CommandeMoteur | null {
+	for (const dossier of dossiers) {
+		for (const nom of ['codex.exe', 'codex.EXE']) {
+			const candidat = join(dossier, nom);
+			if (estFichier(candidat)) return { commande: candidat, avant: [] };
+		}
+	}
+	for (const dossier of dossiers) {
+		for (const nom of ['codex.cmd', 'codex.CMD']) {
+			const candidat = join(dossier, nom);
+			if (!estFichier(candidat)) continue;
+			const cible = cibleDuShim(candidat, PAQUET_CODEX);
+			if (cible !== null) return cible;
+		}
+	}
+	return null;
+}
+
 /**
  * Commande qui lance `codex` (jamais par un shell). `MNEMO_CODEX` d'abord, et seul (un faux pour les tests, ou un binaire
  * choisi) : un `.mjs`/`.js` est lancé par le Node courant, un shim `.cmd` (Windows) remplacé par sa cible ; un fichier
@@ -43,8 +61,7 @@ export function trouverCodex(env: NodeJS.ProcessEnv, plateforme: NodeJS.Platform
 		return commande === null ? null : { commande, avant: [] };
 	}
 	const dossiers = dossiersDuPath(env, plateforme);
-	// Windows : `codex.exe` d'abord dans tout le PATH, puis un shim npm `codex.cmd` remplacé par sa cible
-	if (plateforme === 'win32') return trouverSousWindows('codex', dossiers, PAQUET_CODEX);
+	if (plateforme === 'win32') return trouverSousWindows(dossiers);
 	for (const dossier of dossiers) {
 		const candidat = join(dossier, 'codex');
 		if (!estExecutable(candidat, plateforme)) continue;
