@@ -1,4 +1,5 @@
-import { segmentsDeCle } from '../toml-lecture.ts';
+import { entreesToml, LitteralToml } from '../toml-lecture.ts';
+import type { ValeurToml } from '../toml-lecture.ts';
 
 /**
  * Approbation des hooks par l'utilisateur dans Codex (`/hooks`), lue dans `config.toml` sans l'écrire : Codex 0.171 y note
@@ -8,70 +9,41 @@ import { segmentsDeCle } from '../toml-lecture.ts';
  */
 export type ApprobationHooks = { etat: 'approuves' | 'a_approuver' | 'inconnu'; motif: string };
 
-/** Position du premier `stop` hors des chaînes de `ligne`, ou -1. */
-function horsChaines(ligne: string, stop: string): number {
-	let guillemet: string | null = null;
-	for (let i = 0; i < ligne.length; i++) {
-		const c = ligne[i]!;
-		if (guillemet !== null) {
-			if (c === '\\' && guillemet === '"') i++;
-			else if (c === guillemet) guillemet = null;
-		} else if (c === '"' || c === "'") guillemet = c;
-		else if (c === stop) return i;
-	}
-	return -1;
-}
-
 type EtatDeHook = { approuve: boolean; desactive: boolean };
 
+/** Chaque valeur feuille de `valeur` (tables en ligne parcourues), sous son chemin complet. */
+function* feuilles(chemin: string[], valeur: ValeurToml): Generator<[string[], ValeurToml]> {
+	if (typeof valeur === 'object' && !Array.isArray(valeur) && !(valeur instanceof LitteralToml)) {
+		for (const [cle, v] of Object.entries(valeur)) yield* feuilles([...chemin, cle], v);
+	} else yield [chemin, valeur];
+}
+
 /**
- * `hooks.state` de `config.toml`, par clé de hook ; `illisible` : une forme que cette lecture par lignes ne suit pas (table
- * en ligne `state = { … }`, en-tête mal formé), l'état est alors inconnu.
+ * `hooks.state` de `config.toml`, par clé de hook (en-têtes, clés pointées et tables en ligne) ; `illisible` : un TOML que
+ * la lecture par entrées ne suit pas, l'état est alors inconnu.
  */
 export function etatsDansConfig(texte: string): { illisible: boolean; etats: Map<string, EtatDeHook> } {
 	const etats = new Map<string, EtatDeHook>();
-	let illisible = false;
-	let table: string[] = [];
+	const entrees = entreesToml(texte);
+	if (entrees === null) return { illisible: true, etats };
 	const etat = (cle: string): EtatDeHook => {
 		const e = etats.get(cle) ?? { approuve: false, desactive: false };
 		etats.set(cle, e);
 		return e;
 	};
-	// chaîne sur plusieurs lignes en cours (`"""` ou `'''`) : ses lignes ne sont ni des en-têtes ni des clés
-	let multiligne: string | null = null;
-	for (const brute of texte.split(/\r?\n/u)) {
-		if (multiligne !== null) {
-			if (brute.includes(multiligne)) multiligne = null;
+	let table: string[] = [];
+	for (const e of entrees) {
+		if (e.genre !== 'valeur') {
+			table = e.cle;
 			continue;
 		}
-		const ligne = brute.trim();
-		if (ligne === '' || ligne.startsWith('#')) continue;
-		if (ligne.startsWith('[')) {
-			const double = ligne.startsWith('[[');
-			const interieur = ligne.slice(double ? 2 : 1);
-			const fin = horsChaines(interieur, ']');
-			const segments = fin === -1 ? null : segmentsDeCle(interieur.slice(0, fin));
-			if (segments === null) {
-				illisible = true;
-				table = [];
-			} else table = segments;
-			continue;
+		for (const [chemin, valeur] of feuilles([...table, ...e.cle], e.valeur)) {
+			if (chemin.length !== 4 || chemin[0] !== 'hooks' || chemin[1] !== 'state') continue;
+			if (chemin[3] === 'trusted_hash' && typeof valeur === 'string' && valeur !== '') etat(chemin[2]!).approuve = true;
+			if (chemin[3] === 'enabled' && valeur === false) etat(chemin[2]!).desactive = true;
 		}
-		const egal = horsChaines(ligne, '=');
-		if (egal === -1) continue;
-		const cle = segmentsDeCle(ligne.slice(0, egal));
-		if (cle === null) continue;
-		const chemin = [...table, ...cle];
-		const valeur = ligne.slice(egal + 1).trim();
-		const ouvrante = valeur.startsWith('"""') ? '"""' : valeur.startsWith("'''") ? "'''" : null;
-		if (ouvrante !== null && !valeur.slice(3).includes(ouvrante)) multiligne = ouvrante;
-		if (chemin[0] !== 'hooks') continue;
-		if (chemin.length <= 3 && valeur.startsWith('{') && (chemin.length === 1 || chemin[1] === 'state')) illisible = true;
-		if (chemin.length !== 4 || chemin[1] !== 'state') continue;
-		if (chemin[3] === 'trusted_hash' && /^(?:"[^"]+"|'[^']+')/u.test(valeur)) etat(chemin[2]!).approuve = true;
-		if (chemin[3] === 'enabled' && /^false\b/u.test(valeur)) etat(chemin[2]!).desactive = true;
 	}
-	return { illisible, etats };
+	return { illisible: false, etats };
 }
 
 const AVERTISSEMENT = 'Mnemo ne peut pas recalculer l’empreinte de Codex : si l’entrée a changé depuis l’approbation, Codex la redemande (/hooks)';
