@@ -1,29 +1,39 @@
 import { existsSync } from 'node:fs';
 import { readdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
 import { arreterServeurs, cheminsModeles, MOTIF_FICHIER_CLE } from './serveurs.ts';
 import type { ResultatArret } from './serveurs.ts';
 
+/** Temporaire d'écriture laissé par une écriture interrompue (`modeles.json.tmp-<hasard>`, idem pour le registre). */
+const MOTIF_TEMPORAIRE = /^modeles(-lances)?\.json\.tmp-/u;
+
+/** Fichiers de l'ancien état présents dans `local` (`.mnemo/` d'un dossier), chemins absolus. */
+async function fichiersAnciens(local: string): Promise<string[]> {
+	const anciens = cheminsModeles(local);
+	const fixes = new Set([anciens.etat, anciens.lances, anciens.verrou, `${anciens.verrou}.lock`, anciens.actif, anciens.journal].map((f) => basename(f)));
+	const noms = await readdir(local).catch(() => [] as string[]);
+	return noms.filter((n) => fixes.has(n) || MOTIF_TEMPORAIRE.test(n) || MOTIF_FICHIER_CLE.test(n)).map((n) => join(local, n));
+}
+
 /**
  * Migration, à retirer un jour : jusqu'à la 1.5, chaque dossier Mnemo avait son gardien, avec son état dans
- * `<racine>/.mnemo/` (`modeles.json`, `modeles-lances.json`, verrou, `modeles.actif`, `modeles.log`, fichiers `.cle`). Les
- * noms de fichiers n'ont pas changé : l'ancien gardien et ses serveurs sont arrêtés par le code d'arrêt d'aujourd'hui, avec
- * la même prudence (seuls les processus prouvés nôtres, clé vérifiée), puis ces fichiers sont retirés. Des serveurs qui
- * chargent encore (pas vérifiables) gardent leurs fichiers : la prochaine migration les reprendra.
+ * `<racine>/.mnemo/` (`modeles.json`, `modeles-lances.json`, verrou, `modeles.actif`, `modeles.log`, fichiers `.cle`,
+ * temporaires d'écriture). Les noms de fichiers n'ont pas changé : l'ancien gardien et ses serveurs sont arrêtés par le code
+ * d'arrêt d'aujourd'hui, avec la même prudence (seuls les processus prouvés nôtres, clé vérifiée), puis ces fichiers sont
+ * retirés. Des serveurs qui chargent encore (pas vérifiables) gardent leurs fichiers : la prochaine migration les reprendra.
+ * Sans état ni registre (un journal, une date d'activité ou un temporaire seuls), rien n'est à arrêter : les restes sont
+ * retirés (`rien`).
  *
- * Rend null s'il n'y avait aucun ancien état, sinon le résultat de l'arrêt.
+ * Rend null s'il n'y avait aucun fichier de l'ancien état, sinon le résultat de l'arrêt.
  */
 export async function migrerAncienGardien(racine: string, env: NodeJS.ProcessEnv = process.env): Promise<ResultatArret | null> {
 	const local = join(racine, DOSSIER_LOCAL);
+	if ((await fichiersAnciens(local)).length === 0) return null;
 	const anciens = cheminsModeles(local);
-	if (!existsSync(anciens.etat) && !existsSync(anciens.lances)) return null;
-	const resultat = await arreterServeurs(local, env);
+	const resultat = existsSync(anciens.etat) || existsSync(anciens.lances) ? await arreterServeurs(local, env) : 'rien';
 	if (typeof resultat === 'object') return resultat;
-	const cles = await readdir(local).then(
-		(noms) => noms.filter((n) => MOTIF_FICHIER_CLE.test(n)).map((n) => join(local, n)),
-		() => [],
-	);
-	await Promise.all([anciens.etat, anciens.lances, anciens.verrou, anciens.actif, anciens.journal, ...cles].map((f) => rm(f, { force: true })));
+	// relus : l'arrêt a pu en écrire (journal, verrou)
+	await Promise.all((await fichiersAnciens(local)).map((f) => rm(f, { recursive: true, force: true })));
 	return resultat;
 }
