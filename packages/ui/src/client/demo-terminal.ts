@@ -1,5 +1,5 @@
 /**
- * Mode démo : l'écran d'un faux `claude`, `codex`, `vibe` ou `copilot` en séquences ANSI (couleurs des 16 teintes du thème,
+ * Mode démo : l'écran d'un faux `claude`, `codex` ou `vibe` en séquences ANSI (couleurs des 16 teintes du thème,
  * cadre d'accueil, invite encadrée à la largeur du terminal, indicateur de réflexion), chacun avec ses marques : celles de
  * Claude Code (✻, ⎿, « ? for shortcuts ») jamais sur la session d'un autre moteur. Chargé seulement avec `demo.ts`, jamais
  * dans la construction.
@@ -41,7 +41,6 @@ const MARQUES: Record<IdMoteur, Marques> = {
 	'claude-code': { puce: '●', resultat: '⎿', reflexion: `${SGR.jaune}✻${SGR.fin} `, aide: `  ${SGR.gris}? for shortcuts${SGR.fin}`, invite: '>' },
 	codex: { puce: '•', resultat: '└', reflexion: `${SGR.gris}•${SGR.fin} `, aide: '', invite: '›' },
 	'mistral-vibe': { puce: '•', resultat: '└', reflexion: `${SGR.jaune}⠋${SGR.fin} `, aide: `  ${SGR.gris}accept edits${SGR.fin}`, invite: '>' },
-	'copilot-cli': { puce: '●', resultat: '└', reflexion: `${SGR.cyan}◉${SGR.fin} `, aide: `  ${SGR.gris}/ commands · ? help${SGR.fin}`, invite: '❯' },
 };
 /** Moteur d'une session de la démo (absent : Claude Code). */
 export type MoteurDemo = IdMoteur;
@@ -57,9 +56,6 @@ function accueil(dossier: string, s?: SessionDemo): string {
 	if (s?.moteur === 'mistral-vibe') {
 		const modele = s.modele === undefined || s.modele === '' ? [] : [`   ${SGR.gris}${s.modele}${SGR.fin}`];
 		return cadre([` ${SGR.gras}Mistral Vibe${SGR.fin} ${SGR.gris}v3.1.5${SGR.fin}`, ...modele, `   ${SGR.gris}Type /help for more information${SGR.fin}`, `   ${SGR.gris}${cwd}${SGR.fin}`], LARGEUR_ACCUEIL, SGR.jaune);
-	}
-	if (s?.moteur === 'copilot-cli') {
-		return cadre([` ${SGR.gras}GitHub Copilot CLI${SGR.fin} ${SGR.gris}1.0.116${SGR.fin}`, '', `   ${SGR.gris}${cwd}${SGR.fin}`], LARGEUR_ACCUEIL, SGR.magenta);
 	}
 	return cadre(
 		[
@@ -122,8 +118,6 @@ function ligne(genre: SessionDemo['ecran'][number][0], texte: string, moteur?: M
 		case 'w':
 			// tel que le service l'écrit (`lignesDAvertissement`)
 			return `[Mnemo] ${texte}`;
-		case 'x':
-			return texte;
 		case 't': {
 			const o = /^● ([\w]+)\((.*)\)$/.exec(texte);
 			if (o) return `${SGR.vert}${m.puce}${SGR.fin} ${SGR.gras}${o[1]}${SGR.fin}(${o[2]})`;
@@ -147,13 +141,11 @@ export function ecranInitial(s: SessionDemo | undefined, colonnes: number, trava
 	let corps = `${accueil(s?.dossier ?? '', s)}${NL}${NL}`;
 	if (s) {
 		s.ecran.forEach(([genre, texte], i) => {
-			corps += (i === 0 ? '' : genre === 'r' || genre === 'x' ? NL : `${NL}${NL}`) + ligne(genre, texte, s.moteur);
+			corps += (i === 0 ? '' : genre === 'r' ? NL : `${NL}${NL}`) + ligne(genre, texte, s.moteur);
 		});
 		corps += `${NL}${NL}`;
 	} else corps += `${SGR.gris}  Session lancée depuis l'interface.${SGR.fin}${NL}${NL}`;
 	if (travaille) corps += `${indicateur('Travaille', s?.moteur)}${NL}${NL}`;
-	// question de l'écran ouverte (confiance du dossier) : pas encore d'invite
-	if (s?.attentePremierMessage !== undefined) return corps;
 	return corps + invite(colonnes, s?.moteur);
 }
 

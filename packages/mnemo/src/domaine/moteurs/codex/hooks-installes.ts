@@ -6,7 +6,7 @@ import { OUTILS_CODEX } from './outils.ts';
 /**
  * Hooks de Mnemo dans `hooks.json` de Codex : un groupe par événement Codex, une commande `mnemo hook <événement> --moteur
  * codex`. `timeout` en secondes ; `SessionEnd` : 3 s au plus chez Codex. `PreToolUse` sans `matcher` : tous les outils ; 3 s
- * (Mnemo décide en 2 s depuis le démarrage du hook), gardées : chez Mistral Vibe et GitHub Copilot CLI, 10 s, mais changer une
+ * (Mnemo décide en 2 s depuis le démarrage du hook), gardées : chez Mistral Vibe, 10 s, mais changer une
  * commande déjà approuvée la fait redemander par Codex (`/hooks`) sur chaque poste, et les hooks non approuvés ne tournent pas.
  */
 export const HOOKS_CODEX_INSTALLES: readonly { evenement: string; args: readonly string[]; timeout: number; matcher?: string }[] = [

@@ -13,7 +13,6 @@ export type ContratDuFacultatif = { bloc: Exclude<keyof PosteVerifie, 'git' | 'c
 export const CONTRAT_DES_FACULTATIFS: Readonly<Record<IdMoteurFacultatif, ContratDuFacultatif>> = {
 	codex: { bloc: 'codex', etape: 'codex', etapeHooks: 'codex_hooks' },
 	'mistral-vibe': { bloc: 'mistral', etape: 'mistral', etapeHooks: 'mistral_hooks' },
-	'copilot-cli': { bloc: 'copilot', etape: 'copilot', etapeHooks: 'copilot_hooks' },
 };
 
 /** Un moteur facultatif : le moteur du poste, son option d'`init` (catalogue) et ce qu'il porte dans le contrat. */

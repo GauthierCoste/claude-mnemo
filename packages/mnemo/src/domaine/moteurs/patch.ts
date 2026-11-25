@@ -1,5 +1,5 @@
 /**
- * Patch au format `*** Begin Patch` (outil `apply_patch` de Codex, et de GitHub Copilot CLI avec les modèles gpt-*) : ses
+ * Patch au format `*** Begin Patch` (outil `apply_patch` de Codex) : ses
  * en-têtes nomment les fichiers écrits.
  */
 

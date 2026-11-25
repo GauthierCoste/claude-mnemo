@@ -27,6 +27,9 @@ describe('vueSession', () => {
 		expect(vueSession(archiviste({ dernierArret: null }), true).dialogueOuvert).toBe(false);
 		expect(vueSession(archiviste({ dernierArret: 'notification' }), true).dialogueOuvert).toBe(true);
 		expect(vueSession(archiviste({ etat: 'travaille', dernierArret: 'notification' }), true).dialogueOuvert).toBe(false);
+		// un dialogue d'avant le dernier lancement est fermé avec son processus
+		expect(vueSession(archiviste({ dernierArret: 'notification', majMs: 10, lanceMs: 20 }), true).dialogueOuvert).toBe(false);
+		expect(vueSession(archiviste({ dernierArret: 'notification', majMs: 30, lanceMs: 20 }), true).dialogueOuvert).toBe(true);
 	});
 
 	it('niveauModeles : celui de la session, null si elle suit le niveau de la machine', () => {
@@ -43,12 +46,5 @@ describe('vueSession', () => {
 		expect(vueSession(archiviste({ moteur: 'claude-code', modele: '' }), false)).not.toHaveProperty('modele');
 		expect(vueSession(archiviste({ moteur: 'codex', modele: 'gpt-a' }), false, 'fil inconnu')).toMatchObject({ moteur: 'codex', modele: 'gpt-a', sansReprise: 'fil inconnu' });
 		expect(vueSession(archiviste({ etat: 'terminee', moteur: 'codex' }), false, 'fil inconnu')).not.toHaveProperty('sansReprise');
-	});
-
-	it('attentePremierMessage : seulement quand le pilote le dit, jamais pour une session terminée', () => {
-		expect(vueSession(archiviste({}), true)).not.toHaveProperty('attentePremierMessage');
-		expect(vueSession(archiviste({ moteur: 'copilot-cli' }), true, null, [], [], 'message').attentePremierMessage).toBe('message');
-		expect(vueSession(archiviste({ moteur: 'copilot-cli' }), true, null, [], [], 'confiance').attentePremierMessage).toBe('confiance');
-		expect(vueSession(archiviste({ etat: 'terminee', moteur: 'copilot-cli' }), false, null, [], [], 'message')).not.toHaveProperty('attentePremierMessage');
 	});
 });

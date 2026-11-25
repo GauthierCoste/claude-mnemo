@@ -13,7 +13,7 @@ export type OptionsLuesInit = {
 	oui: boolean;
 	json: boolean;
 	mcp: ChoixExplicite;
-	/** Moteurs facultatifs où déclarer aussi le serveur MCP et installer les hooks de Mnemo (`--codex`, `--mistral`, `--copilot` ; jamais sans). */
+	/** Moteurs facultatifs où déclarer aussi le serveur MCP et installer les hooks de Mnemo (`--codex`, `--mistral` ; jamais sans). */
 	moteurs: IdMoteur[];
 	modeles: ChoixExplicite;
 	commande: ChoixExplicite;

@@ -12,9 +12,8 @@ import { executeurReel } from '../../infra/executeur.ts';
 
 const USAGE = `Usage : mnemo declarer (--remplacer | --retirer) [--moteur <${IDS_MOTEURS.join(' | ')}>] [--json]
   --remplacer : remet la déclaration MCP de Mnemo au moteur (portée utilisateur) sur ce Node et ce Mnemo, si elle existe
-                (Codex, Mistral Vibe, GitHub Copilot CLI : de même pour les hooks de Mnemo de ~/.codex/hooks.json,
-                ~/.vibe/hooks.toml, ~/.copilot/hooks/mnemo.json)
-  --retirer   : la retire, si elle lance ce Node et ce Mnemo (Codex, Mistral Vibe, GitHub Copilot CLI : les hooks aussi)
+                (Codex, Mistral Vibe : de même pour les hooks de Mnemo de ~/.codex/hooks.json, ~/.vibe/hooks.toml)
+  --retirer   : la retire, si elle lance ce Node et ce Mnemo (Codex, Mistral Vibe : les hooks aussi)
   --moteur    : ${MOTEUR_PAR_DEFAUT} par défaut`;
 
 const MAIN = fileURLToPath(new URL('./main.ts', import.meta.url));
@@ -72,8 +71,8 @@ function lireMoteur(args: string[]): { moteur: IdMoteur; reste: string[] } {
 
 /**
  * `mnemo declarer` : entretien de la déclaration MCP de Mnemo à un moteur (Claude Code par défaut, ou `--moteur <id>`) : la
- * remettre sur ce Node et ce Mnemo, ou la retirer ; jamais de nouvelle déclaration (c'est `mnemo init --mcp`, `--codex`,
- * `--mistral` ou `--copilot`). Codex, Mistral Vibe et GitHub Copilot CLI : leurs hooks de Mnemo pour tout le poste suivent, une ligne de plus en texte, `hooks`
+ * remettre sur ce Node et ce Mnemo, ou la retirer ; jamais de nouvelle déclaration (c'est `mnemo init --mcp`, `--codex`
+ * ou `--mistral`). Codex et Mistral Vibe : leurs hooks de Mnemo pour tout le poste suivent, une ligne de plus en texte, `hooks`
  * en JSON.
  * `--json` : une ligne `SortieDeclarer` (`@mnemo/contrat`) ; code 1 sur un échec.
  */

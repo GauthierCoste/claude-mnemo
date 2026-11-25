@@ -359,7 +359,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	const { dep, pil, pilote, apriori } = ctx;
 	/** Recherche complète en cours par clé de remplacement (la suivante de même clé l'abandonne). */
 	const recherchesEnCours = new Map<string, AbortController>();
-	const vue = (s: Session) => vueSession(s, pilote.enCours(s.id), pilote.motifSansReprise(s), apriori.suggestions(s.id), ctx.suivi === undefined ? [] : vueCoupures(ctx.suivi.derniere()), pilote.attendPremierMessage(s));
+	const vue = (s: Session) => vueSession(s, pilote.enCours(s.id), pilote.motifSansReprise(s), apriori.suggestions(s.id), ctx.suivi === undefined ? [] : vueCoupures(ctx.suivi.derniere()));
 	/**
 	 * Après un geste : l'a priori relit les gestes nouveaux (et les écartées toujours si `ecartees`), puis la vue de chaque
 	 * session dont les suggestions « écartée toujours » ont changé est rediffusée. Une panne de lecture n'empêche pas le geste

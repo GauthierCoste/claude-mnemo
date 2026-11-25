@@ -46,7 +46,7 @@ export type Session = {
 	dernierArret?: CauseArret | null;
 	/**
 	 * Outil dont le dialogue est ouvert (`arret` `notification` qui le nomme : Codex, Mistral Vibe) : seul un `apres_outil` de
-	 * ce même outil le ferme ; null : inconnu (GitHub Copilot CLI, Claude Code), n'importe quel `apres_outil` le ferme.
+	 * ce même outil le ferme ; null : inconnu (Claude Code), n'importe quel `apres_outil` le ferme.
 	 */
 	dialogueOutil?: string | null;
 	/** Instant où l'épisode de la session a été écrit ou constaté (rattrapage au démarrage : déjà fait au-delà). */
@@ -104,9 +104,9 @@ export const dialogueOuvert = (s: Pick<Session, 'etat' | 'dernierArret' | 'majMs
 
 /**
  * Un `message` horodaté avant le dernier événement appliqué, mais après le lancement du processus, quand ce dernier événement
- * est le `debut` de ce lancement (`attend`, aucun arrêt depuis, `majMs` après `lanceMs`) : appliqué quand même. GitHub Copilot
- * CLI lance `sessionStart` et `userPromptSubmitted` ensemble (mesuré) : le `debut` peut être horodaté après le message qu'il
- * précède, et le message, ignoré, ne serait jamais vu (objectif, bilan lu, session au travail).
+ * est le `debut` de ce lancement (`attend`, aucun arrêt depuis, `majMs` après `lanceMs`) : appliqué quand même. Un moteur
+ * qui lance ses hooks de début et de message ensemble peut horodater le `debut` après le message qu'il précède : le message,
+ * ignoré, ne serait jamais vu (objectif, bilan lu, session au travail).
  */
 export const messageApresSonDebut = (s: Pick<Session, 'etat' | 'dernierArret' | 'majMs' | 'lanceMs'>, horodatageMs: number): boolean =>
 	s.etat === 'attend' && (s.dernierArret ?? null) === null && (s.lanceMs ?? null) !== null && s.majMs > s.lanceMs! && horodatageMs > s.lanceMs!;

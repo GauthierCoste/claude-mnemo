@@ -993,7 +993,7 @@ describe('etat.sqlite', () => {
 		// l'après-outil d'un autre outil, lancé en parallèle : ignoré, le dialogue reste ouvert
 		expect(await etat.appliquer('s', 'apres_outil', 12, { outil: 'read_file' })).toMatchObject({ etat: 'attend', dernierArret: 'notification', dialogueOutil: 'bash', majMs: 11 });
 		expect(await etat.appliquer('s', 'apres_outil', 13, { outil: 'bash' })).toMatchObject({ etat: 'travaille', dernierArret: null, dialogueOutil: null });
-		// sans nom d'outil au dialogue (GitHub Copilot CLI) ou à l'après-outil : il le ferme
+		// sans nom d'outil au dialogue (Claude Code) ou à l'après-outil : il le ferme
 		await etat.appliquer('s', 'arret', 14, { arret: 'notification' });
 		expect(await etat.appliquer('s', 'apres_outil', 15, { outil: 'read_file' })).toMatchObject({ dernierArret: null });
 		await etat.appliquer('s', 'arret', 16, { arret: 'notification', outil: 'bash' });

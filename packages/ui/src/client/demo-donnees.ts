@@ -1,11 +1,11 @@
 /**
- * Données fictives du mode démo (`?demo`, en développement seulement) : un dossier de projets, dix sessions sur quatre
- * dossiers (plus l'archiviste et une session terminée), sur les quatre moteurs, une petite mémoire au format des fiches, le fil du jour et les
+ * Données fictives du mode démo (`?demo`, en développement seulement) : un dossier de projets, neuf sessions sur quatre
+ * dossiers (plus l'archiviste et une session terminée), sur les trois moteurs, une petite mémoire au format des fiches, le fil du jour et les
  * sorties de terminal. Jamais dans la construction.
  */
 import { ACCENT_PAR_DEFAUT, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import type { IdMoteur } from '@mnemo/commun';
-import type { AttentePremierMessage, ChampReglageVue, EtatSessionVue, RaisonCarteVue } from '@mnemo/contrat';
+import type { ChampReglageVue, EtatSessionVue, RaisonCarteVue } from '@mnemo/contrat';
 
 /** Dossier des projets dans la mémoire fictive de la démo : la position d'une session de démo est `<ce dossier>/<dossier>`. */
 export const DOSSIER_DES_PROJETS_DEMO = 'projets';
@@ -40,13 +40,11 @@ export type SessionDemo = {
 	modele?: string;
 	/** Pourquoi elle ne peut être ni mise en pause ni reprise (Codex dont aucun hook n'est arrivé). */
 	sansReprise?: string;
-	/** Elle tourne sans avoir commencé : ce que son moteur attend (GitHub Copilot CLI, écran de confiance ouvert). */
-	attentePremierMessage?: AttentePremierMessage;
 	/**
 	 * Écran du terminal : [genre, texte] ; u = utilisateur, m = Mnemo, t = outil, r = résultat, a = réponse, q = question,
-	 * w = avertissement écrit par le service en tête du terminal (`[Mnemo] …`, tel quel), x = texte du moteur, tel quel.
+	 * w = avertissement écrit par le service en tête du terminal (`[Mnemo] …`, tel quel).
 	 */
-	ecran: ['u' | 'm' | 't' | 'r' | 'a' | 'q' | 'w' | 'x', string][];
+	ecran: ['u' | 'm' | 't' | 'r' | 'a' | 'q' | 'w', string][];
 };
 
 /** Une piste ◇ fictive : la fiche, sa raison, et pour `liee` la fiche injectée à la main d'où vient le poids. */
@@ -275,29 +273,6 @@ export const SESSIONS_DEMO: SessionDemo[] = [
 			['r', 'fiche lue'],
 			['a', 'Deux mises à jour majeures. La première change la signature de render(), la seconde abandonne PHP 8.2.'],
 			['q', 'Je prépare une branche pour la première, ou tu veux d’abord le détail de la seconde ?'],
-		],
-	},
-	{
-		id: '6f1b4d8e-9a2c-4e07-b3d5-c8a0e2f4b917',
-		profil: 'tests-e2e',
-		dossier: 'site-vitrine',
-		objectif: 'Écrire les tests du formulaire de contact',
-		// lancée avec son objectif, pas encore commencée : GitHub Copilot CLI montre sa question de confiance, aucun hook
-		// n'est arrivé ; il enverra l'objectif lui-même une fois la question réglée
-		etat: 'attend',
-		moteur: 'copilot-cli',
-		attentePremierMessage: 'confiance',
-		ageMin: 1,
-		calmeMin: 1,
-		branche: 'feat/contact',
-		servis: [],
-		ecran: [
-			['x', 'Confirm folder trust'],
-			['x', `${RACINE_DEMO}/projets/site-vitrine`],
-			['x', 'Do you trust the files in this folder?'],
-			['x', '❯ 1. Yes'],
-			['x', '  2. Yes, and remember this folder for future sessions'],
-			['x', '  3. No (Esc)'],
 		],
 	},
 ];

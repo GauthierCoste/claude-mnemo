@@ -17,12 +17,11 @@ const ENV = {
 };
 
 describe("variables d'un autre fournisseur", () => {
-	it('chaque moteur garde les siennes, GH_TOKEN, GITHUB_TOKEN et le reste ; les autres retirées', () => {
+	it('chaque moteur garde les siennes, GH_TOKEN, GITHUB_TOKEN et le reste ; les autres retirées, COPILOT_GITHUB_TOKEN chez tous', () => {
 		const gardees: Record<IdMoteur, string[]> = {
 			'claude-code': ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'ANTHROPIC_API_KEY'],
 			codex: ['CODEX_API_KEY', 'OPENAI_API_KEY'],
 			'mistral-vibe': ['MISTRAL_API_KEY'],
-			'copilot-cli': ['COPILOT_GITHUB_TOKEN'],
 		};
 		for (const [moteur, siennes] of Object.entries(gardees) as [IdMoteur, string[]][]) {
 			expect(Object.keys(environnementPermis(moteur, ENV)).sort()).toEqual(['GH_TOKEN', 'GITHUB_TOKEN', 'PATH', ...siennes].sort());

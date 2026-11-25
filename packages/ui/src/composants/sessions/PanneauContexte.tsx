@@ -4,8 +4,7 @@
  * (fenêtre du moteur), « Injecté dans la session » (fiches injectées ◆, classement vivant du dernier message, pistes et fiches
  * lues ◈ ; clic → Mémoire › Fichiers), puis les actions permises par l'état ; une session que son moteur ne peut pas reprendre
  * (Codex pas encore commencé) a pause, reprise et bilan grisés, avec la raison. Quotas : dits absents pour un moteur qui n'en
- * communique pas (ceux des autres sont dans la barre de titre). Une session qui attend son premier message (GitHub Copilot
- * CLI) le dit.
+ * communique pas (ceux des autres sont dans la barre de titre).
  */
 import { estIdMoteur, MOTEUR_PAR_DEFAUT } from '@mnemo/commun';
 import type { EntreeServieVue, InjectionVue, LueVue, SessionVue } from '@mnemo/contrat';
@@ -78,16 +77,6 @@ export function PanneauContexte(p: {
 	return (
 		<aside className={s.panneau} aria-label="Contexte" style={p.largeur === undefined ? undefined : { width: p.largeur }}>
 			<EnteteSession session={x} />
-			{x.attentePremierMessage === 'message' && (
-				<p role="note" className={s.avis}>
-					En attente de ton premier message dans le terminal ; réponds d’abord à la question de confiance de {nomDuMoteur(x.moteur)}. Le bilan reste possible.
-				</p>
-			)}
-			{x.attentePremierMessage === 'confiance' && (
-				<p role="note" className={s.avis}>
-					Réponds dans le terminal à la question de confiance de {nomDuMoteur(x.moteur)} : il enverra ensuite lui-même le premier message de la session.
-				</p>
-			)}
 			{x.dossierNonRattache !== null && (
 				<p role="note" className={s.avis}>
 					{x.dossierNonRattache}

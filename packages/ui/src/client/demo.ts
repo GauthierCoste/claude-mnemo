@@ -254,24 +254,13 @@ function vueSession(s: SessionDemo, maintenant: number): SessionVue {
 		...(s.moteur === undefined ? {} : { moteur: s.moteur }),
 		...(s.modele === undefined ? {} : { modele: s.modele }),
 		...(s.sansReprise === undefined || s.etat === 'terminee' ? {} : { sansReprise: s.sansReprise }),
-		...(s.attentePremierMessage === undefined || s.etat === 'terminee' ? {} : { attentePremierMessage: s.attentePremierMessage }),
 	};
 }
 
-/**
- * La session dans son nouvel état ; terminée, sans motif d'impossible reprise (comme la vue du service). Un premier message
- * attendu ne l'est plus après un changement d'état, sauf `garderAttente` (bilan d'une session pas encore commencée : relancée
- * avec lui, son moteur attend encore que l'utilisateur réponde à sa question de confiance).
- */
-function avecEtat(s: SessionVue, etat: SessionVue['etat'], garderAttente = false): SessionVue {
-	const { sansReprise, attentePremierMessage, ...reste } = s;
-	return {
-		...reste,
-		etat,
-		majMs: Date.now(),
-		...(sansReprise === undefined || etat === 'terminee' ? {} : { sansReprise }),
-		...(attentePremierMessage !== undefined && garderAttente && etat !== 'terminee' ? { attentePremierMessage: 'confiance' as const } : {}),
-	};
+/** La session dans son nouvel état ; terminée, sans motif d'impossible reprise (comme la vue du service). */
+function avecEtat(s: SessionVue, etat: SessionVue['etat']): SessionVue {
+	const { sansReprise, ...reste } = s;
+	return { ...reste, etat, majMs: Date.now(), ...(sansReprise === undefined || etat === 'terminee' ? {} : { sansReprise }) };
 }
 
 function texteServi(memoire: Memoire, ids: string[]): string {
@@ -939,7 +928,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 				return { coupures: monde.coupures };
 			case ROUTES.fenetres:
 				// fenêtres de contexte fictives, de plus en plus pleines, pour voir les trois couleurs de la jauge
-				return { fenetres: Object.fromEntries(monde.sessions.filter((x) => x.etat !== 'terminee' && x.attentePremierMessage === undefined).map((x, i) => [x.id, { utilises: [38_000, 124_000, 171_000, 92_000, 58_000][i % 5]!, max: 200_000 }])) } satisfies ReponseFenetres;
+				return { fenetres: Object.fromEntries(monde.sessions.filter((x) => x.etat !== 'terminee').map((x, i) => [x.id, { utilises: [38_000, 124_000, 171_000, 92_000, 58_000][i % 5]!, max: 200_000 }])) } satisfies ReponseFenetres;
 			case ROUTES.quotas: {
 				// quotas fictifs : Claude, fenêtre de 5 h à moitié, semaine bien entamée, remises dans 2 h et dans 3 jours ; ChatGPT, semaine seule
 				const maintenant = Date.now();
@@ -1082,10 +1071,8 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			const avant = monde.sessions[i]!;
 			// comme le service : une session que son moteur ne peut pas reprendre n'a ni pause, ni reprise, ni bilan
 			if (action !== 'abandon' && avant.sansReprise !== undefined) throw new ErreurApi(`${action === 'bilan' ? 'Bilan' : action === 'pause' ? 'Pause' : 'Reprise'} impossible : ${avant.sansReprise} ; abandonne-la à la place.`, 409);
-			// bilan d'une session qui attend son premier message : relancée avec lui, elle attend toujours (comme le service)
-			const attente = action === 'bilan' && avant.attentePremierMessage !== undefined;
 			const s = {
-				...avecEtat(avant, attente ? 'attend' : etat, attente),
+				...avecEtat(avant, etat),
 				bilanDemandeMs: action === 'bilan' ? Date.now() : avant.bilanDemandeMs,
 				terminal: action === 'reprise' ? true : avant.terminal,
 			};

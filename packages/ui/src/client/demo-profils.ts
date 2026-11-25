@@ -41,10 +41,6 @@ const HORS_MNEMO_SANS_PLUGINS: Partial<Record<IdMoteur, readonly ElementApercuVu
 		{ nom: 'AGENTS.md', detail: 'instructions de l’utilisateur (~/.vibe/AGENTS.md) et du projet, lues par Mistral Vibe', actif: true },
 		{ nom: 'Skills de Mistral Vibe', detail: 'skills du projet (.vibe/skills/) et de l’utilisateur (~/.vibe/skills/, ~/.agents/skills/), lues par Mistral Vibe', actif: true },
 	],
-	'copilot-cli': [
-		{ nom: 'Instructions de GitHub Copilot CLI', detail: 'instructions du dépôt (.github/copilot-instructions.md, .github/instructions/, AGENTS.md) et de l’utilisateur (~/.copilot/), lues par GitHub Copilot CLI', actif: true },
-		{ nom: 'Hooks et réglages du dépôt', detail: 'hooks du dépôt (.github/hooks/, et .claude/settings.json dans un dossier approuvé), lus par GitHub Copilot CLI ; ceux de Mnemo y restent inertes', actif: true },
-	],
 };
 
 const HOOKS_TOUS: EvenementHookVue[] = ['debut', 'message', 'outil', 'apres_outil', 'arret', 'fin'];
@@ -68,15 +64,6 @@ export function creerProfilsDemo() {
 			'veille-technique',
 			{
 				editable: { avatar: { forme: 'pingouin', couleur: 'rouge' }, consigne: 'Fais la veille des bibliothèques du projet et résume ce qui change.', lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: 'tous', plugins: [], moteur: 'mistral-vibe', modele: 'mistral-medium-3.5' },
-				consigneParDefaut: CONSIGNE_TRAVAIL,
-				ecrit: true,
-				version: 1,
-			},
-		],
-		[
-			'tests-e2e',
-			{
-				editable: { avatar: { forme: 'lapin', couleur: 'vert' }, consigne: 'Écris et fais passer les tests de bout en bout.', lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: 'tous', plugins: [], moteur: 'copilot-cli', modele: '' },
 				consigneParDefaut: CONSIGNE_TRAVAIL,
 				ecrit: true,
 				version: 1,
@@ -178,7 +165,7 @@ export function creerProfilsDemo() {
 			const sansPlugins = HORS_MNEMO_SANS_PLUGINS[d.moteur];
 			const codex = sansPlugins !== undefined;
 			const titreConsigne = d.consigne === null ? 'Consigne du profil (par défaut)' : 'Consigne du profil (personnalisée)';
-			// sans plugins (Codex, Mistral Vibe, GitHub Copilot CLI) : la consigne reçue porte la liste des skills, lues par l'outil `lire` (comme le service)
+			// sans plugins (Codex, Mistral Vibe) : la consigne reçue porte la liste des skills, lues par l'outil `lire` (comme le service)
 			const listeSkills = SKILLS_MEMOIRE.filter((s) => retenue(s.nom)).map((s) => `- ${s.nom} : ${s.description} (\`skills/${s.nom}/SKILL.md\`)`);
 			const texteCodex = [consigne(e).trim(), '', '## Skills de Mnemo', '', 'Ces skills sont dans la mémoire Mnemo, pas sur le disque du projet. Quand l’une s’applique à ta tâche, lis d’abord son `SKILL.md` avec l’outil `lire` de Mnemo (identifiant entre parenthèses), puis suis-la.', '', ...listeSkills, ''].join('\n');
 			const blocs: BlocApercuVue[] = [

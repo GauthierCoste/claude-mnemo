@@ -1,6 +1,5 @@
-import type { AttentePremierMessage, ClassementVue, CoupureInjectionVue, EcarteeToujoursVue, EcarteVue, EntreeServieVue, InjectionVue, SessionTermineeVue, SessionVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
+import type { ClassementVue, CoupureInjectionVue, EcarteeToujoursVue, EcarteVue, EntreeServieVue, InjectionVue, SessionTermineeVue, SessionVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
 import { estMinimal } from '../../application/episode.ts';
-import type { Pilote } from '../../application/pilote.ts';
 import type { SessionTerminee } from '../../application/historique.ts';
 import type { Classe, Ecarte, EcarteeToujours, EntreeServie, GesteNote } from '../../application/ports.ts';
 import type { SuggestionEcarteeToujours } from '../../domaine/apriori-gestes.ts';
@@ -15,8 +14,7 @@ import type { Session } from '../../domaine/session.ts';
  * `terminal` : un terminal de ce service est attaché à la session ; `sansReprise` : pourquoi son moteur ne peut ni la mettre
  * en pause ni la reprendre (`Pilote.motifSansReprise`), ignoré pour une session terminée. `moteur` et `modele` : seulement
  * s'ils sont enregistrés (absents : Claude Code, modèle par défaut). `suggestions` : fiches écartées par la session que la
- * règle des 3 sessions propose d'écarter toujours (champ absent s'il n'y en a pas) ; `attentePremierMessage` : elle tourne ici
- * sans avoir commencé chez un moteur qui attend le premier message, et ce qu'elle attend (`Pilote.attendPremierMessage`).
+ * règle des 3 sessions propose d'écarter toujours (champ absent s'il n'y en a pas).
  */
 export function vueSession(
 	s: Session,
@@ -24,7 +22,6 @@ export function vueSession(
 	sansReprise: string | null = null,
 	suggestions: readonly SuggestionEcarteeToujours[] = [],
 	coupures: readonly CoupureInjectionVue[] = [],
-	attentePremierMessage: AttentePremierMessage | null = null,
 ): SessionVue {
 	return {
 		id: s.id,
@@ -48,7 +45,6 @@ export function vueSession(
 		...(sansReprise === null || s.etat === 'terminee' ? {} : { sansReprise }),
 		...(suggestions.length === 0 ? {} : { suggestionsEcarteeToujours: suggestions.map(vueSuggestion) }),
 		...(coupures.length === 0 ? {} : { injectionCoupee: [...coupures] }),
-		...(attentePremierMessage === null || s.etat === 'terminee' ? {} : { attentePremierMessage }),
 	};
 }
 

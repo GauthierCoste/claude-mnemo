@@ -59,31 +59,29 @@ describe('Réglages › Profils : moteur et modèle', () => {
 		}
 	});
 
-	it('Mistral Vibe et GitHub Copilot CLI : leur version, leurs effets (ce qui leur manque compris), leurs modèles proposés ; un profil Vibe les montre', async () => {
+	it('Mistral Vibe : sa version, ses effets (ce qui lui manque compris), ses modèles proposés ; un profil Vibe les montre', async () => {
 		const editeur = await choisirProfil('veille-technique');
 		const groupe = moteur(editeur);
 		expect((within(groupe).getByRole('radio', { name: 'Mistral Vibe' }) as HTMLInputElement).checked).toBe(true);
 		const description = (nom: string) => lignes(within(groupe).getByRole('radio', { name: nom }));
 		await waitFor(() => expect(description('Mistral Vibe')[0]?.textContent).toBe('version 3.1.5'));
 		expect(description('Mistral Vibe')[1]?.textContent).toMatch(/ni plugins, ni quotas de l’abonnement$/u);
-		expect(description('GitHub Copilot CLI')[0]?.textContent).toBe('version 1.0.116');
-		expect(description('GitHub Copilot CLI')[1]?.textContent).toMatch(/^pose sa question de confiance dans le terminal à chaque lancement, puis attend ton premier message/u);
 		expect(modele(editeur).value).toBe('mistral-medium-3.5');
 		const proposes = await within(editeur).findByRole('group', { name: 'Modèles proposés par Mistral Vibe' });
 		expect(within(proposes).getAllByRole('button').map((b) => b.textContent)).toEqual(['mistral-large-4-0', 'mistral-medium-3.5']);
 		expect(within(editeur).queryByText('Plugins Claude Code')).toBeNull();
 		expect(await within(editeur).findByText('Skills de Mistral Vibe')).toBeTruthy();
-		// passer à Copilot : modèle par défaut, ses modèles proposés, l'aperçu suit une fois enregistré
-		await act(async () => within(groupe).getByRole('radio', { name: 'GitHub Copilot CLI' }).click());
+		// passer à Codex : modèle par défaut, ses modèles proposés, l'aperçu suit une fois enregistré
+		await act(async () => within(groupe).getByRole('radio', { name: 'Codex' }).click());
 		expect(modele(editeur).value).toBe('');
-		expect(modele(editeur).placeholder).toBe('par défaut de GitHub Copilot CLI');
-		const deCopilot = await within(editeur).findByRole('group', { name: 'Modèles proposés par GitHub Copilot CLI' });
-		expect(within(deCopilot).getAllByRole('button').map((b) => b.textContent)).toEqual(['claude-sonnet-5.5', 'gpt-6.2-sol', 'gemini-4-neon']);
+		expect(modele(editeur).placeholder).toBe('par défaut de Codex');
+		const deCodex = await within(editeur).findByRole('group', { name: 'Modèles proposés par Codex' });
+		expect(within(deCodex).getAllByRole('button').map((b) => b.textContent)).toEqual(['gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-terra']);
 	});
 
-	it('archiviste : Mistral Vibe et GitHub Copilot CLI réservés, comme Codex', async () => {
+	it('archiviste : Mistral Vibe réservé, comme Codex', async () => {
 		const archiviste = await choisirProfil('archiviste');
-		for (const nom of ['Codex', 'Mistral Vibe', 'GitHub Copilot CLI']) {
+		for (const nom of ['Codex', 'Mistral Vibe']) {
 			const radio = within(moteur(archiviste)).getByRole('radio', { name: nom }) as HTMLInputElement;
 			expect(radio.disabled).toBe(true);
 			expect(document.getElementById(radio.getAttribute('aria-describedby')!)?.textContent).toBe('Réservé : l’archiviste reste sur Claude Code.');
@@ -165,7 +163,7 @@ describe('Réglages › Système › Moteurs', () => {
 		expect(within(page).queryByRole('button', { name: 'Annuler les modifications' })).toBeNull();
 	});
 
-	it('Mistral Vibe et GitHub Copilot CLI : un groupe chacun ; la commande du service qui déclare Mnemo chez Copilot, à copier', async () => {
+	it('Mistral Vibe : un groupe, tous ses points satisfaits, sans approbation des hooks', async () => {
 		await ouvrirReglages();
 		await act(async () => screen.getByRole('tab', { name: 'Système' }).click());
 		const page = await screen.findByRole('form', { name: 'Réglages système' });
@@ -173,14 +171,7 @@ describe('Réglages › Système › Moteurs', () => {
 		const vibe = await within(page).findByRole('group', { name: 'Mistral Vibe' });
 		expect(within(vibe).getByText('sessions possibles')).toBeTruthy();
 		expect(within(vibe).getAllByRole('img', { name: 'satisfait' })).toHaveLength(4);
-		const copilot = within(page).getByRole('group', { name: 'GitHub Copilot CLI' });
-		const point = within(copilot).getByText('Serveur MCP mnemo').closest('li')!;
-		expect(point.textContent).toContain('non déclaré');
-		expect(point.textContent).toContain('Les sessions de GitHub Copilot CLI lancées hors de Mnemo ne lisent pas la mémoire.');
-		expect(within(point).getByText('mnemo init --copilot').tagName).toBe('CODE');
-		expect(within(point).getByRole('button', { name: 'Copier « mnemo init --copilot »' })).toBeTruthy();
-		// aucun point d'approbation chez eux : rien à approuver dans le moteur
-		expect(within(copilot).queryByText('Approbation des hooks')).toBeNull();
+		// aucun point d'approbation chez lui : rien à approuver dans le moteur
 		expect(within(vibe).queryByText('Approbation des hooks')).toBeNull();
 	});
 

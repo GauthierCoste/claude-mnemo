@@ -1,6 +1,6 @@
-import type { EtatSessionVue, SessionVue } from '@mnemo/contrat';
+import type { EtatSessionVue } from '@mnemo/contrat';
 import type { CSSProperties, ReactNode } from 'react';
-import { libelleEtat } from '../../sessions/etats.ts';
+import { LIBELLES_ETATS } from '../../sessions/etats.ts';
 import { cx } from '../commun/classes.ts';
 import s from './Point.module.css';
 
@@ -13,17 +13,16 @@ export const COULEURS_ETATS: Record<EtatSessionVue, string> = {
 	terminee: 'var(--etat-terminee)',
 };
 
-/** Point d'état d'une session : pulse quand elle travaille ; son nom est le libellé de l'état (`libelleEtat`). */
-export function Point(p: { session: Pick<SessionVue, 'etat' | 'attentePremierMessage'>; petit?: boolean }): ReactNode {
-	const { etat } = p.session;
-	const libelle = libelleEtat(p.session);
+/** Point d'état d'une session : pulse quand elle travaille ; son nom est le libellé de l'état. */
+export function Point(p: { etat: EtatSessionVue; petit?: boolean }): ReactNode {
+	const libelle = LIBELLES_ETATS[p.etat];
 	return (
 		<span
 			role="img"
 			aria-label={libelle}
 			title={libelle}
-			className={cx(s.point, etat === 'travaille' && s.anime, p.petit && s.petit)}
-			style={{ '--c': COULEURS_ETATS[etat] } as CSSProperties}
+			className={cx(s.point, p.etat === 'travaille' && s.anime, p.petit && s.petit)}
+			style={{ '--c': COULEURS_ETATS[p.etat] } as CSSProperties}
 		/>
 	);
 }

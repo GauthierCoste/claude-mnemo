@@ -1,5 +1,5 @@
 /** Libellés des états des sessions, gestes permis par l'état, et durées affichées sur les cartes. */
-import type { AttentePremierMessage, EtatSessionVue, SessionVue } from '@mnemo/contrat';
+import type { EtatSessionVue } from '@mnemo/contrat';
 
 export const LIBELLES_ETATS: Record<EtatSessionVue, string> = {
 	attend: 'Attend ta réponse',
@@ -8,18 +8,6 @@ export const LIBELLES_ETATS: Record<EtatSessionVue, string> = {
 	en_pause: 'En pause',
 	terminee: 'Terminée',
 };
-
-/** Ce qu'attend une session pas encore commencée chez son moteur : un premier message, ou la réponse à sa question de confiance. */
-export const LIBELLES_ATTENTE: Record<AttentePremierMessage, string> = {
-	message: 'Attend ton premier message',
-	confiance: 'Attend ta réponse à la question de confiance',
-};
-
-/**
- * Libellé de l'état d'une session : celui de son état, sauf quand elle tourne sans avoir commencé chez un moteur qui attend
- * le premier message (`attentePremierMessage`) : ce qu'elle attend alors.
- */
-export const libelleEtat = (s: Pick<SessionVue, 'etat' | 'attentePremierMessage'>): string => (s.attentePremierMessage === undefined ? LIBELLES_ETATS[s.etat] : LIBELLES_ATTENTE[s.attentePremierMessage]);
 
 /** « 1 terminée », « 3 terminées » (lien vers l'historique). */
 export const libelleTerminees = (n: number): string => `${n} terminée${n > 1 ? 's' : ''}`;

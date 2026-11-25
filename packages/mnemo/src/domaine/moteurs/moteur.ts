@@ -25,7 +25,7 @@ export type OutilsDuMoteur = {
 	prefixeMcp: string;
 	/**
 	 * Motif (`matcher`) des outils après lesquels `apres_outil` est appelé : un fichier, une fiche lus ou écrits ; absent : le
-	 * moteur l'installe pour tous les outils (Mistral Vibe, GitHub Copilot CLI : il efface aussi le dialogue ouvert).
+	 * moteur l'installe pour tous les outils (Mistral Vibe : il efface aussi le dialogue ouvert).
 	 */
 	motifApresOutil?: string;
 };

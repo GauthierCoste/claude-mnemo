@@ -1,4 +1,4 @@
-/** Chemins écrits par un patch `apply_patch` (Codex, GitHub Copilot CLI). */
+/** Chemins écrits par un patch `apply_patch` (Codex). */
 import { describe, expect, it } from 'vitest';
 import { cheminsDuPatch, cheminsEcritsDuPatch } from '../../src/domaine/moteurs/patch.ts';
 

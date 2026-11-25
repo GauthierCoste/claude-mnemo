@@ -66,10 +66,6 @@ const HORS_MNEMO_SANS_PLUGINS: Partial<Record<IdMoteur, readonly ElementApercu[]
 		{ nom: 'AGENTS.md', detail: 'instructions de l\'utilisateur (~/.vibe/AGENTS.md) et du projet, lues par Mistral Vibe', actif: true },
 		{ nom: 'Skills de Mistral Vibe', detail: 'skills du projet (.vibe/skills/) et de l\'utilisateur (~/.vibe/skills/, ~/.agents/skills/), lues par Mistral Vibe', actif: true },
 	],
-	'copilot-cli': [
-		{ nom: 'Instructions de GitHub Copilot CLI', detail: 'instructions du dépôt (.github/copilot-instructions.md, .github/instructions/, AGENTS.md) et de l\'utilisateur (~/.copilot/), lues par GitHub Copilot CLI', actif: true },
-		{ nom: 'Hooks et réglages du dépôt', detail: 'hooks du dépôt (.github/hooks/, et .claude/settings.json dans un dossier approuvé), lus par GitHub Copilot CLI ; ceux de Mnemo y restent inertes', actif: true },
-	],
 };
 
 export async function apercuProfil(dep: Dependances, nom: string, projet?: string): Promise<{ blocs: BlocApercu[]; avertissements: string[] }> {

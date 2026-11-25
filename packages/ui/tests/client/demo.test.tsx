@@ -22,7 +22,7 @@ describe('mode démo', () => {
 		expect(await within(screen.getByRole('banner')).findByText('~/Developer')).toBeTruthy();
 		const nav = screen.getByRole('navigation');
 		await screen.findByText('service connecté');
-		expect(within(nav).getByRole('button', { name: /Sessions/ }).textContent).toContain('5');
+		expect(within(nav).getByRole('button', { name: /Sessions/ }).textContent).toContain('4');
 		expect(screen.getByText('données fictives')).toBeTruthy();
 	});
 
@@ -125,11 +125,11 @@ describe('mode démo', () => {
 	it('données cohérentes : sessions de chaque état, graphe, fiche, fil', async () => {
 		const { api } = creerClientDemo();
 		const { sessions } = await api.lire<{ sessions: SessionVue[] }>(ROUTES.sessions);
-		expect(sessions.map((s) => s.etat).sort()).toEqual(['a_relire', 'a_relire', 'attend', 'attend', 'attend', 'attend', 'attend', 'en_pause', 'en_pause', 'terminee', 'travaille', 'travaille']);
+		expect(sessions.map((s) => s.etat).sort()).toEqual(['a_relire', 'a_relire', 'attend', 'attend', 'attend', 'attend', 'en_pause', 'en_pause', 'terminee', 'travaille', 'travaille']);
 		expect(sessions.filter((s) => s.profil === 'archiviste')).toHaveLength(1);
-		// La grille de démonstration : 10 sessions sur 4 dossiers, erp-saas en premier (ordre de création).
+		// La grille de démonstration : 9 sessions sur 4 dossiers, erp-saas en premier (ordre de création).
 		const groupes = grouperSessions(sessions, 'Developer');
-		expect(groupes.map((g) => [g.cle, g.sessions.length])).toEqual([['erp-saas', 4], ['api-facturation', 3], ['agent-maison', 1], ['site-vitrine', 2]]);
+		expect(groupes.map((g) => [g.cle, g.sessions.length])).toEqual([['erp-saas', 4], ['api-facturation', 3], ['agent-maison', 1], ['site-vitrine', 1]]);
 		expect(sessions.some((s) => !s.terminal)).toBe(true);
 
 		const graphe = await api.lire<DonneesGraphe>(ROUTES.graphe);
@@ -150,7 +150,7 @@ describe('mode démo', () => {
 		expect(fil.montees.length).toBe(2);
 	});
 
-	it('moteurs : les quatre du catalogue dans /api/moteurs, chaque profil et chaque session sur un moteur connu, avec un modèle proposé ; Copilot attend son premier message, sans quotas pour Vibe ni Copilot', async () => {
+	it('moteurs : les trois du catalogue dans /api/moteurs, chaque profil et chaque session sur un moteur connu, avec un modèle proposé ; sans quotas pour Vibe', async () => {
 		const { api } = creerClientDemo();
 		const { moteurs } = await api.lire<ReponseMoteurs>(ROUTES.moteurs, { poste: '1' });
 		expect(moteurs.map((m) => m.id)).toEqual([...IDS_MOTEURS]);
@@ -158,9 +158,6 @@ describe('mode démo', () => {
 			expect(m.nom).toBe(NOMS_MOTEURS[m.id]);
 			expect(m.poste?.length).toBeGreaterThan(0);
 		}
-		// les remèdes sont ceux que le service rédige (`remedesDuMoteur`) : `mnemo init <option du moteur>`
-		const copilot = moteurs.find((m) => m.id === 'copilot-cli')!;
-		expect(copilot.poste!.find((p) => p.cle === 'mcp')?.remede).toEqual({ texte: 'mnemo init --copilot', dans: 'terminal' });
 		const { profils } = await api.lire<ReponseProfils>(ROUTES.profils);
 		const proposes = (id: string) => moteurs.find((m) => m.id === id)!.modeles;
 		for (const p of profils) if (p.modele !== '') expect(proposes(p.moteur)).toContain(p.modele);
@@ -170,36 +167,9 @@ describe('mode démo', () => {
 			expect(estIdMoteur(x.moteur ?? 'claude-code')).toBe(true);
 			if (x.modele !== undefined) expect(proposes(x.moteur!)).toContain(x.modele);
 		}
-		const attente = sessions.filter((x) => x.attentePremierMessage !== undefined);
-		expect(attente.map((x) => [x.moteur, x.etat, x.terminal, x.attentePremierMessage])).toEqual([['copilot-cli', 'attend', true, 'confiance']]);
 		expect(sessions.some((x) => x.moteur === 'mistral-vibe')).toBe(true);
 		const quotas = await api.lire<ReponseQuotas>(ROUTES.quotas);
 		expect(Object.keys(quotas.moteurs ?? {}).sort()).toEqual(['claude-code', 'codex']);
-	});
-
-	it('terminal de GitHub Copilot CLI qui attend son premier message : sa question de confiance, sans aucune marque de Claude Code ; un message tapé la fait commencer', async () => {
-		const { api, connexion } = creerClientDemo();
-		const recu: string[] = [];
-		const recus: SessionVue[] = [];
-		connexion.surMessage((m) => void (m.type === 'session' && recus.push(m.session)));
-		const id = '6f1b4d8e-9a2c-4e07-b3d5-c8a0e2f4b917';
-		connexion.abonner(id, (m) => recu.push(m.type === 'retard' ? 'retard' : m.donnees));
-		await new Promise((r) => setTimeout(r, 200));
-		expect(recu[0]).toContain('GitHub Copilot CLI');
-		expect(recu[0]).toContain('Do you trust the files in this folder?');
-		expect(recu[0]).not.toContain('Claude Code');
-		expect(recu[0]).not.toContain('? for shortcuts');
-		connexion.envoyer({ type: 'entree', session: id, donnees: 'go\r' });
-		expect(recus.at(-1)).toMatchObject({ id, etat: 'travaille' });
-		expect(recus.at(-1)).not.toHaveProperty('attentePremierMessage');
-	});
-
-	it('bilan d’une session GitHub Copilot CLI qui attend son premier message : permis, relancée avec lui, elle attend toujours', async () => {
-		const { api } = creerClientDemo();
-		const id = '6f1b4d8e-9a2c-4e07-b3d5-c8a0e2f4b917';
-		const { session } = await api.envoyer<{ session: SessionVue }>(`/api/sessions/${id}/bilan`);
-		expect(session).toMatchObject({ id, etat: 'attend', attentePremierMessage: 'confiance' });
-		expect(session.bilanDemandeMs).not.toBeNull();
 	});
 
 	it('actions de session : l’état change et un message `session` est diffusé ; nouvelle session → une session', async () => {

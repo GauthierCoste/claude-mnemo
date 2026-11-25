@@ -22,18 +22,18 @@ export function variablesDeSession(moteur: IdMoteur, session: Pick<Session, 'id'
 /**
  * Variables d'un autre fournisseur, qu'un moteur ne reçoit jamais : un jeton ou une clé d'un autre outil n'a rien à faire dans
  * son environnement (il passerait à ses outils, à ses commandes, à ses journaux). `GH_TOKEN` et `GITHUB_TOKEN` restent : ils
- * servent à `gh` et à git dans toute session (leur priorité sur `/login` chez GitHub Copilot CLI reste à mesurer).
+ * servent à `gh` et à git dans toute session.
  * - `CLAUDECODE`, `CLAUDE_CODE_*` (marques d'une session Claude Code parente, réglages de Claude Code) et `ANTHROPIC_*` :
  *   hors Claude Code (chez lui, `estInterdite` décide ; ce que Mnemo pose est ajouté après le filtre) ;
  * - `CODEX_API_KEY` et `OPENAI_API_KEY` : hors Codex ;
  * - `MISTRAL_API_KEY` : hors Mistral Vibe ;
- * - `COPILOT_GITHUB_TOKEN` : hors GitHub Copilot CLI.
+ * - `COPILOT_GITHUB_TOKEN` (jeton de l'agent de code de GitHub, qui n'est pas un moteur de Mnemo) : chez aucun moteur.
  */
 export function estDUnAutreFournisseur(moteur: IdMoteur, majuscules: string): boolean {
 	if (majuscules === 'CLAUDECODE' || majuscules.startsWith('CLAUDE_CODE_') || majuscules.startsWith('ANTHROPIC_')) return moteur !== 'claude-code';
 	if (majuscules === 'CODEX_API_KEY' || majuscules === 'OPENAI_API_KEY') return moteur !== 'codex';
 	if (majuscules === 'MISTRAL_API_KEY') return moteur !== 'mistral-vibe';
-	if (majuscules === 'COPILOT_GITHUB_TOKEN') return moteur !== 'copilot-cli';
+	if (majuscules === 'COPILOT_GITHUB_TOKEN') return true;
 	return false;
 }
 

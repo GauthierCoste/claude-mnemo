@@ -99,7 +99,7 @@ const commandeDe = (moteur: MoteurDuPoste, d: DependancesPoste): CommandeMoteur 
 /**
  * Ce dont Mnemo a besoin sur le poste : `git` (lancé, `git --version` ; sous macOS sans les outils de développement, le
  * `git` du système répond en erreur), le `claude` que lanceront les sessions, la version de Node ; et
- * les moteurs facultatifs (Codex, Mistral Vibe, GitHub Copilot CLI : trouvés ou non, leur déclaration MCP et leurs hooks).
+ * les moteurs facultatifs (Codex, Mistral Vibe : trouvés ou non, leur déclaration MCP et leurs hooks).
  */
 export async function verifierPoste(d: DependancesPoste): Promise<PosteVerifieComplet> {
 	let git: PosteVerifie['git'];
@@ -120,9 +120,9 @@ export async function verifierPoste(d: DependancesPoste): Promise<PosteVerifieCo
 }
 
 /**
- * `mnemo verifier-poste [--json]` : git, Claude Code, Codex, Mistral Vibe, GitHub Copilot CLI et Node. `--json` : un objet
+ * `mnemo verifier-poste [--json]` : git, Claude Code, Codex, Mistral Vibe et Node. `--json` : un objet
  * `PosteVerifie` (`@mnemo/contrat`) sur une ligne, code de sortie 0 ; sans `--json` : une ligne par élément, code 1 s'il
- * manque git ou Claude Code (Codex, Mistral Vibe et GitHub Copilot CLI sont facultatifs).
+ * manque git ou Claude Code (Codex et Mistral Vibe sont facultatifs).
  */
 export async function commandeVerifierPoste(args: string[], partiel: Partial<DependancesPoste> = {}, ecrire: (ligne: string) => void = (ligne) => console.log(ligne)): Promise<void> {
 	const inconnue = args.find((a) => a !== '--json');

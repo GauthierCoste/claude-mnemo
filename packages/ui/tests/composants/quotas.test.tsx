@@ -40,8 +40,8 @@ describe('abonnementsEnCours', () => {
 });
 
 describe('abonnementDuMoteur', () => {
-	it('Claude et ChatGPT ; Mistral Vibe et GitHub Copilot CLI n’en communiquent pas de lisibles', () => {
-		expect(IDS_MOTEURS.map((m) => abonnementDuMoteur(m))).toEqual(['Claude', 'ChatGPT', null, null]);
+	it('Claude et ChatGPT ; Mistral Vibe n’en communique pas de lisibles', () => {
+		expect(IDS_MOTEURS.map((m) => abonnementDuMoteur(m))).toEqual(['Claude', 'ChatGPT', null]);
 	});
 });
 

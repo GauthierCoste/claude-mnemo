@@ -1160,20 +1160,6 @@ export type Moteur = MoteurDuPoste & {
 	reglagesMcp?(env: Record<string, string | undefined>): Promise<string[]>;
 	/** Pourquoi la session ne peut pas être reprise par ce moteur (Codex, Mistral Vibe : son `fil` encore inconnu) ; null : elle le peut. */
 	motifSansReprise(session: Session): string | null;
-	/**
-	 * Vrai : le moteur n'envoie aucun hook avant le premier message de chaque lancement, et son écran pose peut-être d'abord une
-	 * question (GitHub Copilot CLI : confiance du dossier, « Yes » choisi par défaut). Rien n'est tapé dans son terminal avant un
-	 * hook de ce lancement ; une ligne pour une session qui ne tourne pas (bilan, consigne) part avec sa reprise, comme premier
-	 * message (`ContextePreparation.objectif`), que le moteur envoie lui-même une fois la question réglée par l'utilisateur ;
-	 * une session qui tourne sans avoir commencé est arrêtée par signaux, puis reprise ainsi (`voieDeLaLigne`). Le filet du
-	 * bilan ne court qu'à partir du premier hook de ce lancement.
-	 */
-	debutAuPremierMessage?: true;
-	/**
-	 * Vrai : l'identifiant de la session chez le moteur (`fil`) est l'uuid de Mnemo, imposé au lancement (GitHub Copilot CLI,
-	 * `--session-id`) : noté dès le lancement, avant tout hook ; un hook qui en porte un autre est étranger à la session.
-	 */
-	filImpose?: true;
 	fichiersDeSession(dep: Dependances, session: Session, profil: Profil, appel: AppelPlugin): Promise<FichierPlugin[]>;
 	/** Lève si la session ne peut pas être lancée ainsi (identifiant, modèle ou `fil` refusés). */
 	preparer(contexte: ContextePreparation): Lancement;

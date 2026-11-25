@@ -22,7 +22,6 @@ describe('moteurs : un seul registre de vérité', () => {
 		expect(MOTEURS_FACULTATIFS.map((m) => [m.id, m.nom, m.optionInit, m.moteur.id])).toEqual(
 			IDS_MOTEURS.filter((id) => CATALOGUE_MOTEURS[id].facultatif).map((id) => [id, CATALOGUE_MOTEURS[id].nom, CATALOGUE_MOTEURS[id].optionInit, id]),
 		);
-		expect(IDS_MOTEURS.filter((id) => CATALOGUE_MOTEURS[id].litLesHooksDeClaudeCode)).toEqual(['copilot-cli']);
 	});
 
 	it('Claude Code : sa marque de session est l’uuid de Mnemo', () => {

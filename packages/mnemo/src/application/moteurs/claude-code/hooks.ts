@@ -1,5 +1,3 @@
-import { CATALOGUE_MOTEURS } from '../../../domaine/moteurs/catalogue.ts';
-import { estIdMoteur } from '../../../domaine/moteurs/moteur.ts';
 import { estSourceDeDebut, estUuid } from '../../../domaine/session.ts';
 import type { EvenementHook } from '../../../domaine/session.ts';
 import { estObjet, objetJson } from '../../../domaine/valeurs.ts';
@@ -98,16 +96,5 @@ function lireArguments(args: string[]): { evenement: EvenementHook; options: Set
  */
 const ECHEANCES_MS: Record<EvenementHook, number> = { debut: 900, message: 900, outil: 2000, apres_outil: 900, arret: 900, fin: 1400 };
 
-/**
- * Claude Code n'appelle Mnemo que par le plugin d'une session Mnemo : jamais inerte, sauf dans une session d'un moteur qui
- * exécute lui-même des hooks au format de Claude Code (`MNEMO_MOTEUR`, `litLesHooksDeClaudeCode`) : des hooks de Mnemo
- * copiés dans un `.claude/settings.json` y feraient double emploi avec ceux du moteur, qui parlent déjà pour la session.
- */
-export const HOOKS_CLAUDE_CODE: HooksDuMoteur = {
-	lireArguments,
-	inerte: (env) => estIdMoteur(env.MNEMO_MOTEUR) && CATALOGUE_MOTEURS[env.MNEMO_MOTEUR].litLesHooksDeClaudeCode,
-	traduire,
-	sortie: sortieDe,
-	echeancesMs: ECHEANCES_MS,
-	finIgnoreeSiVivante: false,
-};
+/** Claude Code n'appelle Mnemo que par le plugin d'une session Mnemo : jamais inerte. */
+export const HOOKS_CLAUDE_CODE: HooksDuMoteur = { lireArguments, inerte: () => false, traduire, sortie: sortieDe, echeancesMs: ECHEANCES_MS, finIgnoreeSiVivante: false };

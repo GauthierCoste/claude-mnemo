@@ -253,7 +253,7 @@ function Ligne(p: { r: Resultat; mots: readonly string[] }): ReactNode {
 				<Icone genre={archiviste ? 'archiviste' : 'session'} libelle={archiviste ? 'Archiviste' : 'Session'} />
 				<span className={s.texte}>
 					<span className={s.ligne1}>
-						<Point session={x} petit />
+						<Point etat={x.etat} petit />
 						<span className={s.titre}>
 							<Segments segments={surligner(x.objectif ?? `Session ${x.id.slice(0, 4)}`, p.mots)} />
 						</span>

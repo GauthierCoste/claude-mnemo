@@ -4,7 +4,7 @@
  */
 import type { SessionVue } from '@mnemo/contrat';
 import type { CSSProperties, ReactNode } from 'react';
-import { libelleEtat } from '../../sessions/etats.ts';
+import { LIBELLES_ETATS } from '../../sessions/etats.ts';
 import { JETONS_COULEUR } from '../commun/AvatarProfil.tsx';
 import { useAvatarsDeProfils } from '../commun/avatar-de-profil.ts';
 import { Puce } from '../commun/Puce.tsx';
@@ -21,7 +21,7 @@ export function EnteteSession(p: { session: SessionVue }): ReactNode {
 			<div className={s.texte}>
 				<div className={s.ligne}>
 					<span className={s.profil}>{x.profil}</span>
-					<Puce couleur={x.etat}>{libelleEtat(x)}</Puce>
+					<Puce couleur={x.etat}>{LIBELLES_ETATS[x.etat]}</Puce>
 				</div>
 				<h2 className={s.objectif}>{x.objectif ?? 'Sans objectif'}</h2>
 			</div>

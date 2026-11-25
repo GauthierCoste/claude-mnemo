@@ -1,7 +1,6 @@
 /**
- * Moteurs du mode démo (`GET moteurs`) : les quatre trouvés ; Codex avec des hooks encore à approuver, GitHub Copilot CLI sans
- * déclaration MCP permanente (pour voir les commandes qui y remédient dans Réglages › Système › Moteurs, rédigées comme le
- * service les rédige).
+ * Moteurs du mode démo (`GET moteurs`) : les trois trouvés ; Codex avec des hooks encore à approuver (pour voir la commande qui y
+ * remédie dans Réglages › Système › Moteurs, rédigée comme le service la rédige).
  */
 import type { MoteurVue, ReponseMoteurs } from '@mnemo/contrat';
 
@@ -56,29 +55,7 @@ const MISTRAL_VIBE: MoteurVue = {
 	],
 };
 
-const COPILOT_CLI: MoteurVue = {
-	id: 'copilot-cli',
-	nom: 'GitHub Copilot CLI',
-	indisponible: null,
-	manuel: false,
-	version: '1.0.116',
-	modeles: ['claude-sonnet-5.5', 'gpt-6.2-sol', 'gemini-4-neon'],
-	poste: [
-		{ cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée', detail: '/opt/homebrew/bin/copilot' },
-		{ cle: 'version', libelle: 'Version', ok: true, etat: '1.0.116' },
-		{
-			cle: 'mcp',
-			libelle: 'Serveur MCP mnemo',
-			ok: false,
-			etat: 'non déclaré',
-			detail: 'Les sessions de GitHub Copilot CLI lancées hors de Mnemo ne lisent pas la mémoire.',
-			remede: { texte: 'mnemo init --copilot', dans: 'terminal' },
-		},
-		{ cle: 'hooks', libelle: 'Hooks de Mnemo', ok: true, etat: 'installés' },
-	],
-};
-
-const TOUS = [CLAUDE_CODE, CODEX, MISTRAL_VIBE, COPILOT_CLI];
+const TOUS = [CLAUDE_CODE, CODEX, MISTRAL_VIBE];
 
 /** `poste` : avec les points vérifiés du poste. */
 export function moteursDemo(poste: boolean): ReponseMoteurs {

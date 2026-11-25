@@ -4,11 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { creerPilote, ErreurMoteurIndisponible, ErreurRepriseImpossible, ErreurSessionNonCommencee, ligneManuelle } from '../../src/application/pilote.ts';
 import type { Pilote } from '../../src/application/pilote.ts';
 import type { CommandeMoteur, EtatSessions, FichierPlugin, Pilotage } from '../../src/application/ports.ts';
-import { dialogueOuvert } from '../../src/domaine/session.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
 import { MOTEUR_CODEX } from '../../src/infra/moteurs/codex.ts';
-import { MOTEUR_COPILOT_CLI } from '../../src/infra/moteurs/copilot-cli.ts';
 import { HOOKS_DU_POSTE_CODEX } from '../../src/infra/moteurs/codex/hooks-json.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { DEPOT_ABSENT, fauxPorts } from '../aides/faux-ports.ts';
@@ -46,7 +44,7 @@ type Contexte = {
 };
 
 async function contexte(
-	options: { claude?: CommandeMoteur | null; plateforme?: string; sessions?: Session[]; ecrire?: (session: string, f: FichierPlugin[]) => Promise<string>; attenteArretBilanMs?: number } = {},
+	options: { claude?: CommandeMoteur | null; plateforme?: string; sessions?: Session[]; ecrire?: (session: string, f: FichierPlugin[]) => Promise<string> } = {},
 ): Promise<Contexte> {
 	const dep = fauxPorts();
 	await dep.coffre.ecrire('projets/alpha/alpha.md', `${entete('dossier', 'dossier_projet: alpha\nportee: projet:alpha\n')}# Alpha\n`);
@@ -93,7 +91,7 @@ async function contexte(
 			},
 		},
 	};
-	const pilote = creerPilote(dep, pil, options.attenteArretBilanMs === undefined ? {} : { attenteArretBilanMs: options.attenteArretBilanMs });
+	const pilote = creerPilote(dep, pil);
 	pilotes.push(pilote);
 	return { pilote, dep, etat, terminaux, pil, plugins, processus, interroges, nettoyes, existants, liens };
 }
@@ -716,179 +714,6 @@ describe('Pilote : sessions Codex', () => {
 		expect(await c.etat.lire(ID_A)).toMatchObject({ etat: 'en_pause' });
 		// abandon d'une session sans fil : possible (rien à reprendre)
 		expect(await c.pilote.terminer(ID_A, { bilan: false })).toMatchObject({ etat: 'terminee' });
-	});
-});
-
-const COPILOT = { commande: '/usr/bin/node', avant: ['/aides/faux-copilot.mjs'] };
-
-/** GitHub Copilot CLI dans le pilotage du test (jamais lancé), sa configuration dans un dossier jetable, un profil qui l'utilise. */
-async function avecCopilot(c: Contexte): Promise<void> {
-	const maison = join(await dossierTemporaire(), 'copilot');
-	c.pil.moteurs = { ...c.pil.moteurs, 'copilot-cli': { moteur: { ...MOTEUR_COPILOT_CLI, version: async () => '1.0.116' }, commande: COPILOT } };
-	c.pil.plugin.appel = APPEL_CODEX;
-	c.pil.hote.env = { ...c.pil.hote.env, COPILOT_HOME: maison };
-	await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmoteur: copilot-cli\nhooks: [debut, message, arret, fin]\n---\n# Rédaction\n\nRédige les courriers.\n');
-}
-
-describe('Pilote : sessions GitHub Copilot CLI', () => {
-	it('lancement : --session-id (marque), consigne par le dossier de session, premier message par --interactive ; arrêt par /exit', async () => {
-		const c = await contexte();
-		await avecCopilot(c);
-		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha', objectif: 'Écris au client' });
-		expect(s).toMatchObject({ moteur: 'copilot-cli' });
-		const t = c.terminaux.lances[0]!;
-		expect(t.options.args.slice(0, 2)).toEqual([...COPILOT.avant, `--session-id=${s.id}`]);
-		expect(t.options.args.at(-1)).toBe('--interactive=Écris au client');
-		expect(t.options.env).toMatchObject({ MNEMO_SESSION: s.id, MNEMO_MOTEUR: 'copilot-cli', COPILOT_CUSTOM_INSTRUCTIONS_DIRS: `${RACINE}/.mnemo/plugins/${s.id}` });
-		expect(c.plugins.get(s.id)!.map((f) => f.chemin)).toEqual(['.github/instructions/mnemo.instructions.md']);
-		expect(t.options.touches).toMatchObject({ arret: '\x15/exit', pauseAvantEntreeMs: 100 });
-		expect(c.pilote.motifSansReprise((await c.etat.lire(s.id))!)).toBeNull();
-	});
-
-	it('fil : l’uuid de la session, noté dès le lancement, avant tout hook', async () => {
-		const c = await contexte();
-		await avecCopilot(c);
-		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
-		expect(s.fil).toBe(s.id);
-		expect((await c.etat.lire(s.id))!.fil).toBe(s.id);
-	});
-
-	it('attendPremierMessage : message (sans ligne au lancement) ou confiance (objectif ou bilan partis avec lui) tant qu’aucun hook de ce lancement n’est arrivé ; null après un hook, pour une session qui ne tourne pas ici, et chez Claude Code', async () => {
-		const c = await contexte();
-		await avecCopilot(c);
-		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
-		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBe('message');
-		await new Promise((r) => setTimeout(r, 5));
-		await c.etat.appliquer(s.id, 'debut', Date.now(), { fil: s.id });
-		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBeNull();
-		c.terminaux.arretFinit = true;
-		await c.pilote.pause(s.id);
-		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBeNull();
-		await c.pilote.terminer(s.id, { bilan: true });
-		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBe('confiance');
-		const avecObjectif = await lancee(c, { profil: 'redaction', dossier: 'alpha', objectif: 'Relis le contrat' });
-		expect(c.pilote.attendPremierMessage((await c.etat.lire(avecObjectif.id))!)).toBe('confiance');
-		const claude = await lancee(c, { profil: 'travail', dossier: 'alpha' });
-		expect(c.pilote.attendPremierMessage((await c.etat.lire(claude.id))!)).toBeNull();
-	});
-
-	it('aucun hook depuis ce lancement (écran de confiance peut-être ouvert) : rien n’est tapé, consigne refusée, taper sans effet ; après un hook, tapée', async () => {
-		const c = await contexte();
-		await avecCopilot(c);
-		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
-		const u = c.terminaux.lances[0]!;
-		await new Promise((r) => setTimeout(r, 5));
-		await expect(c.pilote.confier(s.id, 'Fais ceci')).rejects.toThrow(ErreurSessionNonCommencee);
-		await c.pilote.taper(s.id, 'Encore');
-		expect(u.ecrits).toEqual([]);
-		expect(u.optionsArret).toEqual([]);
-		expect(c.terminaux.lances).toHaveLength(1);
-		// un hook de ce lancement : commencée, la consigne est tapée ; pause par les touches
-		await new Promise((r) => setTimeout(r, 5));
-		await c.etat.appliquer(s.id, 'message', Date.now(), { fil: s.id });
-		await c.pilote.confier(s.id, 'Fais cela');
-		expect(u.ecrits).toEqual(['Fais cela', '\r']);
-		await c.pilote.pause(s.id);
-		expect(u.optionsArret).toEqual([{ echap: false }]);
-		// relancée : de nouveau non commencée jusqu'à son premier hook ; une pause l'arrête sans touche
-		await new Promise((r) => setTimeout(r, 5));
-		await c.pilote.reprendre(s.id);
-		const v = c.terminaux.lances[1]!;
-		expect(v.options.args.some((a) => a.startsWith('--interactive'))).toBe(false);
-		await c.pilote.pause(s.id);
-		expect(v.optionsArret).toEqual([{ sansTouche: true }]);
-		expect(v.ecrits).toEqual([]);
-	});
-
-	it('bilan d’une session qui tourne sans avoir commencé : arrêtée par signaux, puis relancée avec le bilan comme premier message', async () => {
-		const c = await contexte();
-		await avecCopilot(c);
-		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
-		const t = c.terminaux.lances[0]!;
-		await new Promise((r) => setTimeout(r, 5));
-		const avant = Date.now();
-		const b = await c.pilote.terminer(s.id, { bilan: true });
-		expect(b).toMatchObject({ arretAttendu: 'bilan', etat: 'attend' });
-		expect(b!.bilanDemandeMs).toBeGreaterThanOrEqual(avant);
-		expect(t.optionsArret).toEqual([{ sansTouche: true }]);
-		expect(t.ecrits).toEqual([]);
-		const r = c.terminaux.lances[1]!;
-		expect(r.options.args.at(-1)).toMatch(/^--interactive=\S/u);
-		expect(r.ecrits).toEqual([]);
-		// aucun épisode minimal : la session n'a été qu'en pause le temps de la relance
-		expect([...c.dep.fichiers.keys()].filter((chemin) => chemin.startsWith('episodes/'))).toEqual([]);
-	});
-
-	it('bilan d’une session qui ne tourne pas, dont la reprise n’est pas lancée (terminal en échec) : il n’y reste pas demandé', async () => {
-		const c = await contexte({ sessions: [session(ID_A, { etat: 'en_pause', profil: 'redaction', moteur: 'copilot-cli', modele: '' })] });
-		await avecCopilot(c);
-		const lancer = c.terminaux.lancer;
-		c.terminaux.lancer = () => {
-			throw new Error('pty en panne');
-		};
-		expect(await c.pilote.terminer(ID_A, { bilan: true })).toMatchObject({ arretAttendu: null, bilanDemandeMs: null });
-		c.terminaux.lancer = lancer;
-		expect(c.terminaux.lances).toHaveLength(0);
-	});
-
-	it('filet du bilan : il ne court qu’après le premier hook de ce lancement (l’écran de confiance peut attendre l’utilisateur)', async () => {
-		const c = await contexte({ sessions: [session(ID_A, { etat: 'en_pause', profil: 'redaction', moteur: 'copilot-cli', modele: '' })], attenteArretBilanMs: 60 });
-		await avecCopilot(c);
-		await c.pilote.terminer(ID_A, { bilan: true });
-		const t = c.terminaux.lances[0]!;
-		await new Promise((r) => setTimeout(r, 400));
-		expect(t.optionsArret).toEqual([]);
-		expect(c.pilote.enCours(ID_A)).toBe(true);
-		// l'utilisateur règle la question : le bilan part, son premier hook arrive ; sans arrêt lu, le filet arrête la session
-		await c.etat.appliquer(ID_A, 'message', Date.now(), { fil: ID_A });
-		await new Promise((r) => setTimeout(r, 30));
-		expect(t.optionsArret).toEqual([]);
-		await new Promise((r) => setTimeout(r, 400));
-		expect(t.optionsArret).toEqual([{ echap: false }]);
-		expect(await c.etat.lire(ID_A)).toMatchObject({ etat: 'terminee', arretAttendu: 'bilan' });
-	});
-
-	it('dialogue d’avant la reprise : fermé avec son processus (aucun Échap pour lui) ; un dialogue de ce lancement : Échap avant la ligne', async () => {
-		const c = await contexte({ sessions: [session(ID_A, { etat: 'attend', profil: 'redaction', moteur: 'copilot-cli', modele: '', dernierArret: 'notification' })] });
-		await avecCopilot(c);
-		await c.etat.appliquer(ID_A, 'arret', 10, { arret: 'notification' });
-		await c.pilote.reprendre(ID_A);
-		const t = c.terminaux.lances[0]!;
-		const lue = (await c.etat.lire(ID_A))!;
-		expect(lue).toMatchObject({ etat: 'attend', dernierArret: 'notification' });
-		expect(dialogueOuvert(lue)).toBe(false);
-		await new Promise((r) => setTimeout(r, 5));
-		await c.etat.appliquer(ID_A, 'message', Date.now(), { fil: ID_A });
-		await new Promise((r) => setTimeout(r, 5));
-		await c.etat.appliquer(ID_A, 'arret', Date.now(), { arret: 'notification' });
-		expect(dialogueOuvert((await c.etat.lire(ID_A))!)).toBe(true);
-		await c.pilote.confier(ID_A, 'Fais ceci');
-		expect(t.ecrits[0]).toBe(MOTEUR_COPILOT_CLI.touches.echap);
-	});
-
-	it('session qui ne tourne pas : la consigne refusée sans reprise ; le bilan part avec la reprise comme premier message, jamais tapé', async () => {
-		const c = await contexte({ sessions: [session(ID_A, { etat: 'en_pause', profil: 'redaction', moteur: 'copilot-cli', modele: '' })] });
-		await avecCopilot(c);
-		await expect(c.pilote.confier(ID_A, 'Relis le contrat')).rejects.toThrow(ErreurSessionNonCommencee);
-		expect(c.terminaux.lances).toHaveLength(0);
-		const avant = Date.now();
-		const b = await c.pilote.terminer(ID_A, { bilan: true });
-		expect(b).toMatchObject({ arretAttendu: 'bilan', etat: 'attend' });
-		expect(b!.bilanDemandeMs).toBeGreaterThanOrEqual(avant);
-		const u = c.terminaux.lances[0]!;
-		expect(u.options.args.at(-1)).toMatch(/^--interactive=\S/u);
-		expect(u.ecrits).toEqual([]);
-	});
-
-	it('redémarrage du service pendant un bilan : relancée avec le bilan comme premier message', async () => {
-		const c = await contexte({ sessions: [session(ID_A, { etat: 'attend', profil: 'redaction', moteur: 'copilot-cli', modele: '', arretAttendu: 'service', bilanDemandeMs: 5 })] });
-		await avecCopilot(c);
-		expect(await c.pilote.reprendreAuDemarrage()).toEqual([ID_A]);
-		const t = c.terminaux.lances[0]!;
-		expect(t.options.args.at(-1)).toMatch(/^--interactive=\S/u);
-		expect(await c.etat.lire(ID_A)).toMatchObject({ arretAttendu: 'bilan' });
-		expect((await c.etat.lire(ID_A))!.bilanDemandeMs).toBeGreaterThan(5);
-		expect(t.ecrits).toEqual([]);
 	});
 });
 
