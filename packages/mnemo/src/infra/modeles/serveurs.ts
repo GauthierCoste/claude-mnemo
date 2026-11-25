@@ -315,11 +315,12 @@ const age = (depuis: string) => Date.now() - (Date.parse(depuis) || 0);
  * plein démarrage (sans avoir pu écrire `echec`) compte comme un échec : pas de relance pendant une minute, sinon chaque
  * hook relancerait un gardien voué à mourir.
  */
-function gardienEnCharge(etat: EtatServeurs | null, type: TypeServeur): boolean {
+function gardienEnCharge(etat: EtatServeurs | null, type: TypeServeur, forcer = false): boolean {
 	if (etat === null) return false;
 	const { pid, depuis, etat: phase } = etat.gardien;
-	if (phase === 'echec') return age(depuis) < PAUSE_APRES_ECHEC_MS;
-	if (!pidVivant(pid)) return phase === 'demarrage' && age(depuis) < PAUSE_APRES_ECHEC_MS;
+	// un geste explicite (« Démarrer ») relance même pendant la pause qui suit un échec
+	if (phase === 'echec') return !forcer && age(depuis) < PAUSE_APRES_ECHEC_MS;
+	if (!pidVivant(pid)) return !forcer && phase === 'demarrage' && age(depuis) < PAUSE_APRES_ECHEC_MS;
 	if (phase === 'demarrage') return age(depuis) < AGE_MAX_DEMARRAGE_MS;
 	return etat[type] === undefined;
 }
@@ -358,12 +359,12 @@ export function environnementGardien(env: NodeJS.ProcessEnv): Record<string, str
  * Crée `serveurs/` puis, sous son verrou, relit l'état et, si personne ne s'en charge, lance `mnemo modeles garde` détaché,
  * avec l'inactivité tolérée par le dossier qui le lance (`MNEMO_MODELES_INACTIVITE_MS`).
  */
-async function lancerGardien(dossier: string, type: TypeServeur, finMs: number, env: NodeJS.ProcessEnv, inactiviteMs: (() => number) | undefined): Promise<void> {
+async function lancerGardien(dossier: string, type: TypeServeur, finMs: number, env: NodeJS.ProcessEnv, inactiviteMs: (() => number) | undefined, forcer: boolean): Promise<void> {
 	const tentative = (async () => {
 		await preparerDossierServeurs(dossier);
 		await verrouModeles(dossier, finMs).avec(async () => {
 			const etat = await lireEtatServeurs(dossier);
-			if ((await utilisable(etat, type, Math.max(finMs, Date.now() + 500))) !== null || gardienEnCharge(etat, type)) return;
+			if ((await utilisable(etat, type, Math.max(finMs, Date.now() + 500))) !== null || gardienEnCharge(etat, type, forcer)) return;
 			// Serveurs d'un gardien disparu (tué net, même en plein chargement) : retrouvés par le registre, arrêtés s'ils répondent
 			// avec leur clé. Ceux du gardien encore vivant sont laissés : remplacé, il s'arrête de lui-même avec ses serveurs.
 			const vivant = etat !== null && pidVivant(etat.gardien.pid) ? etat.gardien.pid : null;
@@ -393,8 +394,12 @@ async function lancerGardien(dossier: string, type: TypeServeur, finMs: number, 
  */
 export type Demarrage = 'attendre' | 'sans-attendre' | 'jamais';
 
-/** `inactiviteMs` : l'inactivité tolérée transmise au gardien s'il est lancé (sinon la sienne par défaut). */
-export type OptionsServeur = { finMs: number; demarrage: Demarrage; env?: NodeJS.ProcessEnv; inactiviteMs?: () => number };
+/**
+ * `inactiviteMs` : l'inactivité tolérée transmise au gardien s'il est lancé (sinon la sienne par défaut). `forcer` : geste
+ * explicite de l'utilisateur, qui relance le gardien même dans la minute qui suit un échec (les appels automatiques, hooks
+ * et recherches, gardent cette pause).
+ */
+export type OptionsServeur = { finMs: number; demarrage: Demarrage; env?: NodeJS.ProcessEnv; inactiviteMs?: () => number; forcer?: boolean };
 
 /**
  * Serveur de ce type prêt à répondre, ou null. Sans serveur utilisable, selon `demarrage`, lance le gardien (un seul pour toute
@@ -406,7 +411,8 @@ export async function serveurPret(dossier: string, type: TypeServeur, options: O
 	let etat = await lireEtatServeurs(dossier);
 	const pret = await utilisable(etat, type, finMs);
 	if (pret !== null || demarrage === 'jamais' || Date.now() >= finMs) return pret;
-	if (!gardienEnCharge(etat, type)) await lancerGardien(dossier, type, finMs, options.env ?? process.env, options.inactiviteMs);
+	const forcer = options.forcer === true;
+	if (!gardienEnCharge(etat, type, forcer)) await lancerGardien(dossier, type, finMs, options.env ?? process.env, options.inactiviteMs, forcer);
 	if (demarrage === 'sans-attendre') return null;
 	for (;;) {
 		const reste = finMs - Date.now();

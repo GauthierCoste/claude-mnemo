@@ -1,10 +1,12 @@
 import { homedir } from 'node:os';
+import { posix, win32 } from 'node:path';
 import { modelesPermis } from '@mnemo/commun';
 import type { EtatModele, EtatModeles } from '../../application/ports.ts';
 import { lireActivites } from './activite.ts';
 import { dossierModeles, dossierServeurs } from './dossier.ts';
 import { lireNiveau } from './niveau.ts';
 import { piecesInstallees } from './pieces-installees.ts';
+import type { PiecesInstallees } from './pieces-installees.ts';
 import { AGE_MAX_DEMARRAGE_MS, lireEtatServeurs, PAUSE_APRES_ECHEC_MS, pidVivant, verifierServeur } from './serveurs.ts';
 import type { EtatServeurs, TypeServeur } from './serveurs.ts';
 
@@ -30,18 +32,31 @@ export function phaseDuGardien(etat: EtatServeurs | null, maintenant: number = D
 	return 'pret';
 }
 
-/**
- * État des modèles de la machine, pour l'interface : pièces installées, niveau, gardien, état de chaque modèle (prêt : servi
- * par un gardien vivant, serveur vérifié avec sa clé), appels en cours. Une lecture brève, qui ne lance rien ; les fichiers
- * d'activité des processus morts sont retirés au passage (`lireActivites`).
- */
-export async function lireEtatModeles(options: OptionsEtatModeles = {}): Promise<EtatModeles> {
+/** Même dossier (chemins résolus ; casse ignorée sous Windows, où le disque ne la distingue pas). */
+export function memeDossier(a: string, b: string, plateforme: NodeJS.Platform = process.platform): boolean {
+	if (plateforme === 'win32') return win32.resolve(a).toLowerCase() === win32.resolve(b).toLowerCase();
+	return posix.resolve(a) === posix.resolve(b);
+}
+
+/** Pièces installées de la machine (`env` : `MNEMO_MODELES` isole les tests). */
+export function lirePiecesInstallees(options: OptionsEtatModeles = {}): Promise<PiecesInstallees> {
 	const env = options.env ?? process.env;
 	const plateforme = options.plateforme ?? process.platform;
-	const arch = options.arch ?? process.arch;
+	return piecesInstallees(dossierModeles(env, plateforme, homedir()), plateforme, options.arch ?? process.arch);
+}
+
+/**
+ * État des modèles de la machine vu du dossier Mnemo `racine`, pour l'interface : pièces installées (`pieces` : déjà lues,
+ * sinon lues ici), niveau, gardien, état de chaque modèle (prêt : servi par un gardien vivant, serveur vérifié avec sa clé),
+ * appels en cours (`ceDossier` : faits pour `racine`). Une lecture brève, qui ne lance rien ; les fichiers d'activité des
+ * processus morts sont retirés au passage (`lireActivites`).
+ */
+export async function lireEtatModeles(racine: string, options: OptionsEtatModeles = {}, deja: { pieces?: PiecesInstallees } = {}): Promise<EtatModeles> {
+	const env = options.env ?? process.env;
+	const plateforme = options.plateforme ?? process.platform;
 	const serveurs = dossierServeurs(env, plateforme, homedir());
 	const [pieces, niveau, etat, activites] = await Promise.all([
-		piecesInstallees(dossierModeles(env, plateforme, homedir()), plateforme, arch),
+		deja.pieces ?? lirePiecesInstallees(options),
 		lireNiveau(serveurs),
 		lireEtatServeurs(serveurs),
 		lireActivites(serveurs),
@@ -65,6 +80,6 @@ export async function lireEtatModeles(options: OptionsEtatModeles = {}): Promise
 		sens,
 		reranker,
 		pieces,
-		activites: activites.map(({ operation, session, dossier, depuisMs, avancement }) => ({ operation, session, dossier, depuisMs, avancement })),
+		activites: activites.map(({ operation, session, dossier, depuisMs, avancement }) => ({ operation, session, ceDossier: memeDossier(dossier, racine, plateforme), depuisMs, avancement })),
 	};
 }

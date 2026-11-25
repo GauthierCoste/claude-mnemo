@@ -351,8 +351,11 @@ export interface Sens {
 export type EtatModele = 'absent' | 'exclu' | 'arrete' | 'pret';
 /** Un modèle installé : son identité, la taille de son fichier, le début de son SHA-256. */
 export type PieceModele = { modele: string; editeur: string; quantification: string; octets: number; empreinte: string };
-/** Un appel en cours aux modèles (n'importe quel dossier Mnemo de la machine) ; `dossier` : sa racine. Jamais de texte. */
-export type ActiviteEnCours = { operation: OperationModele; session: string | null; dossier: string; depuisMs: number; avancement: AvancementModele | null };
+/** Un appel en cours aux modèles (n'importe quel dossier Mnemo de la machine) ; `ceDossier` : fait pour celui du service. Jamais de texte. */
+export type ActiviteEnCours = { operation: OperationModele; session: string | null; ceDossier: boolean; depuisMs: number; avancement: AvancementModele | null };
+
+/** Bilan d'un arrêt demandé : `arrete`, `rien` (rien en marche), ou des serveurs encore en chargement, à arrêter dans un instant. */
+export type ArretModeles = 'arrete' | 'rien' | { enChargement: number };
 
 /**
  * Les modèles locaux de la machine, vus du service : `installes` (le moteur et au moins un modèle), `niveau` de la machine,
@@ -371,7 +374,7 @@ export type EtatModeles = {
 
 /**
  * Les modèles locaux vus du service : leur état (lecture brève, ne lance rien) ; `demarrer` (geste de l'utilisateur : les
- * modèles permis, sans attendre leur chargement) ; `arreter` (sans changer le niveau) ; `changerNiveau` (celui de la machine :
+ * modèles permis, sans attendre leur chargement, même juste après un échec) ; `arreter` (sans changer le niveau) ; `changerNiveau` (celui de la machine :
  * retirer un modèle arrête les modèles en marche) ; `surveiller` : `rappel` est appelé quand l'état a pu changer (fichiers
  * d'état, de niveau, d'activité), sans garantie qu'il ait changé ni que chaque changement soit vu (un sondage complète) ;
  * rend la fonction qui arrête la surveillance.
@@ -379,7 +382,7 @@ export type EtatModeles = {
 export interface Modeles {
 	etat(): Promise<EtatModeles>;
 	demarrer(): Promise<void>;
-	arreter(): Promise<void>;
+	arreter(): Promise<ArretModeles>;
 	changerNiveau(niveau: NiveauModeles): Promise<void>;
 	surveiller(rappel: () => void): () => void;
 }

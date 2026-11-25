@@ -1,5 +1,5 @@
 import { ENTETE_REMPLACEMENT, ROUTES } from '@mnemo/contrat';
-import type { BilanAmorceVue, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
+import type { BilanAmorceVue, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseArretModeles, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
 import { avertissementsDe, CARACTERES_INVISIBLES, CHEMINS_LOT_MAX, demandeTout, estNiveauModeles, NIVEAUX_MODELES, nomAffichable, OBJECTIF_MAX, PROFIL_TRAVAIL, SAUF_MAX } from '@mnemo/commun';
 import type { AvecAvertissements, NiveauModeles } from '@mnemo/commun';
 import { amorcer, marquerTraitees } from '../../application/amorcer.ts';
@@ -455,7 +455,17 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		},
 		{ methode: 'GET', chemin: ROUTES.modeles, action: async () => ok(vueModeles(await ctx.modeles.etat())) },
 		{ methode: 'POST', chemin: ROUTES.modelesDemarrer, corps: 'json', action: apresGesteModeles(() => ctx.modeles.demarrer()) },
-		{ methode: 'POST', chemin: ROUTES.modelesArreter, corps: 'json', action: apresGesteModeles(() => ctx.modeles.arreter()) },
+		{
+			methode: 'POST',
+			chemin: ROUTES.modelesArreter,
+			corps: 'json',
+			action: async () => {
+				const arret = await ctx.modeles.arreter();
+				ctx.journal(`modèles arrêtés à la demande : ${typeof arret === 'object' ? `${arret.enChargement} serveur(s) encore en chargement` : arret}.`);
+				ctx.relireModeles();
+				return ok({ ...vueModeles(await ctx.modeles.etat()), arret } satisfies ReponseArretModeles);
+			},
+		},
 		{
 			methode: 'PUT',
 			chemin: ROUTES.modelesNiveau,

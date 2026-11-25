@@ -20,8 +20,8 @@ export type DiffusionModeles = {
  * Diffuse l'état des modèles de la machine (`{ type: 'modeles' }`) aux clients WebSocket quand il change : relu sur un signe
  * de la surveillance de ses fichiers (`Modeles.surveiller`), et par un sondage de secours (`sondageMs`) ; les demandes d'une
  * rafale sont regroupées (`regroupementMs`), une seule lecture à la fois. Rien n'est diffusé si la vue est la même que la
- * dernière diffusée (comparaison de son JSON) ; la première lecture sert de référence, sans diffusion (un client lit `GET
- * modeles` à son arrivée).
+ * dernière lue (comparaison de son JSON) ; la première lecture sert de référence, sans diffusion (un client reçoit l'état à
+ * son arrivée) ; si elle échoue, la première qui réussit est diffusée.
  */
 export function diffuserModeles(o: {
 	modeles: Modeles;
@@ -31,6 +31,8 @@ export function diffuserModeles(o: {
 	regroupementMs?: number;
 }): DiffusionModeles {
 	let derniere: string | null = null;
+	/** La première lecture réussie sert de référence, sans diffusion ; si elle échoue, la suivante qui réussit est diffusée. */
+	let reference = true;
 	let ferme = false;
 	let enCours = false;
 	let encore = false;
@@ -53,12 +55,14 @@ export function diffuserModeles(o: {
 				} catch (erreur) {
 					if (!erreurSignalee) o.journal(`état des modèles illisible : ${erreur instanceof Error ? erreur.message : String(erreur)}`);
 					erreurSignalee = true;
+					reference = false;
 					return;
 				}
 				if (ferme) return;
 				const texte = JSON.stringify(vue);
-				if (derniere !== null && texte !== derniere) o.diffuser({ type: 'modeles', modeles: vue });
+				if (!reference && texte !== derniere) o.diffuser({ type: 'modeles', modeles: vue });
 				derniere = texte;
+				reference = false;
 			} while (encore && !ferme);
 		} finally {
 			enCours = false;

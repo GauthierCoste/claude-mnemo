@@ -3,7 +3,7 @@
  * démarrer, arrêter et changer de niveau les font évoluer comme le service, et chaque changement est diffusé (`modeles`).
  */
 import { estNiveauModeles, modelesPermis } from '@mnemo/commun';
-import type { EtatModelesVue, MessageServeur } from '@mnemo/contrat';
+import type { EtatModelesVue, MessageServeur, ReponseArretModeles } from '@mnemo/contrat';
 import { ErreurApi } from './api.ts';
 
 /** Délai du faux chargement après « Démarrer ». */
@@ -43,6 +43,10 @@ export function creerModelesDemo(diffuser: (m: MessageServeur) => void) {
 		clearTimeout(chargement);
 		return publier({ gardien: 'arrete', activites: [], ...modelesSelon(etat.niveau, false) });
 	};
+	const arreterSurDemande = (): ReponseArretModeles => {
+		const enMarche = etat.gardien !== 'arrete';
+		return { ...arreter(), arret: enMarche ? 'arrete' : 'rien' };
+	};
 	return {
 		etat: (): EtatModelesVue => structuredClone(etat),
 		demarrer(): EtatModelesVue {
@@ -51,7 +55,7 @@ export function creerModelesDemo(diffuser: (m: MessageServeur) => void) {
 			chargement = setTimeout(() => publier({ gardien: 'pret', ...modelesSelon(etat.niveau, true) }), CHARGEMENT_MS);
 			return publier({ gardien: 'demarrage' });
 		},
-		arreter,
+		arreter: arreterSurDemande,
 		niveau(corps: unknown): EtatModelesVue {
 			const niveau = (corps as { niveau?: unknown } | null)?.niveau;
 			if (!estNiveauModeles(niveau)) throw new ErreurApi('Champ « niveau » invalide.', 400);

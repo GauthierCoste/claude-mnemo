@@ -5,13 +5,13 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { MessageServeur } from '@mnemo/contrat';
 import { diffuserModeles } from '../../src/adaptateurs/http/diffusion-modeles.ts';
-import { modelesLocaux } from '../../src/infra/modeles/client-llama.ts';
+import { modelesLocaux, sensLlama } from '../../src/infra/modeles/client-llama.ts';
 import { piecesPourPlateforme } from '../../src/infra/modeles/catalogue.ts';
 import { dossierServeurs } from '../../src/infra/modeles/dossier.ts';
 import { phaseDuGardien } from '../../src/infra/modeles/etat-modeles.ts';
 import { dossierPiece } from '../../src/infra/modeles/installer.ts';
 import { changerNiveau } from '../../src/infra/modeles/niveau.ts';
-import { arreterServeurs, lireLances } from '../../src/infra/modeles/serveurs.ts';
+import { arreterServeurs, lireEtatServeurs, lireLances } from '../../src/infra/modeles/serveurs.ts';
 import type { EtatServeurs } from '../../src/infra/modeles/serveurs.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
@@ -78,10 +78,10 @@ async function attendreQue(condition: () => Promise<boolean> | boolean, delaiMs 
 }
 
 /** Un fichier d'activité d'un appel de ce processus (vivant), comme `avecActivite` l'écrit. */
-async function ecrireActivite(serveurs: string, n: number, avancement: { faits: number; total: number | null } | null): Promise<string> {
+async function ecrireActivite(serveurs: string, n: number, avancement: { faits: number; total: number | null } | null, dossier = '/projets/alpha'): Promise<string> {
 	await mkdir(join(serveurs, 'activite'), { recursive: true });
 	const fichier = join(serveurs, 'activite', `${process.pid}-${n}.json`);
-	const valeur = { operation: avancement === null ? 'recherche' : 'vectorisation', dossier: '/projets/alpha', session: null, depuisMs: 1000 + n, jusqueMs: Date.now() + 60_000, avancement };
+	const valeur = { operation: avancement === null ? 'recherche' : 'vectorisation', dossier, session: null, depuisMs: 1000 + n, jusqueMs: Date.now() + 60_000, avancement };
 	await writeFile(fichier, JSON.stringify(valeur));
 	return fichier;
 }
@@ -129,15 +129,29 @@ describe('modelesLocaux : état', () => {
 		expect(await b.modeles.etat()).toMatchObject({ niveau: 'complets', gardien: 'arrete', sens: 'arrete', reranker: 'arrete' });
 	}, 30_000);
 
-	it('activités : les appels en cours, du plus ancien au plus récent, sans leur échéance', async () => {
+	it('activités : les appels en cours, du plus ancien au plus récent, sans échéance ni chemin (ceDossier : ceux du service)', async () => {
 		const b = await banc();
 		await ecrireActivite(b.serveurs, 2, null);
-		await ecrireActivite(b.serveurs, 1, { faits: 64, total: null });
+		await ecrireActivite(b.serveurs, 1, { faits: 64, total: null }, join(b.racine, '.', ''));
 		expect((await b.modeles.etat()).activites).toEqual([
-			{ operation: 'vectorisation', session: null, dossier: '/projets/alpha', depuisMs: 1001, avancement: { faits: 64, total: null } },
-			{ operation: 'recherche', session: null, dossier: '/projets/alpha', depuisMs: 1002, avancement: null },
+			{ operation: 'vectorisation', session: null, ceDossier: true, depuisMs: 1001, avancement: { faits: 64, total: null } },
+			{ operation: 'recherche', session: null, ceDossier: false, depuisMs: 1002, avancement: null },
 		]);
 	});
+
+	it('après un échec récent : un appel automatique ne relance pas le gardien, « Démarrer » si', async () => {
+		const b = await banc();
+		await mkdir(b.serveurs, { recursive: true });
+		const echec: EtatServeurs = { gardien: { pid: 2 ** 22 + 12_345, depuis: new Date().toISOString(), etat: 'echec' } };
+		await writeFile(join(b.serveurs, 'modeles.json'), JSON.stringify(echec));
+		expect((await b.modeles.etat()).gardien).toBe('echec');
+		// un hook (sans attendre) puis une recherche (en attendant) : la pause d'une minute tient
+		expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 1000, demarrer: false })).toBeNull();
+		expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 500, demarrer: true })).toBeNull();
+		expect(await lireEtatServeurs(b.serveurs)).toEqual(echec);
+		await b.modeles.demarrer();
+		await attendreQue(async () => (await b.modeles.etat()).gardien === 'pret');
+	}, 30_000);
 });
 
 describe('phaseDuGardien', () => {
@@ -160,14 +174,20 @@ describe('phaseDuGardien', () => {
 });
 
 describe('modelesLocaux : surveillance et diffusion', () => {
-	it('surveiller : crée les dossiers ; un niveau changé, un fichier d’activité écrit ou retiré, appellent le rappel', async () => {
+	it('surveiller : ne crée rien ; un niveau changé, un fichier d’activité écrit ou retiré, appellent le rappel', async () => {
 		const b = await banc();
 		let rappels = 0;
 		arrets.push(b.modeles.surveiller(() => rappels++));
-		await attendreQue(() => existsSync(join(b.serveurs, 'activite')), 2000);
-		await attendre(100);
-		rappels = 0;
+		await attendre(200);
+		expect(existsSync(b.serveurs)).toBe(false);
+		// le niveau crée serveurs/ : surveillé dès qu'il apparaît
 		await changerNiveau(b.env, 'sens');
+		await attendreQue(() => rappels > 0, 3000);
+		// activite/ apparaît avec le premier appel
+		await ecrireActivite(b.serveurs, 9, null);
+		await attendre(1500);
+		rappels = 0;
+		await changerNiveau(b.env, 'complets');
 		await attendreQue(() => rappels > 0, 2000);
 		rappels = 0;
 		const fichier = await ecrireActivite(b.serveurs, 1, null);
@@ -181,9 +201,9 @@ describe('modelesLocaux : surveillance et diffusion', () => {
 		const b = await banc();
 		const recus: Extract<MessageServeur, { type: 'modeles' }>[] = [];
 		// sondage lent : seule la surveillance des fichiers peut faire partir les messages à temps
+		await mkdir(join(b.serveurs, 'activite'), { recursive: true });
 		const diffusion = diffuserModeles({ modeles: b.modeles, diffuser: (m) => m.type === 'modeles' && recus.push(m), journal: () => {}, sondageMs: 60_000 });
 		arrets.push(() => diffusion.fermer());
-		await attendreQue(() => existsSync(join(b.serveurs, 'activite')), 2000);
 		await attendre(200);
 		diffusion.relire();
 		await attendre(200);

@@ -1,73 +1,100 @@
 import { watch } from 'node:fs';
 import type { FSWatcher } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
+import { basename } from 'node:path';
 
-/** Nouvel essai de surveillance d'un dossier absent, ou dont la surveillance a cessé (dossier retiré, erreur). */
+/** Nouvel essai de surveillance d'un dossier absent, ou dont la surveillance a cessé (dossier retiré, recréé, erreur). */
 export const REESSAI_SURVEILLANCE_MS = 1000;
 
 /** `filtre` : le changement d'un fichier de ce nom (null : nom inconnu, selon la plateforme) appelle-t-il le rappel ? */
 export type DossierSurveille = { chemin: string; filtre?: (nom: string | null) => boolean };
 
+type Surveillance = { observateur: FSWatcher; identite: string };
+
+/** Identité d'un dossier (périphérique et inode) : un dossier retiré puis recréé en change ; null s'il manque. */
+async function identiteDe(chemin: string): Promise<string | null> {
+	try {
+		const i = await stat(chemin);
+		return i.isDirectory() ? `${i.dev}:${i.ino}` : null;
+	} catch {
+		return null;
+	}
+}
+
 /**
  * Surveille ces dossiers (`fs.watch`, non récursif, un par dossier : portable) et appelle `rappel` quand un fichier y change.
- * Chaque dossier est créé s'il manque (droits 0700) ; s'il ne peut l'être, ou si sa surveillance cesse (dossier retiré,
- * erreur), elle est reprise toutes les `reessaiMs`, et `rappel` est appelé à la reprise (des changements ont pu échapper).
- * Un rappel peut ne rien signaler de neuf, et des changements peuvent échapper : à compléter par un sondage. Rend la
- * fonction qui arrête tout.
+ * Un dossier n'est jamais créé : absent, il est surveillé dès qu'il apparaît. Toutes les `reessaiMs`, les dossiers non
+ * surveillés sont réarmés, et les surveillés revérifiés : un dossier retiré ou recréé (autre inode) perd son observateur, qui
+ * est réarmé au tour suivant ; un événement sur le dossier lui-même (nom null ou le sien) déclenche cette vérification
+ * aussitôt. `rappel` est appelé à chaque armement (des changements ont pu échapper). Un rappel peut ne rien signaler de neuf,
+ * et des changements peuvent échapper : à compléter par un sondage. Rend la fonction qui arrête tout.
  */
 export function surveillerDossiers(dossiers: DossierSurveille[], rappel: () => void, options: { reessaiMs?: number } = {}): () => void {
-	const surveillances = new Map<string, FSWatcher>();
+	const surveillances = new Map<string, Surveillance>();
 	const enCours = new Set<string>();
 	let arrete = false;
-	let premierTour = true;
 
-	const oublier = (chemin: string, w: FSWatcher): void => {
-		if (surveillances.get(chemin) !== w) return;
+	const oublier = (chemin: string, s: Surveillance): void => {
+		if (surveillances.get(chemin) !== s) return;
 		surveillances.delete(chemin);
 		try {
-			w.close();
+			s.observateur.close();
 		} catch {
-			/* déjà fermée */
+			/* déjà fermé */
 		}
 	};
 
-	const armer = async (d: DossierSurveille, apresPerte: boolean): Promise<void> => {
+	/** Le dossier surveillé est-il encore celui de l'armement ? Sinon, l'observateur est oublié (réarmé au tour suivant). */
+	const verifier = async (chemin: string, s: Surveillance): Promise<void> => {
+		if ((await identiteDe(chemin)) === s.identite || arrete || surveillances.get(chemin) !== s) return;
+		oublier(chemin, s);
+		rappel();
+	};
+
+	const armer = async (d: DossierSurveille): Promise<void> => {
 		if (arrete || surveillances.has(d.chemin) || enCours.has(d.chemin)) return;
 		enCours.add(d.chemin);
 		try {
-			await mkdir(d.chemin, { recursive: true, mode: 0o700 });
-			if (arrete) return;
-			const w = watch(d.chemin, { persistent: false }, (type, nom) => {
-				const n = typeof nom === 'string' ? nom : null;
-				// le dossier lui-même renommé ou retiré : surveillance à reprendre
-				if (type === 'rename' && n === null) oublier(d.chemin, w);
-				if (d.filtre === undefined || d.filtre(n)) rappel();
-			});
-			w.on('error', () => {
-				oublier(d.chemin, w);
+			const identite = await identiteDe(d.chemin);
+			if (identite === null || arrete) return;
+			const nomDuDossier = basename(d.chemin);
+			const s: Surveillance = {
+				identite,
+				observateur: watch(d.chemin, { persistent: false }, (_type, nom) => {
+					const n = typeof nom === 'string' ? nom : null;
+					// le dossier lui-même a peut-être été retiré ou remplacé : vérifié avant tout
+					if (n === null || n === nomDuDossier) void verifier(d.chemin, s);
+					if (d.filtre === undefined || d.filtre(n)) rappel();
+				}),
+			};
+			s.observateur.on('error', () => {
+				oublier(d.chemin, s);
 				rappel();
 			});
-			surveillances.set(d.chemin, w);
-			if (apresPerte) rappel();
+			surveillances.set(d.chemin, s);
+			rappel();
 		} catch {
-			/* dossier impossible à créer ou à surveiller : nouvel essai plus tard */
+			/* dossier impossible à surveiller : nouvel essai plus tard */
 		} finally {
 			enCours.delete(d.chemin);
 		}
 	};
 
-	const armerTout = (): void => {
-		const apresPerte = !premierTour;
-		premierTour = false;
-		for (const d of dossiers) void armer(d, apresPerte);
+	const tour = (): void => {
+		if (arrete) return;
+		for (const d of dossiers) {
+			const s = surveillances.get(d.chemin);
+			if (s === undefined) void armer(d);
+			else void verifier(d.chemin, s);
+		}
 	};
-	armerTout();
-	const reessai = setInterval(armerTout, options.reessaiMs ?? REESSAI_SURVEILLANCE_MS);
+	tour();
+	const reessai = setInterval(tour, options.reessaiMs ?? REESSAI_SURVEILLANCE_MS);
 	reessai.unref();
 
 	return () => {
 		arrete = true;
 		clearInterval(reessai);
-		for (const [chemin, w] of [...surveillances]) oublier(chemin, w);
+		for (const [chemin, s] of [...surveillances]) oublier(chemin, s);
 	};
 }

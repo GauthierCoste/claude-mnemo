@@ -17,7 +17,8 @@ import { dossierPiece } from './installer.ts';
 import { journaliser } from './journal.ts';
 import { changerNiveau, lireNiveau } from './niveau.ts';
 import { surveillerDossiers } from '../surveillance-dossiers.ts';
-import { lireEtatModeles } from './etat-modeles.ts';
+import { lireEtatModeles, lirePiecesInstallees } from './etat-modeles.ts';
+import type { PiecesInstallees } from './pieces-installees.ts';
 import { arreterServeurs, cheminsModeles, oublierServeur, serveurPret } from './serveurs.ts';
 import type { OptionsServeur } from './serveurs.ts';
 import type { EntreeServeur, TypeServeur } from './serveurs.ts';
@@ -43,14 +44,17 @@ function installee(dossier: string, piece: Piece): boolean {
 	}
 }
 
-/** Ce qui est installé, relu au plus toutes les 30 s. Le moteur peut être remplacé par `MNEMO_LLAMA_SERVEUR` (tests). */
-function piecesDisponibles(options: OptionsClient): () => Disponibles {
+/**
+ * Ce qui est installé, relu au plus toutes les 30 s (`frais` : relu tout de suite, pour un geste de l'utilisateur). Le moteur
+ * peut être remplacé par `MNEMO_LLAMA_SERVEUR` (tests).
+ */
+function piecesDisponibles(options: OptionsClient): (frais?: boolean) => Disponibles {
 	const env = options.env ?? process.env;
 	const plateforme = options.plateforme ?? process.platform;
 	const arch = options.arch ?? process.arch;
 	let cache: { instant: number; valeur: Disponibles } | null = null;
-	return () => {
-		if (cache !== null && Date.now() - cache.instant < VALIDITE_PIECES_MS) return cache.valeur;
+	return (frais = false) => {
+		if (!frais && cache !== null && Date.now() - cache.instant < VALIDITE_PIECES_MS) return cache.valeur;
 		const pieces = piecesPourPlateforme(plateforme, arch);
 		let valeur: Disponibles = { moteur: false, sens: null, reranker: null };
 		if (pieces !== null) {
@@ -226,26 +230,42 @@ const ATTENTE_DEMARRAGE_MS = 1000;
 const FICHIERS_D_ETAT = /^(modeles\.json|niveau\.json|activite$)/u;
 
 /**
- * Les modèles de la machine, vus du service du dossier `racine` : l'état seul ne lance rien (`lireEtatModeles`) ; `demarrer`
- * (geste de l'utilisateur) ; `arreter` (`arreterServeurs`, le niveau ne change pas) ; `changerNiveau` ; `surveiller` :
- * `serveurs/` (état, niveau) et `serveurs/activite/`, créés s'il le faut.
+ * Les modèles de la machine, vus du service du dossier `racine` : l'état seul ne lance rien (`lireEtatModeles`, pièces relues
+ * au plus toutes les 30 s) ; `demarrer` (geste de l'utilisateur : pièces relues, gardien relancé même juste après un échec) ;
+ * `arreter` (`arreterServeurs`, le niveau ne change pas) ; `changerNiveau` ; `surveiller` : `serveurs/` (état, niveau) et
+ * `serveurs/activite/`, dès qu'ils existent (jamais créés pour cela).
  */
 export function modelesLocaux(racine: string, options: OptionsClient = {}): Modeles {
 	const disponibles = piecesDisponibles(options);
 	const lieu = lieuDesServeurs(racine, options);
 	const env = options.env ?? process.env;
 	const plateforme = options.plateforme ?? process.platform;
+	let pieces: { instant: number; valeur: Promise<PiecesInstallees> } | null = null;
+	const piecesRecentes = (): Promise<PiecesInstallees> => {
+		if (pieces === null || Date.now() - pieces.instant >= VALIDITE_PIECES_MS) {
+			const valeur = lirePiecesInstallees(options);
+			pieces = { instant: Date.now(), valeur };
+			// une lecture en échec n'est pas gardée
+			valeur.catch(() => {
+				if (pieces?.valeur === valeur) pieces = null;
+			});
+		}
+		return pieces.valeur;
+	};
 	return {
-		etat: () => lireEtatModeles(options),
+		etat: async () => lireEtatModeles(racine, options, { pieces: await piecesRecentes() }),
 		async demarrer() {
 			// le gardien lance tous les modèles permis : il suffit d'en demander un, permis et installé ; aucun (`coupes`) : rien
-			const d = disponibles();
+			pieces = null;
+			const d = disponibles(true);
 			const permis = modelesPermis(await lireNiveau(lieu.dossier()));
 			const type = (['reranker', 'sens'] as const).find((t) => permis[t] && d[t] !== null);
-			if (d.moteur && type !== undefined) await serveurPret(lieu.dossier(), type, { finMs: Date.now() + ATTENTE_DEMARRAGE_MS, demarrage: 'attendre', ...lieu.serveur });
+			if (d.moteur && type !== undefined)
+				await serveurPret(lieu.dossier(), type, { finMs: Date.now() + ATTENTE_DEMARRAGE_MS, demarrage: 'attendre', forcer: true, ...lieu.serveur });
 		},
 		async arreter() {
-			await arreterServeurs(lieu.dossier(), env);
+			const r = await arreterServeurs(lieu.dossier(), env);
+			return r === 'perime' ? 'rien' : r;
 		},
 		async changerNiveau(niveau) {
 			await changerNiveau(env, niveau, plateforme);

@@ -34,7 +34,7 @@ import { ENTETES_SECURITE, hoteValide, jetonDeLEntete, jetonDuWebSocket, jetonVa
 import { dossierInterface, servirInterface } from './statique.ts';
 import { racineAffichee, titresDeLIndex } from './vues.ts';
 import { creerHub } from './websocket.ts';
-import { diffuserModeles } from './diffusion-modeles.ts';
+import { diffuserModeles, vueModeles } from './diffusion-modeles.ts';
 import { routesLots } from './lots.ts';
 import { versionMnemo } from '../../infra/version.ts';
 
@@ -297,7 +297,9 @@ export async function demarrerService(options: {
 		}),
 	);
 
+	const modeles = options.modeles ?? modelesLocaux(racine);
 	const hub = creerHub({
+		etatModeles: async () => vueModeles(await modeles.etat()),
 		pilote,
 		etat: pil.etat,
 		titres: () => titresDeLIndex(dep.index),
@@ -308,7 +310,6 @@ export async function demarrerService(options: {
 		...(reglages.sondageMs === undefined ? {} : { sondageMs: reglages.sondageMs }),
 	});
 	// état des modèles de la machine, diffusé quand il change (surveillance de ses fichiers, sondage de secours)
-	const modeles = options.modeles ?? modelesLocaux(racine);
 	const diffusionModeles = diffuserModeles({
 		modeles,
 		diffuser: hub.diffuser,

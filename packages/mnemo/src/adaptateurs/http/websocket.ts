@@ -4,7 +4,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
 import { CODE_FERMETURE_LENT, ENTREE_MAX_OCTETS, MESSAGE_CLIENT_MAX_OCTETS, PROTOCOLE_WS } from '@mnemo/contrat';
-import type { MessageClient, MessageServeur, SessionVue } from '@mnemo/contrat';
+import type { EtatModelesVue, MessageClient, MessageServeur, SessionVue } from '@mnemo/contrat';
 import type { Pilote } from '../../application/pilote.ts';
 import type { EtatSessions } from '../../application/ports.ts';
 import type { Session } from '../../domaine/session.ts';
@@ -82,6 +82,8 @@ export function creerHub(o: {
 	titres: () => Promise<ReadonlyMap<string, string>>;
 	/** Signature des lots d'informations (`Lots.version`) ; absente : rien n'est sondé. */
 	versionDesLots?: () => Promise<string>;
+	/** État des modèles de la machine, envoyé à l'accueil d'un client (message `modeles`) ; absent : rien n'est envoyé. */
+	etatModeles?: () => Promise<EtatModelesVue>;
 	racine: string;
 	pingMs?: number;
 	sondageMs?: number;
@@ -209,10 +211,22 @@ export function creerHub(o: {
 			} catch (erreur) {
 				o.journal(`sessions illisibles à l'accueil d'un client : ${(erreur as Error).message}`);
 			}
+			// état des modèles lu après les sessions : un message `modeles` mis en attente avant cette lecture est plus ancien
+			const attenteAvantModeles = c.enAttente.length;
+			let modeles: EtatModelesVue | null = null;
+			if (o.etatModeles !== undefined) {
+				try {
+					modeles = await o.etatModeles();
+				} catch (erreur) {
+					o.journal(`état des modèles illisible à l'accueil d'un client : ${(erreur as Error).message}`);
+				}
+			}
 			if (c.ws.readyState !== WebSocket.OPEN) return;
 			c.ws.send(JSON.stringify({ type: 'sessions', sessions: sessions.map((s) => vueSession(s, o.pilote.enCours(s.id))) } satisfies MessageServeur));
+			if (modeles !== null) c.ws.send(JSON.stringify({ type: 'modeles', modeles } satisfies MessageServeur));
 			c.accueilli = true;
-			for (const m of c.enAttente.splice(0)) envoyer(c, m);
+			const enAttente = c.enAttente.splice(0);
+			for (const [i, m] of enAttente.entries()) if (modeles === null || m.type !== 'modeles' || i >= attenteAvantModeles) envoyer(c, m);
 		})();
 		ws.on('message', (donnees, binaire) => {
 			if (binaire) return;

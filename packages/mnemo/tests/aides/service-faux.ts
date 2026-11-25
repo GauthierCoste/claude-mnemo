@@ -2,7 +2,7 @@ import { request } from 'node:http';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach } from 'vitest';
-import type { EtatModeles, EtatSessions, Modeles, Pilotage } from '../../src/application/ports.ts';
+import type { ArretModeles, EtatModeles, EtatSessions, Modeles, Pilotage } from '../../src/application/ports.ts';
 import { demarrerService } from '../../src/adaptateurs/http/serveur.ts';
 import type { ReglagesService, Service } from '../../src/adaptateurs/http/serveur.ts';
 import type { AppClaude } from '../../src/adaptateurs/http/claude-desktop.ts';
@@ -36,7 +36,7 @@ export type ContexteService = {
 	 * Faux modèles (jamais de vrai llama-server) : `vue` réglable, gestes notés (`gestes`), `signaler()` appelle les rappels
 	 * de la surveillance, `surveillances` : celles en cours.
 	 */
-	modeles: Modeles & { vue: EtatModeles; gestes: string[]; signaler(): void; surveillances: number };
+	modeles: Modeles & { vue: EtatModeles; arret: ArretModeles; gestes: string[]; signaler(): void; surveillances: number };
 };
 
 
@@ -98,6 +98,7 @@ export async function serviceFaux(
 	const rappels = new Set<() => void>();
 	const modeles: ContexteService['modeles'] = {
 		vue: etatModelesFaux(),
+		arret: 'arrete',
 		gestes: [],
 		surveillances: 0,
 		async etat() {
@@ -108,6 +109,7 @@ export async function serviceFaux(
 		},
 		async arreter() {
 			modeles.gestes.push('arreter');
+			return modeles.arret;
 		},
 		async changerNiveau(niveau) {
 			modeles.gestes.push(`niveau ${niveau}`);

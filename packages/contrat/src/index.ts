@@ -215,11 +215,17 @@ export type EtatModeleVue = 'absent' | 'exclu' | 'arrete' | 'pret';
 export type PieceModeleVue = { modele: string; editeur: string; quantification: string; octets: number; empreinte: string };
 
 /**
- * Un appel en cours aux modèles, sur toute la machine : ce qu'il fait, sa session (null : hors session, ou inconnue), le
- * dossier Mnemo qui l'a fait (sa racine, chemin absolu), son début, et l'avancement d'une vectorisation (`total` null : pas
- * encore compté).
+ * Un appel en cours aux modèles, sur toute la machine : ce qu'il fait, sa session (null : hors session, ou inconnue),
+ * `ceDossier` (fait pour le dossier Mnemo de ce service, ou pour un autre), son début, et l'avancement d'une vectorisation
+ * (`total` null : pas encore compté).
  */
-export type ActiviteModeleVue = { operation: OperationModele; session: string | null; dossier: string; depuisMs: number; avancement: AvancementModele | null };
+export type ActiviteModeleVue = { operation: OperationModele; session: string | null; ceDossier: boolean; depuisMs: number; avancement: AvancementModele | null };
+
+/**
+ * Réponse de `modelesArreter` : la vue, et ce que l'arrêt a fait : `arrete`, `rien` (rien en marche), ou `{ enChargement }`
+ * (des serveurs chargeaient encore : laissés, à arrêter de nouveau dans un instant).
+ */
+export type ReponseArretModeles = EtatModelesVue & { arret: 'arrete' | 'rien' | { enChargement: number } };
 
 /**
  * Les modèles locaux de la machine (partagés par tous les dossiers Mnemo) : `installes` (le moteur et au moins un modèle),
@@ -291,10 +297,12 @@ export type MessageClient =
  * - `fenetres` GET → `ReponseFenetres` : la fenêtre de contexte connue de chaque session (message `fenetre` à chaque changement) ;
  * - `quotas` GET → `ReponseQuotas` ; POST `{ rate_limits }` (de `mnemo ligne-etat`, tel que Claude Code le donne à sa ligne
  *   d'état) → `ReponseQuotas` : les quotas du compte, diffusés (message `quotas`) quand ils changent ; 400 sans fenêtre lisible ;
- * - `modeles` GET → `EtatModelesVue` (diffusée aussi, message `modeles`, à chaque changement : niveau, gardien, appels en cours) ;
+ * - `modeles` GET → `EtatModelesVue` (envoyée aussi, message `modeles`, à l'accueil d'un client WebSocket et à chaque
+ *   changement : niveau, gardien, appels en cours) ;
  * - `modelesDemarrer` POST → `EtatModelesVue` : lance les modèles installés et permis par le niveau (geste de l'utilisateur ;
- *   sans attendre leur chargement) ;
- * - `modelesArreter` POST → `EtatModelesVue` : arrête les modèles de la machine sans changer le niveau (le prochain usage les relance) ;
+ *   sans attendre leur chargement ; même dans la minute qui suit un échec) ;
+ * - `modelesArreter` POST → `ReponseArretModeles` : arrête les modèles de la machine sans changer le niveau (le prochain usage les
+ *   relance) ;
  * - `modelesNiveau` PUT `{ niveau: NiveauModeles }` → `EtatModelesVue` : niveau de la machine (un niveau qui retire un modèle
  *   arrête les modèles en marche ; un niveau qui en ajoute ne lance rien) ; 400 : niveau invalide ;
  * - `sessionModeles` PUT `{ niveau: NiveauModeles | null }` (null : suivre le niveau de la machine) → `{ session }` : niveau

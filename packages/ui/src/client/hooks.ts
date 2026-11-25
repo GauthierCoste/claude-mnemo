@@ -15,6 +15,7 @@ import {
 	type EntreeServieVue,
 	type LueVue,
 	type EtatModelesVue,
+	type ReponseArretModeles,
 	type SessionVue,
 	type DonneesGraphe,
 	type NiveauDossiersVue,
@@ -346,24 +347,40 @@ export function useFenetre(session: string): FenetreVue | null {
 export function useModeles(utile: boolean): {
 	etat: EtatModelesVue | undefined;
 	demarrer(): Promise<void>;
-	arreter(): Promise<void>;
+	arreter(): Promise<ReponseArretModeles['arret']>;
 	changerNiveau(niveau: NiveauModeles): Promise<void>;
 } {
 	const { api, connexion } = useClient();
 	const base = useRessource(utile ? 'modeles' : null, () => api.lire<EtatModelesVue>(ROUTES.modeles));
 	const [recu, setRecu] = useState<EtatModelesVue | null>(null);
-	// écoute même quand l'état n'est pas utile : un état reçu reste ainsi le plus récent
-	useEffect(() => connexion.surMessage((m) => m.type === 'modeles' && setRecu(m.modeles)), [connexion]);
+	/** Diffusions reçues : la réponse d'un geste arrivée après une diffusion plus récente n'est pas appliquée. */
+	const diffusions = useRef(0);
+	// écoute même quand l'état n'est pas utile : un état reçu (à l'accueil, après une reconnexion compris) reste le plus récent
+	useEffect(
+		() =>
+			connexion.surMessage((m) => {
+				if (m.type !== 'modeles') return;
+				diffusions.current++;
+				setRecu(m.modeles);
+			}),
+		[connexion],
+	);
+	const geste = async <T extends EtatModelesVue>(envoi: () => Promise<T>): Promise<T> => {
+		const avant = diffusions.current;
+		const r = await envoi();
+		if (diffusions.current === avant) setRecu(r);
+		return r;
+	};
 	return {
 		etat: recu ?? base.donnees,
 		async demarrer() {
-			setRecu(await api.envoyer<EtatModelesVue>(ROUTES.modelesDemarrer, undefined));
+			await geste(() => api.envoyer<EtatModelesVue>(ROUTES.modelesDemarrer, undefined));
 		},
 		async arreter() {
-			setRecu(await api.envoyer<EtatModelesVue>(ROUTES.modelesArreter, undefined));
+			return (await geste(() => api.envoyer<ReponseArretModeles>(ROUTES.modelesArreter, undefined))).arret;
 		},
 		async changerNiveau(niveau) {
-			setRecu(await api.remplacer<EtatModelesVue>(ROUTES.modelesNiveau, { niveau }));
+			await geste(() => api.remplacer<EtatModelesVue>(ROUTES.modelesNiveau, { niveau }));
 		},
 	};
 }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { ROUTES } from '@mnemo/contrat';
-import type { EtatModelesVue, MessageServeur, SessionVue } from '@mnemo/contrat';
+import type { EtatModelesVue, MessageServeur, ReponseArretModeles, SessionVue } from '@mnemo/contrat';
 import type { Session } from '../../src/domaine/session.ts';
 import { appeler, etatModelesFaux, jusqua, serviceFaux } from '../aides/service-faux.ts';
 import type { ContexteService } from '../aides/service-faux.ts';
@@ -34,7 +34,7 @@ afterEach(() => {
 	while (clients.length > 0) clients.pop()!.terminate();
 });
 
-/** Client WebSocket qui garde ses messages ; prêt une fois l'accueil (`sessions`) reçu. */
+/** Client WebSocket qui garde ses messages ; prêt une fois l'accueil (`sessions`, puis `modeles`) reçu, qui est retiré de la liste. */
 async function ecouter(c: ContexteService): Promise<MessageServeur[]> {
 	const recus: MessageServeur[] = [];
 	const ws = new WebSocket(`ws://127.0.0.1:${c.service.port}${ROUTES.ws}?jeton=${c.service.jeton}`);
@@ -44,7 +44,9 @@ async function ecouter(c: ContexteService): Promise<MessageServeur[]> {
 		ws.once('open', r);
 		ws.once('error', e);
 	});
-	expect(await jusqua(() => recus.some((m) => m.type === 'sessions'), 2000)).toBe(true);
+	expect(await jusqua(() => recus.some((m) => m.type === 'modeles'), 2000)).toBe(true);
+	expect(recus.map((m) => m.type)).toEqual(['sessions', 'modeles']);
+	recus.length = 0;
 	return recus;
 }
 
@@ -67,7 +69,7 @@ describe('routes : modèles de la machine', () => {
 		expect(r.statut).toBe(200);
 		expect(r.corps).toEqual(etatModelesFaux() satisfies EtatModelesVue);
 		c.modeles.vue = { ...c.modeles.vue, gardien: 'pret', sens: 'pret', reranker: 'exclu', niveau: 'sens' };
-		c.modeles.vue.activites = [{ operation: 'vectorisation', session: null, dossier: c.racine, depuisMs: 5, avancement: { faits: 120, total: null } }];
+		c.modeles.vue.activites = [{ operation: 'vectorisation', session: null, ceDossier: true, depuisMs: 5, avancement: { faits: 120, total: null } }];
 		expect((await api(c).get(ROUTES.modeles)).corps).toEqual(c.modeles.vue);
 	});
 
@@ -78,8 +80,31 @@ describe('routes : modèles de la machine', () => {
 		expect(demarrage.corps).toEqual(c.modeles.vue);
 		const arret = await api(c).post(ROUTES.modelesArreter);
 		expect(arret.statut).toBe(200);
-		expect(arret.corps).toEqual(c.modeles.vue);
+		expect(arret.corps).toEqual({ ...c.modeles.vue, arret: 'arrete' } satisfies ReponseArretModeles);
 		expect(c.modeles.gestes).toEqual(['demarrer', 'arreter']);
+		// des serveurs chargeaient encore : dit dans la réponse et au journal
+		c.modeles.arret = { enChargement: 2 };
+		expect(((await api(c).post(ROUTES.modelesArreter)).corps as ReponseArretModeles).arret).toEqual({ enChargement: 2 });
+		expect(c.journal.some((l) => l.includes('2 serveur(s) encore en chargement'))).toBe(true);
+	});
+
+	it('accueil WebSocket : l’état des modèles suit `sessions`, à jour à chaque connexion (reconnexion comprise)', async () => {
+		const c = await serviceFaux({ sondageModelesMs: 60_000 });
+		const recus: MessageServeur[] = [];
+		const ws = new WebSocket(`ws://127.0.0.1:${c.service.port}${ROUTES.ws}?jeton=${c.service.jeton}`);
+		clients.push(ws);
+		ws.on('message', (brut) => recus.push(JSON.parse(String(brut)) as MessageServeur));
+		expect(await jusqua(() => recus.length >= 2, 2000)).toBe(true);
+		expect(recus.slice(0, 2)).toEqual([expect.objectContaining({ type: 'sessions' }), { type: 'modeles', modeles: etatModelesFaux() }]);
+		ws.terminate();
+		// changé sans diffusion (sondage lent, aucun signal) : un client qui se reconnecte le reçoit quand même
+		c.modeles.vue = { ...c.modeles.vue, gardien: 'echec' };
+		const r2: MessageServeur[] = [];
+		const ws2 = new WebSocket(`ws://127.0.0.1:${c.service.port}${ROUTES.ws}?jeton=${c.service.jeton}`);
+		clients.push(ws2);
+		ws2.on('message', (brut) => r2.push(JSON.parse(String(brut)) as MessageServeur));
+		expect(await jusqua(() => r2.some((m) => m.type === 'modeles'), 2000)).toBe(true);
+		expect(modelesRecus(r2)).toEqual([c.modeles.vue]);
 	});
 
 	it('PUT modeles/niveau : niveau valide changé et rendu ; invalide → 400 en français, rien changé', async () => {
@@ -141,7 +166,7 @@ describe('diffusion de l’état des modèles', () => {
 		c.modeles.signaler();
 		await attendre(200);
 		expect(modelesRecus(recus)).toEqual([]);
-		c.modeles.vue = { ...c.modeles.vue, activites: [{ operation: 'recherche', session: UUID, dossier: c.racine, depuisMs: 1, avancement: null }] };
+		c.modeles.vue = { ...c.modeles.vue, activites: [{ operation: 'recherche', session: UUID, ceDossier: true, depuisMs: 1, avancement: null }] };
 		c.modeles.signaler();
 		c.modeles.signaler();
 		expect(await jusqua(() => modelesRecus(recus).length > 0, 2000)).toBe(true);
