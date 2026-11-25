@@ -271,7 +271,7 @@ and opens it in the browser when the interface is built (`MNEMO_SANS_NAVIGATEUR=
 or closing the terminal, or `mnemo arreter [folder]` for a service without a terminal) stops the sessions cleanly; they
 resume at the next start (`claude --resume`, `codex resume`, `vibe --resume`). After a crash of the service, its sessions become
 "à relire" (to review, minimal episode written), then are relaunched (a Codex session that never reached its first
-message stays "à relire").
+message, or a Mistral Vibe session that never sent its first hook, stays "à relire").
 
 **Token and browser.** The service token is created once and kept in `.mnemo/jeton` (readable by you only). At the first
 opening of the address with the token in a browser, the interface stores the token in the `localStorage` of its origin,
@@ -389,8 +389,8 @@ environment. `MNEMO_CLAUDE` names another `claude` binary.
 
 Whatever its engine, a session never receives the keys and tokens of another provider: `CLAUDECODE`, `CLAUDE_CODE_*` and
 `ANTHROPIC_*` outside Claude Code, `CODEX_API_KEY` and `OPENAI_API_KEY` outside Codex, `MISTRAL_API_KEY` outside Mistral
-Vibe; `COPILOT_GITHUB_TOKEN` (GitHub's coding agent, not an engine of Mnemo) is never passed. `GH_TOKEN` and
-`GITHUB_TOKEN` are passed to every engine (`gh` and git use them).
+Vibe; the token of GitHub's coding agent is never passed either. `GH_TOKEN` and `GITHUB_TOKEN` are passed to every
+engine (`gh` and git use them).
 
 Mnemo keeps a log of the gestures made on the notes it proposes: a note you inject by hand, set aside with ✗ or restore,
 and a note Claude reads with `lire` after a lead proposed it. Each gesture keeps the text of your last meaningful message
@@ -709,8 +709,8 @@ Mnemo get no Claude Code plugin.
 
 Without node-pty, Mnemo cannot open a terminal; nor can it for a Claude Code session when `claude` cannot be found.
 Everything else works: service, API, hooks, memory, search. Starting a session then returns a complete command line to
-paste into your own terminal (`claude …` or `codex …`; a Codex that cannot be found is refused instead, see
-[Codex sessions](#codex-sessions)). The session is followed through its hooks, without a terminal in Mnemo. The meaning
+paste into your own terminal (`claude …`, `codex …` or `vibe …`; a Codex or a Mistral Vibe that cannot be found is
+refused instead, see [Codex sessions](#codex-sessions) and [Mistral Vibe sessions](#mistral-vibe-sessions)). The session is followed through its hooks, without a terminal in Mnemo. The meaning
 models are another, independent option: without them, search works by words.
 
 node-pty is an optional dependency. On macOS and Windows it comes prebuilt (Node-API: it survives Node.js upgrades),

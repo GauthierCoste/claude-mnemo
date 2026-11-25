@@ -135,7 +135,7 @@ terminal). Everything else is in [docs/usage.md](docs/usage.md).
 
 Everything stays on your machine. The service only listens on `127.0.0.1`, behind a token, and the models run locally.
 The only thing Mnemo downloads is the optional models, once, from fixed addresses with checked SHA-256 hashes. Your
-sessions talk to Anthropic, OpenAI, Mistral or GitHub like any other session of their engine. Secrets it recognises (API keys,
+sessions talk to Anthropic, OpenAI or Mistral like any other session of their engine. Secrets it recognises (API keys,
 tokens, private keys) are masked before anything is written or indexed. What the web interface does and does not protect is written down in
 [docs/usage.md](docs/usage.md#what-the-web-version-protects-and-what-it-does-not).
 
