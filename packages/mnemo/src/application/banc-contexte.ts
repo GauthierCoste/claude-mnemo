@@ -3,10 +3,12 @@
  * compte les cartes justes et indésirables. « Proposée » : la fiche de position servie ou une carte.
  */
 import { ficheDePosition } from './chercher.ts';
-import type { Dependances, EtatSessions } from './ports.ts';
+import type { Dependances } from './ports.ts';
 import { servir } from './servir.ts';
 import { SANS_EXTRACTION, synchroniser } from './synchroniser.ts';
 import { raisonDeMutisme } from '../domaine/message-muet.ts';
+import type { ListeDuBanc, Signaux } from './banc-signaux.ts';
+import type { InjectionManuelle } from '../domaine/signal-injection.ts';
 
 /**
  * Un message étiqueté. `attendues` / `interdites` : chemin complet de fiche ou dernier segment (« Corvel.md » désigne
@@ -28,6 +30,49 @@ export type CasContexte = {
 	interdites: string[];
 	silence: boolean;
 	injectees?: string[];
+	/** Session d'origine (id) et rang du message parmi ses messages porteurs (1 = le premier), pour les plis groupés par session. */
+	session?: string;
+	rang?: number;
+	/** Le message porteur d'avant dans la session (variante jointe de la requête, spec § 3.2) ; null s'il n'y en a pas. */
+	precedent?: string | null;
+	/**
+	 * Jugement par mise en commun (spec § 6.1) : les fiches à juger, figées à l'extraction (l'union des premières selon le sens,
+	 * les mots et le reranker). Un cas sans `candidates` est un cas étiqueté à la main (`attendues`, `interdites`).
+	 */
+	candidates?: CandidateAJuger[];
+	/** Chemin → jugement ; une candidate absente n'est pas encore jugée. */
+	jugements?: Record<string, Jugement>;
+	/** Vrai : le message a été sauté au jugement ; il ne compte nulle part. */
+	saute?: boolean;
+	/** Horodatage du message au journal (identité stable avec la session et le rang) et date de l'extraction (ISO). */
+	horodatageMs?: number;
+	extraitLe?: string;
+	/** Modèles qui ont répondu pour ce message à l'extraction (un message dont un modèle disponible n'a pas répondu n'est pas gardé). */
+	modeles?: { sens: boolean; reranker: boolean };
+	/**
+	 * Fiches injectées à la main dans la session avant ce message (ou à ce message, âge 0), reconstituées du journal : leurs
+	 * voisines sont candidates (signal de session).
+	 */
+	injectionsManuelles?: InjectionManuelle[];
+};
+export type Jugement = 'pertinente' | 'non_pertinente' | 'indecise';
+export const JUGEMENTS: readonly Jugement[] = ['pertinente', 'non_pertinente', 'indecise'];
+/** `seule` : le message ; `jointe` : le message joint au message porteur d'avant (spec § 3.2). */
+export type VarianteRequete = 'seule' | 'jointe';
+/**
+ * Une fiche à juger : titre et première ligne figés à l'extraction (ce que l'on montre), les listes où elle était en tête
+ * (jamais montrées) et ses signaux bruts par variante de requête, calculés à l'extraction.
+ */
+export type CandidateAJuger = {
+	chemin: string;
+	titre: string;
+	ligne: string;
+	listes: ListeDuBanc[];
+	signaux: Partial<Record<VarianteRequete, Signaux>>;
+	/** Empreinte de la fiche à l'extraction : une fiche changée depuis n'a plus le jugement qu'on lui a donné. */
+	empreinte?: string;
+	/** Vrai : tirée au hasard (de façon stable) hors de l'union des têtes, pour mesurer ce que la pile laisse de côté. */
+	horsPile?: boolean;
 };
 /** `indesirables` : fiches interdites proposées, et, dans un cas `silence`, tout ce qui est proposé (sauf la fiche de position d'un `premier` muet). */
 export type MesureContexte = { cas: number; justes: number; attenduesProposees: number; attenduesTotal: number; indesirables: number; caracteres: number };
@@ -36,13 +81,13 @@ export type EchecContexte = { nom: string; manquees: string[]; indesirables: str
 const DELAI_MS = 5000;
 
 /** Le nom désigne le chemin : égal, ou dernier segment (« Corvel.md » désigne `projets/clients/Corvel/Corvel.md`). */
-const designe = (nom: string, chemin: string) => chemin === nom || chemin.endsWith(`/${nom}`);
+export const designe = (nom: string, chemin: string) => chemin === nom || chemin.endsWith(`/${nom}`);
 
 /**
  * Rejoue un cas : les chemins proposés (fiche de position servie puis cartes), les cartes seules, si le message est muet, la taille
  * du texte injecté et les désignations `injectees` qui ne désignent aucune fiche de l'index.
  */
-async function rejouer(dep: Dependances, cas: CasContexte): Promise<{ proposes: string[]; cartes: string[]; muet: boolean; caracteres: number; injecteesInconnues: string[] }> {
+async function rejouer(dep: Dependances, cas: CasContexte, synchroniserIndex: boolean): Promise<{ proposes: string[]; cartes: string[]; muet: boolean; caracteres: number; injecteesInconnues: string[] }> {
 	const muet = raisonDeMutisme(cas.message);
 	const dejaServies = new Map<string, string | null>();
 	if (!cas.premier) {
@@ -68,6 +113,7 @@ async function rejouer(dep: Dependances, cas: CasContexte): Promise<{ proposes: 
 		fin: Date.now() + DELAI_MS,
 		rappels: false,
 		...(injectees.length === 0 ? {} : { demandees: injectees }),
+		synchroniser: synchroniserIndex,
 	});
 	const { position, cartes } = servi.calcul;
 	return {
@@ -79,13 +125,18 @@ async function rejouer(dep: Dependances, cas: CasContexte): Promise<{ proposes: 
 	};
 }
 
-export async function rejouerCas(dep: Dependances, cas: readonly CasContexte[]): Promise<{ mesure: MesureContexte; echecs: EchecContexte[] }> {
+/**
+ * `synchroniser` (vrai par défaut) : synchroniser l'index d'abord. Faux : l'index est lu tel qu'il est, rien n'est écrit (le
+ * banc sur la mémoire réelle, dont l'index appartient au service en marche).
+ */
+export async function rejouerCas(dep: Dependances, cas: readonly CasContexte[], options: { synchroniser?: boolean } = {}): Promise<{ mesure: MesureContexte; echecs: EchecContexte[] }> {
+	const synchroniserIndex = options.synchroniser ?? true;
 	// l'index doit être à jour avant de lire la position et les empreintes
-	await synchroniser(dep, SANS_EXTRACTION);
+	if (synchroniserIndex) await synchroniser(dep, SANS_EXTRACTION);
 	const mesure: MesureContexte = { cas: cas.length, justes: 0, attenduesProposees: 0, attenduesTotal: 0, indesirables: 0, caracteres: 0 };
 	const echecs: EchecContexte[] = [];
 	for (const c of cas) {
-		const { proposes, cartes, muet, caracteres, injecteesInconnues } = await rejouer(dep, c);
+		const { proposes, cartes, muet, caracteres, injecteesInconnues } = await rejouer(dep, c, synchroniserIndex);
 		const attenduesManquees = c.attendues.filter((a) => !proposes.some((p) => designe(a, p)));
 		const manquees = [...attenduesManquees, ...injecteesInconnues.map((nom) => `${nom} (injectée inconnue)`)];
 		const interdites = c.interdites.filter((i) => proposes.some((p) => designe(i, p)));
@@ -99,21 +150,4 @@ export async function rejouerCas(dep: Dependances, cas: readonly CasContexte[]):
 		else echecs.push({ nom: c.nom, manquees, indesirables });
 	}
 	return { mesure, echecs };
-}
-
-/**
- * Les messages journalisés de la session, dans l'ordre, en cas à étiqueter (`attendues`, `interdites` vides). Le premier message
- * non muet est le `premier`.
- */
-export async function extraireCas(etat: EtatSessions, session: string): Promise<CasContexte[]> {
-	const journal = await etat.servis(session, 200);
-	const positionDeLaSession = (await etat.lire(session))?.position;
-	if (positionDeLaSession === undefined && journal.length === 0) throw new Error(`Session inconnue ou sans journal : ${session}`);
-	const entrees = journal.filter((e) => e.moment === 'message' && e.demande !== null).sort((a, b) => a.horodatageMs - b.horodatageMs);
-	let dejaPremier = false;
-	return entrees.map((e, i): CasContexte => {
-		const premier = !dejaPremier && e.muet === null;
-		if (premier) dejaPremier = true;
-		return { nom: `${session.slice(0, 8)} #${i + 1}`, position: e.position ?? positionDeLaSession ?? '', message: e.demande!, premier, attendues: [], interdites: [], silence: false };
-	});
 }
