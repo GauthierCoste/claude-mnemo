@@ -169,6 +169,9 @@ describe('hooks de Mistral Vibe', () => {
 		// approbation demandée par un sous-agent : son parent est la session, le dialogue compte pour elle (non mesuré)
 		const duSousAgent = HOOKS_MISTRAL_VIBE.traduire(appel('arret', { session_id: 'sous-agent-1', parent_session_id: FIL, notification_type: 'approval_requested' }, ['--notification']));
 		expect(duSousAgent?.entree).toMatchObject({ arret: 'notification', fil: FIL });
+		// son après-outil aussi (il ferme le dialogue), pour l'état seulement : rien n'est servi au sous-agent
+		expect(HOOKS_MISTRAL_VIBE.traduire(appel('apres_outil', { session_id: 'sous-agent-1', parent_session_id: FIL, tool_name: 'file_system.bash' }))?.entree).toMatchObject({ fil: FIL, sansContexte: true });
+		expect(HOOKS_MISTRAL_VIBE.traduire(appel('apres_outil', { session_id: FIL, tool_name: 'file_system.bash' }))?.entree.sansContexte).toBeUndefined();
 		// un autre arrêt d'un sous-agent garde son propre fil (étranger à la session)
 		expect(HOOKS_MISTRAL_VIBE.traduire(appel('arret', { session_id: 'sous-agent-1', parent_session_id: FIL }))?.entree.fil).toBe('sous-agent-1');
 		expect(HOOKS_MISTRAL_VIBE.traduire(appel('fin', { reason: 'clear' }))).toBeNull();

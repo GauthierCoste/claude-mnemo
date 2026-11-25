@@ -20,7 +20,8 @@ const OPTIONS: Partial<Record<EvenementHook, readonly string[]>> = { arret: ['--
  *   il efface un dialogue ouvert une fois l'outil approuvé passé (aucun autre hook ne le fait avant l'outil suivant ou la
  *   fin du tour) ;
  * - `dialogueDuParent` : un dialogue ouvert (`arret` `notification`) porte `parent_session_id`, l'identifiant de la session
- *   quand il vient d'un agent qu'elle a lancé (son approbation s'affiche dans le terminal de la session) : il compte pour elle ;
+ *   quand il vient d'un agent qu'elle a lancé (son approbation s'affiche dans le terminal de la session) : il compte pour elle,
+ *   comme l'`apres_outil` de cet agent qui le ferme (l'état seulement, `sansContexte` : rien n'est servi à l'agent) ;
  * - `champs` : l'entrée lue ramenée à la forme commune (`session_id`, `cwd`, `prompt`, `source`, `tool_name`, `tool_input`,
  *   `reason`, `transcript_path`, `parent_session_id`, `notification_type`) ; absent : elle l'a déjà (Codex, Mistral Vibe) ;
  * - `sortie`, `echeancesMs`, `finIgnoreeSiVivante` : ceux de `HooksDuMoteur`.
@@ -76,14 +77,16 @@ export function hooksGardes(r: ReglagesHooksGardes): HooksDuMoteur {
 		// le moteur lance le hook dans le dossier de la session : la meilleure position connue quand l'entrée n'en donne pas
 		const entree: EntreeHook = { evenement, session, horodatageMs: maintenantMs, cwd: reel(typeof champs.cwd === 'string' && champs.cwd !== '' ? champs.cwd : cwdProcessus) };
 		if (estFil(champs.session_id)) entree.fil = champs.session_id;
-		if (r.dialogueDuParent === true && arret === 'notification' && estFil(champs.parent_session_id)) entree.fil = champs.parent_session_id;
+		// dialogue d'un agent lancé par la session, et l'après-outil qui le ferme : ils comptent pour elle (l'état seulement)
+		const duParent = r.dialogueDuParent === true && (arret === 'notification' || evenement === 'apres_outil') && estFil(champs.parent_session_id);
+		if (duParent) entree.fil = champs.parent_session_id as string;
 		if (typeof champs.prompt === 'string') entree.prompt = champs.prompt;
 		if (evenement === 'debut' && estSourceDeDebut(champs.source)) entree.source = champs.source;
 		// une entrée d'outil en texte (patch brut de Codex) est gardée sous `input`, où les outils du moteur la lisent
 		if (typeof champs.tool_name === 'string') entree.outil = { nom: champs.tool_name, entree: estObjet(champs.tool_input) ? champs.tool_input : typeof champs.tool_input === 'string' ? { input: champs.tool_input } : {} };
 		else if (evenement === 'outil') entree.outil = { nonLue: 'nonLue' in lecture ? lecture.nonLue : 'entree_illisible' };
 		if (arret !== null) entree.arret = arret;
-		if (options.has('--sans-contexte') || effet === 'sans_contexte') entree.sansContexte = true;
+		if (options.has('--sans-contexte') || effet === 'sans_contexte' || (duParent && evenement === 'apres_outil')) entree.sansContexte = true;
 		return typeof champs.transcript_path === 'string' && champs.transcript_path !== '' ? { entree, transcription: champs.transcript_path } : { entree };
 	}
 
