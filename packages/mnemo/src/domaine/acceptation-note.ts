@@ -14,6 +14,7 @@
 import { ece as eceDe, hasardFixe, intervalleWilson, tableDeFiabilite } from './mesures-banc.ts';
 import type { TrancheFiabilite } from './mesures-banc.ts';
 import { apprendreRegression } from './regression-logistique.ts';
+import { GARDE_APRIORI } from './injection-automatique.ts';
 
 /** Pseudo-session des cas étiquetés à la main (sans session d'origine) : elle ne compte pas parmi les sessions réelles. */
 export const SESSION_MANUELLE = 'manuel';
@@ -34,7 +35,7 @@ export type ReglageDInjection = {
 	pistesParMessage: number;
 };
 
-export const REGLAGE_PAR_DEFAUT: ReglageDInjection = { seuil: 0.9, injectionsParMessage: 2, garde: 0.7, seuilPiste: 0.3, pistesParMessage: 3 };
+export const REGLAGE_PAR_DEFAUT: ReglageDInjection = { seuil: 0.9, injectionsParMessage: 2, garde: GARDE_APRIORI, seuilPiste: 0.3, pistesParMessage: 3 };
 
 const estReelle = (session: string) => session !== SESSION_MANUELLE;
 const part = (n: number, d: number): number | null => (d === 0 ? null : n / d);

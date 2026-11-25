@@ -9,8 +9,10 @@
  * accepté. Sans note apprise (règle provisoire), les premières nouvelles ne partent en pistes qu'au premier message et au message
  * qui part avec une fiche injectée à la main. Au hook, le reranker note les premières de l'ordre si l'estimation de sa durée
  * tient dans le temps restant (`duree-reranker.ts`) : son logit fait noter la fiche au niveau Complets. L'outil `contexte`
- * classe sur sa question, avec la même note. La fiche de position seule est servie entière. Avec le sens, toute carte porte sa
- * note, fiche nommée et fiche de position comprises, sans que la note les reclasse.
+ * classe sur sa question, avec la même note. La fiche de position est servie entière ; au hook d'un message porteur, les
+ * candidates qu'un modèle accepté met au seuil d'injection le sont aussi (`domaine/injection-automatique.ts`, spec § 3.4), au
+ * message même et jamais en différé. Avec le sens, toute carte porte sa note, fiche nommée et fiche de position comprises, sans
+ * que la note les reclasse.
  */
 import { fichesNommees } from '../domaine/fiches-nommees.ts';
 import type { Nommable } from '../domaine/fiches-nommees.ts';
@@ -28,6 +30,8 @@ import { requeteDuReranker, syntheseDuTexte, texteDuReranker as texteDeFiche } f
 import { normaliser } from '../domaine/sens.ts';
 import { noteApprise, noterLaCandidate, pCalibre } from '../domaine/note-de-confiance.ts';
 import type { ModelesDeNote } from '../domaine/note-de-confiance.ts';
+import type { NiveauDeNote } from '../domaine/modele-de-note.ts';
+import { injectables } from '../domaine/injection-automatique.ts';
 import { candidatesDuMessage, classerLeMessage, ficheProposable } from './classement-du-message.ts';
 import type { LigneDeClassement } from './classement-du-message.ts';
 import { ficheDePosition } from './chercher.ts';
@@ -62,6 +66,8 @@ export type Carte = {
 	empreinte: string;
 };
 export type FicheDePositionServie = { chemin: string; titre: string; texte: string; empreinte: string; encadree: boolean };
+/** Une fiche injectée entière par Mnemo (spec classement vivant § 3.4) : sa note `p` et le niveau du modèle qui l'a notée. */
+export type FicheInjecteeParMnemo = FicheDePositionServie & { p: number; niveau: NiveauDeNote };
 export type DemandeCartes = {
 	/** Chemin de position de la session ('' = racine). */
 	position: string;
@@ -91,6 +97,11 @@ export type DemandeCartes = {
 	servirPosition: boolean;
 	/** Vrai : outil `contexte` (note par le sens ou le reranker plus les signaux, ailleurs admis, au plus 10). */
 	question: boolean;
+	/**
+	 * Vrai : au hook d'un message porteur, les candidates que la note d'un modèle accepté met au seuil sont injectées entières
+	 * (spec § 3.4), au message même. Jamais ailleurs : ni outil `contexte`, ni affinage, ni message muet.
+	 */
+	injecter?: boolean;
 	/** Chemin → empreinte injectée (`null` : jamais injectée). */
 	dejaServies: ReadonlyMap<string, string | null>;
 	/** Chemin → empreinte de la fiche à sa lecture ou écriture (`null` : inconnue, la fiche compte comme vue quelle que soit sa version). */
@@ -125,6 +136,8 @@ export type { LigneDeClassement };
 export type CartesCalculees = {
 	position: FicheDePositionServie | null;
 	positionFiche: string | null;
+	/** Fiches injectées entières par Mnemo à ce message (la note les met au seuil), de la mieux notée à la moins bien notée. */
+	injectees: FicheInjecteeParMnemo[];
 	cartes: Carte[];
 	mesure: 'reranker' | 'sens' | 'aucune';
 	vecteur?: VecteurDuMessage;
@@ -151,6 +164,11 @@ const LIGNE_MAX = 160;
  * écritures) a toujours son temps, et la fiche de position et les fiches demandées ne sont jamais perdues pour lui.
  */
 export const RESERVE_APRES_RERANKER_MS = 45;
+/**
+ * Au hook, une fiche n'est plus lue pour l'injection automatique quand il reste moins que ce temps avant l'échéance du calcul :
+ * les fiches demandées (lues ensuite) et les écritures gardent le leur. Une fiche qui n'a pas pu être lue reste une piste.
+ */
+export const RESERVE_APRES_INJECTION_MS = 20;
 /** Candidates soumises à l'appel de mesure lancé après le hook quand l'estimation n'est pas fiable : celles d'un hook plein. */
 const DOCUMENTS_A_MESURER = 8;
 
@@ -330,6 +348,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 	type Choisie = { chemin: string; raison: RaisonCarte; depuis: string | null; note: number | null };
 	let classement: LigneDeClassement[] = [];
 	let choisies: Choisie[] = [];
+	const injectees: FicheInjecteeParMnemo[] = [];
 	/** Note de la fiche de position trop longue (première carte) : comme celle d'une fiche nommée, sans reclasser. */
 	let noteDePosition: number | null = null;
 	let mesure: CartesCalculees['mesure'] = 'aucune';
@@ -492,6 +511,23 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 			aprioriConnu,
 		);
 		calibree = note.calibree;
+		// Injection automatique (spec § 3.4), au message même : les candidates qu'un modèle accepté met au seuil, non vues par la
+		// session, entières, au plus `injectionsParMessage` ; une fiche trop longue, ou qu'il n'est plus temps de lire, reste une piste.
+		if (d.injecter === true && d.classer && reglages.injectionsParMessage > 0) {
+			const vue = (chemin: string): boolean => {
+				const deja = dejaDe(chemin);
+				return deja === 'injectee' || deja === 'lue';
+			};
+			for (const chemin of injectables(note.lignes.map((l) => l.chemin), (c) => note.notes.get(c), reglages.seuilInjection, vue)) {
+				if (injectees.length >= reglages.injectionsParMessage || Date.now() >= d.fin - RESERVE_APRES_INJECTION_MS) break;
+				const brut = await dep.coffre.lire(chemin);
+				const texte = brut === null ? null : sansFaitsInactifs(brut, jour);
+				if (texte === null || texte.length > TAILLE_POSITION_MAX) continue;
+				const n = note.notes.get(chemin)!;
+				injectees.push({ chemin, titre: titre(chemin), texte, empreinte: empreintes.get(chemin) ?? '', encadree: false, p: n.p, niveau: n.niveau });
+			}
+		}
+		const injecteesIci = new Set(injectees.map((f) => f.chemin));
 		/** Note d'une carte hors classement (fiche nommée, fiche de position trop longue) : comme une candidate, sans reclasser. */
 		const noteHorsClassement = (chemin: string): number | null => {
 			if (mesure === 'aucune') return null;
@@ -505,7 +541,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 			// l'ordre de la note, au plus `pistesParMessage`.
 			pistes = d.classer
 				? note.lignes
-						.filter((l) => !dejaVue(l.chemin) && !nommeesRetenues.has(l.chemin) && auSeuilDePiste(note.notes.get(l.chemin), reglages.seuilPiste))
+						.filter((l) => !dejaVue(l.chemin) && !injecteesIci.has(l.chemin) && !nommeesRetenues.has(l.chemin) && auSeuilDePiste(note.notes.get(l.chemin), reglages.seuilPiste))
 						.slice(0, reglages.pistesParMessage)
 						.map((l) => parChemin.get(l.chemin)!)
 				: [];
@@ -521,17 +557,22 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		}
 		choisies = [
 			...pistes.map((n) => choisie(n, origine(n.chemin), note.parNote ? pCalibre(note.notes.get(n.chemin) ?? null) : undefined)),
-			...cartesNommees.map((chemin): Choisie => ({ chemin, raison: 'nommee', depuis: null, note: noteHorsClassement(chemin) })),
+			// une fiche nommée injectée entière n'est pas aussi proposée en carte
+			...cartesNommees.filter((chemin) => !injecteesIci.has(chemin)).map((chemin): Choisie => ({ chemin, raison: 'nommee', depuis: null, note: noteHorsClassement(chemin) })),
 		];
 		if (carteDePosition !== null) noteDePosition = noteHorsClassement(carteDePosition);
 		const raisonDe = new Map(choisies.map((c) => [c.chemin, c.raison]));
 		const enPiste = new Set(pistes.map((n) => n.chemin));
-		classement = note.lignes.map((l) => ({ ...l, raison: raisonDe.get(l.chemin) ?? null, piste: enPiste.has(l.chemin) }));
+		classement = note.lignes.map((l) => ({ ...l, raison: raisonDe.get(l.chemin) ?? null, piste: enPiste.has(l.chemin), ...(injecteesIci.has(l.chemin) ? { auto: true as const } : {}) }));
 	}
 	// la fiche de position trop longue reste la première carte
 	if (carteDePosition !== null) choisies.unshift({ chemin: carteDePosition, raison: 'perimetre', depuis: null, note: noteDePosition });
 
-	const concernees = [...choisies.map((c) => ({ chemin: c.chemin, typeFiche: type(c.chemin) })), ...(position === null ? [] : [{ chemin: position.chemin, typeFiche: type(position.chemin) }])];
+	const concernees = [
+		...choisies.map((c) => ({ chemin: c.chemin, typeFiche: type(c.chemin) })),
+		...injectees.map((f) => ({ chemin: f.chemin, typeFiche: type(f.chemin) })),
+		...(position === null ? [] : [{ chemin: position.chemin, typeFiche: type(position.chemin) }]),
+	];
 	const encadrees = await fichesAEncadrer(dep, concernees);
 	const cartes: Carte[] = [];
 	for (const { chemin, raison, depuis, note } of choisies) {
@@ -548,5 +589,6 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		});
 	}
 	if (position !== null) position = { ...position, encadree: encadrees.has(position.chemin) };
-	return { position, positionFiche, cartes, mesure, ...(vecteurDuCalcul === null ? {} : { vecteur: vecteurDuCalcul }), classement, calibree, ...(aMesurer === undefined ? {} : { aMesurer }) };
+	const injecteesEncadrees = injectees.map((f) => ({ ...f, encadree: encadrees.has(f.chemin) }));
+	return { position, positionFiche, injectees: injecteesEncadrees, cartes, mesure, ...(vecteurDuCalcul === null ? {} : { vecteur: vecteurDuCalcul }), classement, calibree, ...(aMesurer === undefined ? {} : { aMesurer }) };
 }

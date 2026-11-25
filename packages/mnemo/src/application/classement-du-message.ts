@@ -32,6 +32,8 @@ export type LigneDeClassement = {
 	deja: DejaDansLaSession | null;
 	raison: RaisonCarte | null;
 	piste: boolean;
+	/** Injectée entière par Mnemo à ce message (spec § 3.4). */
+	auto?: true;
 };
 
 /** Lignes du classement gardées au journal par message (les 50 dernières entrées d'une session) : les mieux classées ; au-delà, coupées et comptées. */
@@ -190,6 +192,7 @@ export function classementDuJournal(classement: readonly LigneDeClassement[], ma
 		},
 		...(l.deja === null ? {} : { deja: l.deja }),
 		...(l.piste ? { piste: true } : {}),
+		...(l.auto === true ? { auto: true } : {}),
 		...(l.raison === null ? {} : { raison: l.raison }),
 		...(coupees > 0 && i === gardees.length - 1 ? { coupees } : {}),
 	}));

@@ -1,6 +1,7 @@
 /**
  * Ce que Mnemo injecte dans une session : les consignes de la portée, la fiche de position entière si elle n'est pas déjà injectée,
- * les fiches que l'utilisateur a demandé d'injecter, puis des cartes (`calculerCartes`) au lieu de fiches entières.
+ * les fiches que l'utilisateur a demandé d'injecter, les fiches qu'une note de confiance acceptée met au seuil d'injection
+ * (entières, au message même), puis des pistes (`calculerCartes`).
  */
 import { libelleRaison } from '@mnemo/commun';
 import { ficheDePosition } from './chercher.ts';
@@ -72,7 +73,7 @@ export async function consignesVerifiees(dep: Dependances, position: Position): 
 	return consignesDe(dep, portees, ['verifiee']);
 }
 
-export type DemandeServir = Omit<DemandeCartes, 'classer' | 'pistes' | 'premier' | 'servirPosition' | 'question' | 'demandees'> & {
+export type DemandeServir = Omit<DemandeCartes, 'classer' | 'pistes' | 'premier' | 'servirPosition' | 'question' | 'demandees' | 'injecter'> & {
 	moment: Moment;
 	/** Le message ne porte pas de sens : ni cartes ni consigne trouvée, seule la fiche de position peut venir. */
 	muet: RaisonMuet | null;
@@ -107,16 +108,21 @@ function rendreCarte(c: Carte): string {
 	return c.encadree ? encadrer(c.chemin, [ligne]) : ligne;
 }
 
+/** Titre de la section des fiches injectées entières par Mnemo (spec classement vivant § 3.4). */
+export const TITRE_INJECTEES_PAR_MNEMO = '## Fiches injectées par Mnemo (très proches de ta demande)';
+
 /**
- * Texte injecté : consignes, fiche de position entière, fiches demandées par l'utilisateur entières, puis une ligne par carte. Ce qui vient de documents est encadré
- * `<donnees>`, l'avertissement n'étant dit qu'une fois, en tête. Rien sans consigne, fiche ni carte.
+ * Texte injecté : consignes, fiche de position entière, fiches demandées par l'utilisateur entières, fiches injectées par Mnemo
+ * entières, puis une ligne par carte. Ce qui vient de documents est encadré `<donnees>`, l'avertissement n'étant dit qu'une
+ * fois, en tête. Rien sans consigne, fiche ni carte.
  */
 export function rendreServi(consignes: string, calcul: CartesCalculees, demandees: readonly FicheDePositionServie[] = []): string {
 	const cartes = calcul.cartes.length === 0 ? '' : `## Pistes de Mnemo (lis avec \`lire\` celles qui servent ta tâche)\n${calcul.cartes.map(rendreCarte).join('\n')}`;
 	const injectees = demandees.length === 0 ? '' : `## Fiches injectées à la demande de l’utilisateur\n\n${demandees.map(rendreFiche).join('\n\n')}`;
-	const parties = [consignes, calcul.position === null ? '' : rendreFiche(calcul.position), injectees, cartes].filter((p) => p !== '');
+	const parMnemo = calcul.injectees.length === 0 ? '' : `${TITRE_INJECTEES_PAR_MNEMO}\n\n${calcul.injectees.map(rendreFiche).join('\n\n')}`;
+	const parties = [consignes, calcul.position === null ? '' : rendreFiche(calcul.position), injectees, parMnemo, cartes].filter((p) => p !== '');
 	if (parties.length === 0) return '';
-	const encadre = calcul.position?.encadree === true || demandees.some((f) => f.encadree) || calcul.cartes.some((c) => c.encadree);
+	const encadre = calcul.position?.encadree === true || demandees.some((f) => f.encadree) || calcul.injectees.some((f) => f.encadree) || calcul.cartes.some((c) => c.encadree);
 	return encadre ? `${AVERTISSEMENT}\n\n${parties.join('\n\n')}` : parties.join('\n\n');
 }
 
@@ -169,6 +175,8 @@ export async function servir(dep: Dependances, demande: DemandeServir): Promise<
 		premier: moment === 'message' && muet === null && premier,
 		servirPosition: moment === 'message',
 		question: moment === 'contexte',
+		// injection automatique : au hook d'un message porteur seulement (jamais à l'outil `contexte`, ni à un message muet)
+		injecter: moment === 'message' && muet === null,
 		injectees: aLaMain,
 		// une fiche demandée, injectée entière, n'est pas aussi candidate : écartée avant le plafond, elle ne prend la place d'aucune carte
 		demandees: aInjecter,

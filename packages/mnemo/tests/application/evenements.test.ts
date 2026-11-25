@@ -8,7 +8,9 @@ import { fichesDemandees } from '../../src/application/fiches-demandees.ts';
 import { proposer } from '../../src/application/proposer.ts';
 import { porteursRecents } from '../../src/application/porteurs-recents.ts';
 import { aprioriDesGestes } from '../../src/application/apriori.ts';
+import { affiner } from '../../src/application/affiner.ts';
 import type { DemandeAffinage } from '../../src/application/affiner.ts';
+import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
@@ -822,5 +824,87 @@ describe('traiterEvenement : poids d’une fiche injectée à la main', () => {
 		expect(apres.contexte).toContain('- Avoirs — projets/vela/avoirs.md');
 		expect(apres.contexte).not.toContain('Factures —');
 		expect((await etat.servis(ID, 1))[0]!.cartes).toEqual([{ chemin: AVOIRS, raison: 'perimetre' }]);
+	});
+});
+
+describe('traiterEvenement : injection automatique', () => {
+	const AVOIRS = 'projets/vela/avoirs.md';
+	const VOISINE = 'projets/vela/remises.md';
+	const message = (h: number, prompt: string) => entree('message', h, { prompt });
+	const sensParMots: Sens = {
+		modele: () => 'mots@1',
+		vecteurs: async (textes) => textes.map((t) => Float32Array.from([...['avoir', 'remise', 'catalogue'].map((m) => t.toLowerCase().split(m).length - 1), 0.01])),
+	};
+	const modele = (surcharge: object = {}) => ({
+		...modeleNonAppris(),
+		apprisLe: '2026-11-25T10:00:00.000Z',
+		refus: [],
+		accepte: true,
+		echelle: echelleDesSignaux(REGLAGES_PAR_DEFAUT.contexte),
+		biais: -3,
+		poids: { bm25Relatif: 6, cosinusRelatif: 0.5 },
+		...surcharge,
+	});
+
+	async function memoire() {
+		const c = await contexte();
+		await c.dep.coffre.ecrire(AVOIRS, `${entete()}# Avoirs\n\nUn avoir annule une facture.\n\n## Relations\n- concerne [[Remises]]\n`);
+		await c.dep.coffre.ecrire(VOISINE, `${entete()}# Remises\n\nUne remise baisse le prix.\n`);
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		c.dep.sens = sensParMots;
+		await vectoriser(c.dep, { budgetMs: 60_000, demarrer: true });
+		c.dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens: modele() }, installes: { sens: null, reranker: null } });
+		return c;
+	}
+
+	it('geste `injectee_auto` (niveau, ligne du classement, vecteur), notée servie et au journal ; aucun poids sur les voisines', async () => {
+		const { dep, etat, pil } = await memoire();
+		const r = await traiterEvenement(dep, pil, message(10, 'montant exact des avoirs annulés en novembre'), local);
+		expect(r.contexte).toContain('## Fiches injectées par Mnemo');
+		expect(r.contexte).toContain('Un avoir annule une facture.');
+		const [j] = await etat.servis(ID, 1);
+		expect(j!.ids).toContain(AVOIRS);
+		expect(j!.classement.find((c) => c.id === AVOIRS)).toMatchObject({ auto: true });
+		expect((await etat.fichesServiesLuesOuEcrites(ID)).find((f) => f.chemin === AVOIRS)).toMatchObject({ derniereAction: 'servie' });
+		const gestes = await etat.gestes({ limite: null });
+		expect(gestes.map((g) => g.geste)).toEqual(['injectee_auto']);
+		expect(gestes[0]).toMatchObject({ fiche: AVOIRS, origine: 'auto', rangMessage: 1 });
+		expect(gestes[0]!.note).toMatchObject({ niveau: 'sens', auto: true, p: expect.any(Number) });
+		expect(gestes[0]!.vecteur).not.toBeNull();
+		// jamais une injection à la main : aucune voisine ne prend de poids
+		expect(await etat.injectionsManuelles(ID)).toEqual([]);
+		const suivant = await traiterEvenement(dep, pil, message(11, 'montant exact des remises accordées en novembre'), local);
+		expect((await etat.servis(ID, 1))[0]!.cartes.every((c) => c.raison !== 'liee')).toBe(true);
+		// une fois par session
+		expect(suivant.contexte ?? '').not.toContain('Un avoir annule une facture.');
+	});
+
+	it('service : le geste est noté après la réponse, par `enFond`', async () => {
+		const { dep, etat, pil } = await memoire();
+		const taches: Promise<unknown>[] = [];
+		await traiterEvenement(dep, pil, message(10, 'montant exact des avoirs annulés en novembre'), { ...local, enFond: (t) => taches.push(t) });
+		expect(await etat.gestes({ limite: null })).toEqual([]);
+		await Promise.all(taches);
+		expect((await etat.gestes({ limite: null })).map((g) => g.geste)).toEqual(['injectee_auto']);
+	});
+
+	it('rien après un outil, rien en différé : l’affinage qui met une fiche au seuil ne l’injecte pas', async () => {
+		const { dep, etat, pil } = await memoire();
+		// Complets accepté (le logit seul décide), Sens seul refusé : sans reranker au hook, rien n'est injecté
+		dep.note = () => ({
+			coefficients: { complets: modele({ biais: -2, poids: { logit: 1, cosinusRelatif: 0 } }), sens: modele({ accepte: false, refus: ['x'] }) },
+			installes: { sens: null, reranker: null },
+		});
+		const affinages: DemandeAffinage[] = [];
+		const r = await traiterEvenement(dep, pil, message(10, 'montant exact des avoirs annulés en novembre'), { ...local, affiner: (d) => affinages.push(d) });
+		expect(r.contexte ?? '').not.toContain('Fiches injectées par Mnemo');
+		dep.reranker = { noter: async (_q, textes) => textes.map((t) => (t.startsWith('Avoirs') ? 8 : -8)) };
+		expect(affinages).toHaveLength(1);
+		const fait = await affiner(dep, etat, affinages[0]!);
+		expect(fait!.classement.find((c) => c.id === AVOIRS)!.p).toBeGreaterThanOrEqual(0.9);
+		expect((await etat.fichesServiesLuesOuEcrites(ID)).some((f) => f.chemin === AVOIRS)).toBe(false);
+		expect(await etat.gestes({ limite: null })).toEqual([]);
+		expect(await traiterEvenement(dep, pil, entree('apres_outil', 11, { outil: { nom: 'Bash', entree: { command: 'ls' } } }), local)).toEqual({});
+		expect(await etat.gestes({ limite: null })).toEqual([]);
 	});
 });

@@ -2,6 +2,7 @@ import type { CauseArret, EvenementHook, Session, SourceDeDebut } from '../domai
 import { objectifDe } from '../domaine/session.ts';
 import { ecrireEpisodeMinimal } from './episode.ts';
 import type { Classe, Dependances, Pilotage, VecteurDuMessage } from './ports.ts';
+import { noteDeLigne } from '../domaine/gestes.ts';
 import type { NoteDuGeste } from '../domaine/gestes.ts';
 import { positionDeSession, positionNotee } from './dossiers-non-rattaches.ts';
 import type { Position } from './position.ts';
@@ -403,9 +404,10 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 }
 
 /**
- * Note la fiche de position et les fiches demandées injectées (et, pour ces dernières, l'injection à la main, qui pèse sur leurs
- * voisines), les cartes proposées (avec leur empreinte), et journalise le calcul pour le panneau Contexte, classement entier compris
- * (une entrée à chaque message porteur, même sans texte injecté).
+ * Note la fiche de position, les fiches demandées et les fiches injectées par Mnemo (et, pour les demandées seulement,
+ * l'injection à la main, qui pèse sur leurs voisines), les cartes proposées (avec leur empreinte), et journalise le calcul pour
+ * le panneau Contexte, classement entier compris (une entrée à chaque message porteur, même sans texte injecté). Les gestes
+ * `injectee_auto` se notent à part (`noterInjectionsAuto`).
  */
 async function noterInjection(
 	dep: Dependances,
@@ -422,7 +424,7 @@ async function noterInjection(
 	noteDemandee: (chemin: string) => NoteDuGeste | undefined,
 ): Promise<void> {
 	const { position, cartes } = servi.calcul;
-	const injectees = [...(position === null ? [] : [position]), ...servi.demandees];
+	const injectees = [...(position === null ? [] : [position]), ...servi.demandees, ...servi.calcul.injectees];
 	for (const f of injectees) {
 		await pil.etat.noterFicheServieLueOuEcrite(session.id, { chemin: f.chemin, action: 'servie', horodatageMs: entree.horodatageMs, empreinte: f.empreinte }).catch(() => {});
 	}
@@ -463,6 +465,21 @@ async function noterInjection(
 	}
 }
 
+/**
+ * Gestes `injectee_auto` des fiches injectées par Mnemo à ce message (spec § 9.1) : avec le message porteur, son vecteur s'il a
+ * été calculé, et la ligne de la fiche au classement de ce message plus le niveau du modèle qui l'a notée (le suivi des
+ * injections le lit). Jamais `noterInjectionManuelle` : elle ne pèse sur aucune voisine et ne compte pas comme un geste positif.
+ */
+async function noterInjectionsAuto(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session: Session, entree: EntreeHook, servi: Servi, rang: number | null, classement: readonly Classe[]): Promise<void> {
+	const vecteur = rang === null || servi.calcul.vecteur === undefined ? null : { rang, vecteur: servi.calcul.vecteur };
+	const lignes = new Map(classement.map((c) => [c.id, c]));
+	for (const f of servi.calcul.injectees) {
+		const ligne = lignes.get(f.chemin);
+		const note: NoteDuGeste = { ...(ligne === undefined ? {} : noteDeLigne(ligne)), niveau: f.niveau };
+		await noterGeste(dep, pil.etat, { geste: 'injectee_auto', session: session.id, fiche: f.chemin, empreinte: f.empreinte, horodatageMs: entree.horodatageMs, vecteur, note });
+	}
+}
+
 async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session: Session | null, entree: EntreeHook, reglages: ReglagesEvenement): Promise<ReponseHook> {
 	const debut = reglages.debutMs ?? Date.now();
 	const fin = reglages.echeance === undefined ? Date.now() + BUDGET_HOOK_MS : Math.min(Date.now() + BUDGET_HOOK_MS, reglages.echeance - MARGE_SORTIE_MS);
@@ -488,8 +505,16 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 	// un message porteur est journalisé même sans texte injecté : son classement en est la trace (panneau, apprentissage)
 	if (session !== null && (injecte || (rang !== null && aTempsPourNoter))) {
 		await noterInjection(dep, pil, session, entree, demande, servi, debut, reglages.appelMs, rang, classement, (chemin) => noteDuPorteur(precedent, chemin));
+		// sans service, les gestes des injections automatiques se notent avant de répondre (après, le processus n'a plus le temps)
+		if (injecte && reglages.enFond === undefined && servi.calcul.injectees.length > 0) await noterInjectionsAuto(dep, pil, session, entree, servi, rang, classement);
 		// après les écritures : le hook attend-il encore ? Sinon, la réponse ne lui parviendrait pas
 		if (!aTemps(reglages)) injecte = false;
+		// le service : une fois la réponse décidée, sans la retarder ; seulement si elle part (une injection perdue ne compte pas au suivi)
+		if (injecte && reglages.enFond !== undefined && servi.calcul.injectees.length > 0) {
+			// au tour suivant de la boucle : l'écriture (synchrone dans la base) ne passe pas avant la réponse
+			const s = session;
+			reglages.enFond(new Promise((resoudre) => setTimeout(resoudre, 0)).then(() => noterInjectionsAuto(dep, pil, s, entree, servi, rang, classement)));
+		}
 	}
 	// le hook n'attend plus : les fiches demandées partiront au message suivant
 	if (session !== null && !injecte && demandees.length > 0) reglages.demandees?.remettre(session.id, demandees);

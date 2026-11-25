@@ -587,6 +587,8 @@ export type Classe = {
 	signaux?: Omit<SignauxBruts, 'apriori' | 'cosinusZ'> & { apriori?: number; cosinusZ?: number | null; logit?: number };
 	deja?: DejaDansLaSession;
 	piste?: boolean;
+	/** Injectée entière par Mnemo à ce message (spec classement vivant § 3.4) ; absent sinon. */
+	auto?: boolean;
 	raison?: RaisonCarte;
 	coupees?: number;
 	/** Classement affiné en arrière-plan : le rang de la fiche dans l'ordre du hook (le panneau en tire ▲/▼). */

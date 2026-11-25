@@ -87,7 +87,7 @@ const DELAI_MS = 5000;
 export const designe = (nom: string, chemin: string) => chemin === nom || chemin.endsWith(`/${nom}`);
 
 /**
- * Rejoue un cas : les chemins proposés (fiche de position servie puis cartes), les cartes seules, si le message est muet, la taille
+ * Rejoue un cas : les chemins proposés (fiche de position servie, fiches injectées par Mnemo, puis cartes), les cartes seules, si le message est muet, la taille
  * du texte injecté et les désignations `injectees` qui ne désignent aucune fiche de l'index.
  */
 async function rejouer(dep: Dependances, cas: CasContexte, synchroniserIndex: boolean): Promise<{ proposes: string[]; cartes: string[]; muet: boolean; caracteres: number; injecteesInconnues: string[] }> {
@@ -118,9 +118,9 @@ async function rejouer(dep: Dependances, cas: CasContexte, synchroniserIndex: bo
 		...(injectees.length === 0 ? {} : { demandees: injectees }),
 		synchroniser: synchroniserIndex,
 	});
-	const { position, cartes } = servi.calcul;
+	const { position, cartes, injectees: parMnemo } = servi.calcul;
 	return {
-		proposes: [...(position === null ? [] : [position.chemin]), ...cartes.map((c) => c.chemin)],
+		proposes: [...(position === null ? [] : [position.chemin]), ...parMnemo.map((f) => f.chemin), ...cartes.map((c) => c.chemin)],
 		cartes: cartes.map((c) => c.chemin),
 		muet: muet !== null,
 		caracteres: servi.texte.length,

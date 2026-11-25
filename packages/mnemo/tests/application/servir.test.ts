@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Carte, CartesCalculees } from '../../src/application/cartes.ts';
-import { rendreServi, servir } from '../../src/application/servir.ts';
+import { rendreServi, servir, TITRE_INJECTEES_PAR_MNEMO } from '../../src/application/servir.ts';
+import type { DemandeServir, Servi } from '../../src/application/servir.ts';
+import type { Dependances, Sens } from '../../src/application/ports.ts';
+import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
+import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
+import { vectoriser } from '../../src/application/vectoriser.ts';
+import { echelleDesSignaux, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
+import type { CoefficientsNote, ModeleDeNote } from '../../src/domaine/modele-de-note.ts';
 import { AVERTISSEMENT } from '../../src/domaine/contexte.ts';
 import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
@@ -17,7 +24,7 @@ async function memoire() {
 }
 
 const carte = (chemin: string, titre: string, surcharge: Partial<Carte> = {}): Carte => ({ chemin, titre, ligne: `Ligne de ${titre}.`, typeFiche: 'sujet', raison: 'perimetre', depuis: null, note: null, encadree: false, empreinte: 'e', ...surcharge });
-const calcul = (surcharge: Partial<CartesCalculees> = {}): CartesCalculees => ({ position: null, positionFiche: null, cartes: [], mesure: 'aucune', classement: [], calibree: false, ...surcharge });
+const calcul = (surcharge: Partial<CartesCalculees> = {}): CartesCalculees => ({ position: null, positionFiche: null, injectees: [], cartes: [], mesure: 'aucune', classement: [], calibree: false, ...surcharge });
 const TITRE_PISTES = '## Pistes de Mnemo (lis avec `lire` celles qui servent ta tâche)';
 
 describe('rendreServi', () => {
@@ -188,5 +195,188 @@ describe('servir', () => {
 
 	it('rien à servir : texte vide', async () => {
 		expect((await servirQuestion(fauxPorts(), '', 'zzz')).texte).toBe('');
+	});
+});
+
+describe('servir : injection automatique (note de confiance acceptée)', () => {
+	const VELA = 'projets/Vela.md';
+	const AVOIRS = 'projets/Vela/Avoirs.md';
+	const FACTURES = 'projets/Vela/Factures.md';
+	const REMISES = 'projets/Vela/Remises.md';
+	const INSTALLES = { sens: null, reranker: null };
+	const fiche = (titre: string, synthese: string, extra = '', corps = '') => `---\nid: 01ABC\ntype: entite\n${extra}updated: 2026-11-01\n---\n# ${titre}\n\n${synthese}\n${corps}`;
+	const MOTS = ['avoir', 'facture', 'remise'];
+	const sensParMots: Sens = {
+		modele: () => 'mots@1',
+		vecteurs: async (textes) => textes.map((t) => Float32Array.from([...MOTS.map((m) => t.toLowerCase().split(m).length - 1), 0.01])),
+	};
+	async function memoireNotee(syntheseAvoirs = 'Un avoir annule une facture.') {
+		const dep = await memoire();
+		const e = dep.coffre.ecrire;
+		await e(VELA, fiche('Vela', 'Le client Vela.', 'portee: client:Vela\n', '\n## Relations\n- concerne [[Avoirs]]\n- concerne [[Factures]]\n- concerne [[Remises]]\n'));
+		await e(AVOIRS, fiche('Avoirs', syntheseAvoirs));
+		await e(FACTURES, fiche('Factures', 'Les factures du client.'));
+		await e(REMISES, fiche('Remises', 'Une remise baisse le prix.'));
+		await synchroniser(dep, SANS_EXTRACTION);
+		dep.sens = sensParMots;
+		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
+		return dep;
+	}
+	const modele = (surcharge: Partial<ModeleDeNote> = {}): ModeleDeNote => ({
+		...modeleNonAppris(),
+		apprisLe: '2026-11-25T10:00:00.000Z',
+		refus: [],
+		accepte: true,
+		gguf: INSTALLES,
+		echelle: echelleDesSignaux(REGLAGES_PAR_DEFAUT.contexte),
+		// les mots du message font la note : la fiche que tous les mots trouvent passe le seuil, les autres non
+		biais: -3,
+		poids: { bm25Relatif: 6, cosinusRelatif: 0.5 },
+		...surcharge,
+	});
+	const avecModeles = (dep: Dependances, coefficients: Partial<CoefficientsNote>) => {
+		dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens: modeleNonAppris(), ...coefficients }, installes: INSTALLES });
+	};
+	const avecReglages = (dep: Dependances, contexte: Partial<typeof REGLAGES_PAR_DEFAUT.contexte>) => {
+		dep.reglages = () => ({ ...REGLAGES_PAR_DEFAUT, contexte: { ...REGLAGES_PAR_DEFAUT.contexte, ...contexte } });
+	};
+	const demande = (surcharge: Partial<DemandeServir> = {}): DemandeServir => ({
+		position: 'projets/Vela',
+		message: 'un avoir',
+		dejaServies: new Map(),
+		dejaLues: new Map(),
+		proposees: new Map(),
+		ecartes: [],
+		moment: 'message',
+		muet: null,
+		premier: false,
+		fin: Date.now() + 5000,
+		rappels: false,
+		...surcharge,
+	});
+	const injectees = (s: Servi) => s.calcul.injectees.map((f) => f.chemin);
+	const cartes = (s: Servi) => s.calcul.cartes.map((c) => c.chemin);
+	const empreinte = async (dep: Dependances, chemin: string) => (await dep.index.fiches()).find((f) => f.chemin === chemin)!.empreinte;
+
+	it('seuil franchi : la fiche est injectée entière, au message même, dans sa section ; marquée au classement, pas en piste', async () => {
+		const dep = await memoireNotee();
+		avecModeles(dep, { sens: modele() });
+		const s = await servir(dep, demande());
+		expect(injectees(s)).toEqual([AVOIRS]);
+		const f = s.calcul.injectees[0]!;
+		expect(f.p).toBeGreaterThanOrEqual(0.9);
+		expect(f.niveau).toBe('sens');
+		expect(f.empreinte).toBe(await empreinte(dep, AVOIRS));
+		expect(s.texte).toContain(`${TITRE_INJECTEES_PAR_MNEMO}\n\n### Avoirs (${AVOIRS})`);
+		expect(s.texte).toContain('Un avoir annule une facture.');
+		expect(cartes(s)).not.toContain(AVOIRS);
+		expect(s.calcul.classement.find((l) => l.chemin === AVOIRS)).toMatchObject({ auto: true, piste: false });
+		expect(s.calcul.classement.filter((l) => l.auto === true)).toHaveLength(1);
+		// la section vient après la fiche de position et avant les pistes
+		expect(s.texte.indexOf(TITRE_INJECTEES_PAR_MNEMO)).toBeGreaterThan(s.texte.indexOf('### Vela'));
+	});
+
+	it('seuil à 100 : jamais d’injection ; la fiche reste une piste', async () => {
+		const dep = await memoireNotee();
+		avecModeles(dep, { sens: modele() });
+		avecReglages(dep, { seuilInjection: 100 });
+		const s = await servir(dep, demande());
+		expect(injectees(s)).toEqual([]);
+		expect(s.texte).not.toContain(TITRE_INJECTEES_PAR_MNEMO);
+		expect(cartes(s)).toContain(AVOIRS);
+	});
+
+	it('plafond : au plus `injectionsParMessage` fiches, les mieux notées ; 0 = jamais', async () => {
+		const dep = await memoireNotee();
+		// toutes au-dessus du seuil
+		avecModeles(dep, { sens: modele({ biais: 3, poids: { cosinusRelatif: 0 } }) });
+		expect(injectees(await servir(dep, demande()))).toHaveLength(2);
+		avecReglages(dep, { injectionsParMessage: 1 });
+		const une = await servir(dep, demande());
+		expect(injectees(une)).toHaveLength(1);
+		// les autres restent des pistes
+		expect(cartes(une)).toHaveLength(2);
+		avecReglages(dep, { injectionsParMessage: 0 });
+		expect(injectees(await servir(dep, demande()))).toEqual([]);
+	});
+
+	it('une fois par session : déjà injectée à son empreinte, plus rien ; la fiche a changé, elle repart', async () => {
+		const dep = await memoireNotee();
+		avecModeles(dep, { sens: modele() });
+		const deja = await servir(dep, demande({ dejaServies: new Map([[AVOIRS, await empreinte(dep, AVOIRS)]]) }));
+		expect(injectees(deja)).toEqual([]);
+		expect(cartes(deja)).not.toContain(AVOIRS);
+		expect(injectees(await servir(dep, demande({ dejaServies: new Map([[AVOIRS, 'ancienne']]) })))).toEqual([AVOIRS]);
+	});
+
+	it('une fiche lue ou écrite par la session n’est jamais injectée ; une fiche seulement proposée en piste peut l’être', async () => {
+		const dep = await memoireNotee();
+		avecModeles(dep, { sens: modele() });
+		expect(injectees(await servir(dep, demande({ dejaLues: new Map([[AVOIRS, null]]) })))).toEqual([]);
+		expect(injectees(await servir(dep, demande({ dejaLues: new Map([[AVOIRS, await empreinte(dep, AVOIRS)]]) })))).toEqual([]);
+		expect(injectees(await servir(dep, demande({ proposees: new Map([[AVOIRS, await empreinte(dep, AVOIRS)]]) })))).toEqual([AVOIRS]);
+	});
+
+	it('une fiche trop longue (plus de 8 000 caractères) n’est pas injectée : elle devient une piste', async () => {
+		const dep = await memoireNotee(`Un avoir annule une facture. ${'Détail. '.repeat(1100)}`);
+		avecModeles(dep, { sens: modele() });
+		const s = await servir(dep, demande());
+		expect(injectees(s)).toEqual([]);
+		expect(cartes(s)[0]).toBe(AVOIRS);
+	});
+
+	it('garde de l’a priori : une note portée par l’a priori seul (p_sans_apriori < 0,7) n’injecte pas', async () => {
+		const dep = await memoireNotee();
+		avecModeles(dep, { sens: modele({ biais: -2, poids: { cosinusRelatif: 0, apriori: 1 } }) });
+		const aprioris = () => new Map([[AVOIRS, 6]]);
+		const s = await servir(dep, demande({ aprioris }));
+		const ligne = s.calcul.classement.find((l) => l.chemin === AVOIRS)!;
+		expect(ligne.p).toBeGreaterThanOrEqual(0.9);
+		expect(ligne.pSansApriori).toBeLessThan(0.7);
+		expect(injectees(s)).toEqual([]);
+		// a priori non lu (hook sans service) alors que le modèle le pèse : note non calibrée, aucune injection
+		avecModeles(dep, { sens: modele({ biais: -3, poids: { bm25Relatif: 6, apriori: 0.1 } }) });
+		expect(injectees(await servir(dep, demande()))).toEqual([]);
+		expect(injectees(await servir(dep, demande({ aprioris: () => new Map() })))).toEqual([AVOIRS]);
+	});
+
+	it('modèle refusé, module livré (`accepte: false`) : rien n’est injecté ; modèle de test accepté : l’injection a lieu', async () => {
+		const dep = await memoireNotee();
+		// le module du dépôt, sans coefficients propres à la mémoire
+		expect(injectees(await servir(dep, demande()))).toEqual([]);
+		avecModeles(dep, { sens: modele({ accepte: false, refus: ['trop peu d’injections'] }) });
+		const refuse = await servir(dep, demande());
+		expect(injectees(refuse)).toEqual([]);
+		expect(cartes(refuse)).toContain(AVOIRS);
+		avecModeles(dep, { sens: modele() });
+		expect(injectees(await servir(dep, demande()))).toEqual([AVOIRS]);
+	});
+
+	it('niveau Complets : sans reranker au hook, aucune injection par lui ; avec le reranker, injectée à ce niveau', async () => {
+		const dep = await memoireNotee();
+		const complets = modele({ biais: -2, poids: { logit: 1, cosinusRelatif: 0 } });
+		avecModeles(dep, { complets, sens: modele({ accepte: false, refus: ['x'] }) });
+		dep.reranker = { noter: async (_r, textes) => textes.map((t) => (t.startsWith('Avoirs') ? 6 : -6)) };
+		expect(injectees(await servir(dep, demande()))).toEqual([]);
+		const duree = dureeDuReranker();
+		for (const [documents, ms] of [[5, 35], [10, 60], [5, 35]] as const) duree.noter({ documents, ms });
+		const s = await servir(dep, demande({ dureeReranker: duree }));
+		expect(injectees(s)).toEqual([AVOIRS]);
+		expect(s.calcul.injectees[0]!.niveau).toBe('complets');
+	});
+
+	it('ni à un message muet, ni à l’outil `contexte`', async () => {
+		const dep = await memoireNotee();
+		avecModeles(dep, { sens: modele() });
+		expect(injectees(await servir(dep, demande({ message: 'ok', muet: 'sans_contenu' })))).toEqual([]);
+		expect(injectees(await servir(dep, demande({ moment: 'contexte' })))).toEqual([]);
+	});
+
+	it('une fiche nommée dans le message et au seuil est injectée, pas aussi proposée en carte', async () => {
+		const dep = await memoireNotee();
+		avecModeles(dep, { sens: modele() });
+		const s = await servir(dep, demande({ message: 'les Avoirs : un avoir' }));
+		expect(injectees(s)).toEqual([AVOIRS]);
+		expect(cartes(s)).not.toContain(AVOIRS);
 	});
 });
