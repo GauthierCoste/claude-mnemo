@@ -23,7 +23,7 @@ export function cleDeMessage(message: string): string {
 }
 
 /** Ordre de prise des messages d'une session : le premier d'abord, puis les suites dans un ordre mêlé, fixe (empreinte). */
-function ordreDansLaSession(messages: readonly MessageDuJournal[]): MessageDuJournal[] {
+function ordreDansLaSession<M extends MessageDuJournal>(messages: readonly M[]): M[] {
 	const [premier, ...suites] = [...messages].sort((a, b) => a.rang - b.rang);
 	if (premier === undefined) return [];
 	const melange = suites.map((m) => ({ m, cle: empreinte(`${m.session}#${m.rang}`) })).sort((a, b) => (a.cle < b.cle ? -1 : a.cle > b.cle ? 1 : 0));
@@ -35,13 +35,13 @@ function ordreDansLaSession(messages: readonly MessageDuJournal[]): MessageDuJou
  * session à l'autre (les plus récentes d'abord) ; dans une session, le premier message, puis des suites mêlées. Un message
  * déjà connu (`connus` : clés de `cleDeMessage`) ou déjà pris (même texte dans une autre session) est laissé.
  */
-export function choisirMessages(
-	messages: readonly MessageDuJournal[],
+export function choisirMessages<M extends MessageDuJournal>(
+	messages: readonly M[],
 	options: { nombre: number; parSession: number; connus?: ReadonlySet<string> },
-): MessageDuJournal[] {
+): M[] {
 	const pris = new Set(options.connus ?? []);
 	// la première occurrence d'un texte (la plus ancienne) le représente
-	const uniques: MessageDuJournal[] = [];
+	const uniques: M[] = [];
 	const vus = new Set<string>();
 	for (const m of [...messages].sort((a, b) => a.horodatageMs - b.horodatageMs || a.rang - b.rang)) {
 		const cle = cleDeMessage(m.message);
@@ -49,16 +49,16 @@ export function choisirMessages(
 		vus.add(cle);
 		uniques.push(m);
 	}
-	const parSession = new Map<string, MessageDuJournal[]>();
+	const parSession = new Map<string, M[]>();
 	for (const m of uniques) parSession.set(m.session, [...(parSession.get(m.session) ?? []), m]);
-	const recence = (liste: readonly MessageDuJournal[]) => Math.max(...liste.map((m) => m.horodatageMs));
-	const groupes = new Map<string, { session: string; file: MessageDuJournal[]; pris: number }[]>();
+	const recence = (liste: readonly M[]) => Math.max(...liste.map((m) => m.horodatageMs));
+	const groupes = new Map<string, { session: string; file: M[]; pris: number }[]>();
 	for (const [session, liste] of [...parSession].sort((a, b) => recence(b[1]) - recence(a[1]) || (a[0] < b[0] ? -1 : 1))) {
 		const groupe = liste[0]!.groupe;
 		groupes.set(groupe, [...(groupes.get(groupe) ?? []), { session, file: ordreDansLaSession(liste), pris: 0 }]);
 	}
 	const tours = [...groupes].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([, sessions]) => ({ sessions, prochaine: 0 }));
-	const choisis: MessageDuJournal[] = [];
+	const choisis: M[] = [];
 	let avance = true;
 	while (choisis.length < options.nombre && avance) {
 		avance = false;
@@ -68,7 +68,7 @@ export function choisirMessages(
 			for (let essai = 0; essai < tour.sessions.length; essai++) {
 				const s = tour.sessions[tour.prochaine % tour.sessions.length]!;
 				tour.prochaine += 1;
-				let m: MessageDuJournal | undefined;
+				let m: M | undefined;
 				if (s.pris < options.parSession) {
 					do m = s.file.shift();
 					while (m !== undefined && pris.has(cleDeMessage(m.message)));
@@ -83,4 +83,21 @@ export function choisirMessages(
 		}
 	}
 	return choisis;
+}
+
+/**
+ * Ordre de jugement : premiers messages et suites tour à tour, chacun dans un ordre mêlé mais stable (empreinte de la session
+ * et du rang) ; ce qui reste d'un genre vient à la fin. Un arrêt en route laisse un échantillon équilibré.
+ */
+export function entrelacer<M extends MessageDuJournal>(messages: readonly M[]): M[] {
+	const melanges = (liste: readonly M[]) =>
+		liste.map((m) => ({ m, cle: empreinte(`ordre\n${m.session}#${m.rang}`) })).sort((a, b) => (a.cle < b.cle ? -1 : a.cle > b.cle ? 1 : 0)).map((x) => x.m);
+	const premiers = melanges(messages.filter((m) => m.rang === 1));
+	const suites = melanges(messages.filter((m) => m.rang !== 1));
+	const resultat: M[] = [];
+	for (let i = 0; i < Math.max(premiers.length, suites.length); i++) {
+		if (i < premiers.length) resultat.push(premiers[i]!);
+		if (i < suites.length) resultat.push(suites[i]!);
+	}
+	return resultat;
 }

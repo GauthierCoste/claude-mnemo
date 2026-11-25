@@ -5,7 +5,7 @@
  *
  * À brancher après T3/T4 :
  * - les candidates (`candidatesDuBanc`) reprennent la règle de la spec § 3.3 (périmètre, neutres, fiches d'ailleurs dont le lieu
- *   est nommé) ; T3 la porte dans `cartes.ts` (et `neutres` dans `domaine/perimetre.ts`) : le banc prendra alors la sienne ;
+ *   est nommé, voisines des fiches injectées à la main) ; T3 la porte dans `cartes.ts` (et `neutres` dans `domaine/perimetre.ts`) : le banc prendra alors la sienne ;
  * - le bm25 relatif suit la règle de `bm25Relatifs` (`domaine/classement.ts`), que T4 exporte ; le banc l'appellera alors.
  */
 import { fichesNommees } from '../domaine/fiches-nommees.ts';
@@ -14,6 +14,8 @@ import { estExpire } from '../domaine/elements.ts';
 import type { ElementIndexe } from '../domaine/elements.ts';
 import { deverrouiller, lieuDeclare, perimetreDe, TYPES_NON_PROPOSABLES } from '../domaine/perimetre.ts';
 import type { Arete, FicheDuGraphe } from '../domaine/perimetre.ts';
+import { signalInjection } from '../domaine/signal-injection.ts';
+import type { InjectionManuelle } from '../domaine/signal-injection.ts';
 import { expressionFts } from '../domaine/requete.ts';
 import { normaliser } from '../domaine/sens.ts';
 import { ligneDeCarte } from './cartes.ts';
@@ -38,6 +40,8 @@ export type MemoireDuBanc = {
 	alias: Map<string, string[]>;
 	/** Nombre de fiches de la mémoire (le cosinus relatif se rapporte à toutes). */
 	nombreDeFiches: number;
+	/** Empreinte de chaque fiche indexée (identité de ce que l'on juge). */
+	empreinteDe: ReadonlyMap<string, string>;
 };
 
 /** Premières de chaque liste mises en commun (spec : 10 à 15). */
@@ -59,7 +63,13 @@ export function syntheseDe(e: ElementIndexe | undefined): string {
 }
 
 export async function chargerMemoireDuBanc(dep: Dependances): Promise<MemoireDuBanc> {
-	const [elements, titres, liens, alias] = await Promise.all([dep.index.elements({ genres: ['fiche'] }), dep.index.titres(), dep.index.tousLesLiens(), dep.index.alias()]);
+	const [elements, titres, liens, alias, indexees] = await Promise.all([
+		dep.index.elements({ genres: ['fiche'] }),
+		dep.index.titres(),
+		dep.index.tousLesLiens(),
+		dep.index.alias(),
+		dep.index.fiches(),
+	]);
 	const elementDe = new Map(elements.map((e) => [e.chemin, e]));
 	const fiches: FicheDuGraphe[] = elements.map((e) => ({ chemin: e.chemin, typeFiche: e.typeFiche, declareUnLieu: declareUnLieu(e) }));
 	const resoudre = resolveurDeLiens(titres);
@@ -78,6 +88,7 @@ export async function chargerMemoireDuBanc(dep: Dependances): Promise<MemoireDuB
 		nommables: titres.filter((t) => elementDe.has(t.chemin) && !TYPES_NON_PROPOSABLES.has(type(t.chemin))),
 		alias,
 		nombreDeFiches: elements.length,
+		empreinteDe: new Map(indexees.map((f) => [f.chemin, f.empreinte])),
 	};
 }
 
@@ -87,12 +98,13 @@ export function presentationDe(memoire: MemoireDuBanc, chemin: string): { titre:
 }
 
 /**
- * Candidates d'un message (spec § 3.3, sans geste de session) : fiches proposables (ni `source`, `dossier`, `consigne`,
- * `profil`, `episode`, ni périmées, ni la fiche de position) parmi le périmètre de la position, les fiches neutres (sans lieu
- * déclaré, ni du périmètre ni d'ailleurs) et les fiches d'ailleurs dont le lieu est nommé dans le message. À la racine : les
- * neutres seules. À remplacer par les candidates de T3 (`cartes.ts`) une fois livrées.
+ * Candidates d'un message (spec § 3.3) : fiches proposables (ni `source`, `dossier`, `consigne`, `profil`, `episode`, ni
+ * périmées, ni la fiche de position, ni une fiche injectée à la main à ce message même) parmi le périmètre de la position, les
+ * fiches neutres (sans lieu déclaré, ni du périmètre ni d'ailleurs), les fiches d'ailleurs dont le lieu est nommé dans le
+ * message et les voisines des fiches injectées à la main dans la session (signal de session, `injectees` avec leur âge). À la
+ * racine : les neutres et ces voisines. À remplacer par les candidates de T3 (`cartes.ts`) une fois livrées.
  */
-export async function candidatesDuBanc(dep: Dependances, memoire: MemoireDuBanc, position: string, message: string): Promise<string[]> {
+export async function candidatesDuBanc(dep: Dependances, memoire: MemoireDuBanc, position: string, message: string, injectees: readonly InjectionManuelle[] = []): Promise<string[]> {
 	const ficheDePos = position.trim() === '' ? null : await ficheDePosition(dep, position);
 	const positionFiche = ficheDePos !== null && memoire.elementDe.has(ficheDePos) ? ficheDePos : null;
 	const { dans, ailleurs } = perimetreDe(positionFiche, memoire.fiches, memoire.aretes);
@@ -100,12 +112,27 @@ export async function candidatesDuBanc(dep: Dependances, memoire: MemoireDuBanc,
 	const nommees = positionFiche === null ? [] : fichesNommees(message, memoire.nommables);
 	const lieuxNommes = nommees.filter((c) => memoire.declarants.has(c) && ailleurs.has(c));
 	const ouvertes = [...deverrouiller(lieuxNommes, memoire.fiches, memoire.declarants)].filter((c) => ailleurs.has(c));
+	const reglages = dep.reglages().contexte;
+	const designees = signalInjection(injectees, memoire.aretes, { poids: reglages.poidsInjection, demiVie: reglages.demiVieInjection }).designees;
+	const demandees = new Set(injectees.filter((i) => i.messages === 0).map((i) => i.chemin));
 	const jour = aujourdhui(dep);
 	const proposable = (chemin: string): boolean => {
 		const e = memoire.elementDe.get(chemin);
-		return e !== undefined && !TYPES_NON_PROPOSABLES.has(e.typeFiche) && !estExpire(e, jour) && chemin !== positionFiche;
+		return e !== undefined && !TYPES_NON_PROPOSABLES.has(e.typeFiche) && !estExpire(e, jour) && chemin !== positionFiche && !demandees.has(chemin);
 	};
-	return [...new Set([...dans, ...neutres, ...ouvertes])].filter(proposable).sort();
+	return [...new Set([...dans, ...neutres, ...ouvertes, ...designees])].filter(proposable).sort();
+}
+
+/**
+ * Modèles disponibles pour le banc : le sens s'il rend un vecteur et que l'index a des vecteurs de ce modèle, le reranker s'il
+ * note. Un modèle disponible qui ne répond pas à un message fait laisser ce message (il sera repris à la prochaine extraction).
+ */
+export async function modelesDisponibles(dep: Dependances, demarrer = true): Promise<{ sens: boolean; reranker: boolean }> {
+	const modele = dep.sens.modele();
+	const vecteur = modele === null ? null : await vecteurDe(dep, 'essai', demarrer);
+	const sens = vecteur !== null && modele !== null && (await dep.index.nombreVecteurs(modele)) > 0;
+	const notes = await dep.reranker.noter('essai', ['essai'], { budgetMs: BUDGET_RERANKER_MS, demarrer, activite: { operation: 'recherche' } }).catch(() => null);
+	return { sens, reranker: notes !== null && notes.length === 1 };
 }
 
 /** Signaux de toutes les candidates pour une requête, les têtes de chaque liste et les modèles qui ont répondu. */
@@ -212,6 +239,6 @@ export async function signauxDuMessage(
 	return {
 		signaux,
 		tetes: { sens: ordreDuSens.slice(0, premieres), mots: ordreDesMots.slice(0, premieres), reranker: ordreDuReranker.slice(0, premieres) },
-		modeles: { sens: cos !== null, reranker: logit !== null && soumises.length > 0 },
+		modeles: { sens: cos !== null, reranker: logit !== null },
 	};
 }

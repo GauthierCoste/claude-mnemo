@@ -85,6 +85,8 @@ export type DemandeServir = Omit<DemandeCartes, 'perimetre' | 'servirPosition' |
 	 * elles pèsent sur leurs voisines (âge 0), qui sont classées et proposées à ce message avec le périmètre restant.
 	 */
 	demandees?: readonly string[];
+	/** Faux : l'index est lu tel qu'il est, sans synchroniser (banc sur la mémoire réelle) ; vrai par défaut. */
+	synchroniser?: boolean;
 };
 
 /** `consignes` : le texte des consignes seul (le banc vérifie qu'une consigne attendue est servie) ; `demandees` : les fiches demandées injectées. */
@@ -145,8 +147,8 @@ async function consignesTrouvees(dep: Dependances, rappelees: readonly ElementIn
 }
 
 export async function servir(dep: Dependances, demande: DemandeServir): Promise<Servi> {
-	await synchroniser(dep, SANS_EXTRACTION);
-	const { moment, muet, premier, rappels: tousLesRappels, demandees: voulues, injectees: anciennes, ...cartes } = demande;
+	if (demande.synchroniser !== false) await synchroniser(dep, SANS_EXTRACTION);
+	const { moment, muet, premier, rappels: tousLesRappels, demandees: voulues, injectees: anciennes, synchroniser: _synchroniser, ...cartes } = demande;
 	// les fiches injectées à la main à ce message ont l'âge 0 (une réinjection fait repartir le poids)
 	const aInjecter = [...new Set(voulues ?? [])];
 	const aLaMain = [...(anciennes ?? []).filter((i) => !aInjecter.includes(i.chemin)), ...aInjecter.map((chemin) => ({ chemin, messages: 0 }))];

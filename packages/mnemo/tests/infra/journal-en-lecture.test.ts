@@ -31,7 +31,7 @@ async function etatEnVersion(version: number): Promise<string> {
 	const etat = ouvrirEtat(chemin);
 	await etat.creer(session('s1'));
 	for (const [i, demande] of ['Comment cuire les grisailles du vitrail ?', 'oui', 'Et les températures du four pour la cuisson ?'].entries()) {
-		await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: 10 + i, ids: [], texte: '', ms: 0, sens: false, demande, classement: [], muet: demande === 'oui' ? 'sans_contenu' : null, cartes: [], position: null });
+		await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: 10 + i, ids: i === 0 ? ['pratiques/four.md'] : [], texte: '', ms: 0, sens: false, demande, classement: [], muet: demande === 'oui' ? 'sans_contenu' : null, cartes: [], position: null });
 	}
 	etat.fermer();
 	const base = new DatabaseSync(chemin);
@@ -61,6 +61,9 @@ describe('ouvrirJournalEnLecture', () => {
 			[1, 'Comment cuire les grisailles du vitrail ?', 'projets/atelier-vitrail'],
 			[2, 'Et les températures du four pour la cuisson ?', 'projets/atelier-vitrail'],
 		]);
+		// fiches injectées entières, relues du journal (signal des injections à la main)
+		expect(messages[0]!.injectionsDuJournal).toEqual([{ chemin: 'pratiques/four.md', messages: 0, position: null }]);
+		expect(messages[1]!.injectionsDuJournal).toEqual([{ chemin: 'pratiques/four.md', messages: 1, position: null }]);
 		expect(versionDe(chemin)).toEqual({ v: 11, niveau: false });
 		expect(readFileSync(chemin).equals(avant)).toBe(true);
 	});

@@ -8,6 +8,7 @@ import { servir } from './servir.ts';
 import { SANS_EXTRACTION, synchroniser } from './synchroniser.ts';
 import { raisonDeMutisme } from '../domaine/message-muet.ts';
 import type { ListeDuBanc, Signaux } from './banc-signaux.ts';
+import type { InjectionManuelle } from '../domaine/signal-injection.ts';
 
 /**
  * Un message étiqueté. `attendues` / `interdites` : chemin complet de fiche ou dernier segment (« Corvel.md » désigne
@@ -43,6 +44,16 @@ export type CasContexte = {
 	jugements?: Record<string, Jugement>;
 	/** Vrai : le message a été sauté au jugement ; il ne compte nulle part. */
 	saute?: boolean;
+	/** Horodatage du message au journal (identité stable avec la session et le rang) et date de l'extraction (ISO). */
+	horodatageMs?: number;
+	extraitLe?: string;
+	/** Modèles qui ont répondu pour ce message à l'extraction (un message dont un modèle disponible n'a pas répondu n'est pas gardé). */
+	modeles?: { sens: boolean; reranker: boolean };
+	/**
+	 * Fiches injectées à la main dans la session avant ce message (ou à ce message, âge 0), reconstituées du journal : leurs
+	 * voisines sont candidates (signal de session).
+	 */
+	injectionsManuelles?: InjectionManuelle[];
 };
 export type Jugement = 'pertinente' | 'non_pertinente' | 'indecise';
 export const JUGEMENTS: readonly Jugement[] = ['pertinente', 'non_pertinente', 'indecise'];
@@ -52,7 +63,17 @@ export type VarianteRequete = 'seule' | 'jointe';
  * Une fiche à juger : titre et première ligne figés à l'extraction (ce que l'on montre), les listes où elle était en tête
  * (jamais montrées) et ses signaux bruts par variante de requête, calculés à l'extraction.
  */
-export type CandidateAJuger = { chemin: string; titre: string; ligne: string; listes: ListeDuBanc[]; signaux: Partial<Record<VarianteRequete, Signaux>> };
+export type CandidateAJuger = {
+	chemin: string;
+	titre: string;
+	ligne: string;
+	listes: ListeDuBanc[];
+	signaux: Partial<Record<VarianteRequete, Signaux>>;
+	/** Empreinte de la fiche à l'extraction : une fiche changée depuis n'a plus le jugement qu'on lui a donné. */
+	empreinte?: string;
+	/** Vrai : tirée au hasard (de façon stable) hors de l'union des têtes, pour mesurer ce que la pile laisse de côté. */
+	horsPile?: boolean;
+};
 /** `indesirables` : fiches interdites proposées, et, dans un cas `silence`, tout ce qui est proposé (sauf la fiche de position d'un `premier` muet). */
 export type MesureContexte = { cas: number; justes: number; attenduesProposees: number; attenduesTotal: number; indesirables: number; caracteres: number };
 export type EchecContexte = { nom: string; manquees: string[]; indesirables: string[] };
@@ -66,7 +87,7 @@ export const designe = (nom: string, chemin: string) => chemin === nom || chemin
  * Rejoue un cas : les chemins proposés (fiche de position servie puis cartes), les cartes seules, si le message est muet, la taille
  * du texte injecté et les désignations `injectees` qui ne désignent aucune fiche de l'index.
  */
-async function rejouer(dep: Dependances, cas: CasContexte): Promise<{ proposes: string[]; cartes: string[]; muet: boolean; caracteres: number; injecteesInconnues: string[] }> {
+async function rejouer(dep: Dependances, cas: CasContexte, synchroniserIndex: boolean): Promise<{ proposes: string[]; cartes: string[]; muet: boolean; caracteres: number; injecteesInconnues: string[] }> {
 	const muet = raisonDeMutisme(cas.message);
 	const dejaServies = new Map<string, string | null>();
 	if (!cas.premier) {
@@ -92,6 +113,7 @@ async function rejouer(dep: Dependances, cas: CasContexte): Promise<{ proposes: 
 		fin: Date.now() + DELAI_MS,
 		rappels: false,
 		...(injectees.length === 0 ? {} : { demandees: injectees }),
+		synchroniser: synchroniserIndex,
 	});
 	const { position, cartes } = servi.calcul;
 	return {
@@ -103,13 +125,18 @@ async function rejouer(dep: Dependances, cas: CasContexte): Promise<{ proposes: 
 	};
 }
 
-export async function rejouerCas(dep: Dependances, cas: readonly CasContexte[]): Promise<{ mesure: MesureContexte; echecs: EchecContexte[] }> {
+/**
+ * `synchroniser` (vrai par défaut) : synchroniser l'index d'abord. Faux : l'index est lu tel qu'il est, rien n'est écrit (le
+ * banc sur la mémoire réelle, dont l'index appartient au service en marche).
+ */
+export async function rejouerCas(dep: Dependances, cas: readonly CasContexte[], options: { synchroniser?: boolean } = {}): Promise<{ mesure: MesureContexte; echecs: EchecContexte[] }> {
+	const synchroniserIndex = options.synchroniser ?? true;
 	// l'index doit être à jour avant de lire la position et les empreintes
-	await synchroniser(dep, SANS_EXTRACTION);
+	if (synchroniserIndex) await synchroniser(dep, SANS_EXTRACTION);
 	const mesure: MesureContexte = { cas: cas.length, justes: 0, attenduesProposees: 0, attenduesTotal: 0, indesirables: 0, caracteres: 0 };
 	const echecs: EchecContexte[] = [];
 	for (const c of cas) {
-		const { proposes, cartes, muet, caracteres, injecteesInconnues } = await rejouer(dep, c);
+		const { proposes, cartes, muet, caracteres, injecteesInconnues } = await rejouer(dep, c, synchroniserIndex);
 		const attenduesManquees = c.attendues.filter((a) => !proposes.some((p) => designe(a, p)));
 		const manquees = [...attenduesManquees, ...injecteesInconnues.map((nom) => `${nom} (injectée inconnue)`)];
 		const interdites = c.interdites.filter((i) => proposes.some((p) => designe(i, p)));

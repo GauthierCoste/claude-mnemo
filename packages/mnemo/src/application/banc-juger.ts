@@ -46,8 +46,8 @@ export function progression(cas: readonly CasContexte[]): { messagesJuges: numbe
 }
 
 /**
- * Une réponse : juger la fiche, marquer le message « silence » (rien n'y est pertinent : toutes ses fiches deviennent non
- * pertinentes), ou le sauter.
+ * Une réponse : juger la fiche, marquer le message « silence » (rien n'y est pertinent : ses fiches deviennent non pertinentes,
+ * sauf celles déjà jugées indécises), ou le sauter.
  */
 export type Reponse = { genre: 'juger'; jugement: Jugement } | { genre: 'silence' } | { genre: 'sauter' };
 /** Ce qu'il faut pour annuler une réponse : le message tel qu'il était avant. */
@@ -64,7 +64,9 @@ export function repondre(cas: readonly CasContexte[], cible: AJuger, reponse: Re
 		apres = { ...avant, jugements: { ...avant.jugements, [cible.candidate.chemin]: reponse.jugement } };
 	} else if (reponse.genre === 'silence') {
 		if (Object.values(avant.jugements ?? {}).includes('pertinente')) return null;
-		apres = { ...avant, silence: true, jugements: Object.fromEntries((avant.candidates ?? []).map((x) => [x.chemin, 'non_pertinente' as const])) };
+		// une fiche jugée indécise le reste : « rien d'utile » ne tranche que les autres
+		const jugements: Record<string, Jugement> = Object.fromEntries((avant.candidates ?? []).map((x) => [x.chemin, avant.jugements?.[x.chemin] === 'indecise' ? 'indecise' : 'non_pertinente']));
+		apres = { ...avant, silence: true, jugements };
 	} else {
 		apres = { ...avant, saute: true };
 	}

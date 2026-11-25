@@ -10,10 +10,20 @@ import type { RaisonMuet } from '../domaine/message-muet.ts';
 
 /** Première version de l'état dont le journal porte la demande, le mutisme et la position de chaque entrée. */
 export const VERSION_JOURNAL_MIN = 11;
-const COLONNES_SERVIS = ['rang', 'session', 'moment', 'horodatage_ms', 'demande', 'muet', 'position'];
+const COLONNES_SERVIS = ['rang', 'session', 'ids', 'moment', 'horodatage_ms', 'demande', 'muet', 'position'];
 const COLONNES_SESSIONS = ['id', 'profil', 'dossier', 'position', 'creee_ms'];
 
 type Ligne = Record<string, unknown>;
+
+/** Fiches injectées entières à cette entrée (JSON) ; illisible : aucune. */
+function idsDe(v: unknown): string[] {
+	try {
+		const ids: unknown = JSON.parse(String(v));
+		return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : [];
+	} catch {
+		return [];
+	}
+}
 
 export function ouvrirJournalEnLecture(chemin: string): LectureDuJournal & { version: number; fermer(): void } {
 	if (!existsSync(chemin)) throw new Error(`État des sessions absent : ${chemin}`);
@@ -41,7 +51,7 @@ export function ouvrirJournalEnLecture(chemin: string): LectureDuJournal & { ver
 			},
 			async messages(id, limite) {
 				const lignes = base
-					.prepare("SELECT moment, horodatage_ms, demande, muet, position FROM servis WHERE session = ? AND moment = 'message' ORDER BY rang DESC LIMIT ?")
+					.prepare("SELECT moment, horodatage_ms, demande, muet, position, ids FROM servis WHERE session = ? AND moment = 'message' ORDER BY rang DESC LIMIT ?")
 					.all(id, limite) as Ligne[];
 				return lignes.map(
 					(l): EntreeDuJournal => ({
@@ -50,6 +60,7 @@ export function ouvrirJournalEnLecture(chemin: string): LectureDuJournal & { ver
 						demande: (l.demande as string | null) ?? null,
 						muet: (l.muet as RaisonMuet | null) ?? null,
 						position: (l.position as string | null) ?? null,
+						ids: idsDe(l.ids),
 					}),
 				);
 			},

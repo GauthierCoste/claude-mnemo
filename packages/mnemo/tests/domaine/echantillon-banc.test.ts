@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { choisirMessages, cleDeMessage } from '../../src/domaine/echantillon-banc.ts';
+import { choisirMessages, cleDeMessage, entrelacer } from '../../src/domaine/echantillon-banc.ts';
 import type { MessageDuJournal } from '../../src/domaine/echantillon-banc.ts';
 
 const message = (session: string, groupe: string, rang: number, texte: string, horodatageMs = rang): MessageDuJournal => ({
@@ -18,6 +18,16 @@ const JOURNAL: MessageDuJournal[] = [
 	...[1, 2, 3, 4, 5].map((r) => message('s2', 'A', r, `projet A session 2 message ${r}`, 200 + r)),
 	...[1, 2, 3, 4, 5].map((r) => message('s3', 'B', r, `projet B session 3 message ${r}`, 300 + r)),
 ];
+
+describe('entrelacer', () => {
+	it('premiers messages et suites alternent, mêlés mais dans un ordre fixe', () => {
+		const ordre = entrelacer(JOURNAL);
+		expect(ordre).toHaveLength(JOURNAL.length);
+		expect(ordre.slice(0, 6).map((m) => m.rang === 1)).toEqual([true, false, true, false, true, false]);
+		expect(entrelacer([...JOURNAL].reverse())).toEqual(ordre);
+		expect(ordre.filter((m) => m.rang > 1).map((m) => m.message)).not.toEqual(JOURNAL.filter((m) => m.rang > 1).map((m) => m.message));
+	});
+});
 
 describe('choisirMessages', () => {
 	it('alterne les projets, puis les sessions d’un projet ; chaque session donne d’abord son premier message', () => {

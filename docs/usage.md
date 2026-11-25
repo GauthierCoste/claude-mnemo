@@ -629,7 +629,12 @@ Benchmarks measure Mnemo on fictitious corpora shipped with it (`packages/mnemo/
   sessions (varied, deduplicated), each with the notes to judge: the union of the first ones by meaning, by words and by
   the reranker. `--juger` shows them one at a time, without score or rank, one key per answer (`o` useful, `n` not
   useful, `i` undecided, `r` nothing useful for this message, `s` skip the message, `b` back, `q` quit), saves each
-  answer and resumes where you stopped. `--json` also gives the judged pairs with their raw signals.
+  answer and resumes where you stopped (a copy `banc-contexte.json.bak` is kept from before the session; only one of
+  these commands may write the file at a time). `--par-session <n>` (6 by default) caps the messages taken per session;
+  `--completer` reruns the extraction on the messages already taken, and `--juger` then asks only the new notes. Two
+  notes drawn outside the union are added to each message, to measure what the union misses. A note changed since the
+  extraction has its judgement left out of the measures (`--empreintes garder` to keep it). `--json` also gives the
+  judged pairs with their raw signals. Nothing is written to `.mnemo` except this file.
 - `mnemo banc extraction --reel` and `mnemo banc contradictions --reel`: the archivist run by the real `claude -p` on
   test documents, then scored. **They consume your Claude subscription**: without `--reel`, the command refuses.
 

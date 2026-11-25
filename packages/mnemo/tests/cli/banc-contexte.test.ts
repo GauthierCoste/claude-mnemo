@@ -33,6 +33,18 @@ describe('banc-contexte.json', () => {
 		expect(lireCasContexte(JSON.stringify([avecJugement]))).toEqual([avecJugement]);
 	});
 
+	it('relit l’heure du message, la date d’extraction, les modèles, les injections à la main, l’empreinte et le hors pile', () => {
+		const complet: CasContexte = {
+			...JUGE,
+			horodatageMs: 1_700_000_000_000,
+			extraitLe: '2026-11-25T10:00:00.000Z',
+			modeles: { sens: true, reranker: false },
+			injectionsManuelles: [{ chemin: 'pratiques/four.md', messages: 2 }],
+			candidates: [{ ...JUGE.candidates![0]!, empreinte: 'abc123', horsPile: true }],
+		};
+		expect(lireCasContexte(JSON.stringify([complet]))).toEqual([complet]);
+	});
+
 	it('un ancien cas étiqueté reste lisible, sans champ ajouté', () => {
 		const ancien = { nom: 'n', position: 'p', message: 'm', premier: true, attendues: ['A.md'], interdites: [], silence: false };
 		expect(lireCasContexte(JSON.stringify([ancien]))).toEqual([ancien]);
@@ -48,6 +60,10 @@ describe('options de mnemo banc contexte', () => {
 		expect(lireOptionsContexte(['--extraire'])).toMatchObject({ extraire: true, session: null, nombre: null });
 		expect(lireOptionsContexte(['--extraire', 'abc', '--nombre', '120'])).toMatchObject({ extraire: true, session: 'abc', nombre: 120 });
 		expect(lireOptionsContexte(['--juger'])).toMatchObject({ juger: true });
+		expect(lireOptionsContexte(['--extraire', '--par-session', '10'])).toMatchObject({ parSession: 10 });
+		expect(lireOptionsContexte(['--completer'])).toMatchObject({ completer: true });
+		expect(lireOptionsContexte([])).toMatchObject({ empreintes: 'exclure' });
+		expect(lireOptionsContexte(['--empreintes', 'garder'])).toMatchObject({ empreintes: 'garder' });
 	});
 
 	it('combinaisons refusées', () => {
@@ -56,6 +72,9 @@ describe('options de mnemo banc contexte', () => {
 		expect(() => lireOptionsContexte(['--extraire', '--nombre', 'x'])).toThrow('Nombre');
 		expect(() => lireOptionsContexte(['--juger', '--json'])).toThrow('--json');
 		expect(() => lireOptionsContexte(['--inconnue'])).toThrow('Option inconnue');
+		expect(() => lireOptionsContexte(['--completer', '--extraire'])).toThrow('ne vont pas ensemble');
+		expect(() => lireOptionsContexte(['--completer', '--par-session', '3'])).toThrow('--par-session');
+		expect(() => lireOptionsContexte(['--empreintes', 'oublier'])).toThrow('exclure');
 	});
 });
 

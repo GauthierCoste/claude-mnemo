@@ -1,29 +1,36 @@
-import { mkdir, readFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { JUGEMENTS, rejouerCas } from '../../application/banc-contexte.ts';
 import type { CandidateAJuger, CasContexte, EchecContexte, Jugement, MesureContexte, VarianteRequete } from '../../application/banc-contexte.ts';
-import { extraireJugements, fusionnerCas, messagesAExtraire, messagesDuJournal } from '../../application/banc-extraire.ts';
+import { extraireJugements, fusionnerCas, messagesAExtraire, messagesDesCas, messagesDuJournal } from '../../application/banc-extraire.ts';
+import type { MessageAExtraire } from '../../application/banc-extraire.ts';
 import { progression } from '../../application/banc-juger.ts';
 import { rejouerJugements } from '../../application/banc-rejeu.ts';
 import type { MesuresNiveau, RejeuJugements } from '../../application/banc-rejeu.ts';
 import { LISTES_DU_BANC } from '../../application/banc-signaux.ts';
 import type { Signaux } from '../../application/banc-signaux.ts';
 import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
+import { requeteJointeProvisoire } from '../../domaine/requete-jointe-provisoire.ts';
+import type { InjectionManuelle } from '../../domaine/signal-injection.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
 import { ouvrirJournalEnLecture } from '../../infra/journal-en-lecture.ts';
 import { dependancesReelles } from '../../infra/systeme.ts';
 import { enregistrerCas, jugerAuTerminal } from './banc-juger.ts';
 import { AUCUNE_MEMOIRE, ErreurCli } from './erreurs.ts';
+import { prendreVerrouBanc } from './verrou-banc.ts';
 import { trouverRacine } from './racine.ts';
 
 const USAGE_CONTEXTE = [
-	'Usage : mnemo banc contexte [--json] [--recalculer]',
-	'        mnemo banc contexte --extraire [<session>] [--nombre <n>] [--json]',
+	'Usage : mnemo banc contexte [--json] [--recalculer] [--empreintes exclure|garder]',
+	'        mnemo banc contexte --extraire [<session>] [--nombre <n>] [--par-session <n>] [--json]',
+	'        mnemo banc contexte --completer [--json]',
 	'        mnemo banc contexte --juger',
 ].join('\n');
 /** Messages extraits par défaut, et au plus par session (variété : 20 sessions au moins pour 120 messages). */
 const NOMBRE_PAR_DEFAUT = 50;
 const PAR_SESSION = 6;
+/** Règle provisoire de la requête jointe, remplacée par celle de T4. */
+const REQUETE_JOINTE = requeteJointeProvisoire;
 
 /** Cas du banc `contexte` : `.mnemo/banc-contexte.json` (état local, ignoré par git, jamais commité). */
 export function fichierBancContexte(racine: string): string {
@@ -58,8 +65,14 @@ function lireCandidates(v: unknown, i: number): CandidateAJuger[] {
 			ligne: typeof x['ligne'] === 'string' ? x['ligne'] : '',
 			listes: LISTES_DU_BANC.filter((l) => listes.includes(l)),
 			signaux,
+			...(typeof x['empreinte'] === 'string' ? { empreinte: x['empreinte'] } : {}),
+			...(x['horsPile'] === true ? { horsPile: true } : {}),
 		};
 	});
+}
+
+function lireInjections(v: unknown[]): InjectionManuelle[] {
+	return v.flatMap((x) => (estObjet(x) && typeof x['chemin'] === 'string' && typeof x['messages'] === 'number' ? [{ chemin: x['chemin'], messages: x['messages'] }] : []));
 }
 
 function lireJugements(v: unknown, i: number): Record<string, Jugement> {
@@ -101,6 +114,10 @@ export function lireCasContexte(texte: string): CasContexte[] {
 			...(c['candidates'] === undefined ? {} : { candidates: lireCandidates(c['candidates'], i) }),
 			...(c['jugements'] === undefined ? {} : { jugements: lireJugements(c['jugements'], i) }),
 			...(c['saute'] === true ? { saute: true } : {}),
+			...(typeof c['horodatageMs'] === 'number' ? { horodatageMs: c['horodatageMs'] } : {}),
+			...(typeof c['extraitLe'] === 'string' ? { extraitLe: c['extraitLe'] } : {}),
+			...(estObjet(c['modeles']) ? { modeles: { sens: c['modeles']['sens'] === true, reranker: c['modeles']['reranker'] === true } } : {}),
+			...(Array.isArray(c['injectionsManuelles']) ? { injectionsManuelles: lireInjections(c['injectionsManuelles']) } : {}),
 		};
 	});
 }
@@ -128,24 +145,29 @@ export function contexteEnTexte(mesure: MesureContexte, echecs: EchecContexte[])
 const pourcent = (x: number | null) => (x === null ? '-' : `${Math.round(x * 100)} %`);
 const NOMS_NIVEAUX: Record<MesuresNiveau['niveau'], string> = { complets: 'Complets', sens: 'Sens seul', ordre: 'Coupés' };
 
-/** Les mesures du jugement, lisibles : une ligne par niveau et variante, puis ce qui reste à brancher. */
+const variante = (v: MesuresNiveau['variante']) => (v === 'seule' ? 'message seul' : 'message joint');
+
+/** Les mesures du jugement, lisibles : une ligne par niveau et variante, le biais de la pile, puis ce qui reste à brancher. */
 export function jugementsEnTexte(r: RejeuJugements): string {
-	const lignes = [`Jugements : ${r.messagesJuges} messages jugés, ${r.sessions} sessions, ${r.paires.length} paires (${r.indecises} indécises exclues)`];
+	const lignes = [`Jugements : ${r.messagesJuges} messages rejoués, ${r.sessions} sessions, ${r.paires.length} paires (${r.indecises} indécises exclues)`];
 	for (const m of r.mesures) {
 		if (m.messages === 0) {
-			lignes.push(`  ${NOMS_NIVEAUX[m.niveau]}, ${m.variante === 'seule' ? 'message seul' : 'message joint'} : aucun message classé (modèle absent)`);
+			lignes.push(`  ${NOMS_NIVEAUX[m.niveau]}, ${variante(m.variante)} : aucun message classé (modèle absent)`);
 			continue;
 		}
-		const tete = `  ${NOMS_NIVEAUX[m.niveau]}, ${m.variante === 'seule' ? 'message seul' : 'message joint'} : ${m.messages} messages (${m.silences} silence), ${m.pertinentes} pertinentes / ${m.nonPertinentes} non`;
+		const tete = `  ${NOMS_NIVEAUX[m.niveau]}, ${variante(m.variante)} : ${m.messages} messages (${m.silences} silence), ${m.pertinentes} pertinentes / ${m.nonPertinentes} non`;
 		const ordre = `rappel des 10 premières ${pourcent(m.rappel10)}, pistes : rappel ${pourcent(m.rappelPistes)}, précision ${pourcent(m.precisionPistes)}${m.nonJugeesEnTete === 0 ? '' : `, ${m.nonJugeesEnTete} non jugées en tête`}`;
 		lignes.push(`${tete} ; ${ordre}`);
 		if (m.note !== null) {
 			const s = m.note.auSeuil;
 			lignes.push(
-				`    au seuil ${pourcent(s.seuil)} : ${s.injections} injections (${s.sessions} sessions), précision ${pourcent(s.precision)}, Wilson ${pourcent(s.wilsonBasse)}, ECE ${m.note.ece === null ? '-' : m.note.ece.toFixed(3)}, ${s.silencesAvecInjection} silences avec injection`,
+				`    au seuil ${pourcent(s.seuil)} : ${s.injections} injections (${s.injectionsNonJugees} non jugées, ${s.sessions} sessions), précision ${pourcent(s.precision)} (pessimiste ${pourcent(s.precisionPessimiste)}), Wilson ${pourcent(s.wilsonBasse)} (pessimiste ${pourcent(s.wilsonBassePessimiste)}), ECE ${m.note.ece === null ? '-' : m.note.ece.toFixed(3)}, ${s.silencesAvecInjection} silences avec injection`,
 			);
 		}
 	}
+	const { pile, horsPile } = r.biais;
+	lignes.push(`  Biais de la pile : pertinentes ${pile.pertinentes} / ${pile.jugees} dans la pile (${pourcent(pile.jugees === 0 ? null : pile.pertinentes / pile.jugees)}), ${horsPile.pertinentes} / ${horsPile.jugees} hors pile (${pourcent(horsPile.jugees === 0 ? null : horsPile.pertinentes / horsPile.jugees)})`);
+	if (r.empreintesChangees.length > 0) lignes.push(`  ${r.empreintesChangees.length} fiche(s) jugée(s) changée(s) depuis l'extraction (voir --json) : leur jugement est exclu, sauf --empreintes garder`);
 	if (r.modeles !== null && (!r.modeles.sens || !r.modeles.reranker)) {
 		lignes.push(`  Modèles absents au recalcul : ${[r.modeles.sens ? null : 'sens', r.modeles.reranker ? null : 'reranker'].filter((x) => x !== null).join(', ')}`);
 	}
@@ -153,16 +175,32 @@ export function jugementsEnTexte(r: RejeuJugements): string {
 	return lignes.join('\n');
 }
 
-type Options = { json: boolean; extraire: boolean; session: string | null; nombre: number | null; juger: boolean; recalculer: boolean };
+type Options = {
+	json: boolean;
+	extraire: boolean;
+	completer: boolean;
+	session: string | null;
+	nombre: number | null;
+	parSession: number | null;
+	juger: boolean;
+	recalculer: boolean;
+	empreintes: 'exclure' | 'garder';
+};
 
 export function lireOptionsContexte(args: readonly string[]): Options {
-	const o: Options = { json: false, extraire: false, session: null, nombre: null, juger: false, recalculer: false };
+	const o: Options = { json: false, extraire: false, completer: false, session: null, nombre: null, parSession: null, juger: false, recalculer: false, empreintes: 'exclure' };
 	const refus = (motif: string) => new ErreurCli(`${motif}\n${USAGE_CONTEXTE}`, 2);
+	const entier = (option: string, valeur: string | undefined): number => {
+		const n = Number(valeur);
+		if (!Number.isInteger(n) || n < 1) throw refus(`Nombre manquant ou invalide après ${option}.`);
+		return n;
+	};
 	for (let k = 0; k < args.length; k++) {
 		const a = args[k]!;
 		if (a === '--json') o.json = true;
 		else if (a === '--juger') o.juger = true;
 		else if (a === '--recalculer') o.recalculer = true;
+		else if (a === '--completer') o.completer = true;
 		else if (a === '--extraire') {
 			o.extraire = true;
 			const suivant = args[k + 1];
@@ -171,14 +209,20 @@ export function lireOptionsContexte(args: readonly string[]): Options {
 				k += 1;
 			}
 		} else if (a === '--nombre') {
-			const n = Number(args[k + 1]);
-			if (!Number.isInteger(n) || n < 1) throw refus('Nombre manquant ou invalide après --nombre.');
-			o.nombre = n;
+			o.nombre = entier(a, args[k + 1]);
+			k += 1;
+		} else if (a === '--par-session') {
+			o.parSession = entier(a, args[k + 1]);
+			k += 1;
+		} else if (a === '--empreintes') {
+			const v = args[k + 1];
+			if (v !== 'exclure' && v !== 'garder') throw refus('--empreintes attend « exclure » ou « garder ».');
+			o.empreintes = v;
 			k += 1;
 		} else throw refus(a.startsWith('--') ? `Option inconnue : « ${a} ».` : `Argument inattendu : « ${a} ».`);
 	}
-	if ([o.extraire, o.juger, o.recalculer].filter(Boolean).length > 1) throw refus('--extraire, --juger et --recalculer ne vont pas ensemble.');
-	if (o.nombre !== null && !o.extraire) throw refus("--nombre ne va qu'avec --extraire.");
+	if ([o.extraire, o.completer, o.juger, o.recalculer].filter(Boolean).length > 1) throw refus('--extraire, --completer, --juger et --recalculer ne vont pas ensemble.');
+	if ((o.nombre !== null || o.parSession !== null) && !o.extraire) throw refus("--nombre et --par-session ne vont qu'avec --extraire.");
 	if (o.juger && o.json) throw refus('--juger ne va pas avec --json.');
 	return o;
 }
@@ -194,86 +238,135 @@ function avancement(libelle: string): (faits: number, total: number) => void {
 const LECTURE_MAX_MS = 30 * 60_000;
 const dependancesEnLecture = (racine: string) => dependancesReelles(racine, { indexEnLecture: { finMs: Date.now() + LECTURE_MAX_MS } });
 const enErreurCli = (e: unknown) => new ErreurCli(e instanceof Error ? e.message : String(e));
+const SUITE = 'Ensuite : la même commande avec --juger (au lieu de --extraire ou --completer)';
 
-async function extraire(racine: string, fichier: string, existants: CasContexte[], o: Options): Promise<void> {
-	// l'état des sessions est lu sans migration ni écriture : le service en marche (une autre version, peut-être) le garde tel quel
-	let lecture: ReturnType<typeof ouvrirJournalEnLecture>;
+/** Pourquoi il y a moins de messages que demandé. */
+function raisonDuManque(demandes: number, choisis: number, nouveaux: number, parSession: number): string {
+	if (choisis >= demandes) return '';
+	if (nouveaux <= choisis) return ` (le journal n'a que ${nouveaux} message(s) porteur(s) nouveau(x))`;
+	return ` (au plus ${parSession} par session : --par-session pour en prendre plus)`;
+}
+
+/**
+ * `--extraire` (nouveaux messages) ou `--completer` (les cas déjà extraits, relancés : leurs nouvelles fiches s'ajoutent, et
+ * `--juger` ne demandera qu'elles). Le fichier des jugements est sous verrou pendant tout le calcul.
+ */
+async function extraire(racine: string, fichier: string, o: Options): Promise<void> {
+	await mkdir(dirname(fichier), { recursive: true });
+	const rendre = prendreVerrouBanc(fichier, o.completer ? '--completer' : '--extraire');
 	try {
-		lecture = ouvrirJournalEnLecture(join(racine, DOSSIER_LOCAL, 'etat.sqlite'));
-	} catch (e) {
-		throw enErreurCli(e);
-	}
-	const dep = dependancesEnLecture(racine);
-	try {
-		const journal = await messagesDuJournal(lecture, o.session ?? undefined).catch((e: unknown) => {
-			throw enErreurCli(e);
-		});
-		// une session nommée : tous ses messages porteurs ; sinon, un choix varié parmi toutes les sessions
-		const choix = o.session === null ? { nombre: o.nombre ?? NOMBRE_PAR_DEFAUT, parSession: PAR_SESSION } : { nombre: o.nombre ?? Infinity, parSession: Infinity };
-		const choisis = messagesAExtraire(journal, existants, choix);
-		if (!o.json) console.error(`${choisis.length} message(s) à extraire (sur ${journal.length} messages porteurs au journal) ; calcul des fiches à juger, modèles compris…`);
-		const bilan = await extraireJugements(dep, choisis, { avancement: avancement('Messages') }).catch((e: unknown) => {
-			throw enErreurCli(e);
-		});
-		const { cas, ajoutes, completes } = fusionnerCas(existants, bilan.cas);
-		await mkdir(dirname(fichier), { recursive: true });
-		await enregistrerCas(fichier, cas);
-		const fiches = bilan.cas.reduce((n, c) => n + (c.candidates?.length ?? 0), 0);
-		const p = progression(cas);
-		if (o.json) {
-			console.log(JSON.stringify({ ajoutes, completes, sansCandidate: bilan.sansCandidate, fiches, modeles: bilan.modeles, messages: p.messages, messagesJuges: p.messagesJuges }));
-			return;
+		const existants = await lireCasDuFichier(fichier);
+		let choisis: MessageAExtraire[];
+		let manque = '';
+		if (o.completer) {
+			choisis = messagesDesCas(existants);
+			if (choisis.length === 0) throw new ErreurCli(`Aucun cas à compléter dans ${fichier}.`);
+		} else {
+			// l'état des sessions est lu sans migration ni écriture : le service en marche (une autre version, peut-être) le garde tel quel
+			let lecture: ReturnType<typeof ouvrirJournalEnLecture>;
+			try {
+				lecture = ouvrirJournalEnLecture(join(racine, DOSSIER_LOCAL, 'etat.sqlite'));
+			} catch (e) {
+				throw enErreurCli(e);
+			}
+			try {
+				const journal = await messagesDuJournal(lecture, o.session ?? undefined).catch((e: unknown) => {
+					throw enErreurCli(e);
+				});
+				// une session nommée : tous ses messages porteurs ; sinon, un choix varié parmi toutes les sessions
+				const parSession = o.parSession ?? (o.session === null ? PAR_SESSION : Infinity);
+				const nombre = o.nombre ?? (o.session === null ? NOMBRE_PAR_DEFAUT : Infinity);
+				const pris = messagesAExtraire(journal, existants, { nombre, parSession });
+				choisis = pris.choisis;
+				manque = Number.isFinite(nombre) ? raisonDuManque(nombre, choisis.length, pris.nouveaux, parSession) : '';
+				if (!o.json) console.error(`${choisis.length} message(s) pris${Number.isFinite(nombre) ? ` sur ${nombre} demandé(s)` : ''}${manque} ; calcul des fiches à juger, modèles compris…`);
+			} finally {
+				lecture.fermer();
+			}
 		}
-		const absents = [bilan.modeles.sens ? null : 'sens', bilan.modeles.reranker ? null : 'reranker'].filter((x) => x !== null);
-		console.log(
-			[
-				`${ajoutes} message(s) ajouté(s), ${completes} complété(s), ${fiches} fiches à juger (${bilan.cas.length === 0 ? 0 : Math.round(fiches / bilan.cas.length)} par message)${bilan.sansCandidate === 0 ? '' : ` ; ${bilan.sansCandidate} sans aucune fiche candidate, laissé(s)`}.`,
-				...(absents.length === 0 ? [] : [`Attention : modèle absent (${absents.join(', ')}) : les fiches à juger ne viennent que des autres listes.`]),
-				`À juger : ${p.messages - p.messagesJuges} message(s). Ensuite : la même commande avec --juger (au lieu de --extraire)`,
-			].join('\n'),
-		);
+		const dep = dependancesEnLecture(racine);
+		try {
+			const bilan = await extraireJugements(dep, choisis, { requeteJointe: REQUETE_JOINTE, avancement: avancement('Messages') }).catch((e: unknown) => {
+				throw enErreurCli(e);
+			});
+			// relu sous le verrou : rien n'a pu l'écrire entre-temps
+			const { cas, ajoutes, completes, fichesAjoutees } = fusionnerCas(await lireCasDuFichier(fichier), bilan.cas);
+			await enregistrerCas(fichier, cas);
+			const p = progression(cas);
+			if (o.json) {
+				console.log(JSON.stringify({ pris: choisis.length, ajoutes, completes, fichesAjoutees, sansCandidate: bilan.sansCandidate, sansModele: bilan.sansModele, modeles: bilan.modeles, messages: p.messages, messagesJuges: p.messagesJuges }));
+				return;
+			}
+			const fiches = bilan.cas.filter((c) => !existants.some((e) => e.message === c.message && e.position === c.position)).reduce((n, c) => n + (c.candidates?.length ?? 0), 0);
+			const absents = [bilan.modeles.sens ? null : 'sens', bilan.modeles.reranker ? null : 'reranker'].filter((x) => x !== null);
+			const laisses = [
+				bilan.sansCandidate === 0 ? null : `${bilan.sansCandidate} sans aucune fiche candidate`,
+				bilan.sansModele === 0 ? null : `${bilan.sansModele} dont un modèle n'a pas répondu (repris à la prochaine extraction)`,
+			].filter((x) => x !== null);
+			console.log(
+				[
+					`${choisis.length} message(s) pris${manque} : ${ajoutes} ajouté(s) (${fiches} fiches à juger), ${completes} complété(s) (${fichesAjoutees} fiches ajoutées)${laisses.length === 0 ? '' : ` ; laissés : ${laisses.join(', ')}`}.`,
+					...(absents.length === 0 ? [] : [`Attention : modèle indisponible (${absents.join(', ')}) : les fiches à juger ne viennent que des autres listes.`]),
+					`À juger : ${p.messages - p.messagesJuges} message(s). ${SUITE}`,
+				].join('\n'),
+			);
+		} finally {
+			dep.index.fermer();
+		}
 	} finally {
-		dep.index.fermer();
-		lecture.fermer();
+		rendre();
 	}
 }
 
 /**
  * `mnemo banc contexte` : rejoue les cas étiquetés à la main et mesure les messages jugés de `.mnemo/banc-contexte.json`
- * (sans `claude`) ; `--recalculer` recalcule les signaux avec les modèles. `--extraire [<session>]` ajoute des messages réels
- * à juger, avec leurs fiches figées ; `--juger` les fait juger une fiche à la fois ; `--json` rend aussi les paires jugées et
- * leurs signaux bruts (apprentissage de la note).
+ * (sans `claude`, sans rien écrire dans `.mnemo`) ; `--recalculer` recalcule les signaux avec les modèles. `--extraire
+ * [<session>]` ajoute des messages réels à juger, avec leurs fiches figées ; `--completer` relance l'extraction sur les cas
+ * existants ; `--juger` les fait juger une fiche à la fois ; `--json` rend aussi les paires jugées et leurs signaux bruts.
  */
 export async function commandeContexte(args: string[]): Promise<void> {
 	const o = lireOptionsContexte(args);
 	const racine = trouverRacine(process.cwd());
 	if (racine === null) throw new ErreurCli(AUCUNE_MEMOIRE);
 	const fichier = fichierBancContexte(racine);
-	const existants = await lireCasDuFichier(fichier);
 
-	if (o.extraire) return extraire(racine, fichier, existants, o);
+	if (o.extraire || o.completer) return extraire(racine, fichier, o);
 	if (o.juger) {
-		if (progression(existants).messages === 0) throw new ErreurCli(`Aucun message à juger dans ${fichier}. Ajoutez-en avec : mnemo banc contexte --extraire`);
-		const fin = await jugerAuTerminal(fichier, existants, { entree: process.stdin, sortie: process.stdout }).catch((e: unknown) => {
-			throw new ErreurCli(e instanceof Error ? e.message : String(e));
-		});
-		const suite = fin.messagesJuges === fin.messages ? ' Tout est jugé : mnemo banc contexte --extraire pour en ajouter.' : ' Relancez --juger pour reprendre.';
-		console.log(`${fin.messagesJuges} / ${fin.messages} messages jugés (${fin.silences} silence, ${fin.sautes} sautés), enregistrés dans ${fichier}.${suite}`);
+		const rendre = prendreVerrouBanc(fichier, '--juger');
+		try {
+			const existants = await lireCasDuFichier(fichier);
+			if (progression(existants).messages === 0) throw new ErreurCli(`Aucun message à juger dans ${fichier}. Ajoutez-en avec --extraire.`);
+			// copie de sûreté du fichier tel qu'il était au lancement
+			await copyFile(fichier, `${fichier}.bak`);
+			const fin = await jugerAuTerminal(fichier, existants, { entree: process.stdin, sortie: process.stdout }).catch((e: unknown) => {
+				throw enErreurCli(e);
+			});
+			const suite = fin.messagesJuges === fin.messages ? ' Tout est jugé : --extraire pour en ajouter.' : ' Relancez --juger pour reprendre.';
+			console.log(`${fin.messagesJuges} / ${fin.messages} messages jugés (${fin.silences} silence, ${fin.sautes} sautés), enregistrés dans ${fichier} (copie d'avant la séance : ${fichier}.bak).${suite}`);
+		} finally {
+			rendre();
+		}
 		return;
 	}
+	const existants = await lireCasDuFichier(fichier);
 	const etiquetes = existants.filter((c) => c.candidates === undefined);
 	const avecCandidates = existants.filter((c) => c.candidates !== undefined);
-	if (existants.length === 0) throw new ErreurCli(`Aucun cas dans ${fichier}. Ajoutez-en avec : mnemo banc contexte --extraire`);
-	// index en lecture seule : un index pas à jour fait échouer le rejeu des cas étiquetés (sa synchronisation), sans rien écrire
+	if (existants.length === 0) throw new ErreurCli(`Aucun cas dans ${fichier}. Ajoutez-en avec --extraire.`);
+	// index en lecture seule et jamais synchronisé : le rejeu n'écrit rien dans `.mnemo`
 	const dep = dependancesEnLecture(racine);
 	try {
-		const etiquetage = etiquetes.length === 0 ? null : await rejouerCas(dep, etiquetes).catch((e: unknown) => {
-			throw new ErreurCli(`Rejeu des cas étiquetés impossible sur l'index tel qu'il est (le banc ne l'écrit jamais ; laisser le service le synchroniser) : ${e instanceof Error ? e.message : String(e)}`);
+		const etiquetage = etiquetes.length === 0 ? null : await rejouerCas(dep, etiquetes, { synchroniser: false }).catch((e: unknown) => {
+			throw enErreurCli(e);
 		});
 		const jugements =
 			avecCandidates.length === 0
 				? null
-				: await rejouerJugements(dep, avecCandidates, { recalculer: o.recalculer, ...(o.recalculer ? { avancement: avancement('Rejeu') } : {}) }).catch((e: unknown) => {
+				: await rejouerJugements(dep, avecCandidates, {
+						recalculer: o.recalculer,
+						empreintes: o.empreintes,
+						requeteJointe: REQUETE_JOINTE,
+						...(o.recalculer ? { avancement: avancement('Rejeu') } : {}),
+					}).catch((e: unknown) => {
 						throw enErreurCli(e);
 					});
 		if (o.json) {

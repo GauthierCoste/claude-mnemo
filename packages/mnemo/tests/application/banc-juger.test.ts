@@ -63,6 +63,14 @@ describe('jugement une fiche à la fois', () => {
 		expect(repondre(utile, prochaine(utile)!, { genre: 'silence' })).toBeNull();
 	});
 
+	it('silence après une indécise : l’indécise le reste, les autres deviennent non pertinentes', () => {
+		const indecise = repondre(CAS, prochaine(CAS)!, { genre: 'juger', jugement: 'indecise' })!.cas;
+		const chemin = Object.keys(indecise[1]!.jugements!)[0]!;
+		const fait = repondre(indecise, prochaine(indecise)!, { genre: 'silence' })!;
+		expect(fait.cas[1]!.jugements![chemin]).toBe('indecise');
+		expect(Object.values(fait.cas[1]!.jugements!).filter((j) => j === 'non_pertinente')).toHaveLength(2);
+	});
+
 	it('sauter : le message ne compte plus nulle part', () => {
 		const cas = repondre(CAS, prochaine(CAS)!, { genre: 'sauter' })!.cas;
 		expect(prochaine(cas)!.indice).toBe(2);
