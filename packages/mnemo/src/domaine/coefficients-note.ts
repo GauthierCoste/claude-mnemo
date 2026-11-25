@@ -18,6 +18,7 @@ export const COEFFICIENTS_NOTE: CoefficientsNote = {
 			"sens": null,
 			"reranker": null
 		},
+		"echelle": null,
 		"paires": 0,
 		"messages": 0,
 		"sessions": 0,
@@ -39,6 +40,7 @@ export const COEFFICIENTS_NOTE: CoefficientsNote = {
 			"sens": null,
 			"reranker": null
 		},
+		"echelle": null,
 		"paires": 0,
 		"messages": 0,
 		"sessions": 0,

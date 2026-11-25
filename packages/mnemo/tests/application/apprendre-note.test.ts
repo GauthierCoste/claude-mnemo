@@ -159,6 +159,36 @@ describe('apprendreNote', { timeout: 60_000 }, () => {
 		expect(rapport.coefficients.complets).toBe(complets.modele);
 	});
 
+	it('le Complets prend la variante de requête du Sens seul (validation emboîtée et modèle final) ; échelle des signaux enregistrée', () => {
+		// requête seule : seuls les mots disent quelque chose ; jointe : seul le logit. Libre, le Complets prendrait la jointe.
+		const bruit = (chemin: string, k: number) => ((chemin.length * 7919 + k * 104729 + [...chemin].reduce((a, c) => a + c.charCodeAt(0), 0)) % 1000) / 1000 - 0.5;
+		const cas = banc(SCENARIOS.favorable, 1000, 80, 16).map((c) => ({
+			...c,
+			candidates: c.candidates!.map((x) => {
+				const seule = x.signaux.seule!;
+				return {
+					...x,
+					signaux: {
+						seule: { ...seule, logit: seule.logit === null ? null : bruit(x.chemin, 1) * 6, cosinusRelatif: 0, cosinusZ: 0 },
+						jointe: { ...seule, cosinusRelatif: 0, cosinusZ: 0, bm25Relatif: 0, signalSession: 0, apriori: 0 },
+					},
+				};
+			}),
+		}));
+		const jeu = jeuDApprentissage(cas, null, INSTALLES);
+		expect(jeu.jointe).toBe(true);
+		expect(choisirConfiguration(jeu, jeu.messages, 'complets').retenue!.requete).toBe('jointe');
+		expect(choisirConfiguration(jeu, jeu.messages, 'complets', { requete: 'seule' }).lignes.every((l) => l.requete === 'seule')).toBe(true);
+		const echelle = { poidsInjection: 0.3, demiVieInjection: 4, apriori: 'signature' };
+		const rapport = apprendreNote(jeu, { date: DATE, graines: [1], echelle });
+		expect(rapport.coefficients.sens.requete).toBe('seule');
+		expect(rapport.coefficients.complets.requete).toBe('seule');
+		const complets = rapport.niveaux.find((n) => n.niveau === 'complets')!;
+		expect(complets.stabilite.every((x) => x.configuration.startsWith('requête seule'))).toBe(true);
+		expect(rapport.coefficients.sens.echelle).toEqual(echelle);
+		expect(rapport.coefficients.complets.echelle).toEqual(echelle);
+	});
+
 	it('refuse le scénario au hasard', () => {
 		const rapport = apprendreNote(jeuDApprentissage(banc(SCENARIOS.auHasard, 1000, 140, 28), null, INSTALLES), { date: DATE, graines: [1] });
 		for (const n of rapport.niveaux) expect(n.modele.accepte).toBe(false);

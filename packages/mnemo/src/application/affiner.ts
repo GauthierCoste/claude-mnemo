@@ -15,6 +15,7 @@ import { cosinusDesFiches, cosinusRelatif, cosinusZ } from '../domaine/signaux-d
 import { requeteDuReranker, texteDuReranker } from '../domaine/textes-du-reranker.ts';
 import { classementDuJournal } from './classement-du-message.ts';
 import { modelesActifs, noterLeClassement } from './note-du-classement.ts';
+import type { ModelesDeNote } from '../domaine/note-de-confiance.ts';
 import type { LigneDeClassement } from './classement-du-message.ts';
 import type { Classe, Dependances, EtatSessions, VecteurDuMessage } from './ports.ts';
 
@@ -47,6 +48,10 @@ export type DemandeAffinage = {
 	 */
 	mesurer?: boolean;
 	budgetMs?: number;
+	/** L'a priori des gestes a été lu au hook (sinon, une note qui le pèse n'est pas calibrée). Absent : non. */
+	aprioriConnu?: boolean;
+	/** Les modèles de la note lus pour ce message au hook ; absents : lus ici. */
+	modeles?: ModelesDeNote;
 };
 
 export type OptionsAffinage = {
@@ -148,9 +153,16 @@ export async function affiner(dep: Dependances, etat: Pick<EtatSessions, 'comple
 	await diffuser();
 	let lignes: LigneDeClassement[] = [...d.classement];
 	let vecteur: VecteurDuMessage | null = null;
+	const modeles = d.modeles ?? modelesActifs(dep);
+	const aprioriConnu = { aprioriConnu: d.aprioriConnu === true };
 	if (!d.sens) {
 		const calcul = await avecLeSens(dep, d, fin).catch(() => null);
-		if (calcul !== null) ({ lignes, vecteur } = calcul);
+		if (calcul !== null) {
+			({ lignes, vecteur } = calcul);
+			// le sens manquait au hook : la note Sens seul ordonne d'abord (si un modèle est appris), puis les 30 sont choisies
+			const parSens = noterLeClassement(lignes, modeles, aprioriConnu);
+			if (parSens.parNote) lignes = parSens.lignes;
+		}
 	}
 	if (coupe()) return sansAffinage();
 	// les notes du hook sont gardées telles quelles : seules les autres candidates sont soumises
@@ -180,7 +192,8 @@ export async function affiner(dep: Dependances, etat: Pick<EtatSessions, 'comple
 	// la note recalculée avec les logits (et le sens, s'il manquait au hook) ; sans note apprise, l'ordre provisoire
 	const note = noterLeClassement(
 		lignes.map((l) => ({ ...l, logit: logits.get(l.chemin) ?? null })),
-		modelesActifs(dep),
+		modeles,
+		aprioriConnu,
 	);
 	const ordre = note.parNote ? note.lignes : ordreAffine(lignes, logits);
 	const affine = classementDuJournal(ordre).map((c) => ({ ...c, rangHook: rangHook.get(c.id) ?? c.rang }));

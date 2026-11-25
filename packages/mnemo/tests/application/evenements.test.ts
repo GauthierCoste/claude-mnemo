@@ -14,7 +14,7 @@ import { vectoriser } from '../../src/application/vectoriser.ts';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import type { Reranker, Sens } from '../../src/application/ports.ts';
 import { servirQuestion } from '../aides/servir.ts';
-import { modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
+import { echelleDesSignaux, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
 import { texteDossierNonRattache } from '../../src/domaine/rattachement.ts';
 import type { EvenementHook, Session } from '../../src/domaine/session.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
@@ -641,10 +641,16 @@ describe('traiterEvenement : contexte sobre au message', () => {
 		dep.sens = { modele: () => 'espion@1', vecteurs: async (textes) => (vus.push(...textes), textes.map((t) => Float32Array.from([t.includes('avoir') ? 1 : 0.2, 1]))) };
 		await synchroniser(dep, SANS_EXTRACTION);
 		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
-		const sens = { ...modeleNonAppris(), apprisLe: '2026-11-25', refus: [], accepte: true, requete: 'jointe' as const, biais: 0, poids: { cosinusRelatif: 1 } };
-		dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens }, installes: { sens: null, reranker: null } });
-		await traiterEvenement(dep, pil, message(10, 'les avoirs du catalogue de la refonte'), local);
+		const echelle = echelleDesSignaux(dep.reglages().contexte);
+		const sens = { ...modeleNonAppris(), apprisLe: '2026-11-25', refus: [], accepte: true, requete: 'jointe' as const, biais: 0, poids: { cosinusRelatif: 1 }, echelle };
+		let lectures = 0;
+		dep.note = () => (lectures++, { coefficients: { complets: modeleNonAppris(), sens }, installes: { sens: null, reranker: null } });
+		const affinages: DemandeAffinage[] = [];
+		await traiterEvenement(dep, pil, message(10, 'les avoirs du catalogue de la refonte'), { ...local, affiner: (d) => affinages.push(d) });
 		expect((await etat.servis(ID, 1))[0]).toMatchObject({ calibree: true });
+		// les modèles sont lus une fois pour le message, et passés à l'affinage ; a priori non lu (hook sans service)
+		expect(lectures).toBe(1);
+		expect(affinages[0]).toMatchObject({ modeles: { sens: { etat: 'accepte' } }, aprioriConnu: false });
 		vus.length = 0;
 		await traiterEvenement(dep, pil, message(11, 'et pour les factures annulées ?'), local);
 		expect(vus).toEqual(['les avoirs du catalogue de la refonte\net pour les factures annulées ?']);

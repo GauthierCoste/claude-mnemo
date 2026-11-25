@@ -24,8 +24,9 @@ import { accepter, calibration, grilleDesSeuils, mesurerAcceptation, SESSION_MAN
 import type { CandidateNotee, CaseDeSeuils, MesuresDAcceptation, MessageNote, StatutDeJugement } from '../domaine/acceptation-note.ts';
 import { plisParSessionMelanges } from '../domaine/mesures-banc.ts';
 import type { TrancheFiabilite } from '../domaine/mesures-banc.ts';
-import { identiteDifferente, MAXIMUMS_DES_POIDS, modeleNonAppris, NIVEAUX_DE_NOTE, RERANKEES_AU_HOOK, VARIABLES_DU_NIVEAU, VARIABLES_MAX, variablesDeNote } from '../domaine/modele-de-note.ts';
-import type { CoefficientsNote, IdentiteDesModeles, MesuresDuModele, MethodeCosinus, ModeleDeNote, NiveauDeNote, RequeteDeNote, SignauxDeNote, VariableDeNote } from '../domaine/modele-de-note.ts';
+import { echelleDesSignaux, identiteDifferente, MAXIMUMS_DES_POIDS, modeleNonAppris, NIVEAUX_DE_NOTE, RERANKEES_SIMULEES, VARIABLES_DU_NIVEAU, VARIABLES_MAX, variablesDeNote } from '../domaine/modele-de-note.ts';
+import { REGLAGES_PAR_DEFAUT } from '../domaine/reglages.ts';
+import type { CoefficientsNote, EchelleDesSignaux, IdentiteDesModeles, MesuresDuModele, MethodeCosinus, ModeleDeNote, NiveauDeNote, RequeteDeNote, SignauxDeNote, VariableDeNote } from '../domaine/modele-de-note.ts';
 import { apprendreRegression, marge, perteMoyenne, sigmoide } from '../domaine/regression-logistique.ts';
 import type { Exemple, Regression } from '../domaine/regression-logistique.ts';
 import type { CasContexte } from './banc-contexte.ts';
@@ -189,7 +190,7 @@ export function choisirConfiguration(
 	jeu: Pick<JeuDApprentissage, 'zApproche' | 'jointe'>,
 	messages: readonly MessageDuJeu[],
 	niveau: NiveauDeNote,
-	options: { k?: number; graine?: number; lambdas?: readonly number[] } = {},
+	options: { k?: number; graine?: number; lambdas?: readonly number[]; requete?: RequeteDeNote } = {},
 ): { retenue: Configuration | null; lignes: LigneDePerte[] } {
 	const k = options.k ?? PLIS_INTERIEURS;
 	const plis = plisParSessionMelanges(messages, k, options.graine ?? 0);
@@ -197,7 +198,9 @@ export function choisirConfiguration(
 	const lignes: LigneDePerte[] = [];
 	const retenues: LigneDePerte[] = [];
 	const apriori = aprioriEssayable(messages);
-	for (const requete of jeu.jointe ? (['seule', 'jointe'] as const) : (['seule'] as const)) {
+	// `options.requete` : la variante imposée (le Complets prend celle du Sens seul, qui ordonne les candidates qu'il note)
+	const requetes: readonly RequeteDeNote[] = options.requete !== undefined ? [options.requete] : jeu.jointe ? ['seule', 'jointe'] : ['seule'];
+	for (const requete of requetes) {
 		for (const methode of jeu.zApproche ? (['mediane'] as const) : (['mediane', 'zscore'] as const)) {
 			for (const avecApriori of apriori ? [false, true] : [false]) {
 				const essais = lambdas.map((lambda): LigneDePerte => {
@@ -260,7 +263,8 @@ export function noterMessage(m: MessageDuJeu, sens: ModeleAppris, complets?: Mod
 		})
 		.sort((a, b) => b.n.z - a.n.z);
 	if (parSens.length === 0) return null;
-	const candidates = parSens.map(({ c, n }, i) => (complets !== undefined && i < RERANKEES_AU_HOOK ? (noterCandidate(c, complets, true) ?? n) : n));
+	// le hook rerank de 8 à 5 premières selon le temps : la simulation prend le cas le plus défavorable
+	const candidates = parSens.map(({ c, n }, i) => (complets !== undefined && i < RERANKEES_SIMULEES ? (noterCandidate(c, complets, true) ?? n) : n));
 	return { session: m.session, rang: m.rang, silence: m.silence, candidates };
 }
 
@@ -300,7 +304,11 @@ export type RapportDApprentissage = {
 	coefficients: CoefficientsNote;
 };
 
-export type OptionsApprentissage = { date: string; graines?: readonly number[]; lambdas?: readonly number[] };
+/**
+ * `echelle` : l'échelle des signaux des cas jugés (réglages du signal de session de la mémoire, constantes de l'a priori),
+ * enregistrée avec le modèle ; défaut : celle des réglages par défaut.
+ */
+export type OptionsApprentissage = { date: string; graines?: readonly number[]; lambdas?: readonly number[]; echelle?: EchelleDesSignaux };
 
 const mediane = (valeurs: readonly (number | null)[]): number | null => {
 	const v = valeurs.filter((x): x is number => x !== null).sort((a, b) => a - b);
@@ -357,7 +365,7 @@ export function validationEmboitee(jeu: JeuDApprentissage, niveau: NiveauDeNote,
 		if (!sens.r.converge) nonConverges += 1;
 		let complets: ModeleAppris | undefined;
 		if (niveau === 'complets') {
-			const choix = choisirConfiguration(jeu, apprentissage, 'complets', { graine: graine * 100 + f, lambdas }).retenue;
+			const choix = choisirConfiguration(jeu, apprentissage, 'complets', { graine: graine * 100 + f, lambdas, requete: choixSens.requete }).retenue;
 			if (choix === null) continue;
 			complets = apprendreModele(apprentissage, 'complets', choix);
 			apprentissages += 1;
@@ -379,7 +387,11 @@ function apprendreNiveau(
 	sensFinal: ModeleAppris | null,
 ): { rapport: RapportDeNiveau; final: ModeleAppris | null } {
 	if (VARIABLES_DU_NIVEAU[niveau].length > VARIABLES_MAX) throw new Error(`Trop de variables pour le niveau ${niveau}.`);
-	const { retenue, lignes } = choisirConfiguration(jeu, jeu.messages, niveau, { graine: 0, lambdas: o.lambdas });
+	const { retenue, lignes } = choisirConfiguration(jeu, jeu.messages, niveau, {
+		graine: 0,
+		lambdas: o.lambdas,
+		...(niveau === 'complets' && sensFinal !== null ? { requete: sensFinal.conf.requete } : {}),
+	});
 	if (retenue === null || (niveau === 'complets' && sensFinal === null)) {
 		const modele = { ...modeleNonAppris(), apprisLe: o.date, gguf: jeu.installes, refus: ['aucune paire jugée pour ce niveau'] };
 		return { rapport: { niveau, retenue: null, pertes: lignes, tirages: [], mediane: null, pirePrecision: null, grille: [], stabilite: [], fiabilite: [], modele }, final: null };
@@ -411,6 +423,7 @@ function apprendreNiveau(
 		converge: final.r.converge,
 		apprisLe: o.date,
 		gguf: jeu.installes,
+		echelle: o.echelle,
 		paires: exemplesDe(jeu.messages, niveau, retenue).length,
 		messages: notesFinales.length,
 		sessions: new Set(notesFinales.map((m) => m.session).filter((s) => s !== SESSION_MANUELLE)).size,
@@ -436,7 +449,7 @@ function apprendreNiveau(
 
 /** Apprend et valide un modèle par niveau ; rend le rapport et les coefficients à écrire. */
 export function apprendreNote(jeu: JeuDApprentissage, options: OptionsApprentissage): RapportDApprentissage {
-	const o = { date: options.date, graines: options.graines ?? GRAINES, lambdas: options.lambdas ?? LAMBDAS };
+	const o = { date: options.date, graines: options.graines ?? GRAINES, lambdas: options.lambdas ?? LAMBDAS, echelle: options.echelle ?? echelleDesSignaux(REGLAGES_PAR_DEFAUT.contexte) };
 	const sens = apprendreNiveau(jeu, 'sens', o, null);
 	const complets = apprendreNiveau(jeu, 'complets', o, sens.final);
 	const niveaux = NIVEAUX_DE_NOTE.map((n) => (n === 'sens' ? sens.rapport : complets.rapport));

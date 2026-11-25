@@ -12,7 +12,7 @@ import type { CasContexte } from '../../application/banc-contexte.ts';
 import type { MesuresDAcceptation } from '../../domaine/acceptation-note.ts';
 import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
 import { jsonDeCoefficients, moduleDeCoefficients } from '../../domaine/modele-de-note.ts';
-import type { IdentiteDesModeles } from '../../domaine/modele-de-note.ts';
+import type { EchelleDesSignaux, IdentiteDesModeles } from '../../domaine/modele-de-note.ts';
 import { fichierDesCoefficients } from '../../infra/coefficients-note-fichier.ts';
 import { ErreurCli } from './erreurs.ts';
 
@@ -88,11 +88,20 @@ async function ecrireEntier(fichier: string, texte: string): Promise<void> {
 export async function apprendreAuBanc(
 	racine: string,
 	cas: readonly CasContexte[],
-	options: { empreinteDe: ReadonlyMap<string, string> | null; empreintes: 'exclure' | 'garder'; date: string; installes: IdentiteDesModeles; module?: string; graines?: readonly number[] },
+	options: {
+		empreinteDe: ReadonlyMap<string, string> | null;
+		empreintes: 'exclure' | 'garder';
+		date: string;
+		installes: IdentiteDesModeles;
+		/** Échelle des signaux de la mémoire (ses réglages du signal de session), enregistrée avec les modèles. */
+		echelle?: EchelleDesSignaux;
+		module?: string;
+		graines?: readonly number[];
+	},
 ): Promise<{ rapport: RapportDApprentissage; texte: string }> {
 	const module = options.module === undefined ? undefined : verifierCheminDuModule(options.module);
 	const jeu = jeuDApprentissage(cas, options.empreinteDe, { empreintes: options.empreintes, installes: options.installes });
-	const rapport = apprendreNote(jeu, { date: options.date, ...(options.graines === undefined ? {} : { graines: options.graines }) });
+	const rapport = apprendreNote(jeu, { date: options.date, ...(options.graines === undefined ? {} : { graines: options.graines }), ...(options.echelle === undefined ? {} : { echelle: options.echelle }) });
 	const coefficients = fichierDesCoefficients(racine);
 	await ecrireEntier(coefficients, jsonDeCoefficients(rapport.coefficients));
 	if (module !== undefined) await ecrireEntier(module, moduleDeCoefficients(rapport.coefficients));

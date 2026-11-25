@@ -12,10 +12,12 @@ import type { GestesDuBanc, Signaux } from '../../application/banc-signaux.ts';
 import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
 import { compterGestes, GESTES } from '../../domaine/gestes.ts';
 import type { ComptesDesGestes } from '../../domaine/gestes.ts';
+import { echelleDesSignaux } from '../../domaine/modele-de-note.ts';
 import { requeteJointe } from '../../domaine/requete-du-message.ts';
 import type { InjectionManuelle } from '../../domaine/signal-injection.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
 import { ouvrirJournalEnLecture } from '../../infra/journal-en-lecture.ts';
+import { lireReglagesDuDossier } from '../../infra/reglages-fichier.ts';
 import { dependancesReelles, etatParesseux } from '../../infra/systeme.ts';
 import { apprendreAuBanc, ggufInstalles } from './banc-apprendre.ts';
 import { enregistrerCas, jugerAuTerminal } from './banc-juger.ts';
@@ -401,7 +403,9 @@ async function apprendre(racine: string, fichier: string, o: Options): Promise<v
 		} finally {
 			dep.index.fermer();
 		}
-		const options = { empreinteDe, empreintes: o.empreintes, date: dateDuJour(), installes: ggufInstalles(), ...(o.module === null ? {} : { module: o.module }) };
+		// l'échelle des signaux : les réglages de la mémoire, ceux avec lesquels le banc a calculé le signal de session
+		const echelle = echelleDesSignaux(lireReglagesDuDossier(racine).reglages.contexte);
+		const options = { empreinteDe, empreintes: o.empreintes, date: dateDuJour(), installes: ggufInstalles(), echelle, ...(o.module === null ? {} : { module: o.module }) };
 		const { rapport, texte } = await apprendreAuBanc(racine, cas, options).catch((e: unknown) => {
 			throw e instanceof ErreurCli ? e : enErreurCli(e);
 		});

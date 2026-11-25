@@ -1,14 +1,15 @@
 /**
  * Coefficients de la note de confiance d'une mémoire (spec classement vivant § 4.2, décisions du 25/11) :
- * `.mnemo/coefficients-note.json`, écrit par `mnemo banc contexte --apprendre`, chargé en priorité ; sinon (absent, illisible
- * ou invalide) le module du dépôt, `domaine/coefficients-note.ts`. Avec l'identité des modèles installés (fichiers GGUF du
- * sens et du reranker de cette plateforme) : un modèle appris pour d'autres fichiers est refusé.
+ * `.mnemo/coefficients-note.json`, écrit par `mnemo banc contexte --apprendre`, chargé en priorité ; absent : le module du
+ * dépôt, `domaine/coefficients-note.ts` ; présent mais illisible ou invalide : aucun modèle appris (un fichier abîmé ne fait pas
+ * revenir à d'autres coefficients que ceux de la mémoire), avec un avertissement. Avec l'identité des modèles installés
+ * (fichiers GGUF du sens et du reranker de cette plateforme) : un modèle appris pour d'autres fichiers est refusé.
  */
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { COEFFICIENTS_NOTE } from '../domaine/coefficients-note.ts';
 import { DOSSIER_LOCAL } from '../domaine/dossier-memoire.ts';
-import { lireCoefficients } from '../domaine/modele-de-note.ts';
+import { lireCoefficients, modeleNonAppris } from '../domaine/modele-de-note.ts';
 import type { CoefficientsNote, IdentiteDesModeles } from '../domaine/modele-de-note.ts';
 import type { NoteChargee } from '../application/ports.ts';
 import { piecesPourPlateforme } from './modeles/catalogue.ts';
@@ -26,14 +27,20 @@ export function ggufInstalles(plateforme: NodeJS.Platform = process.platform, ar
 	return { sens: identite('sens'), reranker: identite('reranker') };
 }
 
-/** Les coefficients de la mémoire : son fichier s'il est lisible et valide (`avertissement` sinon, s'il existe), ou ceux du module. */
+/** Aucun modèle appris : ce que vaut un fichier de coefficients abîmé. */
+const aucunModele = (): CoefficientsNote => ({ complets: modeleNonAppris(), sens: modeleNonAppris() });
+
+/**
+ * Les coefficients de la mémoire : son fichier s'il est lisible et valide ; absent, ceux du module ; illisible ou invalide, aucun
+ * modèle appris, avec un avertissement.
+ */
 export function lireCoefficientsDuDossier(racine: string): { coefficients: CoefficientsNote; avertissement: string | null } {
 	let texte: string;
 	try {
 		texte = readFileSync(fichierDesCoefficients(racine), 'utf8');
 	} catch (e) {
 		if ((e as NodeJS.ErrnoException).code === 'ENOENT') return { coefficients: COEFFICIENTS_NOTE, avertissement: null };
-		return { coefficients: COEFFICIENTS_NOTE, avertissement: `.mnemo/coefficients-note.json illisible (${(e as Error).message}) : coefficients par défaut.` };
+		return { coefficients: aucunModele(), avertissement: `.mnemo/coefficients-note.json illisible (${(e as Error).message}) : aucun modèle de note.` };
 	}
 	let lus: CoefficientsNote | null = null;
 	try {
@@ -41,8 +48,11 @@ export function lireCoefficientsDuDossier(racine: string): { coefficients: Coeff
 	} catch {
 		lus = null;
 	}
-	return lus === null ? { coefficients: COEFFICIENTS_NOTE, avertissement: '.mnemo/coefficients-note.json invalide : coefficients par défaut.' } : { coefficients: lus, avertissement: null };
+	return lus === null ? { coefficients: aucunModele(), avertissement: '.mnemo/coefficients-note.json invalide : aucun modèle de note (relancer mnemo banc contexte --apprendre).' } : { coefficients: lus, avertissement: null };
 }
+
+/** Lecteurs créés par `noteDuDossier`, et leur dossier : le service les recrée avec son journal (`noteAvecJournal`). */
+const lecteurs = new WeakMap<() => NoteChargee, { racine: string; installes: IdentiteDesModeles }>();
 
 /**
  * Lecteur des coefficients d'une mémoire pour un processus qui dure (service) : le fichier est relu seulement s'il a changé
@@ -51,7 +61,7 @@ export function lireCoefficientsDuDossier(racine: string): { coefficients: Coeff
  */
 export function noteDuDossier(racine: string, avertir: (message: string) => void = () => {}, installes: IdentiteDesModeles = ggufInstalles()): () => NoteChargee {
 	let garde: { cle: string; coefficients: CoefficientsNote } | null = null;
-	return () => {
+	const lire = () => {
 		let cle = 'absent';
 		try {
 			const s = statSync(fichierDesCoefficients(racine));
@@ -66,4 +76,12 @@ export function noteDuDossier(racine: string, avertir: (message: string) => void
 		}
 		return { coefficients: garde.coefficients, installes };
 	};
+	lecteurs.set(lire, { racine, installes });
+	return lire;
+}
+
+/** Le lecteur des coefficients avec ses avertissements dans `journal` (service) ; un autre lecteur (tests) reste tel quel. */
+export function noteAvecJournal(note: (() => NoteChargee) | undefined, journal: (message: string) => void): (() => NoteChargee) | undefined {
+	const l = note === undefined ? undefined : lecteurs.get(note);
+	return l === undefined ? note : noteDuDossier(l.racine, journal, l.installes);
 }

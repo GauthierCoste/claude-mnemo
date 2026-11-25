@@ -3,7 +3,8 @@ import { AFFINEES_MAX, affiner, BUDGET_AFFINAGE_MS, CANDIDATES_AFFINEES, candida
 import type { DemandeAffinage } from '../../src/application/affiner.ts';
 import type { LigneDeClassement } from '../../src/application/classement-du-message.ts';
 import type { Affinage, Classe, Dependances, OptionsModele } from '../../src/application/ports.ts';
-import { modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
+import { echelleDesSignaux, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
+import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 import type { ModeleDeNote } from '../../src/domaine/modele-de-note.ts';
 import { sigmoide } from '../../src/domaine/regression-logistique.ts';
 
@@ -234,7 +235,15 @@ describe('affiner', () => {
 
 describe('affiner avec une note de confiance apprise', () => {
 	const INSTALLES = { sens: 'sens.gguf@aaaaaaaaaaaa', reranker: 'reranker.gguf@bbbbbbbbbbbb' };
-	const modele = (surcharge: Partial<ModeleDeNote>): ModeleDeNote => ({ ...modeleNonAppris(), apprisLe: '2026-11-25', refus: [], accepte: true, gguf: INSTALLES, ...surcharge });
+	const modele = (surcharge: Partial<ModeleDeNote>): ModeleDeNote => ({
+		...modeleNonAppris(),
+		apprisLe: '2026-11-25',
+		refus: [],
+		accepte: true,
+		gguf: INSTALLES,
+		echelle: echelleDesSignaux(REGLAGES_PAR_DEFAUT.contexte),
+		...surcharge,
+	});
 	const SENS = modele({ biais: -1, poids: { cosinusRelatif: 2 } });
 	const COMPLETS = modele({ biais: -1, poids: { logit: 1, cosinusRelatif: 2 } });
 	// cosinus relatif décroissant : la note Sens seul suit l'ordre du hook
@@ -263,7 +272,7 @@ describe('affiner avec une note de confiance apprise', () => {
 		const { dep } = dependances({ logitDe });
 		dep.note = () => ({ coefficients: { complets: COMPLETS, sens: SENS }, installes: INSTALLES });
 		const accepte = await affiner(dep, etatFaux(100), demande({ classement }));
-		dep.note = () => ({ coefficients: { complets: { ...COMPLETS, accepte: false }, sens: { ...SENS, accepte: false } }, installes: INSTALLES });
+		dep.note = () => ({ coefficients: { complets: { ...COMPLETS, accepte: false, refus: ['x'] }, sens: { ...SENS, accepte: false, refus: ['x'] } }, installes: INSTALLES });
 		const etat = etatFaux(100);
 		const refuse = await affiner(dep, etat, demande({ classement }));
 		expect(etat.ecritures.at(-1)).toMatchObject({ affinage: 'fait', calibree: false });
@@ -275,5 +284,20 @@ describe('affiner avec une note de confiance apprise', () => {
 		expect(provisoire.ecritures.at(-1)).toMatchObject({ affinage: 'fait', calibree: false });
 		expect(r!.classement[0]!.id).toBe('notes/f20.md');
 		expect(r!.classement.every((c) => c.p === undefined)).toBe(true);
+	});
+
+	it('sens absent au hook : l’affinage note d’abord par le Sens seul, puis soumet ses 30 premières au reranker', async () => {
+		const { dep, appels } = dependances({ logitDe: () => 0 });
+		// les mots désignent la fiche 38, que le sens (et l'ordre du hook) met loin
+		dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens: modele({ biais: 0, poids: { cosinusRelatif: 0.1, bm25Relatif: 5 } }) }, installes: INSTALLES });
+		const lignes = Array.from({ length: 40 }, (_, i) => ligne(i, { note: null, signaux: { ...ligne(i).signaux, cosinus: null, cosinusRelatif: null, cosinusZ: null, bm25Relatif: i === 38 ? 1 : 0 } }));
+		await affiner(dep, etatFaux(100), demande({ classement: lignes, sens: false }));
+		const soumises = appels.flatMap((a) => a.textes);
+		expect(soumises[0]).toBe('Fiche 38\n');
+		expect(soumises).toHaveLength(30);
+		// sans note apprise : l'ordre provisoire du sens, la fiche 38 reste hors des 30
+		const sansNote = dependances({ logitDe: () => 0 });
+		await affiner(sansNote.dep, etatFaux(100), demande({ classement: lignes, sens: false }));
+		expect(sansNote.appels.flatMap((a) => a.textes)).not.toContain('Fiche 38\n');
 	});
 });

@@ -373,7 +373,9 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 	const exclusDefinitivement = await exclusionDefinitive(pil.etat, reglages.apriori);
 	// requête du classement : le message seul, ou joint au message porteur d'avant (variante jointe, message court ou anaphorique) ;
 	// celle avec laquelle la note de confiance a été apprise, s'il y en a une
-	const variante = reglages.varianteRequete ?? requeteDesModeles(modelesActifs(dep)) ?? VARIANTE_DE_LA_REQUETE;
+	// les modèles de la note : lus une fois pour le message (hook, puis affinage)
+	const modeles = modelesActifs(dep);
+	const variante = reglages.varianteRequete ?? requeteDesModeles(modeles) ?? VARIANTE_DE_LA_REQUETE;
 	const precedent = session !== null && muet === null && precedentUtile(message, variante) ? await messagePorteurPrecedent(pil.etat, session.id, entree.horodatageMs) : null;
 	const requete = requeteDuMessage(message, precedent, variante);
 	const apriori = reglages.apriori;
@@ -395,6 +397,7 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 		fin,
 		rappels,
 		exclusDefinitivement,
+		modeles,
 		...(apriori === undefined ? {} : { aprioris: (vecteur: VecteurDuMessage | null) => apriori.aprioris({ ...contexte, vecteur }) }),
 	};
 }
@@ -502,6 +505,8 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 			classement: servi.calcul.classement,
 			sens: servi.calcul.mesure !== 'aucune',
 			mesurer: reglages.dureeReranker?.fiable() === false,
+			aprioriConnu: demande.aprioris !== undefined,
+			...(demande.modeles === undefined ? {} : { modeles: demande.modeles }),
 		});
 	} else {
 		const aMesurer = servi.calcul.aMesurer;

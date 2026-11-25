@@ -9,6 +9,7 @@ import { TAILLE_MAX_DOCUMENT, tailleLisible } from '@mnemo/commun';
 import { extractionDifferee } from '../../application/extraction-differee.ts';
 import { creerPilote } from '../../application/pilote.ts';
 import type { Dependances, Modeles, Pilotage } from '../../application/ports.ts';
+import { noteAvecJournal } from '../../infra/coefficients-note-fichier.ts';
 import { identiteDuReranker, modelesLocaux } from '../../infra/modeles/client-llama.ts';
 import { migrerAncienGardien } from '../../infra/modeles/migration-gardien-dossier.ts';
 import { dossierClaudeParDefaut, memoireClaude, projetsClaude } from '../../infra/memoire-claude.ts';
@@ -275,6 +276,9 @@ export async function demarrerService(options: {
 	if (orphelins > 0) journal(`${orphelins} dépôt(s) interrompu(s) retiré(s) de .mnemo/depots/.`);
 
 	// extraction des documents à part de la recherche, qui la réveille (une recherche n'attend jamais un document de plusieurs Go)
+	// les avertissements des coefficients de la note (fichier abîmé) vont au journal du service
+	const note = noteAvecJournal(dep.note, journal);
+	if (note !== undefined) dep.note = note;
 	const differee = dep.extractionDifferee === undefined ? extractionDifferee(dep, journal) : null;
 	if (differee !== null) dep.extractionDifferee = differee;
 

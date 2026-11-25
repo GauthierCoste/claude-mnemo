@@ -8,21 +8,33 @@
  * - Aucun modèle appris, ou aucune ligne notée (le sens n'a pas répondu) : l'ordre donné (règle provisoire), inchangé.
  */
 import { COEFFICIENTS_NOTE } from '../domaine/coefficients-note.ts';
+import { echelleDesSignaux } from '../domaine/modele-de-note.ts';
 import type { RequeteDeNote } from '../domaine/modele-de-note.ts';
+import { REGLAGES_PAR_DEFAUT } from '../domaine/reglages.ts';
+import type { Reglages } from '../domaine/reglages.ts';
 import { classementCalibre, modelesDeNote, noteApprise, noterLaCandidate, ordonnerParNote, pCalibre } from '../domaine/note-de-confiance.ts';
 import type { ModelesDeNote, NoteDeLaCandidate } from '../domaine/note-de-confiance.ts';
 import type { LigneDeClassement } from './classement-du-message.ts';
 import type { Dependances } from './ports.ts';
 
-/** Les modèles de note de la mémoire, avec leur état pour les modèles installés ; une lecture en panne vaut le module du dépôt. */
-export function modelesActifs(dep: Pick<Dependances, 'note'>): ModelesDeNote {
+/**
+ * Les modèles de note de la mémoire, avec leur état pour les modèles installés et l'échelle actuelle des signaux (réglages) ;
+ * une lecture en panne vaut le module du dépôt. Lus une fois par message (`DemandeServir.modeles`).
+ */
+export function modelesActifs(dep: Pick<Dependances, 'note' | 'reglages'>): ModelesDeNote {
 	let charge: ReturnType<NonNullable<Dependances['note']>> | undefined;
 	try {
 		charge = dep.note?.();
 	} catch {
 		charge = undefined;
 	}
-	return modelesDeNote(charge?.coefficients ?? COEFFICIENTS_NOTE, charge?.installes ?? { sens: null, reranker: null });
+	let contexte: Reglages['contexte'];
+	try {
+		contexte = dep.reglages().contexte;
+	} catch {
+		contexte = REGLAGES_PAR_DEFAUT.contexte;
+	}
+	return modelesDeNote(charge?.coefficients ?? COEFFICIENTS_NOTE, charge?.installes ?? { sens: null, reranker: null }, echelleDesSignaux(contexte));
 }
 
 /**
@@ -45,12 +57,12 @@ export type ClassementNote = { lignes: LigneDeClassement[]; notes: ReadonlyMap<s
 /**
  * Note chaque ligne (son logit, s'il est là, la fait noter au niveau Complets ; sinon Sens seul) et, si un modèle appris en note
  * au moins une, les range par leur note (les lignes sans note ensuite, dans l'ordre donné). `p` et `pSansApriori` : seulement
- * d'un modèle accepté ; null sinon.
+ * d'une note calibrée (modèle accepté, a priori lu s'il pèse) ; null sinon. `aprioriConnu` : l'a priori des gestes a été lu.
  */
-export function noterLeClassement(lignes: readonly LigneDeClassement[], modeles: ModelesDeNote): ClassementNote {
+export function noterLeClassement(lignes: readonly LigneDeClassement[], modeles: ModelesDeNote, options: { aprioriConnu: boolean }): ClassementNote {
 	const sansNote = (): ClassementNote => ({ lignes: lignes.map(({ pSansApriori: _p, ...l }) => ({ ...l, p: null })), notes: new Map(), parNote: false, calibree: false });
 	if (!noteApprise(modeles)) return sansNote();
-	const notes = new Map(lignes.map((l) => [l.chemin, noterLaCandidate(modeles, { ...l.signaux, logit: l.logit })]));
+	const notes = new Map(lignes.map((l) => [l.chemin, noterLaCandidate(modeles, { ...l.signaux, logit: l.logit }, options)]));
 	if (![...notes.values()].some((n) => n !== null)) return { ...sansNote(), notes };
 	const rangees = ordonnerParNote(lignes, (l) => notes.get(l.chemin)?.p ?? null).map((l): LigneDeClassement => {
 		const { pSansApriori: _ancien, ...reste } = l;

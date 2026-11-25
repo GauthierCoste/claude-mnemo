@@ -5,7 +5,7 @@ import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
 import type { Dependances, Reranker, Sens } from '../../src/application/ports.ts';
 import { classementDuJournal } from '../../src/application/classement-du-message.ts';
 import type { LigneDeClassement } from '../../src/application/classement-du-message.ts';
-import { modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
+import { echelleDesSignaux, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
 import type { CoefficientsNote, ModeleDeNote } from '../../src/domaine/modele-de-note.ts';
 import { sigmoide } from '../../src/domaine/regression-logistique.ts';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
@@ -909,7 +909,15 @@ describe('calculerCartes : note de confiance (modèle accepté, refusé, aucun)'
 		return dep;
 	}
 	const suite = (surcharge: Partial<DemandeCartes> = {}) => demande({ message, premier: false, pistes: false, servirPosition: false, ...surcharge });
-	const modele = (surcharge: Partial<ModeleDeNote> = {}): ModeleDeNote => ({ ...modeleNonAppris(), apprisLe: '2026-11-25', refus: [], accepte: true, gguf: INSTALLES, ...surcharge });
+	const modele = (surcharge: Partial<ModeleDeNote> = {}): ModeleDeNote => ({
+		...modeleNonAppris(),
+		apprisLe: '2026-11-25',
+		refus: [],
+		accepte: true,
+		gguf: INSTALLES,
+		echelle: echelleDesSignaux(REGLAGES_PAR_DEFAUT.contexte),
+		...surcharge,
+	});
 	/** Sens seul : les mots d'abord (bm25 relatif), le sens ensuite ; un ordre autre que la note provisoire (sens plus poids). */
 	const SENS: Pick<ModeleDeNote, 'biais' | 'poids'> = { biais: -1, poids: { cosinusRelatif: 2, bm25Relatif: 3 } };
 	const avecModeles = (dep: Dependances, coefficients: Partial<CoefficientsNote>, installes = INSTALLES) => {
@@ -1029,12 +1037,34 @@ describe('calculerCartes : note de confiance (modèle accepté, refusé, aucun)'
 		}
 		expect(decroissant(c.classement.map((l) => l.p!))).toBe(true);
 		expect(c.calibree).toBe(true);
-		// un Complets refusé : ses notes ordonnent, sans %
-		avecModeles(dep, { sens: modele(SENS), complets: modele({ ...COMPLETS, accepte: false }) });
+		// un Complets refusé ne remplace pas le Sens seul accepté : le logit est journalisé, la note reste celle du Sens seul
+		avecModeles(dep, { sens: modele(SENS), complets: modele({ ...COMPLETS, accepte: false, refus: ['trop peu d’injections'] }) });
 		const mixte = await calculerCartes(dep, suite({ dureeReranker: duree }));
-		expect(mixte.calibree).toBe(false);
-		expect(mixte.classement.map((l) => l.chemin)).toEqual(c.classement.map((l) => l.chemin));
-		expect(mixte.classement.filter((l) => l.logit !== null).every((l) => l.p === null)).toBe(true);
+		expect(mixte.calibree).toBe(true);
+		expect(mixte.classement.filter((l) => l.logit !== null).length).toBeGreaterThan(0);
+		for (const l of mixte.classement) expect(l.p).toBeCloseTo(pSens(l), 9);
+		expect(mixte.classement.map((l) => l.chemin)).toEqual(parSens.classement.map((l) => l.chemin));
+	});
+
+	it('a priori des gestes : lu (service), la note est calibrée ; non lu alors que le modèle le pèse, elle ordonne sans %', async () => {
+		const dep = await avecSens();
+		const AVEC_APRIORI: Pick<ModeleDeNote, 'biais' | 'poids'> = { biais: -1, poids: { cosinusRelatif: 2, bm25Relatif: 3, apriori: 0.8 } };
+		avecModeles(dep, { sens: modele(AVEC_APRIORI) });
+		const lu = await calculerCartes(dep, suite({ aprioris: () => new Map([[NEUTRES[0]!, 0.5]]) }));
+		expect(lu.calibree).toBe(true);
+		const neutre = lu.classement.find((l) => l.chemin === NEUTRES[0])!;
+		expect(neutre.signaux.apriori).toBe(0.5);
+		expect(neutre.p).toBeCloseTo(sigmoide(-1 + 2 * neutre.signaux.cosinusRelatif! + 3 * (neutre.signaux.bm25Relatif ?? 0) + 0.4), 9);
+		expect(neutre.pSansApriori).toBeCloseTo(pSens(neutre), 9);
+		const nonLu = await calculerCartes(dep, suite());
+		expect(nonLu.calibree).toBe(false);
+		expect(nonLu.classement.every((l) => l.p === null)).toBe(true);
+		expect(chemins(nonLu).length).toBeGreaterThan(0);
+		// outil contexte : l'a priori transmis entre dans les signaux
+		const question = { question: true, classer: false, servirPosition: false, message: 'maquette numéro' };
+		const ctx = await calculerCartes(dep, demande({ ...question, aprioris: () => new Map([[NEUTRES[0]!, 0.5]]) }));
+		expect(ctx.calibree).toBe(true);
+		expect((await calculerCartes(dep, demande(question))).calibree).toBe(false);
 	});
 
 	it('outil contexte : la même note (Complets sur les rerankées), sans la base du reranker ; % seulement d’un modèle accepté', async () => {
@@ -1052,7 +1082,7 @@ describe('calculerCartes : note de confiance (modèle accepté, refusé, aucun)'
 		expect(decroissant(notes)).toBe(true);
 		expect(notes[0]).not.toBeCloseTo(sigmoide(3), 3);
 		// refusé : même ordre, aucune note
-		avecModeles(dep, { sens: modele({ ...SENS, accepte: false }), complets: modele({ ...COMPLETS, accepte: false }) });
+		avecModeles(dep, { sens: modele({ ...SENS, accepte: false, refus: ['x'] }), complets: modele({ ...COMPLETS, accepte: false, refus: ['x'] }) });
 		const refuse = await calculerCartes(dep, demande(question));
 		expect(refuse.calibree).toBe(false);
 		expect(chemins(refuse)).toEqual(chemins(c));

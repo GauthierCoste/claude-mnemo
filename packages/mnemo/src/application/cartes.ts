@@ -27,6 +27,7 @@ import { sansFaitsInactifs } from '../domaine/sans-faits-inactifs.ts';
 import { requeteDuReranker, syntheseDuTexte, texteDuReranker as texteDeFiche } from '../domaine/textes-du-reranker.ts';
 import { normaliser } from '../domaine/sens.ts';
 import { noteApprise, noterLaCandidate, pCalibre } from '../domaine/note-de-confiance.ts';
+import type { ModelesDeNote } from '../domaine/note-de-confiance.ts';
 import { candidatesDuMessage, classerLeMessage, ficheProposable } from './classement-du-message.ts';
 import type { LigneDeClassement } from './classement-du-message.ts';
 import { ficheDePosition } from './chercher.ts';
@@ -112,6 +113,8 @@ export type DemandeCartes = {
 	 * Journalisé dans les signaux bruts seulement : il ne change ni l'ordre ni les pistes (aucune note apprise ne l'utilise encore).
 	 */
 	aprioris?: (vecteur: VecteurDuMessage | null) => ReadonlyMap<string, number>;
+	/** Les modèles de la note de confiance, lus une fois pour le message (`modelesActifs`) ; absents : lus ici. */
+	modeles?: ModelesDeNote;
 };
 /**
  * `positionFiche` : fiche de la position si elle existe dans l'index (injectée ou non) ; null sinon : il n'y a alors pas de périmètre à proposer.
@@ -333,7 +336,9 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 	let vecteurDuCalcul: VecteurDuMessage | null = null;
 	let aMesurer: CartesCalculees['aMesurer'];
 	let calibree = false;
-	const modeles = modelesActifs(dep);
+	const modeles = d.modeles ?? modelesActifs(dep);
+	// l'a priori des gestes n'est lu qu'avec le service : sans lui, une note qui le pèse n'est pas calibrée
+	const aprioriConnu = { aprioriConnu: d.aprioris !== undefined };
 	const date = (chemin: string) => elementDe.get(chemin)?.date ?? '';
 
 	// Note unique : sens du message (base) plus le poids de chaque signal. Un nouveau signal s'ajoute à cette liste.
@@ -356,7 +361,16 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		// session) ; la note Sens seul ordonne, le reranker note les 30 premières, la note Complets les reclasse.
 		const candidates = elements.map((e) => e.chemin).filter(proposable);
 		vecteurDuCalcul = await vecteurDuMessage(dep, requete, d.fin);
-		const m = await classerLeMessage(dep, { candidates, message: requete, vecteur: vecteurDuCalcul?.valeurs ?? null, nombreDeFiches: elements.length, noter: noterPiste, date });
+		const aprioris = candidates.length === 0 || d.aprioris === undefined ? undefined : d.aprioris(vecteurDuCalcul);
+		const m = await classerLeMessage(dep, {
+			candidates,
+			message: requete,
+			vecteur: vecteurDuCalcul?.valeurs ?? null,
+			nombreDeFiches: elements.length,
+			noter: noterPiste,
+			date,
+			...(aprioris === undefined ? {} : { aprioris }),
+		});
 		if (m.sens) mesure = 'sens';
 		const parChemin = new Map(m.ordre.map((n) => [n.chemin, n]));
 		const cosinus = (n: Note): number | null => m.signaux(n).cosinus;
@@ -371,12 +385,12 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 			pool = m.ordreDesMots.slice(0, CANDIDATS_QUESTION).flatMap((c) => (parChemin.has(c) ? [parChemin.get(c)!] : []));
 		}
 		const ligne = (n: Note): LigneDeClassement => ({ chemin: n.chemin, titre: titre(n.chemin), note: n.total, p: null, signaux: m.signaux(n), logit: null, deja: null, raison: null, piste: false });
-		const parSens = noterLeClassement(pool.map(ligne), modeles);
+		const parSens = noterLeClassement(pool.map(ligne), modeles, aprioriConnu);
 		const soumises = parSens.lignes.slice(0, CANDIDATS_RERANKER);
 		const rerank = rerankerTient(d.dureeReranker, soumises.length, d.fin) ? await notesDuReranker(dep, requete, soumises.map((l) => texteDuReranker(l.chemin)), d.fin) : null;
 		if (rerank !== null) mesure = 'reranker';
 		const logitDe = new Map(rerank === null ? [] : soumises.map((l, i) => [l.chemin, rerank[i]!] as const));
-		const finale = noterLeClassement(parSens.lignes.map((l) => ({ ...l, logit: logitDe.get(l.chemin) ?? null })), modeles);
+		const finale = noterLeClassement(parSens.lignes.map((l) => ({ ...l, logit: logitDe.get(l.chemin) ?? null })), modeles, aprioriConnu);
 		calibree = finale.calibree;
 		choisies = finale.lignes
 			.slice(0, CARTES_QUESTION_MAX)
@@ -464,7 +478,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 			piste: false,
 		});
 		// note Sens seul pour toutes les candidates, si un modèle est appris : l'ordre que suit le reranker au hook
-		const parSens = noterLeClassement(m.ordre.map(ligne), modeles);
+		const parSens = noterLeClassement(m.ordre.map(ligne), modeles, aprioriConnu);
 		const ordreDuHook = parSens.lignes.map((l) => l.chemin);
 		// reranker au hook sur les premières de cet ordre, si l'estimation de sa durée le permet
 		const logits = await logitsAuHook(dep, d.dureeReranker, requete, ordreDuHook, texteDuReranker, d.fin);
@@ -475,6 +489,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		const note = noterLeClassement(
 			parSens.lignes.map((l) => ({ ...l, logit: logits.get(l.chemin) ?? null })),
 			modeles,
+			aprioriConnu,
 		);
 		calibree = note.calibree;
 		/** Note d'une carte hors classement (fiche nommée, fiche de position trop longue) : comme une candidate, sans reclasser. */
@@ -482,7 +497,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 			if (mesure === 'aucune') return null;
 			const n = noterPiste(chemin, m.base(chemin));
 			if (!note.parNote) return n.total;
-			return pCalibre(note.notes.get(chemin) ?? noterLaCandidate(modeles, m.signaux(n)));
+			return pCalibre(note.notes.get(chemin) ?? noterLaCandidate(modeles, m.signaux(n), aprioriConnu));
 		};
 		let pistes: Note[];
 		if (note.parNote) {
