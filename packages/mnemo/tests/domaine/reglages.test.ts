@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHAMPS_REGLAGES, fusionnerFichier, lireReglages, modifierReglages, REGLAGES_PAR_DEFAUT, reglagesEnFichier, valeurDuReglage } from '../../src/domaine/reglages.ts';
+import { CHAMPS_REGLAGES, fusionnerFichier, lireReglages, modifierReglages, REGLAGES_PAR_DEFAUT, REGLAGES_RETIRES, reglagesEnFichier, valeurDuReglage } from '../../src/domaine/reglages.ts';
 
 describe('réglages : valeurs par défaut', () => {
 	it('reprennent le comportement actuel', () => {
@@ -7,7 +7,10 @@ describe('réglages : valeurs par défaut', () => {
 			projets: { marqueurs: ['.git', 'package.json', 'composer.json', 'pyproject.toml', 'Cargo.toml', 'go.mod'] },
 			contexte: {
 				similariteRecherche: 0.45,
-				cartesPerimetre: 10,
+				seuilInjection: 90,
+				injectionsParMessage: 2,
+				seuilPiste: 60,
+				pistesParMessage: 3,
 				cartesNommees: 5,
 				poidsInjection: 0.25,
 				demiVieInjection: 3,
@@ -93,9 +96,8 @@ describe('réglages retirés du contexte', () => {
 		for (const k of anciennes) expect(avertissements.join('\n')).toContain(`contexte.${k}`);
 	});
 
-	it('cartesPerimetre : 10 (0 à 30) ; cartesNommees : 5 (0 à 15)', () => {
+	it('cartesNommees : 5 (0 à 15)', () => {
 		const champ = (cle: string) => CHAMPS_REGLAGES.find((c) => c.cle === cle)!;
-		expect(champ('contexte.cartesPerimetre')).toMatchObject({ defaut: 10, min: 0, max: 30, libelle: 'Cartes du périmètre au premier message' });
 		expect(champ('contexte.cartesNommees')).toMatchObject({ defaut: 5, min: 0, max: 15, libelle: 'Cartes des fiches nommées par message' });
 	});
 
@@ -108,6 +110,50 @@ describe('réglages retirés du contexte', () => {
 		expect(modifierReglages(REGLAGES_PAR_DEFAUT, { 'contexte.demiVieInjection': 2.5 }).ok).toBe(false);
 		const r = modifierReglages(REGLAGES_PAR_DEFAUT, { 'contexte.poidsInjection': 0, 'contexte.demiVieInjection': 20 });
 		expect(r).toEqual({ ok: true, reglages: { ...REGLAGES_PAR_DEFAUT, contexte: { ...REGLAGES_PAR_DEFAUT.contexte, poidsInjection: 0, demiVieInjection: 20 } } });
+	});
+});
+
+describe('injection automatique et pistes', () => {
+	const champ = (cle: string) => CHAMPS_REGLAGES.find((c) => c.cle === cle)!;
+
+	it('quatre entiers aux bornes et défauts de la spécification', () => {
+		expect(champ('contexte.seuilInjection')).toMatchObject({ groupe: 'contexte', genre: 'entier', defaut: 90, min: 50, max: 100, unite: '%', effet: 'immediat', libelle: 'Seuil d’injection automatique' });
+		expect(champ('contexte.injectionsParMessage')).toMatchObject({ groupe: 'contexte', genre: 'entier', defaut: 2, min: 0, max: 5, effet: 'immediat' });
+		expect(champ('contexte.seuilPiste')).toMatchObject({ groupe: 'contexte', genre: 'entier', defaut: 60, min: 0, max: 100, unite: '%', effet: 'immediat', libelle: 'Seuil des pistes' });
+		expect(champ('contexte.pistesParMessage')).toMatchObject({ groupe: 'contexte', genre: 'entier', defaut: 3, min: 0, max: 10, effet: 'immediat', libelle: 'Pistes par message' });
+		for (const [cle, dehors] of [['contexte.seuilInjection', [49, 101, 90.5]], ['contexte.injectionsParMessage', [-1, 6]], ['contexte.seuilPiste', [-1, 101]], ['contexte.pistesParMessage', [-1, 11, 2.5]]] as const) {
+			for (const v of dehors) expect(modifierReglages(REGLAGES_PAR_DEFAUT, { [cle]: v }).ok, `${cle} = ${v}`).toBe(false);
+		}
+		expect(modifierReglages(REGLAGES_PAR_DEFAUT, { 'contexte.injectionsParMessage': 0, 'contexte.pistesParMessage': 10 }).ok).toBe(true);
+	});
+
+	it('l’explication des seuils dit que 100 % veut dire jamais et qu’ils n’agissent qu’avec une note calibrée', () => {
+		expect(champ('contexte.seuilInjection').explication).toContain('100 % : jamais');
+		expect(champ('contexte.seuilInjection').explication).toContain('note calibrée');
+		expect(champ('contexte.seuilPiste').explication).toContain('note calibrée');
+		for (const c of CHAMPS_REGLAGES.filter((x) => x.groupe === 'contexte')) expect(`${c.libelle} ${c.explication}`).not.toMatch(/servi|nourri|·/u);
+	});
+
+	it('seuil des pistes au plus le seuil d’injection : le lot qui le dépasse est refusé, égal accepté', () => {
+		const refus = modifierReglages(REGLAGES_PAR_DEFAUT, { 'contexte.seuilPiste': 95 });
+		expect(refus).toEqual({ ok: false, motifs: ['Seuil des pistes (contexte.seuilPiste) : 95 % dépasse le seuil d’injection automatique (90 %).'] });
+		// baisser le seuil d'injection sous le seuil des pistes actuel est refusé aussi
+		expect(modifierReglages(REGLAGES_PAR_DEFAUT, { 'contexte.seuilInjection': 55 }).ok).toBe(false);
+		expect(modifierReglages(REGLAGES_PAR_DEFAUT, { 'contexte.seuilInjection': 100, 'contexte.seuilPiste': 100 }).ok).toBe(true);
+		const ensemble = modifierReglages(REGLAGES_PAR_DEFAUT, { 'contexte.seuilInjection': 55, 'contexte.seuilPiste': 55 });
+		expect(ensemble).toEqual({ ok: true, reglages: { ...REGLAGES_PAR_DEFAUT, contexte: { ...REGLAGES_PAR_DEFAUT.contexte, seuilInjection: 55, seuilPiste: 55 } } });
+	});
+
+	it('cartesPerimetre retiré : ignoré sans avertissement à la lecture, refusé à la modification', () => {
+		expect(REGLAGES_RETIRES).toContain('contexte.cartesPerimetre');
+		expect(CHAMPS_REGLAGES.some((c) => c.cle === 'contexte.cartesPerimetre')).toBe(false);
+		expect(lireReglages({ contexte: { cartesPerimetre: 12, pistesParMessage: 4 } })).toEqual({
+			reglages: { ...REGLAGES_PAR_DEFAUT, contexte: { ...REGLAGES_PAR_DEFAUT.contexte, pistesParMessage: 4 } },
+			avertissements: [],
+		});
+		expect(modifierReglages(REGLAGES_PAR_DEFAUT, { 'contexte.cartesPerimetre': 5 })).toEqual({ ok: false, motifs: ['Réglage retiré « contexte.cartesPerimetre ».'] });
+		// l'ancienne clé reste telle quelle dans le fichier, comme toute entrée non touchée
+		expect(fusionnerFichier({ contexte: { cartesPerimetre: 12 } }, REGLAGES_PAR_DEFAUT, ['contexte.pistesParMessage'])).toEqual({ contexte: { cartesPerimetre: 12 } });
 	});
 });
 

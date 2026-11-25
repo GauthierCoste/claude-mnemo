@@ -305,7 +305,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		const noteHorsClassement = (chemin: string): number | null => (mesure === 'aucune' ? null : noterPiste(chemin, sim.get(chemin) ?? 0).total);
 		// à note égale (sans modèle : poids seuls), la plus récente d'abord
 		const notes = candidates.map((c) => noterPiste(c, sim.get(c) ?? 0));
-		const classees = classer(notes, (a, b) => date(b.chemin).localeCompare(date(a.chemin)) || a.chemin.localeCompare(b.chemin)).slice(0, reglages.cartesPerimetre);
+		const classees = classer(notes, (a, b) => date(b.chemin).localeCompare(date(a.chemin)) || a.chemin.localeCompare(b.chemin)).slice(0, reglages.pistesParMessage);
 		choisies = [
 			...classees.map((n) => choisie(n, dans.has(n.chemin) ? 'perimetre' : null)),
 			...cartesNommees.map((chemin): Choisie => ({ chemin, raison: 'nommee', depuis: null, note: noteHorsClassement(chemin) })),
