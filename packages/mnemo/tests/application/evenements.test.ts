@@ -75,6 +75,31 @@ describe('traiterEvenement : états', () => {
 		}
 	});
 
+	it('événement d’un autre moteur que celui de la session (codex lancé depuis une session Claude Code) : aucun effet', async () => {
+		const { dep, etat, pil } = await contexte({ etat: 'travaille' });
+		for (const e of ['debut', 'message', 'arret', 'fin'] as const) {
+			expect(await traiterEvenement(dep, pil, entree(e, 10, { moteur: 'codex', fil: 'fil-codex', prompt: 'Autre objectif' }), local), e).toEqual({});
+		}
+		const s = await etat.lire(ID);
+		expect(s).toMatchObject({ etat: 'travaille', objectif: null });
+		expect(s?.fil).toBeUndefined();
+		expect(s?.episodeMs ?? null).toBeNull();
+	});
+
+	it('session Codex : son fil appris au premier événement ; un autre fil ensuite est sans effet', async () => {
+		const { dep, etat, pil } = await contexte({ etat: 'travaille', moteur: 'codex' });
+		await traiterEvenement(dep, pil, entree('arret', 10, { moteur: 'codex', fil: 'fil-a' }), local);
+		expect(await etat.lire(ID)).toMatchObject({ etat: 'attend', fil: 'fil-a' });
+		await traiterEvenement(dep, pil, entree('message', 11, { moteur: 'codex', fil: 'fil-b', prompt: 'Autre' }), local);
+		await traiterEvenement(dep, pil, entree('fin', 12, { moteur: 'codex', fil: 'fil-b' }), local);
+		expect(await etat.lire(ID)).toMatchObject({ etat: 'attend', fil: 'fil-a', objectif: null });
+		// un événement de Claude Code n'est pas de cette session Codex
+		await traiterEvenement(dep, pil, entree('fin', 13), local);
+		expect((await etat.lire(ID))?.etat).toBe('attend');
+		await traiterEvenement(dep, pil, entree('fin', 14, { moteur: 'codex', fil: 'fil-a' }), local);
+		expect((await etat.lire(ID))?.etat).toBe('a_relire');
+	});
+
 	it('fin selon arretAttendu : pause → en_pause', async () => {
 		const { dep, etat, pil } = await contexte({ arretAttendu: 'pause' });
 		await traiterEvenement(dep, pil, entree('fin', 10), local);

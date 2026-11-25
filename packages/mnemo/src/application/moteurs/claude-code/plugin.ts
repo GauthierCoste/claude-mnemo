@@ -207,10 +207,11 @@ export function premierMessage(objectif?: string): string[] {
 
 /**
  * Environnement de `claude` : celui de l'utilisateur, sans les variables interdites (comparées sans la casse, comme sous
- * Windows), plus la session Mnemo (lue par `mnemo hook` et `mnemo mcp`) et l'auto-mémoire coupée.
+ * Windows), plus la session Mnemo (lue par `mnemo hook` et `mnemo mcp`), son moteur (`MNEMO_MOTEUR` : les hooks d'un autre
+ * moteur lancé depuis la session, qui hérite de `MNEMO_SESSION`, restent inertes) et l'auto-mémoire coupée.
  */
 export function environnementClaude(env: Record<string, string | undefined>, session: Session, racine: string): Record<string, string> {
-	const ajouts: Record<string, string> = { MNEMO_SESSION: session.id, MNEMO_PROJET: session.projet, MNEMO_RACINE: racine, CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' };
+	const ajouts: Record<string, string> = { MNEMO_SESSION: session.id, MNEMO_MOTEUR: 'claude-code', MNEMO_PROJET: session.projet, MNEMO_RACINE: racine, CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' };
 	const resultat: Record<string, string> = {};
 	for (const [cle, valeur] of Object.entries(env)) {
 		const majuscules = cle.toUpperCase();

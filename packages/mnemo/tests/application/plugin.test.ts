@@ -375,7 +375,7 @@ describe('environnementClaude', () => {
 			session(),
 			'/m',
 		);
-		expect(env).toEqual({ PATH: '/usr/bin', HOME: '/Users/x', MNEMO_SESSION: ID, MNEMO_PROJET: 'alpha', MNEMO_RACINE: '/m', CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' });
+		expect(env).toEqual({ PATH: '/usr/bin', HOME: '/Users/x', MNEMO_SESSION: ID, MNEMO_MOTEUR: 'claude-code', MNEMO_PROJET: 'alpha', MNEMO_RACINE: '/m', CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' });
 	});
 
 	it("retire les marques d'une session Claude Code parente (service lancé depuis Claude Code)", () => {

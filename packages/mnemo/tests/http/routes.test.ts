@@ -402,6 +402,16 @@ describe('routes : hook', () => {
 		expect(await c.etat.lire(UUID)).toMatchObject({ etat: 'a_relire' });
 	});
 
+	it('POST hook d’un autre moteur que la session (codex lancé depuis Claude Code) : rien, ni état ni épisode', async () => {
+		const c = await serviceFaux();
+		await c.etat.creer(sessionFixe(UUID));
+		const r = await api(c).post(ROUTES.hook, { evenement: 'fin', session: UUID, horodatageMs: Date.now(), cwd: null, moteur: 'codex', fil: 'fil-codex' });
+		expect(r).toMatchObject({ statut: 200, corps: {} });
+		await c.service.arreter();
+		expect(c.dep.commits).toEqual([]);
+		expect(await c.etat.lire(UUID)).toMatchObject({ etat: 'attend', majMs: 1000 });
+	});
+
 	it('POST hook : horodatage hors bornes (négatif, au-delà de maintenant + 60 s) → 400, état intact', async () => {
 		const c = await serviceFaux();
 		await c.etat.creer(sessionFixe(UUID));

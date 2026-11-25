@@ -13,7 +13,7 @@ import { chercherAvecAvis, voisins } from '../../application/chercher.ts';
 import { deplacer, destinationDuDeplacement } from '../../application/deplacer.ts';
 import { BORNES_DOCUMENTS, documentsDeLaMemoire, SANS_BORNE } from '../../application/documents.ts';
 import { ecarterDuClassement } from '../../application/ecarter.ts';
-import { traiterEvenement } from '../../application/evenements.ts';
+import { estEtranger, traiterEvenement } from '../../application/evenements.ts';
 import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
 import type { EntreeHook } from '../../application/evenements.ts';
@@ -611,6 +611,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const entree = entreeHook(brut);
 				const echeance = echeanceDuHook(brut, entree.evenement);
 				const transcription = transcriptionDuHook(brut);
+				// un autre moteur que celui de la session, ou un autre fil : ni état, ni contexte, ni jauge
+				if (await estEtranger(pil, entree)) return ok({});
 				// les modèles de la session bornés par son niveau (relu à chaque appel)
 				const depDuHook = entree.session === '' ? dep : dependancesDeSession(dep, pil.etat, entree.session);
 				const reponse = await traiterEvenement(depDuHook, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, rattachee: (id) => pilote.reecrirePlugin(id) });

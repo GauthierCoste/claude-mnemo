@@ -35,10 +35,14 @@ const RAISONS_IGNOREES = new Set(['clear', 'resume']);
 /** Identifiant de la session chez Codex : borné comme l'accepte le service. */
 const FIL_MAX = 200;
 
-/** La session Mnemo de ce processus (`MNEMO_SESSION`, posée par Mnemo au lancement de Codex), ou null. */
+/**
+ * La session Mnemo de ce processus, ou null : `MNEMO_SESSION` et `MNEMO_MOTEUR=codex`, posées par Mnemo au lancement de Codex.
+ * `MNEMO_SESSION` seule ne suffit pas : tout processus lancé depuis une session Claude Code en hérite (avec
+ * `MNEMO_MOTEUR=claude-code`), un `codex` lancé par l'agent compris.
+ */
 function sessionMnemo(env: Record<string, string | undefined>): string | null {
 	const session = env.MNEMO_SESSION;
-	return session !== undefined && estUuid(session) ? session : null;
+	return env.MNEMO_MOTEUR === 'codex' && session !== undefined && estUuid(session) ? session : null;
 }
 
 /**
@@ -76,7 +80,8 @@ function traduire({ evenement, options, lecture, env, maintenantMs, cwdProcessus
 	if (typeof champs.session_id === 'string' && champs.session_id !== '' && champs.session_id.length <= FIL_MAX) entree.fil = champs.session_id;
 	if (typeof champs.prompt === 'string') entree.prompt = champs.prompt;
 	if (evenement === 'debut' && estSourceDeDebut(champs.source)) entree.source = champs.source;
-	if (typeof champs.tool_name === 'string') entree.outil = { nom: champs.tool_name, entree: estObjet(champs.tool_input) ? champs.tool_input : {} };
+	// une entrée d'outil en texte (patch brut) est gardée sous `input`, où les outils de Codex la lisent
+	if (typeof champs.tool_name === 'string') entree.outil = { nom: champs.tool_name, entree: estObjet(champs.tool_input) ? champs.tool_input : typeof champs.tool_input === 'string' ? { input: champs.tool_input } : {} };
 	else if (evenement === 'outil') entree.outil = { nonLue: 'nonLue' in lecture ? lecture.nonLue : 'entree_illisible' };
 	if (evenement === 'arret') entree.arret = options.has('--notification') ? 'notification' : 'stop';
 	if (options.has('--sans-contexte')) entree.sansContexte = true;
@@ -100,5 +105,5 @@ function lireArguments(args: string[]): { evenement: EvenementHook; options: Set
  */
 const ECHEANCES_MS: Record<EvenementHook, number> = { debut: 900, message: 900, outil: 2000, apres_outil: 900, arret: 900, fin: 2500 };
 
-/** Codex : hooks installés pour tout le poste, inertes hors d'une session Mnemo (`MNEMO_SESSION` absente ou invalide). */
+/** Codex : hooks installés pour tout le poste, inertes hors d'une session Codex de Mnemo (`sessionMnemo`). */
 export const HOOKS_CODEX: HooksDuMoteur = { lireArguments, inerte: (env) => sessionMnemo(env) === null, traduire, sortie: sortieDe, echeancesMs: ECHEANCES_MS };

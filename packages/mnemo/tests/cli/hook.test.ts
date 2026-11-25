@@ -47,7 +47,7 @@ type Resultat = { code: number | null; out: string; err: string; ms: number; err
 function hook(cwd: string, evenement: string, stdin: string, env: Record<string, string | undefined> = {}, delaiStdinMs = 0): Promise<Resultat> {
 	return new Promise((resoudre) => {
 		const debut = Date.now();
-		const enfant = spawn(process.execPath, [MAIN, 'hook', ...evenement.split(' ')], { cwd, env: { ...ENV_TEST, MNEMO_SESSION: '', MNEMO_RACINE: '', ...env } });
+		const enfant = spawn(process.execPath, [MAIN, 'hook', ...evenement.split(' ')], { cwd, env: { ...ENV_TEST, MNEMO_SESSION: '', MNEMO_MOTEUR: '', MNEMO_RACINE: '', ...env } });
 		let out = '';
 		let err = '';
 		enfant.stdout.on('data', (m: Buffer) => (out += m.toString('utf8')));
@@ -81,14 +81,14 @@ function session(champs: Partial<Session> = {}): Session {
 }
 
 /** Dossier Mnemo minimal (pas de git : `servir` ne lit que les fiches), une consigne globale, une session connue. */
-async function dossierMnemo(): Promise<string> {
+async function dossierMnemo(champs: Partial<Session> = {}): Promise<string> {
 	const racine = await dossierTemporaire();
 	await mkdir(join(racine, '_mnemo', 'consignes'), { recursive: true });
 	await mkdir(join(racine, '.mnemo'));
 	await writeFile(join(racine, '_mnemo', 'SCHEMA.md'), '# Schéma\n');
 	await writeFile(join(racine, '_mnemo', 'consignes', 'g.md'), consigne('Réponds en français.'));
 	const etat = ouvrirEtat(join(racine, '.mnemo', 'etat.sqlite'));
-	await etat.creer(session());
+	await etat.creer(session(champs));
 	etat.fermer();
 	return racine;
 }
@@ -256,8 +256,8 @@ const REFUS_PUSH = 'Mnemo : consigne vérifiée « Jamais de push forcé. » (mo
 const refusAttendu = (motif: string) => `${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: motif }, systemMessage: motif })}\n`;
 
 /** Dossier Mnemo avec une consigne vérifiée globale, index synchronisé (le hook `outil` ne synchronise pas). */
-async function dossierVerifie(): Promise<string> {
-	const racine = await dossierMnemo();
+async function dossierVerifie(champs: Partial<Session> = {}): Promise<string> {
+	const racine = await dossierMnemo(champs);
 	await writeFile(join(racine, '_mnemo', 'consignes', 'push.md'), `${entete('consigne', 'portee: globale\nniveau: verifiee\nregle: { type: commandes_interdites, motifs: ["git push --force*"] }\n')}# P\n\nJamais de push forcé.\n`);
 	await attendu(racine, '');
 	return racine;
@@ -424,7 +424,7 @@ describe('mnemo hook : identité de session et /clear', () => {
 
 	it('SessionEnd de /clear ou /resume : ignoré (pas de fin) ; SessionStart source clear : un debut normal, sans contexte', async () => {
 		const racine = await dossierMnemo();
-		const env = { MNEMO_RACINE: racine, MNEMO_SESSION: ID };
+		const env = { MNEMO_RACINE: racine, MNEMO_SESSION: ID, MNEMO_MOTEUR: 'codex' };
 		const fin = await hook(racine, 'fin', JSON.stringify({ session_id: AUTRE, cwd: racine, hook_event_name: 'SessionEnd', reason: 'clear' }), env);
 		expect(fin.code).toBe(0);
 		expect(fin.out).toBe('');
@@ -584,9 +584,9 @@ describe('mnemo hook --moteur codex', () => {
 	const codex = (racine: string, champs: Record<string, unknown>) => JSON.stringify({ session_id: FIL, transcript_path: '/t.jsonl', cwd: racine, ...champs });
 
 	it('session Mnemo : contexte au format de Codex, session de MNEMO_SESSION et fil = session_id de Codex, PermissionRequest = dialogue ouvert', async () => {
-		const racine = await dossierMnemo();
+		const racine = await dossierMnemo({ moteur: 'codex' });
 		const { requetes } = await fauxService(racine, (_req, corps) => (JSON.parse(corps).evenement === 'message' ? { contexte: 'Contexte du service.' } : {}));
-		const env = { MNEMO_RACINE: racine, MNEMO_SESSION: ID };
+		const env = { MNEMO_RACINE: racine, MNEMO_SESSION: ID, MNEMO_MOTEUR: 'codex' };
 		const r = await hook(racine, 'message --moteur codex', codex(racine, { hook_event_name: 'UserPromptSubmit', turn_id: 't', prompt: 'Bonjour' }), env);
 		expect(r.code).toBe(0);
 		expect(r.out).toBe(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: 'Contexte du service.' } })}\n`);
@@ -603,10 +603,10 @@ describe('mnemo hook --moteur codex', () => {
 	});
 
 	it('outil : refus au format de Codex (permissionDecision deny, sans systemMessage) ; apply_patch vers un chemin interdit refusé', async () => {
-		const racine = await dossierVerifie();
+		const racine = await dossierVerifie({ moteur: 'codex' });
 		await writeFile(join(racine, '_mnemo', 'consignes', 'env.md'), `${entete('consigne', 'portee: globale\nniveau: verifiee\nregle: { type: chemins_interdits, motifs: ["**/.env"] }\n')}# E\n\nJamais de .env.\n`);
 		await attendu(racine, '');
-		const env = { MNEMO_RACINE: racine, MNEMO_SESSION: ID };
+		const env = { MNEMO_RACINE: racine, MNEMO_SESSION: ID, MNEMO_MOTEUR: 'codex' };
 		const r = await hook(racine, 'outil --moteur codex', codex(racine, { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'git push --force' } }), env);
 		expect(r.code).toBe(0);
 		expect(r.out).toBe(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: REFUS_PUSH } })}\n`);
@@ -617,16 +617,17 @@ describe('mnemo hook --moteur codex', () => {
 		expect(write.out).toBe('');
 	});
 
-	it('hors d’une session Mnemo (MNEMO_SESSION absente ou invalide) : sortie vide, code 0, aucun appel au service, aucun effet, même pour outil', async () => {
-		const racine = await dossierVerifie();
+	it('hors d’une session Codex de Mnemo (MNEMO_SESSION absente, invalide, ou sans MNEMO_MOTEUR=codex) : sortie vide, code 0, aucun appel au service, aucun effet, même pour outil', async () => {
+		const racine = await dossierVerifie({ moteur: 'codex' });
 		const { requetes } = await fauxService(racine, () => ({ refus: 'jamais' }));
-		for (const session of ['', 'pas-un-uuid']) {
+		// MNEMO_SESSION seule (héritée d'une session Claude Code par un `codex` qu'y lance l'agent) ne suffit pas
+		for (const [session, moteur] of [['', 'codex'], ['pas-un-uuid', 'codex'], [ID, 'claude-code'], [ID, '']] as const) {
 			for (const [args, champs] of [
 				['outil --moteur codex', { tool_name: 'Bash', tool_input: { command: 'git push --force' } }],
 				['message --moteur codex', { prompt: 'Bonjour' }],
 				['fin --moteur codex', { reason: 'other' }],
 			] as const) {
-				const r = await hook(racine, args, codex(racine, champs), { MNEMO_RACINE: racine, MNEMO_SESSION: session });
+				const r = await hook(racine, args, codex(racine, champs), { MNEMO_RACINE: racine, MNEMO_SESSION: session, MNEMO_MOTEUR: moteur });
 				expect(r, args).toMatchObject({ code: 0, out: '', err: '' });
 			}
 		}

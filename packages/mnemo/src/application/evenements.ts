@@ -1,5 +1,5 @@
 import type { CauseArret, EvenementHook, Session, SourceDeDebut } from '../domaine/session.ts';
-import { objectifDe } from '../domaine/session.ts';
+import { evenementEtranger, objectifDe } from '../domaine/session.ts';
 import { ecrireEpisodeMinimal } from './episode.ts';
 import type { Dependances, Pilotage } from './ports.ts';
 import { positionDeSession, positionNotee } from './dossiers-non-rattaches.ts';
@@ -232,14 +232,25 @@ async function finDeSession(dep: Dependances, pil: Pick<Pilotage, 'etat' | 'depo
 }
 
 /**
+ * L'événement vient-il d'un autre moteur que celui de la session, ou d'un autre fil (`evenementEtranger`) ? Lu avant d'appliquer
+ * quoi que ce soit ; session inconnue ou illisible : non (rien ne sera appliqué à une session inconnue).
+ */
+export async function estEtranger(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil'>): Promise<boolean> {
+	if (entree.session === '') return false;
+	const session = await pil.etat.lire(entree.session).catch(() => null);
+	return session !== null && evenementEtranger(session, entree);
+}
+
+/**
  * Un événement de hook, par le service (`froid: 'permis'`) ou par `mnemo hook` sans service (`si-budget`) : l'état de la
  * session est mis à jour ; `debut` sert le contexte de début (question : l'objectif) et note branche et commit de départ,
  * `message` sert celui du prompt. Chaque contexte servi à une session connue est journalisé (durée, usage du sens). Session
  * inconnue de l'état : servie quand même, sans état ni journal. `outil` vérifie l'action contre les consignes vérifiées
  * (refus éventuel) ; `fin` écrit l'épisode minimal s'il le faut (`finDeSession`). Avec `enFond` (le service), git et
- * l'épisode ne retardent jamais la réponse.
+ * l'épisode ne retardent jamais la réponse. Un événement étranger à la session (`estEtranger`) est sans effet.
  */
 export async function traiterEvenement(dep: Dependances, pil: Pick<Pilotage, 'etat' | 'depot'>, entree: EntreeHook, reglages: ReglagesEvenement): Promise<ReponseHook> {
+	if (await estEtranger(pil, entree)) return {};
 	const session = await appliquer(pil, entree);
 	if (entree.evenement === 'fin') {
 		const tache = finDeSession(dep, pil, session, entree, reglages).catch(() => {});
