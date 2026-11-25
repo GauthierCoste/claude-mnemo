@@ -8,6 +8,17 @@
 
 ## Done
 
+- **Live ranking (25/11/2026).** Each meaningful message ranks every candidate note (the folder of the position, the
+  neutral notes, the places named, the notes linked to a note injected by hand), refined by the reranker in the
+  background. A confidence score, one small model per level of the models, is learned on your judgements (`mnemo banc
+  contexte --extraire`, `--juger`, `--apprendre`; coefficients in `.mnemo/coefficients-note.json`). Accepted, it shows
+  calibrated percentages, chooses the leads (`contexte.seuilPiste`, 30 %) and injects a note whole at the message itself
+  (`contexte.seuilInjection`, 90 %, 2 at most per message); refused, it orders the ranking and chooses the leads without
+  %. Automatic injection is watched over its last 100 injections and stops when the lower Wilson bound falls under 0.75;
+  « Réactiver » starts it again. The history of your gestures gives each note a prior; ✗ offers « Pas pour cette
+  session » and « Ne plus jamais suggérer », restored from the page of the note in Mémoire, and a note set aside in 3
+  sessions brings a suggestion. Replaces the fixed cards of the folder at the first message (`contexte.cartesPerimetre`,
+  removed). See [usage.md](usage.md#injected-context).
 - **Open Mnemo to other coding agents (Codex first).** Each profile chooses its engine (Claude Code or Codex) and its
   model (empty: the engine's default); a session keeps both, resume included. A `Moteur` port holds what differs between
   engines. Codex 0.171 or later: memory over MCP in every Codex session (`mnemo init --codex`, `mnemo declarer --moteur
@@ -37,6 +48,10 @@
 
 ## Left to do
 
+- **Learn the confidence score on real judgements.** The defaults shipped with Mnemo have learned nothing, so the ranking
+  stays in « ordre seul » and nothing is injected automatically. Judge real messages (`mnemo banc contexte --extraire`,
+  then `--juger`) until `--apprendre` accepts a model for each level, then check on real sessions that the thresholds
+  (90 % to inject, 30 % for leads) and the watch of automatic injection hold; adjust them with the report if they do not.
 - **Archivist on any engine.** The archivist and its benches run on Claude Code (`claude -p`); make its engine a setting.
 - **Import Codex's own memory**, as `mnemo amorce` imports Claude Code's.
 - **Reasoning tokens in the Codex context gauge.** The gauge counts `input_tokens + output_tokens` of the last

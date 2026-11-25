@@ -94,7 +94,7 @@ grouped the first time. A copy that later changes gets its own note and leaves t
 ## Settings
 
 The settings of a folder are in `.mnemo/reglages.json` (local state, never versioned) and can be changed in the
-interface (gear at the bottom of the rail, ⌥,): project markers (◆ in the folder tree), the injected context (number of cards proposed at the first message and per message),
+interface (gear at the bottom of the rail, ⌥,): project markers (◆ in the folder tree), the injected context (thresholds of automatic injection and of leads, notes injected and leads per message),
 minimum similarity of search, model shutdown after inactivity, note types whose proposed information needs a
 confirmation, service port, launcher browser and the main colour of the interface (green by default). The table of settings and defaults is in [installation.md](installation.md#settings).
 The main colour is applied as soon as it is picked; below the picker, a warning appears when it is hard to read on the dark background (contrast under 3:1). The logo and the session state colours keep their own colours.
@@ -194,6 +194,9 @@ Three levels set which models run. The bench counts the questions whose right so
 - **For one session.** A session can have its own level. It is kept when the session is resumed. The more restrictive of
   the two levels applies: a session cannot use a model the machine excludes. Its tools and hooks then neither call nor
   start the excluded models. This frees no memory: the servers are shared and keep running for the other sessions.
+- **Injected context.** The confidence score has one model per level: « Complets » scores the notes the reranker saw,
+  « Sens seul » the others. At « Coupés », without meaning, there is no score: no %, no automatic injection, the ranking
+  follows the words (see "Injected context").
 - **Vectors.** At « Coupés », new notes are not vectorised. When meaning comes back, the missing vectors are computed
   again (`mnemo index`, or a search, within its budget).
 
@@ -222,8 +225,8 @@ session. Its menu offers « Comme partout » (follow the level of the machine), 
 
 ### How a result is ranked
 
-Each result of `chercher` (and of `mnemo cherche`) has one **score**: `score = base + weights`, the same model as the
-cards (see "Injected context").
+Each result of `chercher` (and of `mnemo cherche`) has one **score**: `score = base + weights`. The leads of a session
+are ranked otherwise (see "Injected context").
 
 - The **base**, from 0 to 1, is how well the result matches the query: words, meaning, graph and reranker. Among words
   matches, a fact that carries the precise words ranks above one that only shares the words of its note's title.
@@ -382,8 +385,10 @@ instructions, the action check is declared so that Claude Code refuses the actio
 `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` and the `CLAUDE_CODE_USE_*` provider selectors are removed from its
 environment. `MNEMO_CLAUDE` names another `claude` binary.
 
-Mnemo keeps a log of the gestures made on the notes it proposes: a note you inject by hand, set aside with ✗ or restore,
-and a note Claude reads with `lire` after a lead proposed it. Each gesture keeps the text of your last meaningful message
+Mnemo keeps a log of the gestures made on the notes it proposes: a note you inject by hand, set aside with ✗ (for the
+session or for good) or restore, a note Mnemo injects by itself, a note Claude reads with `lire` after a lead proposed it,
+and the reactivation of automatic injection. These gestures give the history used by the ranking and the watch of
+automatic injection (see "Injected context"). Each gesture keeps the text of your last meaningful message
 and, when the meaning model has already computed it, that message's vector. The log lives in `.mnemo/etat.sqlite` only
 (never in the versioned memory), survives `/clear`, `/compact` and the end of the session, and is never purged on its
 own. Deleting a session keeps its gestures but erases the text and the vectors of its messages from the file.
@@ -421,9 +426,10 @@ profile.
 
 ### Injected context
 
-Mnemo proposes, it never forces. It does not push notes into the session: it hands the agent a few **cards** (title, path,
-one line) and the agent reads with `lire` the ones useful to its task. The tools `chercher`, `lire`, `lister`, `voisins`,
-`chronologie` and `contexte` stay available for the rest.
+Mnemo's aim is to give each session what it should know from the memory. At each meaningful message it ranks the notes
+that may help, injects whole the few it is sure of, and proposes others as **leads**: a card (title, path, one line) that
+the agent reads with `lire` when it helps its task. The tools `chercher`, `lire`, `lister`, `voisins`, `chronologie` and
+`contexte` stay available for the rest.
 
 What a session receives, in this order:
 
@@ -431,45 +437,101 @@ What a session receives, in this order:
    all together in the first message.
 2. **The note of the position**, whole, like a CLAUDE.md: the note of the project or client the session is started in.
    It comes at the first message that is not mute, again after `/clear` or `/compact`, and again if the note changes.
-   Beyond 8000 characters it becomes a card.
-3. **The cards**, under the title `## Pistes de Mnemo (lis avec `lire` celles qui servent ta tâche)`. A card shows the
+   Beyond 8000 characters it becomes a lead.
+3. **The notes you inject by hand** (➤, below), whole, under `## Fiches injectées à la demande de l’utilisateur`.
+4. **The notes injected by Mnemo**, whole, under `## Fiches injectées par Mnemo (très proches de ta demande)`: only with
+   an accepted confidence score (below).
+5. **The leads**, under the title `## Pistes de Mnemo (lis avec `lire` celles qui servent ta tâche)`. A lead shows the
    title, the path, the first sentence of the summary, the type and the reason.
 
-Cards come from three places:
+Whatever cites documents is framed as `<donnees>`.
 
-- **At the first message**: the notes of the folder of the position and the notes linked to the position (one or two
-  hops), ordered by meaning against that first message alone, at most `contexte.cartesPerimetre` (10 by default). Without
-  a position (session at the root), there are none.
-- **At any message that names a note**: a note whose title or alias is written in your message (whole words, at least 4
-  letters) becomes a card, at most `contexte.cartesNommees` per message (5 by default). Naming the place of a note from
-  elsewhere (another client, another project) unlocks the notes stored under it, and only those that are named too are
-  proposed.
-- **At the message that carries a note you inject by hand** (➤, below): the notes linked to it (one hop, a relation or a
-  written link, either way) are ranked with what is left of the folder of the position, at most
-  `contexte.cartesPerimetre`, even if they belong elsewhere; their reason reads *liée à <title of the injected note>*.
+**A ranking at every message.** Each message that is not mute ranks all the candidates:
 
-Notes named in your message keep the order of the message. The others are ranked by one score: the meaning of the
-message (0 to 1, 0 without the model) plus weights. Injecting a note by hand adds `contexte.poidsInjection` (0.25 by
-default) to each note linked to it; the weight halves every `contexte.demiVieInjection` messages (3 by default; mute
-messages do not count, time does not either), is dropped below 0.02, and several injected notes add up to 0.40 at most on
-the same note. Injecting the note again restarts its weight; `/clear` and `/compact` clear all weights. A weight still
-active also counts in the `contexte` tool.
+- the notes of the folder of the position and the notes linked to the position (one or two hops);
+- the neutral notes, filed under no project or client (people, practices…);
+- the notes stored under a place from elsewhere (another client, another project) that your message names;
+- the notes linked to a note you inject by hand (one hop, a relation or a written link, either way), even from elsewhere.
+
+At the root (no position), only the neutral notes and the linked ones are candidates. Never candidates: `source`,
+`dossier`, `consigne`, `profil` and `episode` notes, outdated notes, and the notes you set aside. Each candidate gets
+signals: the meaning of the message (compared with the other notes of the memory), its words, the weight of a note
+injected by hand on its neighbours, and the history of your gestures (below). When the estimate of its duration fits in
+the time left, the reranker also scores the first 5 to 8 candidates during the hook. The whole ranking is kept in the
+journal of the session and shown in the Contexte panel.
+
+**Refinement in the background.** Once the hook has answered, the service asks the reranker to score the first 30
+candidates, plus those a signal designates (40 at most, within 3 seconds); if meaning did not answer in time, it computes
+it too. The ranking of the panel is updated in place, and the models button of the session reads « affinage… »
+(refining) meanwhile. Refinement changes nothing in the session: no injection, no lead, nothing kept for a later message.
+A newer meaningful message makes it obsolete: it stops and writes nothing.
+
+**The confidence score.** A small model, learned on your own judgements (`mnemo banc contexte --apprendre`, see
+[Benchmarks](#benchmarks)), turns the signals of a note into the probability that it is useful for this message. There is
+one model per level of the models: « Complets », for the notes the reranker scored, and « Sens seul » (meaning only), for
+the others. The coefficients are in `.mnemo/coefficients-note.json`, written by the learning and read again when it
+changes; without this file, Mnemo uses the defaults shipped with it, which have not learned anything yet. A model is
+**accepted** only if it passes strict criteria on your judgements (enough injections in enough real sessions, a high
+precision even at its pessimistic bound, a calibrated score, few injections on messages that need none), and only for the
+model files it was learned with. Three cases:
+
+- **Accepted**: the score is a calibrated percentage. It orders the ranking, chooses the leads and may inject a note.
+- **Learned but refused** (criteria not met, or other model files installed since): its score still orders the ranking
+  and chooses the leads at each message, but no percentage is shown and nothing is injected by Mnemo: « ordre seul »
+  (order only).
+- **Nothing learned** (a new installation): a provisional rule, also « ordre seul ». The ranking follows the meaning and
+  the words; the first new notes go out as leads only at the first message and at the message that carries a note you
+  inject by hand, at most `contexte.pistesParMessage`. Without the meaning model, a lead must match the words of the
+  message or be linked to an injected note (at the first message, the notes of the folder of the position still qualify).
+
+**Leads.** With a learned score, each meaningful message sends as leads the new notes whose score reaches
+`contexte.seuilPiste` (30 % by default), best first, at most `contexte.pistesParMessage` (3 by default). A note whose title
+or alias is written in your message (whole words, at least 4 letters) is a lead at any message, with the reason *nommée*,
+at most `contexte.cartesNommees` (5 by default), in the order of the message. Naming the place of a note from elsewhere
+unlocks the notes stored under it, and only those that are named too are proposed.
+
+**Automatic injection.** With an accepted model, Mnemo injects a note whole at the message itself when:
+
+- its score reaches `contexte.seuilInjection` (90 % by default; 100 %: never);
+- its score without the history of your gestures is still 70 % or more: the history alone never injects a note;
+- the session has not already received or read it as it is now;
+- it is 8000 characters or shorter, and there is still time to read it within the hook (otherwise it stays a lead).
+
+At most `contexte.injectionsParMessage` notes per message (2 by default), best first. A named note injected whole is not
+also a lead. Nothing is injected automatically after a tool call, at a mute message, by the refinement or by the
+`contexte` tool.
+
+**Watching automatic injection.** For each level, Mnemo follows the last 100 notes it injected automatically, since the
+model was learned or since you last reactivated injection. An injection counts as wrong when you set the note aside (✗)
+later in the same session without restoring it. When the lower bound of the Wilson interval (95 %) of these injections
+falls below 0.75, automatic injection stops for that level (a window not full yet counts the missing injections as
+right). The scores and the order stay; ➤ still injects by hand; if « Complets » is cut, « Sens seul » takes over when it is
+accepted and not cut. The Contexte panel then says « Injection automatique coupée », with the reason (*N des M dernières
+fiches injectées par Mnemo ont été écartées*) and a **Réactiver** button (reactivate), which starts a new window. A model
+learned and accepted again also starts a new window. When the log of gestures cannot be read, automatic injection waits
+for the next reading.
+
+**The history of your gestures.** The gestures of past sessions on a note give it a prior: injected by hand, or read by
+the agent after a lead, count for it (a read counts half, and the reads of a note are capped); set aside counts against
+it. A gesture weighs less with age (half-life: 60 days), half as much when it was made elsewhere (another position or
+folder), and more when its message looks like the current one. The prior is bounded, and only a learned score that
+uses it takes it into account; a lead it pushed up reads *souvent injectée*.
 
 What Mnemo does not do:
 
-- A **mute message** gets no card: a message that starts with a tag (`<task-notification>`, `<command-name>`…) or that
-  has fewer than two meaningful words ("oui vas-y pousse"). Only the instructions come, and the note of the position if
-  it was not injected yet.
-- **Nothing after a tool call**, and no computation in the background: `PostToolUse` only records which notes the agent
-  reads or writes.
-- No `source`, `dossier`, `consigne`, `profil` or `episode` note is proposed, and no note from another project or client
-  unless your message names it or it is linked to a note you injected by hand. Episodes stay findable with `chercher` and `chronologie`.
-- A card already proposed is not proposed again while the note is unchanged. A note you dismiss in the Contexte panel
-  (✗), and the note of the position if it was dismissed, are never injected again in that session (unless you ask for it with ➤).
-- After `/clear` or `/compact`, the cards can be proposed again and the note of the position is injected again.
+- A **mute message** is not ranked and gets neither lead nor automatic injection: a message that starts with a tag
+  (`<task-notification>`, `<command-name>`…) or that has fewer than two meaningful words ("oui vas-y pousse"). Only the
+  instructions come, and the note of the position if it was not injected yet.
+- **Nothing after a tool call**: `PostToolUse` only records which notes the agent reads or writes.
+- No note from another project or client unless your message names it, names its place, or it is linked to a note you
+  injected by hand. Episodes stay findable with `chercher` and `chronologie`.
+- A lead already proposed is not proposed again while the note is unchanged. A note you set aside for the session, and
+  the note of the position if it was set aside, are never injected again in that session (unless you ask for it with ➤).
+- After `/clear` or `/compact`, leads can be proposed again and the note of the position is injected again.
 
 The `contexte(question)` MCP tool draws leads on demand: given a question, it returns up to 10 cards of the closest notes
-by meaning, notes from elsewhere included (the agent asked), to read with `lire`.
+by meaning, notes from elsewhere included (the agent asked), ordered by the same score, to read with `lire`. It leaves
+out the notes you never want suggested, and never injects anything.
 
 The profile `travail` does not tell the agent how to use its own native memory. It says that the Mnemo memory holds
 information relevant to the work, that Mnemo proposes leads, and to write with `proposer` whatever is worth keeping. The
@@ -477,35 +539,56 @@ automatic memory of Claude Code, and the memory of Codex, stay off in the sessio
 
 **Injecting a note by hand.** In the Contexte panel, ➤ "Injecter dans la session" (inject into the session) on a line
 queues the whole note for the session's **next message** (never after a tool call): it is then injected whole, under
-`## Fiches injectées à la demande de l’utilisateur`, framed as `<donnees>` if it cites documents, even if it was dismissed
-or already injected, and recorded as injected. ➤ stays lit until then; a second click cancels it. The notes linked to it
-are proposed with it as cards (*liée à …*), and keep a weight for the next few messages, used in the `contexte` tool or
-at a new injection.
+`## Fiches injectées à la demande de l’utilisateur`, even if it was set aside or already injected, and recorded as
+injected. ➤ stays lit until then; a second click cancels it. The notes linked to it become candidates with the reason
+*liée à …*: injecting a note adds `contexte.poidsInjection` (0.25 by default) to each note linked to it; the weight halves
+every `contexte.demiVieInjection` messages (3 by default; mute messages do not count, time does not either), is dropped
+below 0.02, and several injected notes add up to 0.40 at most on the same note. Injecting the note again restarts its
+weight; `/clear` and `/compact` clear all weights. A weight still active also counts in the `contexte` tool.
 
-**Contexte panel.** For the selected session, one list, "Injecté dans la session", one line per note: on the left ◆
-for a note injected whole, or the score of a proposed card as a percentage (the meaning of the message plus the weights).
-Every proposed card has a score, a note named in the message and the oversized note of the position included: they are
-scored the same way but keep their place (named notes in the order of the message, the position note first). Without the
-meaning model, when it did not answer in time, or when the notes are not indexed yet, there is no score (« — »), and a
-discreet « sans note de sens » next to the panel title says so (not after a mute message, whose text is never scored).
-A note the session read (tools `lire`, `voisins`) is a line of the same list, placed at the time it was read, with ◈ on
-the left (tooltip: when it was read); it appears as soon as it is read, without reloading. A note already in the list
-(injected or proposed) keeps its line and its tooltip adds « lue aussi à HH:MM ». Then the type dot and the title on one line. The notes injected whole come first (the note of the position and the notes you
-asked for, oldest first), then the cards proposed to the agent, most recent first. The reason of a card is written on the
-right only when it tells something (*nommée*, *question*, *liée à <title>*); *du périmètre*, the default, is in the tooltip
-with the time the card was proposed and its path. The list scrolls on its own and stays anchored where the two meet. On
-hover, the reason gives way to ➤ (inject at the next message) and ✗ "ne plus suggérer" (dismiss the note for the
-session; dismissed notes stay under "Écartées (N)" with "Rétablir"); a note that was only read has ➤ alone, since only
-what Mnemo proposed can be dismissed. A mute message shows its reason under the list.
-Clicking a title opens the note. Above the list: the avatar of the profile, the state and the objective of the session,
-then its engine and model (the **Moteur** line), its folder, start, duration, branch and, once known, the **Contexte**
-line: how full the agent's context window is (read from the end of the session's transcript by the service, for this
-gauge only; the same gauge runs under the title bar of the session). When Claude Code's `autoCompactWindow` setting is set (the project's `.claude/settings.local.json`,
-then `.claude/settings.json`, then `~/.claude/settings.json`; read again at each reading), the gauge fills up to that
-threshold instead of the size of the window, and its tooltip says "tokens avant résumé automatique" (before the automatic summary).
+**Setting a note aside.** On hover, ✗ opens a menu with two choices:
 
-The context settings (`contexte.cartesPerimetre`, `contexte.cartesNommees`, `contexte.poidsInjection`,
-`contexte.demiVieInjection`) and the minimum similarity of search are listed in [installation.md](installation.md#settings).
+- « Pas pour cette session » (not for this session): the note is no longer proposed nor injected in this session. It is
+  listed under « Écartées (N) », with « Rétablir » (restore).
+- « Ne plus jamais suggérer » (never suggest again): the note leaves the candidates of every session and of the
+  `contexte` tool. Its page in Mémoire says so, with « Rétablir ».
+
+When you set the same note aside in 3 sessions, on at least 2 different days, the panel asks « écartée dans 3 sessions :
+ne plus la suggérer ? », with « Ne plus suggérer » and « Garder » (keep: it stays aside for this session only). Setting
+aside a note Mnemo injected counts as an error for the watch above.
+
+**Contexte panel.** For the selected session, one list, "Injecté dans la session":
+
+- At the top, ◆ the notes injected whole, oldest first, with on the right how: « du dossier » (the note of the position),
+  « à la main » (➤), or « auto 94 % » (injected by Mnemo, with its score at that message; the tooltip gives the threshold
+  and the time).
+- Below a gap, when automatic injection is cut, the notice and « Réactiver ».
+- The ranking of the last meaningful message: on the left the calibrated score in %, or ◇ in « ordre seul »; the type dot
+  and the title, with the reason under it and « piste » when the note was sent as a lead. A line marks the threshold of
+  automatic injection. At each ranking, then at the refinement, the lines slide to their new place, ▲/▼ shows a change of
+  rank for a few seconds, and a newcomer fades in.
+- « Plus tôt dans la session » (earlier in the session): the leads of earlier messages and the notes the session read (◈,
+  tools `lire` and `voisins`) that are not in the ranking, most recent first, without %. A note read that is already in
+  the list keeps its line, and its tooltip adds « lue aussi à HH:MM ».
+- Then the suggestion of the 3 sessions, « Sous le seuil (N) » (notes scored under 5 %) and « Écartées (N) ».
+
+On hover, a line offers ➤ and ✗; a note that was only read has ➤ alone, since only what Mnemo proposed can be set aside.
+A mute message shows its reason under the list. Clicking a title opens the note. The list scrolls on its own and stays
+anchored where the injected notes and the ranking meet. The models button of the session, at the right of the panel
+title, also says « affinage… » during refinement and « ordre seul » when no score is calibrated (the reason in its
+tooltip).
+
+Above the list: the avatar of the profile, the state and the objective of the session, then its engine and model (the
+**Moteur** line), its folder, start, duration, branch and, once known, the **Contexte** line: how full the agent's
+context window is (read from the end of the session's transcript by the service, for this gauge only; the same gauge runs
+under the title bar of the session). When Claude Code's `autoCompactWindow` setting is set (the project's
+`.claude/settings.local.json`, then `.claude/settings.json`, then `~/.claude/settings.json`; read again at each reading),
+the gauge fills up to that threshold instead of the size of the window, and its tooltip says "tokens avant résumé
+automatique" (before the automatic summary).
+
+The context settings (`contexte.seuilInjection`, `contexte.injectionsParMessage`, `contexte.seuilPiste`,
+`contexte.pistesParMessage`, `contexte.cartesNommees`, `contexte.poidsInjection`, `contexte.demiVieInjection`) and the
+minimum similarity of search are listed in [installation.md](installation.md#settings).
 
 **Permissions.** A Mnemo session runs with your own Claude Code or Codex permissions: Mnemo is not a sandbox. Checked
 instructions are reminders: they refuse the actions they recognise, without guaranteeing that no other one gets through.
@@ -691,18 +774,30 @@ Benchmarks measure Mnemo on fictitious corpora shipped with it (`packages/mnemo/
   test memory; with a file, your questions on the memory of the folder.
 - `mnemo banc consignes [--json]`: checked instructions (actions refused or allowed by the `outil` hook) and reminded
   ones (injected at the right message). Without `claude`, in a few seconds.
-- `mnemo banc contexte [--json]`: the cards proposed on messages labelled by hand, and the measures of the judged
-  messages, from the file `.mnemo/banc-contexte.json` (private, never committed); see
-  [banc.md](banc.md#banc-du-contexte-sobre). `--extraire [<session>] [--nombre <n>]` adds real messages from your
-  sessions (varied, deduplicated), each with the notes to judge: the union of the first ones by meaning, by words and by
-  the reranker. `--juger` shows them one at a time, without score or rank, one key per answer (`o` useful, `n` not
-  useful, `i` undecided, `r` nothing useful for this message, `s` skip the message, `b` back, `q` quit), saves each
-  answer and resumes where you stopped (a copy `banc-contexte.json.bak` is kept from before the session; only one of
-  these commands may write the file at a time). `--par-session <n>` (6 by default) caps the messages taken per session;
-  `--completer` reruns the extraction on the messages already taken, and `--juger` then asks only the new notes. Two
-  notes drawn outside the union are added to each message, to measure what the union misses. A note changed since the
-  extraction has its judgement left out of the measures (`--empreintes garder` to keep it). `--json` also gives the
-  judged pairs with their raw signals. Nothing is written to `.mnemo` except this file.
+- `mnemo banc contexte [--json]`: the leads proposed on messages labelled by hand, and the measures of the judged
+  messages, from the file `.mnemo/banc-contexte.json` (private, never committed); `--recalculer` computes the signals
+  again with the models. It ranks as the hook does, reading the index and the log of gestures as they are, without writing
+  to them. The steps to learn the confidence score of your memory (see [Injected context](#injected-context)):
+  1. `--extraire [<session>] [--nombre <n>]` adds real messages from your sessions (varied, deduplicated), each with the
+     notes to judge: the union of the first ones by meaning, by words and by the reranker, plus two notes drawn outside
+     that union, to measure what it misses. `--par-session <n>` (6 by default) caps the messages taken per session.
+     `--completer` reruns the extraction on the messages already taken; their new notes are added.
+  2. `--juger` shows the notes one at a time, without score or rank, one key per answer (`o` useful, `n` not useful, `i`
+     undecided, `r` nothing useful for this message, `s` skip the message, `b` back, `q` quit), saves each answer and
+     resumes where you stopped (a copy `banc-contexte.json.bak` is kept from before the session; only one of these
+     commands may write the file at a time). After `--completer`, it asks only the new notes.
+  3. `--apprendre [--module <path>]` learns one model per level (« Complets » and « Sens seul ») on the judgements,
+     validated on sessions it did not learn from, and decides whether each one is accepted: at least 25 simulated
+     injections in at least 10 real sessions, a pessimistic precision of 90 % or more (80 % or more at its lower Wilson
+     bound and at the 2.5th percentile of a bootstrap by session), a calibration slope between 0.8 and 1.25, at least 20
+     judged messages that need nothing (from 5 sessions) with an injection on at most 5 % of them, and at most 0.5
+     injection per message. It writes the coefficients to `.mnemo/coefficients-note.json`, which the service reads again
+     at once, and its report to `.mnemo/apprentissage-note.txt` (and `.json`): the reason of each refusal, and what each
+     threshold would give. Neither file holds any text of a note or a message. `--module <path>` also writes the
+     coefficients as the TypeScript module of defaults shipped with Mnemo (for development).
+
+  A note changed since the extraction has its judgement left out (`--empreintes garder` to keep it). `--json` also gives
+  the judged pairs with their raw signals. Nothing is written to `.mnemo` except these files.
   `mnemo banc contexte --gestes [--json]`: counts of the logged gestures, by kind and by note (no message text).
 - `mnemo banc extraction --reel` and `mnemo banc contradictions --reel`: the archivist run by the real `claude -p` on
   test documents, then scored. **They consume your Claude subscription**: without `--reel`, the command refuses.
@@ -773,7 +868,7 @@ change).
 
 What the Claude app receives is the memory's MCP tools (`chercher`, `lire`, `contexte`, `proposer`, …) and the
 instructions of the MCP server. It does not get the hooks of a Claude Code session: nothing is injected automatically, no
-context at the first message, no cards per message, no episode at the end. Claude searches and reads the memory when it
+context at the first message, no leads per message, no episode at the end. Claude searches and reads the memory when it
 decides to, or when you ask it.
 
 `mnemo mcp` finds its folder from `CLAUDE_PROJECT_DIR`, then from the current folder. The Claude app starts it outside any

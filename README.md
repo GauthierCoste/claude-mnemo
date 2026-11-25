@@ -6,8 +6,9 @@ each session you see what it has been given from that memory.
 
 The memory is a plain folder of Markdown notes, versioned with git. The agent reads from it at each message and writes
 to it as it learns; every change is a commit you can see. At each message, Mnemo searches that memory locally (words,
-meaning, links between notes, the project you are in) and injects only a few ranked leads into the session, never a
-wall of text: the agent stays focused and reads what it needs.
+meaning, links between notes, the project you are in, your past gestures), proposes a few ranked leads and injects whole
+only the notes it is sure of, never a wall of text: the agent gets what it should know and reads the rest when it needs
+it.
 
 ![Sessions view: sessions grouped by project, the folder tree, and the context injected into the selected session](docs/images/sessions.png)
 
@@ -18,12 +19,13 @@ wall of text: the agent stays focused and reads what it needs.
   one with ⌥1 to ⌥9 and the others fold into a side rail. A thin gauge under each title bar shows how full the agent's
   context window is (or how close it is to the automatic summary when Claude Code's `autoCompactWindow` is set; amber
   from 60 %, red from 85 %). The side panels resize from their border.
-- **Injected context.** Mnemo injects leads, not whole notes. Every message brings the instructions for the session's
-  folder; the first one also brings the note of the project the session is in. A few cards (title, path, one line) then
-  point to the notes that matter, and the agent reads the ones it needs. A message that names a note gets its card; a
-  silent message ("ok, go") gets none. The Contexte panel lists what was injected and proposed, and the notes the
-  session read. A click injects a whole note by hand at the next message; another stops suggesting a note for the rest
-  of the session.
+- **Injected context.** Every message brings the instructions for the session's folder; the first one also brings the
+  note of the project the session is in. Each meaningful message then ranks the notes that may help. A few leads (title,
+  path, one line) point to the notes that matter, and the agent reads the ones it needs; once a confidence score learned
+  on your own judgements is accepted, a note scored 90 % or more is injected whole at the message itself. A silent
+  message ("ok, go") gets nothing. The Contexte panel shows the live ranking, what was injected and proposed, and the
+  notes the session read. A click injects a whole note by hand at the next message; another sets a note aside for the
+  session, or for good.
 - **Profiles.** A profile sets what a session receives: its engine (Claude Code or Codex) and model, its instruction, the
   memory skills, the Claude Code plugins switched on (every other installed plugin is switched off), the hooks, where it
   starts, and an avatar shown on its sessions. A read-only preview shows everything a session of the profile receives,
@@ -66,10 +68,12 @@ wall of text: the agent stays focused and reads what it needs.
   match, the weights reward the neighbourhood of the current project, confidence, belonging to the memory and freshness;
   each weight is a setting. Budgets are short (3.5 s for a tool, 400 ms for a hook): a slow model is skipped, never
   waited for.
-- **Injection** follows the session. The first message brings the note of the project and cards for the notes around
-  it, ranked by meaning against that message; a message that names a note brings its card; a note you inject by hand
-  lends a weight to the notes linked to it for the next few messages. Mute messages ("ok, go") bring nothing. The
-  [details](docs/usage.md) are in the usage guide.
+- **Injection** follows the session. Each meaningful message ranks the notes around the project, the neutral ones and
+  those a gesture or the message points to, by meaning, words, the notes you injected by hand and the history of your
+  gestures; the ranking is refined by the reranker in the background. A small model learned on your judgements
+  (`mnemo banc contexte --apprendre`) turns this into a calibrated score: it chooses the leads, and injects a note whole
+  only when it is accepted and sure enough; automatic injection stops by itself when you keep setting its notes aside.
+  Mute messages ("ok, go") bring nothing. The [details](docs/usage.md#injected-context) are in the usage guide.
 - **Sessions** started from Mnemo get what their engine reads. Claude Code gets a plugin generated for the session
   (`.mnemo/plugins/<session>/`): the instruction of the profile, the memory skills, the hooks, and Claude Code's own
   auto-memory turned off. Codex gets the instruction on its command line, with the skills listed in it (read with the

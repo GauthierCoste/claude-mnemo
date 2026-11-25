@@ -202,8 +202,11 @@ falls back to its default with a warning, never a crash.
 | --- | --- | --- |
 | Project markers, shown as ◆ in the folder tree (`projets.marqueurs`) | `.git`, `package.json`, `composer.json`, `pyproject.toml`, `Cargo.toml`, `go.mod` | immediately |
 | Minimum similarity of a search result by meaning, 0.1 to 0.95 (`contexte.similariteRecherche`) | 0.45 | immediately |
-| Cards of the folder of the session at its first message, 0 to 30 (`contexte.cartesPerimetre`) | 10 | immediately |
-| Cards of the notes named in a message, 0 to 15, per message (`contexte.cartesNommees`) | 5 | immediately |
+| Threshold of automatic injection: score a note needs to be injected whole at the message, 50 to 100 %, 100: never; only with an accepted confidence score (`contexte.seuilInjection`) | 90 % | immediately |
+| Notes injected automatically per message, 0 to 5 (`contexte.injectionsParMessage`) | 2 | immediately |
+| Threshold of leads: score a new note needs to be proposed as a lead, 0 to 100 %, never above the threshold of injection (`contexte.seuilPiste`) | 30 % | immediately |
+| Leads per message, 0 to 10 (`contexte.pistesParMessage`) | 3 | immediately |
+| Leads for the notes named in a message, 0 to 15, per message (`contexte.cartesNommees`) | 5 | immediately |
 | Weight of a note you inject by hand on the notes linked to it, 0 to 1 (`contexte.poidsInjection`) | 0.25 | immediately |
 | Half-life of that weight, in messages that are not mute, 1 to 20 (`contexte.demiVieInjection`) | 3 | immediately |
 | Default number of results of `chercher`, 1 to 50 (`recherche.resultats`) | 10 | immediately |
