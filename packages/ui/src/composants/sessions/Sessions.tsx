@@ -312,7 +312,7 @@ export function Sessions(p: { visible: boolean; /** Mode démo : rang de la sess
 						surDefaut={largeurContexte.reinitialiser}
 					/>
 				)}
-				{contexteVisible && selection && <PanneauContexte largeur={largeurContexte.valeur} session={selection} nomRacine={nomRacine} maintenant={maintenant} fiches={fiches} entrees={servis.donnees ?? []} lues={servis.lues} surOuvrirFiche={nav.ouvrirFiche} />}
+				{contexteVisible && selection && <PanneauContexte largeur={largeurContexte.valeur} session={selection} nomRacine={nomRacine} maintenant={maintenant} fiches={fiches} entrees={servis.donnees ?? []} lues={servis.lues} injections={servis.injections} surOuvrirFiche={nav.ouvrirFiche} />}
 			</div>
 			<Terminees
 				ouvert={termineesOuvertes}

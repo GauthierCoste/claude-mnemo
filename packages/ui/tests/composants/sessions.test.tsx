@@ -187,7 +187,7 @@ describe('vue Sessions', () => {
 		expect(cellule('s3').getAttribute('data-zoomee')).toBe('false');
 	});
 
-	it('panneau Contexte : « Injecté dans la session » : ◆ injectées, cartes proposées avec leur note (pas une injectée), lues ◈ dans la liste', async () => {
+	it('panneau Contexte : « Injecté dans la session » : ◆ injectées, pistes proposées sans % (pas une injectée), lues ◈ dans la liste', async () => {
 		const servis: EntreeServieVue[] = [
 			{
 				...SERVIS[0]!,
@@ -206,25 +206,24 @@ describe('vue Sessions', () => {
 		// la fiche lue (heure inconnue : 0) est une ligne ◈ de la liste, après les cartes
 		expect(lignes.map((l) => l.getAttribute('data-id'))).toEqual(['projets/erp-saas/Module stocks.md', 'projets/erp-saas/Lots.md', 'projets/erp-saas/Inventaire.md', 'consignes/Tests.md']);
 		expect(within(lignes[0]!).getByRole('img', { name: 'Injectée dans la session' })).toBeTruthy();
-		expect(lignes[1]!.firstElementChild?.textContent).toBe('64\u00a0%');
-		expect(within(lignes[1]!).getByText('question')).toBeTruthy();
-		// une fiche nommée a sa note, comme les autres
-		expect(lignes[2]!.firstElementChild?.textContent).toBe('31\u00a0%');
-		expect(within(lignes[2]!).getByText('nommée')).toBeTruthy();
-		expect(within(contexte).queryByText('sans note de sens')).toBeNull();
+		// une piste n'a pas de % hors du classement calibré : l'heure de son message, sa raison au survol
+		expect(lignes[1]!.firstElementChild?.textContent).toBe('');
+		expect(lignes[1]!.textContent).toMatch(/piste du message de \d\d:\d\d/u);
+		expect(within(lignes[1]!).getByRole('button', { name: 'Lots' }).getAttribute('title')).toMatch(/ – question\n/u);
+		expect(within(lignes[2]!).getByRole('button', { name: 'Inventaire' }).getAttribute('title')).toMatch(/ – nommée\n/u);
+		expect(contexte.textContent).not.toMatch(/\d\u00a0%/u);
 		expect(within(lignes[3]!).getByRole('img', { name: 'Lue par la session' }).textContent).toBe('◈');
-		expect(within(lignes[3]!).getByRole('button', { name: 'Tests' }).getAttribute('title')).toBe('Lue par la session\nconsignes/Tests.md');
+		expect(within(lignes[3]!).getByRole('button', { name: 'Tests' }).getAttribute('title')).toMatch(/^lue par la session à \d\d:\d\d\nconsignes\/Tests\.md$/u);
 		expect(within(contexte).queryByRole('group', { name: 'Lues par la session' })).toBeNull();
 	});
 
-	it('panneau Contexte : cartes proposées sans le sens : « — » et le repère « sans note de sens » à côté du titre', async () => {
+	it('panneau Contexte : pistes proposées sans le sens : ni note ni repère (le classement dit « ordre seul » s’il y en a un)', async () => {
 		const servis: EntreeServieVue[] = [{ ...SERVIS[0]!, sens: false, cartes: [{ id: 'projets/erp-saas/Lots.md', titre: 'Lots', raison: 'perimetre' }] }];
 		await monter({ '/api/sessions/s1/servis': { servis, lues: [] } });
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
 		const liste = await within(contexte).findByRole('list', { name: 'Injecté dans la session' });
-		expect(within(liste).getAllByRole('listitem').at(-1)!.firstElementChild?.textContent).toBe('—');
-		const repere = within(contexte).getByText('sans note de sens');
-		expect(repere.getAttribute('title')).toBe("Pas de note : le modèle de sens ne tourne pas, n'a pas répondu à temps, ou ces fiches ne sont pas encore indexées ; les fiches sont proposées sans note.");
+		expect(within(liste).getAllByRole('listitem').at(-1)!.firstElementChild?.textContent).toBe('');
+		expect(within(contexte).queryByText('sans note de sens')).toBeNull();
 	});
 
 	it('panneau Contexte : une fiche lue après l’ouverture (message `lues`) paraît sans recharger', async () => {
@@ -286,14 +285,15 @@ describe('vue Sessions', () => {
 		expect(screen.getByText('projets / erp-saas / Module stocks.md')).toBeTruthy();
 	});
 
-	it('panneau Contexte : journal ancien, les injectées en tête (◆ à la place de la note), puis le classement (pourcentage à gauche) ; clic → la fiche', async () => {
+	it('panneau Contexte : journal ancien, les injectées en tête (◆ à la place de la note), puis le classement en ordre seul (◇, sans %) ; clic → la fiche', async () => {
 		await monter();
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
 		const classement = await within(contexte).findByRole('list', { name: 'Injecté dans la session' });
 		const lignes = within(classement).getAllByRole('listitem');
 		expect(lignes.map((l) => l.getAttribute('data-id'))).toEqual(['projets/erp-saas/Module stocks.md', 'consignes/Tests.md', 'projets/erp-saas/Lots.md']);
 		expect(lignes[1]!.firstElementChild?.textContent).toBe('◆');
-		expect(lignes[2]!.firstElementChild?.textContent).toBe('40\u00a0%');
+		expect(lignes[2]!.firstElementChild?.textContent).toBe('◇');
+		expect(within(contexte).getByText('ordre seul')).toBeTruthy();
 		expect(within(lignes[1]!).getByRole('img', { name: 'Injectée dans la session' })).toBeTruthy();
 		expect(within(lignes[2]!).queryByRole('img', { name: 'Injectée dans la session' })).toBeNull();
 		await act(async () => within(lignes[2]!).getByRole('button', { name: 'Lots et péremption' }).click());

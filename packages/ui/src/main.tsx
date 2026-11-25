@@ -35,7 +35,9 @@ async function creerClient(): Promise<{ client: Client | null; depart?: Depart; 
 		const enPlus = { ...(archiviste ? { archiviste } : {}), ...(palette !== null ? { palette } : {}) };
 		const avecEnPlus = depart ? { ...depart, ...enPlus } : Object.keys(enPlus).length ? { vue: 'sessions' as const, ...enPlus } : undefined;
 		const modeles = parametres.get('modeles');
-		return { client: creerClientDemo({ ...conflit, ...(modeles !== null ? { modeles } : {}) }), ...(avecEnPlus ? { depart: avecEnPlus } : {}) };
+		// classement vivant : `&coupure=1` (injection automatique coupée par le suivi), `&suggestion=1` (règle des 3 sessions)
+		const classement = { ...(parametres.get('coupure') === '1' ? { coupure: true } : {}), ...(parametres.get('suggestion') === '1' ? { suggestion: true } : {}) };
+		return { client: creerClientDemo({ ...conflit, ...classement, ...(modeles !== null ? { modeles } : {}) }), ...(avecEnPlus ? { depart: avecEnPlus } : {}) };
 	}
 	// le jeton de la première ouverture : rangé dans le stockage de cette origine ; la session demandée (`#session=<id>`,
 	// seule ou avec le jeton) : ouverte une fois la liste reçue ; le fragment est retiré de l'adresse tout de suite

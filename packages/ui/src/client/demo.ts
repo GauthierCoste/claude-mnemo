@@ -20,7 +20,11 @@ import {
 	RACINE_DEMO,
 	REPONSES_ARCHIVISTE_DEMO,
 	REPONSES_TERMINAL_DEMO,
-	PISTES_NOUVEL_ENVOI_DEMO,
+	CLASSEMENT_VIVANT_DEMO,
+	COUPURE_DEMO,
+	type MessageClasseDemo,
+	ORDRE_SEUL_DEMO,
+	SUGGESTION_DEMO,
 	type PisteDemo,
 	SERVI_PAR_ARCHIVISTE_DEMO,
 	REGLAGES_DEMO,
@@ -31,7 +35,11 @@ import {
 	ROUTES,
 	type CarteVue,
 	type ClassementVue,
+	type CoupureInjectionVue,
+	type RaisonCarteVue,
 	type EcarteVue,
+	type EcarteeToujoursVue,
+	type InjectionVue,
 	type EntreeServieVue,
 	type LueVue,
 	type MessageClient,
@@ -216,6 +224,12 @@ type Monde = {
 	servis: Map<string, EntreeServieVue[]>;
 	/** Écartés par session (« ne plus suggérer »). */
 	ecartes: Map<string, EcarteVue[]>;
+	/** Fiches écartées toujours (« Ne plus jamais suggérer »). */
+	ecarteesToujours: EcarteeToujoursVue[];
+	/** Injections à la main et par Mnemo, par session, plus récentes d'abord (journal des gestes). */
+	injections: Map<string, InjectionVue[]>;
+	/** Injection automatique coupée par le suivi (`&coupure=1`). */
+	coupures: CoupureInjectionVue[];
 };
 
 function vueSession(s: SessionDemo, maintenant: number): SessionVue {
@@ -278,6 +292,65 @@ function cartesDemo(memoire: Memoire, pistes: readonly PisteDemo[]): CarteVue[] 
 		...(p.depuis !== undefined ? { depuis: { id: p.depuis, titre: titreDemo(memoire, p.depuis) } } : {}),
 		note: Math.round((0.86 - i * 0.07) * 100) / 100,
 	}));
+}
+
+/** Signaux bruts fictifs d'une ligne, cohérents avec sa note ; le logit seulement après l'affinage (reranker). */
+function signauxDemo(p: number, raison: RaisonCarteVue, affine: boolean): NonNullable<ClassementVue['signaux']> {
+	const r = (n: number) => Math.round(n * 1000) / 1000;
+	return {
+		...(affine ? { logit: r((p - 0.5) * 8) } : {}),
+		cosinus: r(0.45 + p / 3),
+		cosinusRelatif: r(p - 0.4),
+		cosinusZ: r((p - 0.5) * 3),
+		bm25Relatif: raison === 'nommee' ? 1 : r(p * 0.6),
+		apriori: raison === 'historique' ? 0.4 : 0,
+		signalSession: raison === 'liee' ? 0.3 : 0,
+	};
+}
+
+/**
+ * Une entrée du classement vivant, comme le service la rend : les lignes du message (au hook, ou affinées), avec `p` si la note
+ * est calibrée (sinon l'ordre seul), `auto` pour la fiche injectée par Mnemo, `piste` pour celles envoyées en piste.
+ */
+function entreeVivante(
+	memoire: Memoire,
+	session: string,
+	horodatageMs: number,
+	m: MessageClasseDemo,
+	o: { ids: string[]; calibre: boolean; affinage: 'en_cours' | 'fait' | null; coupee?: boolean },
+): EntreeServieVue {
+	const lignes = o.affinage === 'fait' && m.affine ? m.affine : m.hook;
+	// injection coupée par le suivi : les % restent, Mnemo n'injecte rien
+	const auto = o.calibre && o.coupee !== true ? m.auto : undefined;
+	const ids = [...o.ids, ...(auto ? [auto] : [])];
+	const classement: ClassementVue[] = lignes.map(([id, p, raison], i) => ({
+		id,
+		titre: titreDemo(memoire, id),
+		note: o.calibre ? p : null,
+		servi: id === auto,
+		rang: i + 1,
+		p: o.calibre ? p : null,
+		signaux: signauxDemo(p, raison, o.affinage === 'fait'),
+		...(id === auto ? { auto: true as const } : {}),
+		...(m.pistes.includes(id) ? { piste: true as const } : {}),
+		raison,
+	}));
+	return {
+		session,
+		moment: 'message',
+		horodatageMs,
+		ids,
+		texte: texteServi(memoire, ids),
+		ms: 61,
+		sens: true,
+		classement,
+		muet: null,
+		cartes: m.pistes.map((id) => ({ id, titre: titreDemo(memoire, id), raison: lignes.find(([x]) => x === id)?.[2] ?? 'proche' })),
+		titres: titresDemo(memoire, ids),
+		...(o.affinage === null ? {} : { affinage: o.affinage }),
+		calibree: o.calibre,
+		mesure: o.calibre ? (o.affinage === 'fait' ? 'complets' : 'sens') : 'ordre',
+	};
 }
 
 /** Titres des fiches d'`ids`, comme les entrées du service (chemin → titre). */
@@ -395,7 +468,24 @@ function creerMonde(): Monde {
 				: [],
 		);
 	}
-	return { sessions, memoire, fil: filDuJour(memoire, []), commitsEnPlus: [], servis, ecartes: new Map() };
+	// classement vivant : la première session (note calibrée, une injection par Mnemo), la session des achats en ordre seul
+	const injections = new Map<string, InjectionVue[]>();
+	const premiere = SESSIONS_DEMO[0];
+	if (premiere) {
+		const debut = maintenant - 10 * MINUTE;
+		const avant = maintenant - 6 * MINUTE;
+		const position = servis.get(premiere.id)?.[0];
+		if (position) Object.assign(position, { moment: 'message' as const, horodatageMs: debut });
+		const entree = entreeVivante(memoire, premiere.id, avant, CLASSEMENT_VIVANT_DEMO.avant, { ids: [], calibre: true, affinage: 'fait' });
+		servis.set(premiere.id, [entree, ...(servis.get(premiere.id) ?? [])]);
+		injections.set(premiere.id, [{ chemin: CLASSEMENT_VIVANT_DEMO.avant.auto!, mode: 'auto', horodatageMs: avant, p: 0.94 }]);
+	}
+	const achats = SESSIONS_DEMO.find((s) => s.objectif === 'Écrire les tests du module achats');
+	if (achats) {
+		const entree = entreeVivante(memoire, achats.id, maintenant - 2 * MINUTE, ORDRE_SEUL_DEMO, { ids: [], calibre: false, affinage: null });
+		servis.set(achats.id, [entree, ...(servis.get(achats.id) ?? [])]);
+	}
+	return { sessions, memoire, fil: filDuJour(memoire, []), commitsEnPlus: [], servis, ecartes: new Map(), ecarteesToujours: [], injections, coupures: [] };
 }
 
 // --- Fausse connexion : sessions, terminaux d'un faux `claude` (demo-terminal.ts) ---
@@ -498,7 +588,8 @@ function creerConnexionDemo(monde: Monde): FausseConnexion {
 		diffuser({ type: 'sessions', sessions: [...monde.sessions] });
 	}, 150);
 	function servirDemo(entree: EntreeServieVue): void {
-		monde.servis.set(entree.session, [entree, ...(monde.servis.get(entree.session) ?? [])]);
+		// une entrée rediffusée (affinage) remplace la précédente au même horodatage, comme au service
+		monde.servis.set(entree.session, [entree, ...(monde.servis.get(entree.session) ?? []).filter((e) => e.horodatageMs !== entree.horodatageMs)]);
 		diffuser({ type: 'servi', entree });
 	}
 	// Peu après l'ouverture, l'archiviste sert une session (message `servi`, tiroir « Ce qu'il a fait pour tes sessions »).
@@ -509,13 +600,23 @@ function creerConnexionDemo(monde: Monde): FausseConnexion {
 			const classement = classementDemo(monde.memoire, [[ids[1]!, 0.9, true], [ids[0]!, 0.84, true], ...SERVI_PAR_ARCHIVISTE_DEMO.autres]);
 			servirDemo({ session: servie.id, moment: 'message', horodatageMs: Date.now(), ids, texte: texteServi(monde.memoire, ids), ms: 41, sens: true, classement, muet: null, cartes: SERVI_PAR_ARCHIVISTE_DEMO.autres.map(([id]) => ({ id, titre: titreDemo(monde.memoire, id), raison: 'question' as const })) });
 		}, 1200);
-	// Puis la première session reçoit un nouveau classement : le panneau Contexte le réordonne en direct.
+	// Puis la première session reçoit deux messages : chacun classé au hook (« affinage… »), puis affiné en arrière-plan (même
+	// entrée, lignes qui glissent) ; au second, Mnemo injecte l'export CSV (95 %).
 	const premiere = SESSIONS_DEMO[0];
-	if (premiere)
-		setTimeout(() => {
-			const ids = [...premiere.servis];
-			servirDemo({ session: premiere.id, moment: 'message', horodatageMs: Date.now(), ids, texte: texteServi(monde.memoire, ids), ms: 44, sens: true, classement: [], muet: null, cartes: cartesDemo(monde.memoire, PISTES_NOUVEL_ENVOI_DEMO), titres: titresDemo(monde.memoire, ids) });
-		}, 2500);
+	if (premiere) {
+		const [deuxieme, troisieme] = CLASSEMENT_VIVANT_DEMO.suivants;
+		const classer = (m: MessageClasseDemo, apresMs: number) => {
+			setTimeout(() => {
+				const horodatageMs = Date.now();
+				const coupee = monde.coupures.length > 0;
+				servirDemo(entreeVivante(monde.memoire, premiere.id, horodatageMs, m, { ids: [], calibre: true, affinage: 'en_cours', coupee }));
+				if (m.auto && !coupee) monde.injections.set(premiere.id, [{ chemin: m.auto, mode: 'auto', horodatageMs, p: m.hook.find(([id]) => id === m.auto)![1] }, ...(monde.injections.get(premiere.id) ?? [])]);
+				setTimeout(() => servirDemo(entreeVivante(monde.memoire, premiere.id, horodatageMs, m, { ids: [], calibre: true, affinage: 'fait', coupee })), 1800);
+			}, apresMs);
+		};
+		if (deuxieme) classer(deuxieme, 2500);
+		if (troisieme) classer(troisieme, 9000);
+	}
 	const bavarde = SESSIONS_DEMO.find((s) => s.etat === 'travaille' && s.profil === PROFIL_TRAVAIL);
 	let progression = 8;
 	if (bavarde)
@@ -574,6 +675,10 @@ export type OptionsDemo = {
 	changementExterne?: string;
 	/** État de départ des modèles locaux (`&modeles=` : voir `DEPARTS_MODELES`, ou `anime`) ; absent : prêts. */
 	modeles?: string;
+	/** Injection automatique coupée par le suivi (`&coupure=1`). */
+	coupure?: boolean;
+	/** Suggestion de la règle des 3 sessions sur la première session, sa fiche écartée ici (`&suggestion=1`). */
+	suggestion?: boolean;
 };
 
 function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo): Api {
@@ -676,6 +781,18 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 				throw new ErreurApi(`Refusé : genre « ${String(corps['genre'])} » non pris en charge par la démonstration.`, 400);
 		}
 		return { statut: 'ecrit', fiche, aConfirmer: false, commit: 'demo' } satisfies ResultatEcriture;
+	}
+
+	/** Comme le service : une fiche écartée toujours n'est plus suggérée ; les sessions qui la suggéraient sont rediffusées. */
+	function sansSuggestion(fiche: string): void {
+		monde.sessions = monde.sessions.map((x) => {
+			if (!x.suggestionsEcarteeToujours?.some((g) => g.chemin === fiche)) return x;
+			const { suggestionsEcarteeToujours: suggestions, ...reste } = x;
+			const restantes = (suggestions ?? []).filter((g) => g.chemin !== fiche);
+			const y = restantes.length === 0 ? reste : { ...reste, suggestionsEcarteeToujours: restantes };
+			connexion.diffuser({ type: 'session', session: y });
+			return y;
+		});
 	}
 
 	/** Comme le service : les écartés de la session, rendus et diffusés. */
@@ -781,7 +898,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 		const profil = profilDe(ROUTES.profil, chemin);
 		if (profil !== undefined) return profilsDemo.detail(profil);
 		const servis = sessionDe(chemin, 'servis');
-		if (servis) return { servis: monde.servis.get(servis) ?? [], lues: luesDemo(servis) };
+		if (servis) return { servis: monde.servis.get(servis) ?? [], lues: luesDemo(servis), coupures: monde.coupures, injections: monde.injections.get(servis) ?? [] };
 		const ecartes = sessionDe(chemin, 'ecartes');
 		if (ecartes) return { ecartes: monde.ecartes.get(ecartes) ?? [] };
 		const aServirLue = sessionDe(chemin, 'a-servir');
@@ -793,6 +910,10 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			return { session };
 		}
 		switch (chemin) {
+			case ROUTES.ecarteesToujours:
+				return { ecarteesToujours: monde.ecarteesToujours };
+			case ROUTES.injectionAutomatique:
+				return { coupures: monde.coupures };
 			case ROUTES.fenetres:
 				// fenêtres de contexte fictives, de plus en plus pleines, pour voir les trois couleurs de la jauge
 				return { fenetres: Object.fromEntries(monde.sessions.filter((x) => x.etat !== 'terminee').map((x, i) => [x.id, { utilises: [38_000, 124_000, 171_000, 92_000, 58_000][i % 5]!, max: 200_000 }])) } satisfies ReponseFenetres;
@@ -917,7 +1038,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 		const ecartant = sessionDe(chemin, 'ecartes');
 		if (ecartant) {
 			const id = String(corps['id'] ?? '');
-			const classe = (monde.servis.get(ecartant) ?? []).flatMap((e) => e.classement).find((c) => c.id === id);
+			const classe = (monde.servis.get(ecartant) ?? []).flatMap((e) => [...e.classement, ...e.cartes]).find((c) => c.id === id);
 			if (!classe) throw new ErreurApi('Élément absent des derniers classements de la session.', 404);
 			const avant = monde.ecartes.get(ecartant) ?? [];
 			return ecartesDe(ecartant, avant.some((e) => e.id === id) ? avant : [...avant, { id, titre: classe.titre, horodatageMs: Date.now() }]);
@@ -946,6 +1067,20 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			return { session: s };
 		}
 		switch (chemin) {
+			case ROUTES.ecarteesToujours: {
+				const fiche = String(corps['chemin'] ?? '');
+				if (!monde.memoire.fiches.has(fiche)) throw introuvable(`Fiche ${fiche}`);
+				if (!monde.ecarteesToujours.some((e) => e.chemin === fiche)) monde.ecarteesToujours = [...monde.ecarteesToujours, { chemin: fiche, titre: titreDemo(monde.memoire, fiche), horodatageMs: Date.now() }];
+				sansSuggestion(fiche);
+				return { ecarteesToujours: monde.ecarteesToujours };
+			}
+			case ROUTES.injectionAutomatique: {
+				// comme le service : réactivée, la vue des sessions est rediffusée sans la coupure
+				monde.coupures = [];
+				monde.sessions = monde.sessions.map(({ injectionCoupee: _c, ...x }) => x);
+				connexion.diffuser({ type: 'sessions', sessions: [...monde.sessions] });
+				return { coupures: [] };
+			}
 			case ROUTES.modelesDemarrer:
 				return modelesDemo.demarrer();
 			case ROUTES.modelesArreter:
@@ -1147,6 +1282,12 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 					monde.sessions = monde.sessions.filter((y) => y.id !== retiree);
 					return { id: retiree } as T;
 				}
+				if (chemin === ROUTES.ecarteesToujours) {
+					const fiche = params?.['chemin'] ?? '';
+					if (!monde.ecarteesToujours.some((e) => e.chemin === fiche)) throw new ErreurApi('Cette fiche n’était pas écartée pour toujours.', 404);
+					monde.ecarteesToujours = monde.ecarteesToujours.filter((e) => e.chemin !== fiche);
+					return { ecarteesToujours: monde.ecarteesToujours } as T;
+				}
 				const annulee = sessionDe(chemin, 'a-servir');
 				if (annulee) return aServirDe(annulee, (aServir.get(annulee) ?? []).filter((c) => c !== params?.['chemin'])) as T;
 				const session = sessionDe(chemin, 'ecartes');
@@ -1172,6 +1313,15 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 /** Client de démonstration : données fictives, aucun jeton, aucun service. */
 export function creerClientDemo(o: OptionsDemo = {}): Client {
 	const monde = creerMonde();
+	if (o.coupure) {
+		monde.coupures = [{ ...COUPURE_DEMO, depuisMs: Date.now() - 40 * MINUTE }];
+		monde.sessions = monde.sessions.map((x) => ({ ...x, injectionCoupee: monde.coupures }));
+	}
+	const premiere = SESSIONS_DEMO[0];
+	if (o.suggestion && premiere) {
+		monde.ecartes.set(premiere.id, [{ id: SUGGESTION_DEMO.chemin, titre: titreDemo(monde.memoire, SUGGESTION_DEMO.chemin), horodatageMs: Date.now() - 4 * MINUTE }]);
+		monde.sessions = monde.sessions.map((x) => (x.id === premiere.id ? { ...x, suggestionsEcarteeToujours: [SUGGESTION_DEMO] } : x));
+	}
 	const connexion = creerConnexionDemo(monde);
 	return { api: creerApiDemo(monde, connexion, o), connexion, fictif: true, surJetonRefuse: () => () => {} };
 }

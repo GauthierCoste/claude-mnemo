@@ -3,6 +3,8 @@
  * « Déplacer », titre, propriétés, corps rendu ; en édition, le Markdown brut (`textarea.raw`) enregistré par `brut`
  * avec l'empreinte lue à l'ouverture de l'édition.
  *
+ * Une fiche que Mnemo ne suggère plus jamais (« Ne plus jamais suggérer ») le dit en tête, avec « Rétablir ».
+ *
  * Conflits : un enregistrement sur une version dépassée est refusé (409) et le texte saisi reste dans la zone jusqu'à
  * « Recharger » ; un message `memoire` pendant l'édition recharge la fiche sans toucher la zone, et un avis le dit si
  * la fiche a changé sur le disque. Hors édition, la fiche se recharge en silence (`useFiche`).
@@ -14,6 +16,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
 import { useClient } from '../../client/contexte.tsx';
+import { useEcarteesToujours } from '../../client/hooks.ts';
 import type { Ressource } from '../../client/ressources.ts';
 import { ROUTES, type FicheVue, type ResultatEcriture } from '@mnemo/contrat';
 import { CorpsFiche } from '../../memoire/rendu-fiche.tsx';
@@ -30,6 +33,12 @@ type Avis = { genre: 'conflit' } | { genre: 'refus'; motif: string };
 type Relecture = 'aucune' | 'demandee' | 'en_cours';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** « 25.11.2026 », heure locale. */
+function dateCourte(ms: number): string {
+	const d = new Date(ms);
+	return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+}
 
 /** `updated: 2026-11-21` s'affiche « modifié 21.11.2026 » ; les autres propriétés telles quelles. */
 function propriete(cle: string, valeur: string): [string, string] {
@@ -60,6 +69,16 @@ export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editio
 	const [relecture, setRelecture] = useState<Relecture>('aucune');
 	const [dossier, setDossier] = useState<string | null>(null);
 	const [refusDeplacement, setRefusDeplacement] = useState<string | null>(null);
+	const toujours = useEcarteesToujours();
+	const ecarteeToujours = toujours.liste.find((e) => e.chemin === chemin) ?? null;
+	const retablirSuggestions = async () => {
+		try {
+			await toujours.retablir(chemin);
+			annoncer('Mnemo peut de nouveau suggérer cette fiche');
+		} catch (e) {
+			toast(message(e));
+		}
+	};
 
 	const adopter = (f: FicheVue) => {
 		setTexte(f.brut);
@@ -232,6 +251,15 @@ export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editio
 		alertes.push(
 			<div key="refus" role="alert" className={s.avis}>
 				<span>Enregistrement refusé : {avis.motif}</span>
+			</div>,
+		);
+	if (ecarteeToujours !== null)
+		alertes.push(
+			<div key="jamais" role="note" className={s.avis}>
+				<span>Mnemo ne suggère plus cette fiche, dans aucune session (« Ne plus jamais suggérer », le {dateCourte(ecarteeToujours.horodatageMs)}).</span>
+				<Bouton petit title="Mnemo peut de nouveau la proposer en piste ou l'injecter" onClick={() => void retablirSuggestions()}>
+					Rétablir
+				</Bouton>
 			</div>,
 		);
 	if (changeeSurLeDisque)

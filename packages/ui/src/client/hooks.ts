@@ -7,7 +7,11 @@ import type { NiveauModeles } from '@mnemo/commun';
 import {
 	ROUTES,
 	type EcarteVue,
+	type EcarteeToujoursVue,
 	type FenetreVue,
+	type InjectionVue,
+	type ReponseEcarteesToujours,
+	type ReponseInjectionAutomatique,
 	type ReponseAServir,
 	type ReponseFenetres,
 	type QuotasVue,
@@ -202,12 +206,12 @@ function avecEntree(liste: readonly EntreeServieVue[], e: EntreeServieVue, cle: 
  * d'abord), sans doublon ; une entrée reçue remplace celle du service de même clé. Les messages sont gardés à travers les
  * rechargements : un `servi` arrivé pendant une lecture n'est pas perdu. Les fiches lues suivent les messages `lues`.
  */
-export function useServis(id: string | null): Ressource<EntreeServieVue[]> & { lues: LueVue[] } {
+export function useServis(id: string | null): Ressource<EntreeServieVue[]> & { lues: LueVue[]; injections: InjectionVue[] } {
 	const client = useClient();
 	const brut = useRessource(id === null ? null : `servis:${id}`, async () => {
-		const r = await client.api.lire<{ servis: EntreeServieVue[]; lues?: (LueVue | string)[] }>(avecId(ROUTES.servis, id ?? ''));
-		// un service plus ancien envoie des chemins seuls : sans heure, la lue se place en dernier
-		return { servis: r.servis, lues: (r.lues ?? []).map((l) => (typeof l === 'string' ? { chemin: l, horodatageMs: 0 } : l)) };
+		const r = await client.api.lire<{ servis: EntreeServieVue[]; lues?: (LueVue | string)[]; injections?: InjectionVue[] }>(avecId(ROUTES.servis, id ?? ''));
+		// un service plus ancien envoie des chemins seuls : sans heure, la lue se place en dernier ; ni injections
+		return { servis: r.servis, lues: (r.lues ?? []).map((l) => (typeof l === 'string' ? { chemin: l, horodatageMs: 0 } : l)), injections: r.injections ?? [] };
 	});
 	const base = { ...brut, donnees: brut.donnees?.servis };
 	const [recues, setRecues] = useState<{ pour: string | null; entrees: EntreeServieVue[] }>({ pour: id, entrees: [] });
@@ -234,7 +238,46 @@ export function useServis(id: string | null): Ressource<EntreeServieVue[]> & { l
 	const duService = (base.donnees ?? []).map((e) => parCle.get(cleServie(e)) ?? e);
 	const donnees = base.donnees === undefined && enPlus.length === 0 ? undefined : [...enPlus, ...duService];
 	const lues = luesRecues !== null && luesRecues.pour === id ? luesRecues.lues : (brut.donnees?.lues ?? []);
-	return { ...base, donnees, lues };
+	return { ...base, donnees, lues, injections: brut.donnees?.injections ?? [] };
+}
+
+export type EcarteesToujours = {
+	/** Fiches que Mnemo ne suggère plus jamais (« Ne plus jamais suggérer »), les plus anciennes d'abord. */
+	liste: EcarteeToujoursVue[];
+	/** Écarte la fiche toujours ; `session` : celle du geste (rejeté en `ErreurApi`). */
+	ecarter(chemin: string, session?: string): Promise<void>;
+	/** La rétablit : Mnemo peut de nouveau la suggérer (rejeté en `ErreurApi`). */
+	retablir(chemin: string): Promise<void>;
+};
+
+/** Fiches écartées toujours : lues au service, partagées par le panneau Contexte et la page Mémoire, relues après chaque geste. */
+export function useEcarteesToujours(): EcarteesToujours {
+	const { api } = useClient();
+	const base = useRessource('ecartees-toujours', async () => (await api.lire<ReponseEcarteesToujours>(ROUTES.ecarteesToujours)).ecarteesToujours);
+	const { recharger } = base;
+	return {
+		liste: base.donnees ?? [],
+		ecarter: useCallback(
+			async (chemin: string, session?: string) => {
+				await api.envoyer<ReponseEcarteesToujours>(ROUTES.ecarteesToujours, { chemin, ...(session === undefined ? {} : { session }) });
+				recharger();
+			},
+			[api, recharger],
+		),
+		retablir: useCallback(
+			async (chemin: string) => {
+				await api.supprimer<ReponseEcarteesToujours>(ROUTES.ecarteesToujours, { chemin });
+				recharger();
+			},
+			[api, recharger],
+		),
+	};
+}
+
+/** Réactive l'injection automatique coupée par le suivi (geste noté dans `session`) ; la vue des sessions est rediffusée. */
+export function useReactiverInjection(): (session: string) => Promise<ReponseInjectionAutomatique> {
+	const { api } = useClient();
+	return useCallback((session: string) => api.envoyer<ReponseInjectionAutomatique>(ROUTES.injectionAutomatique, { session }), [api]);
 }
 
 /**

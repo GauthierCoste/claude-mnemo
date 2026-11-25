@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { avertissementNonCherchable, consigneATraiter } from '@mnemo/commun';
-import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EtatModelesVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseProfils, type ReponseValidationLot, type SessionTermineeVue, type SessionVue } from '@mnemo/contrat';
+import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EtatModelesVue, type EntreeServieVue, type ReponseDocuments, type ReponseEcarteesToujours, type ReponseServis, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseProfils, type ReponseValidationLot, type SessionTermineeVue, type SessionVue } from '@mnemo/contrat';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ErreurApi } from '../../src/client/api.ts';
@@ -55,21 +55,54 @@ describe('mode démo', () => {
 		await expect(api.supprimer(ROUTES.claudeDesktopServeur.replace(':id', 'agenda'))).rejects.toMatchObject({ statut: 404 });
 	});
 
-	it('première session : journal au format des pistes (position ◆, pistes ◇ variées dont une liée, classement vide, fiches lues)', async () => {
+	it('première session : le message classé (note calibrée, une injection par Mnemo), puis la position et ses pistes ◇ variées, fiches lues', async () => {
 		const { api } = creerClientDemo();
-		const { servis, lues } = await api.lire<{ servis: EntreeServieVue[]; lues: LueVue[] }>(ROUTES.servis.replace(':id', '7f3a2c4e-1b9d-4e57-a0c2-5d18e6f0a7b1'));
-		const entree = servis[0]!;
+		const { servis, lues, injections } = await api.lire<ReponseServis>(ROUTES.servis.replace(':id', '7f3a2c4e-1b9d-4e57-a0c2-5d18e6f0a7b1'));
+		const [classee, entree] = servis as [EntreeServieVue, EntreeServieVue];
+		expect(classee).toMatchObject({ calibree: true, mesure: 'complets', affinage: 'fait', ids: ['consignes/Migrations réversibles.md'] });
+		expect(classee.classement.find((c) => c.auto)).toMatchObject({ id: 'consignes/Migrations réversibles.md', servi: true });
+		expect(classee.classement.every((c) => typeof c.p === 'number' && c.signaux !== undefined && c.raison !== undefined)).toBe(true);
+		expect(injections).toEqual([expect.objectContaining({ chemin: 'consignes/Migrations réversibles.md', mode: 'auto', p: 0.94 })]);
 		expect(entree.ids).toEqual(['projets/erp-saas/Module stocks.md']);
 		expect(entree.titres).toEqual({ 'projets/erp-saas/Module stocks.md': 'Module stocks' });
-		expect(entree.classement).toEqual([]);
 		expect(new Set(entree.cartes.map((c) => c.raison))).toEqual(new Set(['perimetre', 'nommee', 'question', 'liee']));
 		expect(entree.cartes.find((c) => c.raison === 'liee')?.depuis).toEqual({ id: 'projets/erp-saas/Module stocks.md', titre: 'Module stocks' });
-		// toute carte a sa note, fiche nommée comprise
-		expect(entree.cartes.every((c) => typeof c.note === 'number')).toBe(true);
 		expect(lues.length).toBeGreaterThan(0);
 		// chaque lue a son heure, la plus récente d'abord ; l'une n'est ni injectée ni proposée (ligne ◈ du panneau)
 		expect(lues.map((l) => l.horodatageMs)).toEqual([...lues.map((l) => l.horodatageMs)].sort((a, b) => b - a));
-		expect(lues.some((l) => !entree.ids.includes(l.chemin) && !entree.cartes.some((c) => c.id === l.chemin))).toBe(true);
+		expect(lues.some((l) => !servis.some((e) => e.ids.includes(l.chemin) || e.cartes.some((c) => c.id === l.chemin) || e.classement.some((c) => c.id === l.chemin)))).toBe(true);
+	});
+
+	it('classement vivant : un message qui reclasse (hook puis affiné, même horodatage) et injecte, l’ordre seul ailleurs', async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		const { api, connexion } = creerClientDemo();
+		const recues: EntreeServieVue[] = [];
+		connexion.surMessage((m) => m.type === 'servi' && m.entree.session === '7f3a2c4e-1b9d-4e57-a0c2-5d18e6f0a7b1' && recues.push(m.entree));
+		await vi.advanceTimersByTimeAsync(12_000);
+		expect(recues.map((e) => e.affinage)).toEqual(['en_cours', 'fait', 'en_cours', 'fait']);
+		expect(recues[0]!.horodatageMs).toBe(recues[1]!.horodatageMs);
+		expect(recues[0]!.classement.map((c) => c.id)).not.toEqual(recues[1]!.classement.map((c) => c.id));
+		expect(recues[2]!.classement.find((c) => c.auto)?.id).toBe('projets/erp-saas/Export CSV.md');
+		const { sessions } = await api.lire<{ sessions: SessionVue[] }>(ROUTES.sessions);
+		const achats = sessions.find((x) => x.objectif === 'Écrire les tests du module achats')!;
+		const promesse = api.lire<ReponseServis>(ROUTES.servis.replace(':id', achats.id));
+		await vi.advanceTimersByTimeAsync(200);
+		const [ordre] = (await promesse).servis;
+		expect(ordre).toMatchObject({ calibree: false, mesure: 'ordre' });
+		expect(ordre!.classement.every((c) => c.p === null)).toBe(true);
+	});
+
+	it('coupure, réactivation, écartée toujours et rétablie (`&coupure=1`)', async () => {
+		const { api } = creerClientDemo({ coupure: true });
+		const { sessions } = await api.lire<{ sessions: SessionVue[] }>(ROUTES.sessions);
+		expect(sessions[0]!.injectionCoupee?.[0]?.motif).toMatch(/des 100 dernières/u);
+		expect(await api.envoyer(ROUTES.injectionAutomatique, { session: sessions[0]!.id })).toEqual({ coupures: [] });
+		expect((await api.lire<{ sessions: SessionVue[] }>(ROUTES.sessions)).sessions[0]!.injectionCoupee).toBeUndefined();
+		await api.envoyer(ROUTES.ecarteesToujours, { chemin: 'stacks/PostgreSQL.md', session: sessions[0]!.id });
+		expect((await api.lire<ReponseEcarteesToujours>(ROUTES.ecarteesToujours)).ecarteesToujours.map((e) => e.chemin)).toEqual(['stacks/PostgreSQL.md']);
+		await api.supprimer(ROUTES.ecarteesToujours, { chemin: 'stacks/PostgreSQL.md' });
+		expect((await api.lire<ReponseEcarteesToujours>(ROUTES.ecarteesToujours)).ecarteesToujours).toEqual([]);
+		await expect(api.supprimer(ROUTES.ecarteesToujours, { chemin: 'stacks/PostgreSQL.md' })).rejects.toMatchObject({ statut: 404 });
 	});
 
 	it('données cohérentes : sessions de chaque état, graphe, fiche, fil', async () => {

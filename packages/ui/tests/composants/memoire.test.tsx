@@ -251,6 +251,25 @@ describe('Mémoire › Fichiers', () => {
 		expect(within(bloc).getByRole('listitem').textContent).toBe(avertissement);
 	});
 
+	it('fiche que Mnemo ne suggère plus jamais : dit en tête, « Rétablir » la rétablit et l’avis disparaît', async () => {
+		let toujours = [{ chemin: STOCKS, titre: 'Module stocks', horodatageMs: new Date(2026, 10, 25, 10).getTime() }];
+		const faux = monter({
+			plus: {
+				'/api/ecartees-toujours': () => ({ ecarteesToujours: toujours }),
+				'DELETE /api/ecartees-toujours': () => {
+					toujours = [];
+					return { ecarteesToujours: toujours };
+				},
+			},
+		});
+		await ouvrirStocks();
+		const avis = await screen.findByText(/^Mnemo ne suggère plus cette fiche, dans aucune session/u);
+		expect(avis.textContent).toContain('le 25.11.2026');
+		fireEvent.click(within(avis.parentElement!).getByRole('button', { name: 'Rétablir' }));
+		await waitFor(() => expect(screen.queryByText(/^Mnemo ne suggère plus cette fiche/u)).toBeNull());
+		expect(faux.api.supprimer).toHaveBeenCalledWith('/api/ecartees-toujours', { chemin: STOCKS });
+	});
+
 	it('fiche bien lue : pas de bloc « À vérifier »', async () => {
 		monter();
 		await ouvrirStocks();

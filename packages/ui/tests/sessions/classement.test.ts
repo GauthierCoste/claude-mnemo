@@ -1,6 +1,6 @@
 import type { ClassementVue, EntreeServieVue } from '@mnemo/contrat';
 import { describe, expect, it } from 'vitest';
-import { dernierClassement, estEcarte, pourcentage, sousLeSeuil } from '../../src/sessions/classement.ts';
+import { dernierClassement, estCalibre, estEcarte, modesDInjection, pourcentage, seuilInjection, sousLeSeuil } from '../../src/sessions/classement.ts';
 
 const c = (id: string, rang: number, note: number | null, servi = false): ClassementVue => ({ id, titre: id, note, servi, rang });
 const entree = (horodatageMs: number, classement: ClassementVue[]): EntreeServieVue => ({ session: 's1', moment: 'message', horodatageMs, ids: [], texte: '', ms: 1, sens: false, classement, muet: null, cartes: [] });
@@ -41,5 +41,35 @@ describe('classement', () => {
 		expect(pourcentage(0.874)).toBe('87 %');
 		expect(pourcentage(1)).toBe('100 %');
 		expect(pourcentage(null)).toBeNull();
+	});
+
+	it('estCalibre : seulement une entrée qui le dit ; une entrée ancienne ou en ordre seul, non', () => {
+		expect(estCalibre({ ...entree(1, []), calibree: true })).toBe(true);
+		expect(estCalibre({ ...entree(1, []), calibree: false })).toBe(false);
+		expect(estCalibre(entree(1, []))).toBe(false);
+		expect(estCalibre(null)).toBe(false);
+	});
+
+	it('seuilInjection : le réglage en fraction, 90 % sans réglages', () => {
+		expect(seuilInjection(undefined)).toBe(0.9);
+		const champ = { cle: 'contexte.seuilInjection', groupe: 'contexte', libelle: '', explication: '', genre: 'entier', defaut: 90, valeur: 85, unite: '%', effet: 'immediat' };
+		expect(seuilInjection({ champs: [champ] as never, avertissements: [], enAttente: [] })).toBe(0.85);
+	});
+
+	it('modesDInjection : journal des gestes plus lignes `auto` reçues ; au même message, la note du journal ; la plus récente injection l’emporte', () => {
+		const auto = (id: string, p: number): ClassementVue => ({ ...c(id, 1, p, true), p, auto: true });
+		const entrees = [entree(10, [auto('a.md', 0.97)]), entree(20, [auto('b.md', 0.92)])];
+		const modes = modesDInjection(
+			[
+				{ chemin: 'a.md', mode: 'auto', horodatageMs: 10, p: 0.94 },
+				{ chemin: 'c.md', mode: 'main', horodatageMs: 5 },
+				{ chemin: 'b.md', mode: 'main', horodatageMs: 15 },
+			],
+			entrees,
+		);
+		expect(modes.get('a.md')).toEqual({ mode: 'auto', horodatageMs: 10, p: 0.94 });
+		expect(modes.get('b.md')).toEqual({ mode: 'auto', horodatageMs: 20, p: 0.92 });
+		expect(modes.get('c.md')).toEqual({ mode: 'main', horodatageMs: 5 });
+		expect(modes.has('d.md')).toBe(false);
 	});
 });

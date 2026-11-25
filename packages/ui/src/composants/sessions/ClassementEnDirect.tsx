@@ -1,31 +1,33 @@
 /**
- * « Injecté dans la session » (panneau Contexte) : une seule liste, sans séparation, où le signe distingue chaque ligne :
- * - ◆ en haut, les fiches injectées entières (la fiche de position, et celles que l'utilisateur a demandé d'injecter), de la plus
- *   ancienne à la plus récente ;
- * - ◇ puis les cartes proposées à Claude, les plus récentes d'abord, avec leur raison (« du périmètre », « nommée », « question »,
- *   « liée à <titre> » pour une voisine d'une fiche injectée à la main) ;
- * - ◈ parmi elles, à l'heure de leur lecture, les fiches que la session a lues (outils `lire`, `voisins`) sans qu'elles soient déjà dans la
- *   liste ; une fiche déjà là (injectée ou proposée) garde sa ligne, et son info-bulle dit « lue aussi à HH:MM » ;
- * - puis, pour un journal ancien (avant « contexte sobre »), le classement de son dernier calcul, avec la note du reranker en %.
- * Au survol d'une ligne non injectée : ➤ « Injecter dans la session » (la fiche entière, au prochain message de la session ; il
- * reste allumé jusque-là, un clic l'annule) et ✗ « ne plus suggérer » (les écartés restent dans « Écartées (N) », avec
- * « Rétablir »). Une fiche lue n'a que ➤ (le service n'écarte que ce qu'il a proposé). La liste défile seule et s'ancre à la
- * jonction des injectées et du reste. Sous la liste : le motif d'un message muet. Le clic sur un titre ouvre la fiche.
- * À chaque nouveau calcul, les lignes glissent vers leur nouvelle place (FLIP, 200 ms, sauf mouvement réduit), un ▲/▼ dit le
- * changement de rang quelques secondes, une nouvelle venue apparaît en fondu.
- * Quand le dernier calcul qui a proposé des cartes s'est fait sans le sens (modèle arrêté, sans réponse à temps, fiches pas encore
- * indexées), un repère discret le dit à côté du titre de la section (« sans note de sens ») : les « — » ne restent pas muets. Pas
- * de repère pour un message muet : son texte n'est pas noté, le modèle n'y est pour rien. À droite du titre, le niveau des
- * modèles de la session (`ModelesSession`) ; sans notes, une ligne sous la liste en dit la raison selon ce niveau (coupés, sens
- * seul, en chargement, arrêtés : avec « Démarrer », non installés).
+ * « Injecté dans la session » (panneau Contexte), le classement vivant. Une seule liste :
+ * - ◆ en haut, les fiches injectées entières, de la plus ancienne à la plus récente ; à droite, comment : « du dossier » (fiche
+ *   de position), « à la main » (➤), ou « auto 94 % » (injectée par Mnemo, sa note au message ; l'info-bulle le dit) ;
+ * - la jonction : un simple filet, avec à droite l'état du classement seulement s'il sort de l'ordinaire (« affinage… »,
+ *   « ordre seul » et sa raison au survol) ; dessous, l'injection automatique coupée par le suivi, avec son motif et
+ *   « Réactiver ». Le message classé n'est pas rappelé ;
+ * - le classement du dernier message porteur : la note en % (calibrée), ou ◇ en ordre seul ; le titre et, dessous, la raison
+ *   et « piste » (envoyée en piste dans la session) ; un repère au seuil d'injection automatique ;
+ * - « Plus tôt dans la session » : les pistes plus anciennes et les fiches lues (◈) absentes du classement, plus récentes
+ *   d'abord, sans % ;
+ * - puis la suggestion des 3 sessions (« écartée dans 3 sessions : ne plus la suggérer ? »), « Sous le seuil (N) » et
+ *   « Écartées (N) ».
+ * Au survol d'une ligne : ➤ « Injecter dans la session » (la fiche entière, au prochain message ; allumé jusque-là, un clic
+ * l'annule) et ✗, un menu : « Pas pour cette session » (rétablie depuis « Écartées ») ou « Ne plus jamais suggérer » (rétablie
+ * depuis la fiche, page Mémoire). Une fiche injectée par Mnemo a aussi ✗ : l'écarter compte comme une erreur au suivi.
+ * À chaque classement (hook) puis à l'affinage (même entrée, rangs changés), les lignes glissent (FLIP, sauf mouvement réduit),
+ * un ▲/▼ dit le changement de rang quelques secondes, une nouvelle venue apparaît en fondu. La liste défile seule et s'ancre
+ * à la jonction. Pas de % hors calibration : une entrée ancienne, ou un modèle de note non accepté, donne l'ordre seul.
  */
 import { libelleRaison, niveauEffectif, type NiveauModeles } from '@mnemo/commun';
-import type { ClassementVue, EntreeServieVue, LueVue, RaisonCarteVue } from '@mnemo/contrat';
+import type { CoupureInjectionVue, EntreeServieVue, InjectionVue, LueVue, RaisonCarteVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
-import { useAServir, useEcartes, useModeles } from '../../client/hooks.ts';
-import { dernierClassement, derniereEntree, estEcarte, pourcentage, sousLeSeuil } from '../../sessions/classement.ts';
+import { useAServir, useEcartes, useEcarteesToujours, useModeles, useReactiverInjection, useReglages } from '../../client/hooks.ts';
+import { dernierClassement, derniereEntree, estCalibre, estEcarte, modesDInjection, pourcentage, seuilInjection, sousLeSeuil, type ModeInjection } from '../../sessions/classement.ts';
 import { cartesProposees, cartesRecentes, fichesServies, LIBELLES_MUET, titreFiche, titresConnus } from '../../sessions/servis.ts';
+import { Bouton } from '../commun/Bouton.tsx';
+import { ItemMenu, MenuModeles } from '../modeles/MenuModeles.tsx';
+import sm from '../modeles/Modeles.module.css';
 import { avisModeles } from '../modeles/avis-modeles.ts';
 import { ModelesSession } from '../modeles/ModelesSession.tsx';
 import { useToast } from '../Toast.tsx';
@@ -33,18 +35,14 @@ import s from './ClassementEnDirect.module.css';
 
 /** Durée d'affichage des ▲/▼ et du fondu d'une nouvelle venue. */
 export const INDICATEUR_MS = 4000;
-const GLISSEMENT_MS = 200;
+const GLISSEMENT_MS = 260;
 /** Fiches injectées laissées visibles au-dessus de la jonction quand la liste s'y ancre. */
 const SERVIES_VISIBLES = 2;
 /** Entrées récentes où le service cherche une carte à écarter (`ENTREES_CONSULTEES` du service). */
 const ENTREES_ECARTABLES = 20;
 
-/**
- * Ligne affichée : `servi` pour une fiche injectée (◆) ; `raison` pour une carte proposée (◇) ; `lue` pour une fiche seulement
- * lue par la session (◈, à l'heure `lueMs`) ; sinon une ligne d'un classement ancien (note). `lueMs` sur une autre ligne : la fiche
- * a aussi été lue. `ecartable` : le service sait l'écarter (dernier classement, cartes récentes).
- */
-type Ligne = Pick<ClassementVue, 'id' | 'titre' | 'note' | 'servi'> & { raison?: RaisonCarteVue; depuis?: string; proposeeMs?: number; lue?: boolean; lueMs?: number; ecartable: boolean };
+/** Suggestions « Garder » de cette fenêtre : elles ne reviennent pas tant que l'app est ouverte. */
+const suggestionsGardees = new Set<string>();
 
 type Marques = { deltas: ReadonlyMap<string, number>; nouvelles: ReadonlySet<string> };
 const SANS_MARQUES: Marques = { deltas: new Map(), nouvelles: new Set() };
@@ -53,7 +51,7 @@ function mouvementReduit(): boolean {
 	return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-/** Clé du classement reçu : un nouveau calcul, ou le même reclassé (notes), en change ; un écart de l'utilisateur, non. */
+/** Clé du classement reçu : un nouveau calcul, ou le même reclassé (affinage), en change ; un écart de l'utilisateur, non. */
 function cleDe(entree: EntreeServieVue | null): string {
 	return entree === null ? '' : `${entree.horodatageMs}|${entree.classement.map((c) => `${c.id}:${c.rang}`).join(',')}`;
 }
@@ -64,28 +62,43 @@ function libelleDelta(delta: number): string {
 }
 
 const heure = (ms: number) => new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const chemin = (id: string) => id.split('#')[0]!;
 
-/** Le repère d'un calcul fait sans le sens, et son explication. */
-export const SANS_NOTE_DE_SENS = 'sans note de sens';
-const EXPLICATION_SANS_SENS = "Pas de note : le modèle de sens ne tourne pas, n'a pas répondu à temps, ou ces fiches ne sont pas encore indexées ; les fiches sont proposées sans note.";
-
-/** Pourquoi une piste n'a pas de note. */
-function noteAbsente(l: Ligne): string {
-	if (l.raison !== undefined) return 'Sans note : proposée sans modèle du sens, ou par une version plus ancienne de Mnemo';
-	return 'Note indisponible (modèles arrêtés ou non installés)';
+/** Pourquoi le classement est en ordre seul (info-bulle du repère « ordre seul »). */
+export function raisonOrdreSeul(coupes: boolean): string {
+	return coupes
+		? "Ordre seul : modèles coupés pour cette session, ni sens ni reranker. L'ordre suit les mots, puis l'historique de tes gestes ; sans %, ni injection par Mnemo."
+		: "Ordre seul : aucune note apprise et validée sur tes jugements pour les modèles installés (pas encore apprise, refusée, ou modèles changés depuis). L'ordre suit le sens et les mots ; sans %, ni injection par Mnemo.";
 }
 
-/** Bulle d'une ligne : ce qu'elle est, pourquoi et quand elle est là (et si elle a aussi été lue), puis son chemin. */
-function bulle(l: Ligne, chemin: string): string {
-	// heure inconnue (service plus ancien) : 0
-	const a = (ms: number | undefined) => (ms ? ` à ${heure(ms)}` : '');
-	if (l.lue) return `Lue par la session${a(l.lueMs)}\n${chemin}`;
-	const aussi = l.lueMs === undefined ? '' : `, lue aussi${a(l.lueMs)}`;
-	if (l.servi) return `Injectée entière dans la session${aussi}\n${chemin}`;
-	if (l.raison === undefined) return aussi === '' ? chemin : `${aussi.slice(2)}\n${chemin}`;
-	const quand = l.proposeeMs === undefined ? '' : `, proposée à ${heure(l.proposeeMs)}`;
-	return `${libelleRaison(l.raison, l.depuis)}${quand}${aussi}\n${chemin}`;
+/** Libellé à droite d'une fiche injectée et son info-bulle. */
+function modeAffiche(m: ModeInjection | undefined, duDossier: boolean, seuil: number): { libelle: string | null; bulle: string; auto: boolean } {
+	if (m?.mode === 'auto') {
+		const note = pourcentage(m.p ?? null);
+		return {
+			libelle: note === null ? 'auto' : `auto ${note}`,
+			bulle: `Injectée par Mnemo${note === null ? '' : ` : ${note} pour ce message`} (seuil ${pourcentage(seuil)}), entière, au message de ${heure(m.horodatageMs)}`,
+			auto: true,
+		};
+	}
+	if (m?.mode === 'main') return { libelle: 'à la main', bulle: `Injectée à la main (➤), entière, au message de ${heure(m.horodatageMs)}`, auto: false };
+	if (duDossier) return { libelle: 'du dossier', bulle: 'Fiche du dossier de la session, injectée entière', auto: false };
+	return { libelle: null, bulle: 'Injectée entière dans la session', auto: false };
 }
+
+/** Une ligne sous la jonction : du classement du message, ou plus tôt dans la session (piste ancienne, fiche lue). */
+type Ligne = {
+	id: string;
+	titre: string;
+	/** Classement : la note calibrée (null : ordre seul), son rang, et si elle a été envoyée en piste. */
+	classee?: { p: number | null; rang: number; piste: boolean };
+	raison?: RaisonCarteVue;
+	depuis?: string;
+	/** Plus tôt : piste d'un message précédent, ou fiche lue par la session. */
+	plusTot?: { genre: 'piste' | 'lue'; heureMs: number };
+	lueMs?: number;
+	ecartable: boolean;
+};
 
 export function ClassementEnDirect(p: {
 	session: string;
@@ -94,81 +107,97 @@ export function ClassementEnDirect(p: {
 	modifiable: boolean;
 	/** Niveau des modèles propre à la session (`SessionVue.niveauModeles`) ; null ou absent : comme partout. */
 	niveauModeles?: NiveauModeles | null;
+	/** Position de la session (`SessionVue.position`) : une fiche injectée qui en est vient « du dossier ». */
+	position?: string;
 	/** Fiches injectées dans la session, sans doublon, plus récentes d'abord (défaut : celles du journal `entrees`). */
 	servies?: readonly string[];
 	/** Fiches lues par la session, avec l'heure de leur dernière lecture. */
 	lues?: readonly LueVue[];
+	/** Injections à la main et par Mnemo, d'après le journal des gestes (route `servis`). */
+	injections?: readonly InjectionVue[];
+	/** Injection automatique coupée par le suivi (`SessionVue.injectionCoupee`). */
+	coupures?: readonly CoupureInjectionVue[];
+	/** Suggestions de la règle des 3 sessions (`SessionVue.suggestionsEcarteeToujours`). */
+	suggestions?: readonly SuggestionEcarteeToujoursVue[];
 	surOuvrirFiche(chemin: string): void;
 	couleur(chemin: string): string;
 }): ReactNode {
 	const toast = useToast();
 	const { ecartes, ecarter, retablir } = useEcartes(p.session);
+	const toujours = useEcarteesToujours();
 	const aServir = useAServir(p.session);
-	const lignes = dernierClassement(p.entrees, ecartes.map((e) => e.id));
-	const masquees = sousLeSeuil(p.entrees, ecartes.map((e) => e.id));
+	const reactiver = useReactiverInjection();
+	const seuil = seuilInjection(useReglages().donnees);
+	const jamais = new Set(toujours.liste.map((e) => e.chemin));
+	const idsEcartes = ecartes.map((e) => e.id);
+	const horsJeu = (id: string) => estEcarte(id, idsEcartes) || jamais.has(chemin(id));
 	const derniere = derniereEntree(p.entrees);
+	const calibre = estCalibre(derniere);
 	const cle = cleDe(derniere);
 	const titres = titresConnus(p.entrees);
-	for (const l of lignes) if (!titres.has(l.id)) titres.set(l.id, l.titre);
-	const titre = (chemin: string) => titres.get(chemin) ?? titreFiche(chemin);
+	const classement = dernierClassement(p.entrees, idsEcartes);
+	for (const l of classement) if (!titres.has(chemin(l.id))) titres.set(chemin(l.id), l.titre);
+	const titre = (c: string) => titres.get(c) ?? titreFiche(c);
+	const masquees = sousLeSeuil(p.entrees, idsEcartes);
+	const coupures = p.coupures ?? [];
 
-	// en haut, les fiches injectées, de la plus ancienne à la plus récente ; puis les cartes proposées (plus récentes d'abord),
-	// puis le classement d'un journal ancien : ce qui n'a pas été injecté, là où l'on injecte à la main
-	const ordreServies = [...new Set([...[...(p.servies ?? fichesServies(p.entrees))].reverse(), ...lignes.filter((l) => l.servi).map((l) => l.id.split('#')[0]!)])];
-	const servies: Ligne[] = ordreServies.map((chemin) => ({ id: chemin, titre: titre(chemin), note: null, servi: true, ecartable: false }));
-	const ecartables = cartesRecentes(p.entrees, ENTREES_ECARTABLES);
-	const ecartees = ecartes.map((e) => e.id);
-	const cartes: Ligne[] = cartesProposees(p.entrees, ordreServies)
-		.filter((c) => !estEcarte(c.id, ecartees))
-		.map((c) => ({
-			id: c.id,
-			titre: c.titre,
-			note: c.note ?? null,
-			servi: false,
-			raison: c.raison,
-			...(c.depuis === undefined ? {} : { depuis: c.depuis.titre }),
-			proposeeMs: c.horodatageMs,
-			ecartable: ecartables.has(c.id),
-		}));
-	// le dernier calcul qui a proposé des cartes s'est-il fait sans le sens ? (ses cartes, comme celles d'avant, sont alors sans note)
-	const dernierAvecCartes = p.entrees.reduce<EntreeServieVue | null>((a, e) => (e.cartes.length > 0 && (a === null || e.horodatageMs > a.horodatageMs) ? e : a), null);
-	// un message muet (sans contenu, ou système) n'est pas noté : son texte est vide, ce n'est pas le modèle qui manque. C'est aussi le
-	// seul cas où des cartes viennent d'un message vide (le service passe un message vide au calcul pour un message muet ; une question
-	// vide de l'outil `contexte` ne propose rien)
-	const sansSens = cartes.length > 0 && dernierAvecCartes !== null && !dernierAvecCartes.sens && dernierAvecCartes.muet === null;
-	const dejaLa = new Set([...ordreServies, ...cartes.map((c) => c.id)]);
-	const classees: Ligne[] = lignes.filter((l) => !dejaLa.has(l.id.split('#')[0]!)).map((l) => ({ ...l, servi: false, ecartable: true }));
-	// fiches lues : une fiche déjà dans la liste garde sa ligne (« lue aussi ») ; les autres, une ligne ◈ parmi les cartes, à
-	// l'heure de leur lecture (le service ne les écarte pas : elles n'ont pas été proposées)
+	// fiches demandées par ➤ vues dans cette fenêtre : injectées ensuite, elles sont « à la main » avant même le journal des gestes
+	const demandees = useRef(new Set<string>());
+	for (const c of aServir.chemins) demandees.current.add(c);
+	const modes = modesDInjection(p.injections ?? [], p.entrees);
+
+	// ◆ de la plus ancienne à la plus récente
+	const parEntrees = [...p.entrees].sort((a, b) => a.horodatageMs - b.horodatageMs).flatMap((e) => e.ids.map(chemin));
+	const ordreServies = [...new Set([...parEntrees, ...[...(p.servies ?? fichesServies(p.entrees))].reverse(), ...classement.filter((l) => l.servi).map((l) => chemin(l.id))])];
+	const injectees = new Set(ordreServies);
 	const lueA = new Map((p.lues ?? []).map((l) => [l.chemin, l.horodatageMs]));
-	const avecLecture = (l: Ligne): Ligne => {
-		const lueMs = lueA.get(l.id.split('#')[0]!);
-		return lueMs === undefined ? l : { ...l, lueMs };
-	};
-	const presentes = new Set([...dejaLa, ...classees.map((l) => l.id.split('#')[0]!)]);
+	const pistesConnues = new Map(cartesProposees(p.entrees, ordreServies).map((c) => [c.id, c]));
+	const ecartables = cartesRecentes(p.entrees, ENTREES_ECARTABLES);
+
+	const classees: Ligne[] = classement
+		.filter((l) => !l.servi && !injectees.has(chemin(l.id)) && !horsJeu(l.id))
+		.map((l, i) => {
+			const carte = pistesConnues.get(chemin(l.id));
+			const raison = l.raison ?? carte?.raison;
+			const lueMs = lueA.get(chemin(l.id));
+			return {
+				id: l.id,
+				titre: l.titre,
+				classee: { p: calibre ? (l.p ?? l.note) : null, rang: i + 1, piste: l.piste === true || carte !== undefined },
+				...(raison === undefined ? {} : { raison }),
+				...(carte?.depuis === undefined ? {} : { depuis: carte.depuis.titre }),
+				...(lueMs === undefined ? {} : { lueMs }),
+				ecartable: true,
+			};
+		});
+	const presentes = new Set([...ordreServies, ...classees.map((l) => chemin(l.id))]);
+	const pistesAnciennes: Ligne[] = [...pistesConnues.values()]
+		.filter((c) => !presentes.has(c.id) && !horsJeu(c.id))
+		.map((c) => ({ id: c.id, titre: c.titre, raison: c.raison, plusTot: { genre: 'piste', heureMs: c.horodatageMs }, ecartable: ecartables.has(c.id) }));
 	const luesSeules: Ligne[] = (p.lues ?? [])
-		.filter((l) => !presentes.has(l.chemin))
-		.map((l) => ({ id: l.chemin, titre: titre(l.chemin), note: null, servi: false, lue: true, lueMs: l.horodatageMs, ecartable: false }));
-	const quand = (l: Ligne) => (l.lue ? (l.lueMs ?? 0) : (l.proposeeMs ?? 0));
-	// tri stable : les cartes gardent leur ordre entre elles
-	const recentes = [...cartes.map(avecLecture), ...luesSeules].sort((a, b) => quand(b) - quand(a));
-	const enLice = [...recentes, ...classees.map(avecLecture)];
-	const serviesLues = servies.map(avecLecture);
-	const premiereServie = servies.at(-1)?.id;
-	// toutes les lignes : une fiche qui vient d'être injectée monte, et le dit (▲)
-	const ordre = [...serviesLues, ...enLice].map((l) => l.id).join('\n');
-	// notes absentes : on dit pourquoi (niveau, chargement, modèles arrêtés ou non installés) ; arrêtés, le hook les relance en
-	// arrière-plan pour le message suivant, et « Démarrer » les lance tout de suite
-	const sansNotes = lignes.length > 0 && lignes.every((l) => l.note === null);
-	// l'état sert aussi au repère « sans note de sens » (rien à dire de plus quand la session est coupée)
-	const modeles = useModeles(sansNotes || sansSens);
+		.filter((l) => !presentes.has(l.chemin) && !pistesConnues.has(l.chemin) && !jamais.has(l.chemin))
+		.map((l) => ({ id: l.chemin, titre: titre(l.chemin), plusTot: { genre: 'lue', heureMs: l.horodatageMs }, ecartable: false }));
+	// tri stable : les pistes d'un même message gardent leur ordre
+	const plusTot = [...pistesAnciennes, ...luesSeules].sort((a, b) => b.plusTot!.heureMs - a.plusTot!.heureMs);
+	const enLice = [...classees, ...plusTot];
+	const ordre = [...ordreServies, ...enLice.map((l) => l.id)].join('\n');
+
+	// repères de la jonction
+	const modeles = useModeles(derniere !== null && !derniere.sens);
 	const niveauPropre = p.niveauModeles ?? null;
-	const avis = sansNotes ? avisModeles(modeles.etat, niveauPropre) : null;
-	// coupés pour la session : le bouton de niveau le dit déjà sur la même ligne, le repère « sans note de sens » serait de trop
-	const coupee = modeles.etat !== undefined && niveauEffectif(modeles.etat.niveau, niveauPropre) === 'coupes';
+	const coupes = modeles.etat !== undefined && niveauEffectif(modeles.etat.niveau, niveauPropre) === 'coupes';
+	const ordreSeul = classees.length > 0 && !calibre;
+	const affinage = derniere?.affinage === 'en_cours';
+	// notes absentes faute de sens : on dit pourquoi (niveau, chargement, modèles arrêtés ou non installés) ; un message muet n'est pas noté
+	const sansSens = derniere !== null && derniere.classement.length > 0 && !derniere.sens && derniere.muet === null;
+	const avis = sansSens ? avisModeles(modeles.etat, niveauPropre) : null;
 	const [demarrage, setDemarrage] = useState<{ pour: string } | null>(null);
+	const [jamaisIci, setJamaisIci] = useState<string[]>([]);
+	const [, rafraichir] = useState(0);
+	const suggestion = (p.suggestions ?? []).find((x) => !suggestionsGardees.has(`${p.session}|${x.chemin}`) && !jamais.has(x.chemin)) ?? null;
+
 	const titreSection = useRef<HTMLSpanElement>(null);
-	/** Après un ✗ : la ligne qui prend le focus ('' : le titre de la section). */
+	/** Après un écart : la ligne qui prend le focus ('' : le titre de la section). */
 	const focusApres = useRef<string | null>(null);
 
 	const elements = useRef(new Map<string, HTMLLIElement>());
@@ -193,8 +222,7 @@ export function ClassementEnDirect(p: {
 				el.animate([{ transform: `translateY(${delta}px)` }, { transform: 'none' }], { duration: GLISSEMENT_MS, easing: 'ease-out' });
 			}
 		}
-
-		// ▲/▼ et nouvelles venues : seulement quand un classement arrive (pas quand l'utilisateur écarte une ligne).
+		// ▲/▼ et nouvelles venues : seulement quand un classement arrive ou s'affine (pas quand l'utilisateur écarte une ligne).
 		const ids = ordre === '' ? [] : ordre.split('\n');
 		const avant = precedent.current;
 		precedent.current = { cle, ids };
@@ -210,8 +238,8 @@ export function ClassementEnDirect(p: {
 		if (minuteur.current) clearTimeout(minuteur.current);
 		minuteur.current = setTimeout(() => setMarques(SANS_MARQUES), INDICATEUR_MS);
 	}, [ordre, cle]);
-	// Places relevées après chaque rendu (pas seulement quand l'ordre change) : l'apparition ou la fin des ▲/▼, un titre
-	// qui passe sur deux lignes, déplacent les lignes ; le prochain glissement part de leur place réelle.
+	// Places relevées après chaque rendu : l'apparition ou la fin des ▲/▼, un titre qui passe sur deux lignes, déplacent les
+	// lignes ; le prochain glissement part de leur place réelle.
 	useLayoutEffect(() => {
 		positions.current = new Map([...elements.current].map(([id, el]) => [id, el.offsetTop]));
 	});
@@ -225,20 +253,20 @@ export function ClassementEnDirect(p: {
 		(bouton ?? titreSection.current)?.focus();
 	}, [ordre]);
 
-	// La liste reste ancrée à la jonction (dernières servies au-dessus, classement en dessous) : à l'ouverture et à chaque
-	// fiche servie ; entre deux, l'utilisateur fait défiler librement.
+	// La liste reste ancrée à la jonction (dernières injectées au-dessus, classement en dessous) : à l'ouverture et à chaque
+	// fiche injectée ; entre deux, l'utilisateur fait défiler librement.
 	const liste = useRef<HTMLOListElement>(null);
-	/** Première ligne du classement non injecté : la jonction, où la liste s'ancre. */
 	const jonction = useRef<HTMLLIElement | null>(null);
-	const nombreServies = servies.length;
+	const nombreServies = ordreServies.length;
 	useLayoutEffect(() => {
 		const ol = liste.current;
 		const j = jonction.current;
-		if (ol === null || j === null) return;
-		ol.scrollTop = Math.max(0, j.offsetTop - SERVIES_VISIBLES * j.getBoundingClientRect().height);
+		const premiere = ol?.querySelector<HTMLLIElement>('li[data-servie]');
+		if (ol === null || j === null || premiere == null) return;
+		ol.scrollTop = Math.max(0, j.offsetTop - SERVIES_VISIBLES * premiere.getBoundingClientRect().height);
 	}, [nombreServies, p.session]);
 
-	const agir = async (geste: () => Promise<void>): Promise<boolean> => {
+	const agir = async (geste: () => Promise<unknown>): Promise<boolean> => {
 		try {
 			await geste();
 			return true;
@@ -247,116 +275,326 @@ export function ClassementEnDirect(p: {
 			return false;
 		}
 	};
-	const ecarterLigne = async (id: string) => {
+	const focusSuivant = (id: string) => {
 		const i = enLice.findIndex((l) => l.id === id);
-		focusApres.current = (enLice[i + 1] ?? enLice[i - 1])?.id ?? '';
+		focusApres.current = i < 0 ? null : ((enLice[i + 1] ?? enLice[i - 1])?.id ?? '');
+	};
+	const ecarterIci = async (id: string) => {
+		focusSuivant(id);
 		if (!(await agir(() => ecarter(id)))) focusApres.current = null;
 	};
+	const ecarterToujours = async (id: string) => {
+		focusSuivant(id);
+		const c = chemin(id);
+		if (await agir(() => toujours.ecarter(c, p.session))) setJamaisIci((j) => (j.includes(c) ? j : [...j, c]));
+		else focusApres.current = null;
+	};
 	const demarrer = () => void agir(modeles.demarrer).then((ok) => ok && setDemarrage({ pour: cle }));
-
-	/** Une ligne : une fiche injectée (◆), une carte proposée (◇ et sa raison), ou une fiche d'un classement ancien (note). */
-	const ligne = (l: Ligne, premiereServie: boolean, ancre?: { current: HTMLLIElement | null }) => {
-		const note = pourcentage(l.note);
-		const delta = marques.deltas.get(l.id);
-		const chemin = l.id.split('#')[0]!;
-		const attend = aServir.chemins.includes(chemin);
+	const refFiche = (id: string, ancre?: { current: HTMLLIElement | null }) => (el: HTMLLIElement | null) => {
+		if (el) elements.current.set(id, el);
+		else elements.current.delete(id);
+		if (ancre) ancre.current = el;
+	};
+	const delta = (id: string): ReactNode => {
+		const d = marques.deltas.get(id);
+		if (d === undefined) return null;
 		return (
-			<li
-				key={l.id}
-				ref={(el) => {
-					if (el) elements.current.set(l.id, el);
-					else elements.current.delete(l.id);
-					if (ancre) ancre.current = el;
-				}}
-				className={s.ligne}
-				data-id={l.id}
-				data-servie={String(l.servi)}
-				data-nouvelle={marques.nouvelles.has(l.id) ? 'true' : undefined}
-				style={{ '--c': p.couleur(chemin) } as CSSProperties}
-			>
-				{/* case de gauche, une seule colonne : ◆ d'une fiche injectée entière, ◈ d'une fiche lue, sinon la note de la piste (— sans note) */}
-				{l.servi ? (
-					<span className={`${s.note} ${s.injectee}`} role="img" aria-label="Injectée dans la session" title="Injectée entière dans la session">
-						◆
-					</span>
-				) : l.lue ? (
-					<span className={`${s.note} ${s.lue}`} role="img" aria-label="Lue par la session" title="Lue par la session">
-						◈
-					</span>
-				) : (
-					<span className={s.note} title={note === null ? noteAbsente(l) : l.raison === undefined ? 'Note du reranker' : 'Note de la piste : le sens du message, plus les poids'}>
-						{note ?? '—'}
+			<span className={`${s.delta} ${d > 0 ? s.monte : s.descend}`} data-delta="" title={libelleDelta(d)}>
+				<span aria-hidden="true">{`${d > 0 ? '▲' : '▼'}${Math.abs(d)}`}</span>
+				<span className={s.masque}>{libelleDelta(d)}</span>
+			</span>
+		);
+	};
+
+	/** ➤ (sauf une fiche déjà injectée) et ✗, le menu d'écart : pour cette session, ou pour toujours. */
+	const gestes = (o: { id: string; titre: string; ecartableIci: boolean; motifIci: string; resume: string; injecter: boolean }): ReactNode => {
+		if (!p.modifiable) return null;
+		const c = chemin(o.id);
+		const attend = aServir.chemins.includes(c);
+		return (
+			<span className={s.gestes} data-force={attend ? 'true' : undefined}>
+				{o.injecter && (
+					<button
+						type="button"
+						className={`${s.croix} ${s.servir}`}
+						aria-pressed={attend}
+						aria-label={`Injecter ${o.titre} dans la session`}
+						title={attend ? 'Sera injectée au prochain message de la session ; cliquer pour annuler' : 'Injecter dans la session : la fiche entière, au prochain message'}
+						onClick={() => void agir(() => (attend ? aServir.annuler(c) : aServir.servir(c)))}
+					>
+						➤
+					</button>
+				)}
+				<MenuModeles
+					libelle={`Écarter ${o.titre}`}
+					titre="Écarter : de cette session, ou pour toujours"
+					classeBouton={s.croix ?? ''}
+					contenuBouton="✗"
+					alignement="droite"
+					entete={
+						<>
+							<div className={sm.entete}>{o.titre}</div>
+							<p className={sm.note}>{o.resume}</p>
+						</>
+					}
+				>
+					{(fermer) => (
+						<>
+							<ItemMenu
+								libelle="Pas pour cette session"
+								detail={o.ecartableIci ? 'Ni proposée ni injectée par Mnemo dans cette session. Se rétablit depuis « Écartées ».' : o.motifIci}
+								desactive={!o.ecartableIci}
+								surChoix={() => {
+									fermer();
+									void ecarterIci(o.id);
+								}}
+							/>
+							<ItemMenu
+								libelle="Ne plus jamais suggérer"
+								detail="Dans aucune session, ni par Mnemo ni en piste. Se rétablit depuis la fiche, page Mémoire."
+								surChoix={() => {
+									fermer();
+									void ecarterToujours(o.id);
+								}}
+							/>
+						</>
+					)}
+				</MenuModeles>
+			</span>
+		);
+	};
+
+	const ligneInjectee = (c: string): ReactNode => {
+		const m = modes.get(c) ?? (demandees.current.has(c) ? { mode: 'main' as const, horodatageMs: derniere?.horodatageMs ?? 0 } : undefined);
+		const duDossier = p.position !== undefined && p.position !== '' && c.startsWith(`${p.position}/`);
+		const { libelle, bulle, auto } = modeAffiche(m, duDossier, seuil);
+		const lueMs = lueA.get(c);
+		const t = titre(c);
+		return (
+			<li key={c} ref={refFiche(c)} className={s.ligne} data-id={c} data-servie="true" data-nouvelle={marques.nouvelles.has(c) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
+				<span className={`${s.note} ${s.injectee}`} role="img" aria-label="Injectée dans la session" title={bulle}>
+					◆
+				</span>
+				<span className={s.corps}>
+					<button
+						type="button"
+						className={s.fiche}
+						title={`${bulle}${lueMs === undefined ? '' : `, lue aussi à ${heure(lueMs)}`}\n${c}`}
+						aria-keyshortcuts={c === ordreServies[ordreServies.length - 1] ? 'Alt+M' : undefined}
+						onClick={() => p.surOuvrirFiche(c)}
+					>
+						<i aria-hidden="true" />
+						<span className={s.titre}>{t}</span>
+					</button>
+				</span>
+				{delta(c)}
+				{libelle !== null && (
+					<span className={auto ? s.auto : s.mode} title={bulle}>
+						{libelle}
 					</span>
 				)}
-				<button type="button" className={s.fiche} title={bulle(l, chemin)} aria-keyshortcuts={premiereServie ? 'Alt+M' : undefined} onClick={() => p.surOuvrirFiche(chemin)}>
-					<i aria-hidden="true" />
-					<span className={s.titre}>{l.titre}</span>
-				</button>
-				{/* à droite, la raison seulement si elle apprend quelque chose (« du périmètre » est le cas par défaut) ; ▲/▼ quelques
-				    secondes après un nouveau calcul ; au survol, les gestes prennent leur place */}
-				{l.raison !== undefined && l.raison !== 'perimetre' && <span className={s.raison}>{libelleRaison(l.raison, l.depuis)}</span>}
-				{delta !== undefined && (
-					<span className={`${s.delta} ${delta > 0 ? s.monte : s.descend}`} data-delta="" title={libelleDelta(delta)}>
-						<span aria-hidden="true">{`${delta > 0 ? '▲' : '▼'}${Math.abs(delta)}`}</span>
-						<span className={s.masque}>{libelleDelta(delta)}</span>
-					</span>
-				)}
-				{p.modifiable && !l.servi && (
-					<span className={s.gestes}>
-						<button
-							type="button"
-							className={`${s.croix} ${s.servir}`}
-							aria-pressed={attend}
-							aria-label={`Injecter ${l.titre} dans la session`}
-							title={attend ? 'Sera injectée au prochain message de la session ; cliquer pour annuler' : 'Injecter dans la session : la fiche entière, au prochain message'}
-							onClick={() => void agir(() => (attend ? aServir.annuler(chemin) : aServir.servir(chemin)))}
-						>
-							➤
-						</button>
-						<button
-							type="button"
-							className={s.croix}
-							// le service ne cherche l'écart que dans les calculs récents
-							style={l.ecartable ? undefined : { visibility: 'hidden' }}
-							disabled={!l.ecartable}
-							aria-label={`Ne plus suggérer ${l.titre}`}
-							title="Pas pertinent : ne plus suggérer dans cette session (ce qui a déjà été injecté le reste)"
-							onClick={() => void ecarterLigne(l.id)}
-						>
-							✗
-						</button>
-					</span>
-				)}
+				{auto && gestes({ id: c, titre: t, ecartableIci: true, motifIci: '', resume: `${libelle} – injectée par Mnemo`, injecter: false })}
 			</li>
 		);
 	};
+
+	const ligneClassee = (l: Ligne, ancre?: { current: HTMLLIElement | null }): ReactNode => {
+		const k = l.classee!;
+		const c = chemin(l.id);
+		const attend = aServir.chemins.includes(c);
+		const note = pourcentage(k.p);
+		const auDessus = k.p !== null && k.p >= seuil;
+		const raison = l.raison === undefined ? null : libelleRaison(l.raison, l.depuis);
+		const pourquoiPasInjectee = !auDessus
+			? ''
+			: coupures.length > 0
+				? "\nAu-dessus du seuil, mais l'injection automatique est coupée : ➤ pour l'injecter."
+				: "\nAu-dessus du seuil sans être injectée (affinée après le message, plafond par message, ou déjà vue) : ➤ pour l'injecter.";
+		const bulle = `${raison ?? 'Classée pour ce message'}${k.piste ? ' – envoyée en piste dans la session (titre et résumé)' : ''}${l.lueMs === undefined ? '' : `, lue aussi à ${heure(l.lueMs)}`}${pourquoiPasInjectee}\n${c}`;
+		const noteBulle = note !== null ? `${note} : chance que la fiche soit utile à ce message (note apprise sur tes jugements)` : `Rang ${k.rang} : ordre seul, sans note calibrée`;
+		const resume = `${note ?? `rang ${k.rang}`}${raison === null ? '' : ` – ${raison}`}${k.piste ? ' – piste' : ''}`;
+		return (
+			<li key={l.id} ref={refFiche(l.id, ancre)} className={s.ligne} data-id={l.id} data-servie="false" data-nouvelle={marques.nouvelles.has(l.id) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
+				<span className={`${s.note} ${auDessus ? s.haute : ''}`} title={noteBulle}>
+					{note ?? '◇'}
+				</span>
+				<span className={s.corps}>
+					<button type="button" className={s.fiche} title={bulle} onClick={() => p.surOuvrirFiche(c)}>
+						<i aria-hidden="true" />
+						<span className={s.titre}>{l.titre}</span>
+					</button>
+					{(attend || raison !== null || k.piste) && (
+						<span className={s.sous}>
+							{attend ? (
+								<span className={s.attend}>injectée au prochain message</span>
+							) : (
+								<>
+									{raison !== null && <span>{raison}</span>}
+									{k.piste && <span className={s.piste}>{raison === null ? 'piste' : ' – piste'}</span>}
+								</>
+							)}
+						</span>
+					)}
+				</span>
+				{delta(l.id)}
+				{gestes({ id: l.id, titre: l.titre, ecartableIci: true, motifIci: '', resume, injecter: true })}
+			</li>
+		);
+	};
+
+	const lignePlusTot = (l: Ligne, ancre?: { current: HTMLLIElement | null }): ReactNode => {
+		const t = l.plusTot!;
+		const lue = t.genre === 'lue';
+		const c = chemin(l.id);
+		const attend = aServir.chemins.includes(c);
+		const quoi = lue ? `lue par la session à ${heure(t.heureMs)}` : `piste du message de ${heure(t.heureMs)}`;
+		return (
+			<li key={l.id} ref={refFiche(l.id, ancre)} className={s.ligne} data-id={l.id} data-servie="false" data-nouvelle={marques.nouvelles.has(l.id) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
+				<span
+					className={`${s.note} ${lue ? s.lue : ''}`}
+					role={lue ? 'img' : undefined}
+					aria-label={lue ? 'Lue par la session' : undefined}
+					title={lue ? 'Lue par la session' : "Piste d'un message précédent, absente du classement de ce message"}
+				>
+					{lue ? '◈' : ''}
+				</span>
+				<span className={s.corps}>
+					<button type="button" className={s.fiche} title={`${quoi}${l.raison === undefined ? '' : ` – ${libelleRaison(l.raison)}`}\n${c}`} onClick={() => p.surOuvrirFiche(c)}>
+						<i aria-hidden="true" />
+						<span className={s.titre}>{l.titre}</span>
+					</button>
+					<span className={s.sous}>{attend ? <span className={s.attend}>injectée au prochain message</span> : quoi}</span>
+				</span>
+				{delta(l.id)}
+				{gestes({
+					id: l.id,
+					titre: l.titre,
+					ecartableIci: l.ecartable,
+					motifIci: lue ? "Indisponible : la session l'a lue d'elle-même, Mnemo ne l'a pas proposée." : 'Indisponible : proposée trop tôt dans la session pour être écartée ici.',
+					resume: quoi,
+					injecter: true,
+				})}
+			</li>
+		);
+	};
+
+	// repère du seuil d'injection : avant la première note sous le seuil (ou après la dernière, toutes au-dessus)
+	const indexSeuil = calibre ? classees.findIndex((l) => (l.classee!.p ?? 0) < seuil) : -1;
+	const repereSeuil = (
+		<li
+			key="seuil"
+			className={s.seuil}
+			role="presentation"
+			title={coupures.length > 0 ? `Seuil d'injection automatique : ${pourcentage(seuil)}. Injection coupée : rien n'est injecté au-dessus.` : `Au-dessus de ${pourcentage(seuil)}, Mnemo injecte la fiche entière au message même. Réglages › Système › Contexte injecté.`}
+		>
+			<span>{coupures.length > 0 ? `seuil ${pourcentage(seuil)} – coupé` : `seuil d’injection ${pourcentage(seuil)}`}</span>
+		</li>
+	);
+	const lignesClassees = classees.flatMap((l, i) => {
+		const ligne = ligneClassee(l, ordreServies.length > 0 || i > 0 ? undefined : jonction);
+		return i === indexSeuil ? [repereSeuil, ligne] : [ligne];
+	});
+	if (calibre && indexSeuil === -1 && classees.length > 0) lignesClassees.push(repereSeuil);
+
+	const reperes = affinage || ordreSeul;
+	const jonctionVisible = (ordreServies.length > 0 && enLice.length > 0) || reperes || coupures.length > 0;
+	const niveaux = [...new Set(coupures.map((x) => x.niveau))];
+	const libelleNiveau = (n: CoupureInjectionVue['niveau']) => (n === 'complets' ? 'modèles complets' : 'sens seul');
+
 	return (
 		<div className={s.classement}>
 			<div className={s.enteteClassement}>
 				<span className={s.lbl} id={`classement-${p.session}`} ref={titreSection} tabIndex={-1}>
 					Injecté dans la session
 				</span>
-				{sansSens && !coupee && (
-					<span className={s.sansSens} title={EXPLICATION_SANS_SENS}>
-						{SANS_NOTE_DE_SENS}
-					</span>
-				)}
 				{p.modifiable && (
 					<span className={s.aDroite}>
 						<ModelesSession session={p.session} niveau={niveauPropre} />
 					</span>
 				)}
 			</div>
-			{serviesLues.length + enLice.length === 0 ? (
+			{ordreServies.length + enLice.length === 0 && !jonctionVisible ? (
 				<p className={s.mu}>Aucune fiche pour l’instant.</p>
 			) : (
 				<ol className={s.liste} aria-label="Injecté dans la session" ref={liste}>
-					{serviesLues.map((l) => ligne(l, l.id === premiereServie))}
-					{enLice.map((l, i) => ligne(l, false, i === 0 ? jonction : undefined))}
+					{ordreServies.map(ligneInjectee)}
+					{jonctionVisible && (
+						<li key="jonction" ref={ordreServies.length > 0 ? jonction : undefined} className={s.jonction} data-filet={ordreServies.length > 0 ? 'true' : undefined} role="presentation">
+							{reperes && (
+								<div className={s.ligneJonction}>
+									{affinage && (
+										<span className={s.affinage} title="Le reranker affine le classement en arrière-plan ; les lignes glisseront à leur nouvelle place. Rien n'est injecté après coup.">
+											<span className={s.pouls} aria-hidden="true" />
+											affinage…
+										</span>
+									)}
+									{ordreSeul && (
+										<span className={s.ordreSeul} title={raisonOrdreSeul(coupes)}>
+											ordre seul
+										</span>
+									)}
+								</div>
+							)}
+							{coupures.length > 0 && (
+								<div className={s.coupure} role="status">
+									<p>
+										<b>Injection automatique coupée</b>
+										{niveaux.length === 1 ? ` (${libelleNiveau(niveaux[0]!)})` : ''} : justesse récente insuffisante.
+									</p>
+									{coupures.map((x) => (
+										<p key={x.niveau} className={s.detailCoupure}>
+											{niveaux.length > 1 ? `${libelleNiveau(x.niveau)} : ` : ''}
+											{x.motif}.
+										</p>
+									))}
+									<p className={s.detailCoupure}>Les % restent affichés ; ➤ pour injecter à la main.</p>
+									{p.modifiable && (
+										<Bouton petit title="Réactiver l'injection automatique : elle se coupera de nouveau si les écarts continuent" onClick={() => void agir(() => reactiver(p.session))}>
+											Réactiver
+										</Bouton>
+									)}
+								</div>
+							)}
+						</li>
+					)}
+					{lignesClassees}
+					{classees.length > 0 && plusTot.length > 0 && (
+						<li key="plus-tot" className={s.intertitre} role="presentation">
+							Plus tôt dans la session
+						</li>
+					)}
+					{plusTot.map((l, i) => lignePlusTot(l, ordreServies.length > 0 || classees.length > 0 || i > 0 ? undefined : jonction))}
 				</ol>
 			)}
+			{suggestion !== null && p.modifiable && (
+				<div className={s.suggestion} role="group" aria-label="Suggestion">
+					<p>
+						<b>{titre(suggestion.chemin)}</b> écartée dans {suggestion.sessions} sessions : ne plus la suggérer ?
+					</p>
+					<div className={s.boutons}>
+						<Bouton petit genre="primaire" title="Ne plus jamais la suggérer, dans aucune session ; se rétablit depuis la fiche (page Mémoire)" onClick={() => void ecarterToujours(suggestion.chemin)}>
+							Ne plus suggérer
+						</Bouton>
+						<Bouton
+							petit
+							title="La garder : elle reste écartée de cette session seulement"
+							onClick={() => {
+								suggestionsGardees.add(`${p.session}|${suggestion.chemin}`);
+								rafraichir((n) => n + 1);
+							}}
+						>
+							Garder
+						</Bouton>
+					</div>
+				</div>
+			)}
+			{jamaisIci.length > 0 && (
+				<p className={s.avis}>
+					{jamaisIci.map(titre).join(', ')} : plus jamais suggérée{jamaisIci.length > 1 ? 's' : ''}. Se rétablit depuis la fiche, page Mémoire.
+				</p>
+			)}
 			{derniere?.muet != null && <p className={s.avis}>{LIBELLES_MUET[derniere.muet]}</p>}
-			{sansNotes && demarrage?.pour === cle ? (
+			{sansSens && demarrage?.pour === cle ? (
 				<p className={s.avis}>Modèles démarrés : les notes viendront au prochain message.</p>
 			) : avis?.motif === 'arretes' ? (
 				<p className={s.avis}>
@@ -370,9 +608,7 @@ export function ClassementEnDirect(p: {
 			) : avis?.motif === 'chargement' ? (
 				<p className={s.avis}>Modèles en chargement : les notes viendront au prochain message.</p>
 			) : avis?.motif === 'coupes' || avis?.motif === 'sens' ? (
-				<p className={s.avis}>
-					{`Notes indisponibles : ${avis.motif === 'coupes' ? 'modèles coupés' : 'sens seul'}${avis.pourLaSession ? ' pour cette session' : ''}`}
-				</p>
+				<p className={s.avis}>{`Notes indisponibles : ${avis.motif === 'coupes' ? 'modèles coupés' : 'sens seul'}${avis.pourLaSession ? ' pour cette session' : ''}`}</p>
 			) : null}
 			{masquees.length > 0 && (
 				<details className={s.ecartees} role="group" aria-label={`Sous le seuil (${masquees.length})`}>
@@ -393,9 +629,9 @@ export function ClassementEnDirect(p: {
 					<ul>
 						{ecartes.map((e) => (
 							<li key={e.id} title={e.id}>
-								<span className={s.titre}>{e.titre}</span>
+								<span className={`${s.titre} ${s.barre}`}>{e.titre}</span>
 								{p.modifiable && (
-									<button type="button" className={s.retablir} aria-label={`Rétablir ${e.titre}`} onClick={() => void agir(() => retablir(e.id))}>
+									<button type="button" className={s.retablir} aria-label={`Rétablir ${e.titre}`} title="La remettre parmi les fiches proposées à cette session" onClick={() => void agir(() => retablir(e.id))}>
 										Rétablir
 									</button>
 								)}

@@ -1,10 +1,10 @@
 /**
  * Panneau Contexte, à droite de la vue Sessions : en-tête (avatar du profil, état, objectif), dossier non rattaché (texte du
  * service : aucune fiche ne couvre le dossier de la session), carte Dossier / Démarrée / Durée / Branche / Contexte (fenêtre de
- * Claude Code), « Injecté dans la session » (fiches injectées ◆, cartes proposées ◇, fiches lues ◈ ; clic → Mémoire › Fichiers),
+ * Claude Code), « Injecté dans la session » (fiches injectées ◆, classement vivant du dernier message, pistes et fiches lues ◈ ; clic → Mémoire › Fichiers),
  * puis les actions permises par l'état.
  */
-import type { EntreeServieVue, LueVue, SessionVue } from '@mnemo/contrat';
+import type { EntreeServieVue, InjectionVue, LueVue, SessionVue } from '@mnemo/contrat';
 import { useState, type ReactNode } from 'react';
 import { useFenetre, useGraphe } from '../../client/hooks.ts';
 import { couleurDeBranche, rangsDesFiches } from '../../graphe/branches.ts';
@@ -42,6 +42,8 @@ export function PanneauContexte(p: {
 	entrees: readonly EntreeServieVue[];
 	/** Fiches lues par la session, avec l'heure de leur dernière lecture. */
 	lues?: readonly LueVue[];
+	/** Injections à la main et par Mnemo de la session (journal des gestes). */
+	injections?: readonly InjectionVue[];
 	surOuvrirFiche(chemin: string): void;
 }): ReactNode {
 	const couleur = useCouleurBranche();
@@ -85,7 +87,21 @@ export function PanneauContexte(p: {
 					</>
 				)}
 			</div>
-			<ClassementEnDirect key={x.id} session={x.id} entrees={p.entrees} modifiable={x.etat !== 'terminee'} niveauModeles={x.niveauModeles} servies={p.fiches} lues={p.lues ?? []} surOuvrirFiche={p.surOuvrirFiche} couleur={couleur} />
+			<ClassementEnDirect
+				key={x.id}
+				session={x.id}
+				entrees={p.entrees}
+				modifiable={x.etat !== 'terminee'}
+				niveauModeles={x.niveauModeles}
+				position={x.position}
+				servies={p.fiches}
+				lues={p.lues ?? []}
+				injections={p.injections ?? []}
+				coupures={x.injectionCoupee ?? []}
+				suggestions={x.suggestionsEcarteeToujours ?? []}
+				surOuvrirFiche={p.surOuvrirFiche}
+				couleur={couleur}
+			/>
 			<div className={s.actions}>
 				{actif && (
 					<Bouton petit disabled={enCours} onClick={() => void agir('pause')}>

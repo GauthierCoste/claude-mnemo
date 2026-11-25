@@ -63,6 +63,7 @@ export const SESSIONS_DEMO: SessionDemo[] = [
 			['projets/erp-saas/Module stocks.md', 3],
 			['sources/cdc-stocks-v2.md', 9],
 			['projets/erp-saas/Export CSV.md', 14],
+			['projets/erp-saas/achats/achats.md', 16],
 		],
 		ecran: [
 			['u', "Je veux que le module stocks gère les lots et les dates de péremption. Regarde l'existant et propose un plan avant de coder."],
@@ -819,16 +820,130 @@ export const SERVI_PAR_ARCHIVISTE_DEMO: { ids: [string, string]; autres: [string
 	autres: [['episodes/api-facturation/2026-11-20-dependances.md', 0.31, false]],
 };
 
+/** Un message classé par le classement vivant : ses lignes [id, p, raison] au hook, puis après l'affinage ; ses pistes ; la fiche injectée par Mnemo. */
+export type MessageClasseDemo = {
+	texte: string;
+	hook: [string, number, RaisonCarteVue][];
+	affine?: [string, number, RaisonCarteVue][];
+	pistes: string[];
+	auto?: string;
+};
+
+const MIG = 'consignes/Migrations réversibles.md';
+const MT = 'projets/erp-saas/Multi-tenant.md';
+const PG = 'stacks/PostgreSQL.md';
+const CDC = 'sources/cdc-stocks-v2.md';
+const LOTS = 'episodes/erp-saas/2026-11-21-schema-des-lots.md';
+const CSV = 'projets/erp-saas/Export CSV.md';
+const DEC = 'decisions/Choix de PostgreSQL.md';
+const CF = 'projets/erp-saas/achats/Commandes fournisseurs.md';
+const TAC = 'consignes/Test avant correction.md';
+
 /**
- * Nouvel envoi à la première session, peu après l'ouverture : le panneau Contexte réordonne ses pistes ◇ en direct (le
- * cahier des charges, nommé dans le message, passe en tête ; une fiche du périmètre n'est plus proposée).
+ * Classement vivant de la première session (note apprise et acceptée : des %) : le dernier message déjà classé, où Mnemo a
+ * injecté « Migrations réversibles » (94 %) ; puis, peu après l'ouverture, deux nouveaux messages classés au hook puis affinés
+ * en arrière-plan (les lignes glissent), le second avec une injection par Mnemo.
  */
-export const PISTES_NOUVEL_ENVOI_DEMO: PisteDemo[] = [
-	{ id: 'sources/cdc-stocks-v2.md', raison: 'nommee' },
-	{ id: 'episodes/erp-saas/2026-11-21-schema-des-lots.md', raison: 'liee', depuis: 'projets/erp-saas/Module stocks.md' },
-	{ id: 'stacks/PostgreSQL.md', raison: 'question' },
-	{ id: 'consignes/Migrations réversibles.md', raison: 'perimetre' },
-];
+export const CLASSEMENT_VIVANT_DEMO: { avant: MessageClasseDemo; suivants: MessageClasseDemo[] } = {
+	avant: {
+		texte: 'La migration doit pouvoir revenir en arrière, sur PostgreSQL.',
+		hook: [
+			[MIG, 0.94, 'proche'],
+			[PG, 0.88, 'nommee'],
+			[DEC, 0.79, 'proche'],
+			[LOTS, 0.7, 'liee'],
+			[CDC, 0.62, 'proche'],
+			[TAC, 0.58, 'historique'],
+			[MT, 0.41, 'perimetre'],
+			[CSV, 0.3, 'perimetre'],
+		],
+		affine: [
+			[MIG, 0.95, 'proche'],
+			[DEC, 0.91, 'proche'],
+			[PG, 0.84, 'nommee'],
+			[LOTS, 0.72, 'liee'],
+			[CDC, 0.6, 'proche'],
+			[TAC, 0.55, 'historique'],
+			[MT, 0.38, 'perimetre'],
+			[CSV, 0.28, 'perimetre'],
+		],
+		pistes: [PG, DEC],
+		auto: MIG,
+	},
+	suivants: [
+		{
+			texte: 'et pour l’historique des mouvements ?',
+			hook: [
+				[LOTS, 0.89, 'liee'],
+				[CSV, 0.74, 'perimetre'],
+				[CF, 0.62, 'proche'],
+				[MT, 0.57, 'perimetre'],
+				[CDC, 0.55, 'proche'],
+				[DEC, 0.5, 'proche'],
+				[PG, 0.44, 'nommee'],
+				[TAC, 0.4, 'historique'],
+			],
+			affine: [
+				[LOTS, 0.93, 'liee'],
+				[CSV, 0.77, 'perimetre'],
+				[CF, 0.58, 'proche'],
+				[CDC, 0.56, 'proche'],
+				[MT, 0.54, 'perimetre'],
+				[DEC, 0.49, 'proche'],
+				[PG, 0.41, 'nommee'],
+				[TAC, 0.38, 'historique'],
+			],
+			pistes: [CSV, CF],
+		},
+		{
+			texte: 'pareil pour l’export CSV',
+			hook: [
+				[CSV, 0.95, 'perimetre'],
+				[CF, 0.7, 'proche'],
+				[LOTS, 0.66, 'liee'],
+				[TAC, 0.52, 'historique'],
+				[CDC, 0.48, 'proche'],
+				[DEC, 0.36, 'proche'],
+				[PG, 0.31, 'nommee'],
+				[MT, 0.22, 'perimetre'],
+			],
+			affine: [
+				[CSV, 0.96, 'perimetre'],
+				[LOTS, 0.72, 'liee'],
+				[CF, 0.68, 'proche'],
+				[TAC, 0.5, 'historique'],
+				[CDC, 0.47, 'proche'],
+				[DEC, 0.34, 'proche'],
+				[PG, 0.3, 'nommee'],
+				[MT, 0.2, 'perimetre'],
+			],
+			pistes: [],
+			auto: CSV,
+		},
+	],
+};
+
+/**
+ * Classement en ordre seul (aucune note apprise et validée : ni %, ni injection par Mnemo ; les premières de l'ordre en
+ * pistes) : le dernier message de la session « Écrire les tests du module achats ». Les notes fictives ne servent qu'à l'ordre.
+ */
+export const ORDRE_SEUL_DEMO: MessageClasseDemo = {
+	texte: 'Ajoute les cas de commande partiellement livrée.',
+	hook: [
+		['projets/erp-saas/achats/achats.md', 0.8, 'perimetre'],
+		[MT, 0.7, 'perimetre'],
+		[CSV, 0.6, 'proche'],
+		[PG, 0.5, 'proche'],
+		[DEC, 0.4, 'historique'],
+	],
+	pistes: ['projets/erp-saas/achats/achats.md', MT, CSV],
+};
+
+/** Coupure fictive de l'injection automatique (`&coupure=1`) : le motif tel que le service le donne. */
+export const COUPURE_DEMO = { niveau: 'complets' as const, injections: 100, ecartees: 31, motif: '31 des 100 dernières fiches injectées par Mnemo ont été écartées' };
+
+/** Suggestion fictive de la règle des 3 sessions (`&suggestion=1`) : une fiche écartée dans 3 sessions, dont la première. */
+export const SUGGESTION_DEMO = { chemin: MT, sessions: 3, jours: 9 };
 
 /**
  * Réglages fictifs du mode démo (`?demo&vue=reglages`) : la forme de ceux du service (`domaine/reglages.ts`), pour voir la

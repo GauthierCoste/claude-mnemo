@@ -1,5 +1,7 @@
-/* « Injecté dans la session » (panneau Contexte), une ligne par fiche : ◆ ou note (%), pastille et titre sur toute la largeur, raison
-   utile, ▲/▼ ; au survol, ➤ injecter et ✗ écarter à la place de la raison. Puis « Écartées (N) ». */
+/* « Injecté dans la session » (panneau Contexte), le classement vivant : ◆ injectées (et comment), un filet et l'état du
+   classement, puis le classement du message (% ou ◇ en ordre seul, raison et « piste » dessous), le repère du seuil
+   d'injection, « Plus tôt dans la session » ; au survol, ➤ et ✗ (menu d'écart). Puis la suggestion des 3 sessions,
+   « Sous le seuil (N) », « Écartées (N) ». */
 .classement {
 	margin-top: 18px;
 }
@@ -10,13 +12,12 @@
 	gap: 8px;
 }
 
-.enteteClassement .lbl {
+.lbl {
 	white-space: nowrap;
-}
-
-.aDroite {
-	margin-left: auto;
-	min-width: 0;
+	font: 500 10.5px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--dim);
 }
 
 .lbl:focus-visible {
@@ -24,23 +25,13 @@
 	outline-offset: 2px;
 }
 
-.lbl {
-	font: 500 10.5px var(--mono);
-	text-transform: uppercase;
-	letter-spacing: 0.08em;
-	color: var(--dim);
+.aDroite {
+	margin-left: auto;
+	min-width: 0;
 }
 
 .mu {
 	color: var(--mu);
-}
-
-/* Repère discret à côté du titre : le dernier calcul s'est fait sans le sens (d'où les « — »). */
-.sansSens {
-	margin-left: 8px;
-	font-size: 10.5px;
-	color: var(--mu);
-	cursor: help;
 }
 
 .liste {
@@ -48,17 +39,17 @@
 	list-style: none;
 	margin: 6px 0 0;
 	padding: 0;
-	max-height: 360px;
+	max-height: 460px;
 	overflow-y: auto;
 	overscroll-behavior: contain;
 }
 
+/* Une ligne : la note (ou ◆, ◇, ◈), puis le titre et, dessous, la raison ; à droite ▲/▼ ou le mode d'injection. */
 .ligne {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	position: relative;
 	gap: 6px;
-	/* à droite, un petit espace : le fond de la ligne dépasse le bouton (✗, ➤) ou la ◆ qui la termine */
 	padding: 2px var(--esp-1) 2px 4px;
 	border-radius: var(--r-2);
 	font-size: 12.5px;
@@ -68,29 +59,29 @@
 	background: var(--s3);
 }
 
-/* Ce qui n'a été que proposé ou classé reste en retrait de ce qui a été injecté. */
-.ligne[data-servie='false'] .titre {
-	color: var(--mu);
-}
-
 .ligne[data-nouvelle='true'] {
-	animation: fondu 600ms ease-out;
+	animation: fondu 900ms ease-out;
 }
 
 @keyframes fondu {
 	from {
-		opacity: 0;
-		background: color-mix(in srgb, var(--ac) 18%, transparent);
+		background: color-mix(in srgb, var(--ac) 22%, transparent);
 	}
 }
 
-/* La colonne de gauche : ◆ d'une fiche injectée, ou la note (« 100 % » au plus, « — » sans note). */
 .note {
 	width: 34px;
 	flex: none;
+	padding-top: 5px;
 	text-align: right;
 	font: 500 10.5px var(--mono);
 	color: var(--mu);
+	font-variant-numeric: tabular-nums;
+}
+
+/* au-dessus du seuil sans être injectée (affinée après coup, ou injection coupée) */
+.note.haute {
+	color: var(--ac);
 }
 
 .note.injectee {
@@ -98,10 +89,16 @@
 	font-size: 10px;
 }
 
-/* ◈ fiche lue par la session : l'accent, en retrait de ◆ (lue, pas injectée). */
 .note.lue {
 	color: color-mix(in srgb, var(--ac) 55%, var(--mu));
 	font-size: 10px;
+}
+
+.corps {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	flex: 1;
 }
 
 .fiche {
@@ -109,12 +106,17 @@
 	align-items: center;
 	gap: 7px;
 	min-width: 0;
-	flex: 1;
-	padding: 4px 2px;
+	padding: 4px 2px 1px;
 	border: 0;
 	background: none;
 	cursor: pointer;
 	text-align: left;
+	color: inherit;
+	font: inherit;
+}
+
+.ligne[data-servie='true'] .fiche {
+	padding-bottom: 4px;
 }
 
 .fiche i {
@@ -133,48 +135,50 @@
 	line-height: 1.3;
 }
 
+.ligne:not([data-servie='true']) .titre {
+	color: var(--mu);
+}
+
 .ligne:hover .titre {
 	color: var(--tx);
 }
 
-/* Lu par les lecteurs d'écran, invisible à l'écran. */
-.masque {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	overflow: hidden;
-	clip-path: inset(50%);
+/* sous le titre, aligné sur lui (après la pastille) : la raison, « piste » */
+.sous {
+	padding: 0 2px 3px 16px;
+	font-size: 10.5px;
+	color: var(--dim);
 	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
-.avis {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 6px;
-	margin: 6px 0 0;
-	font-size: 11.5px;
-	color: var(--mu);
+.piste {
+	color: color-mix(in srgb, var(--ac) 70%, var(--mu));
 }
 
-.demarrer {
-	border: 1px solid var(--bd2);
-	border-radius: var(--r-2);
-	background: var(--s2);
-	color: var(--tx);
-	padding: 1px 8px;
-	font-size: 11.5px;
-	cursor: pointer;
+.attend {
+	color: var(--ac);
 }
 
-/* ▲/▼ quelques secondes après un nouveau calcul, sans colonne réservée : le titre garde toute la largeur le reste du temps. */
+/* le mode d'une fiche injectée, à droite */
+.mode,
+.auto {
+	flex: none;
+	padding-top: 5px;
+	font: 500 10px var(--mono);
+	color: var(--dim);
+	white-space: nowrap;
+	cursor: help;
+}
+
+.auto {
+	color: var(--ac);
+}
+
 .delta {
 	flex: none;
-}
-
-.monte,
-.descend {
-	flex: none;
+	padding-top: 5px;
 	font: 500 10px var(--mono);
 	white-space: nowrap;
 }
@@ -187,56 +191,180 @@
 	color: var(--amber);
 }
 
-/* ➤ et ✗ : posés sur la droite de la ligne au survol (ou au clavier), sans prendre de place le reste du temps */
+.masque {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* La jonction : un filet sous les fiches injectées, et l'état du classement à droite s'il sort de l'ordinaire. */
+.jonction {
+	margin: 4px 0;
+	padding: 2px 4px 0;
+}
+
+.jonction[data-filet='true'] {
+	margin-top: 8px;
+	padding-top: 6px;
+	border-top: 1px solid var(--bd);
+}
+
+.ligneJonction {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	font-size: 11px;
+}
+
+.affinage,
+.ordreSeul {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font: 500 10px var(--mono);
+	color: var(--mu);
+	white-space: nowrap;
+	cursor: help;
+}
+
+.ordreSeul {
+	padding: 0 5px;
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-1);
+}
+
+.pouls {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--ac);
+	animation: pouls 1s ease-in-out infinite alternate;
+}
+
+@keyframes pouls {
+	from {
+		opacity: 0.3;
+	}
+}
+
+.coupure {
+	margin: 6px 0 2px;
+	padding: 7px 9px;
+	border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+	border-radius: var(--r-3);
+	background: color-mix(in srgb, var(--amber) 7%, transparent);
+	font-size: 11.5px;
+}
+
+.coupure p {
+	margin: 0;
+}
+
+.coupure b {
+	color: var(--amber);
+	font-weight: 600;
+}
+
+.detailCoupure {
+	margin-top: 3px !important;
+	color: var(--mu);
+}
+
+.coupure button {
+	margin-top: 6px;
+}
+
+/* Repère du seuil d'injection : un trait pointillé, sa valeur à droite. */
+.seuil {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 2px 4px;
+	font: 500 9.5px var(--mono);
+	color: var(--dim);
+	cursor: help;
+}
+
+.seuil::before {
+	content: '';
+	flex: 1;
+	border-top: 1px dashed color-mix(in srgb, var(--ac) 35%, var(--bd2));
+}
+
+.intertitre {
+	margin: 10px 0 2px;
+	padding: 6px 4px 0;
+	border-top: 1px solid var(--bd);
+	font: 500 10px var(--mono);
+	color: var(--dim);
+}
+
+/* ➤ et ✗ : posés à droite au survol (ou au clavier), sans prendre de place le reste du temps ; pas de `transform` ici : le
+   menu, en position fixe, se cale sur la fenêtre */
 .gestes {
 	position: absolute;
 	right: 2px;
-	top: 50%;
-	transform: translateY(-50%);
+	top: 0;
+	bottom: 0;
 	display: flex;
+	align-items: center;
 	gap: 2px;
-	padding-left: 8px;
-	background: linear-gradient(to right, transparent, var(--s3) 8px);
+	padding-left: 10px;
+	background: linear-gradient(to right, transparent, var(--s3) 10px);
 	opacity: 0;
 	pointer-events: none;
 }
 
 .ligne:hover .gestes,
 .gestes:focus-within,
-.gestes:has([aria-pressed='true']) {
+.gestes[data-force='true'] {
 	opacity: 1;
 	pointer-events: auto;
 }
 
-/* la raison et ▲/▼ cèdent leur place aux gestes */
-.ligne:hover .raison,
-.ligne:hover .delta,
-.ligne:focus-within .raison {
+.gestes[data-force='true'] {
+	background: none;
+}
+
+.ligne:hover .gestes[data-force='true'] {
+	background: linear-gradient(to right, transparent, var(--s3) 10px);
+}
+
+.ligne:hover .delta {
 	visibility: hidden;
 }
 
 .croix {
 	flex: none;
-	width: 20px;
-	height: 20px;
+	width: 22px;
+	height: 22px;
 	border: 0;
 	border-radius: var(--r-1);
 	background: none;
-	/* `--mu` sur `--s1` : contraste AA pour une icône */
 	color: var(--mu);
 	cursor: pointer;
 }
 
-.croix:hover {
+.croix:hover,
+.croix[aria-expanded='true'] {
 	color: var(--red);
 	background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.croix:disabled {
+	opacity: 0.35;
+	cursor: default;
 }
 
 .servir {
 	font-size: 10px;
 }
 
-/* demandée : allumé jusqu'au prochain message de la session */
 .servir[aria-pressed='true'] {
 	color: var(--ac);
 	background: color-mix(in srgb, var(--ac) 18%, transparent);
@@ -245,6 +373,52 @@
 .servir:hover {
 	color: var(--ac);
 	background: color-mix(in srgb, var(--ac) 14%, transparent);
+}
+
+/* La suggestion des 3 sessions. */
+.suggestion {
+	margin-top: 10px;
+	padding: 8px 10px;
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-3);
+	background: var(--s2);
+	font-size: 12px;
+}
+
+.suggestion p {
+	margin: 0;
+	color: var(--mu);
+}
+
+.suggestion b {
+	color: var(--tx);
+	font-weight: 500;
+}
+
+.boutons {
+	display: flex;
+	gap: 6px;
+	margin-top: 7px;
+}
+
+.avis {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin: 8px 0 0;
+	font-size: 11.5px;
+	color: var(--mu);
+}
+
+.demarrer {
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-2);
+	background: var(--s2);
+	color: var(--tx);
+	padding: 1px 8px;
+	font-size: 11.5px;
+	cursor: pointer;
 }
 
 .ecartees {
@@ -274,6 +448,9 @@
 
 .ecartees .titre {
 	flex: 1;
+}
+
+.barre {
 	text-decoration: line-through;
 }
 
@@ -284,17 +461,12 @@
 	color: var(--ac);
 	cursor: pointer;
 	font-size: 11.5px;
+	padding: 0;
 }
 
-/* raison d'une carte quand elle apprend quelque chose (« nommée », « question », « liée à <titre> ») */
-.raison {
-	/* cède la place au titre : une raison longue (« liée à <titre> ») se coupe au lieu d'écraser le titre */
-	flex: 0 1 auto;
-	min-width: 0;
-	max-width: 45%;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	font-size: 10.5px;
-	color: var(--dim);
-	white-space: nowrap;
+@media (prefers-reduced-motion: reduce) {
+	.ligne[data-nouvelle='true'],
+	.pouls {
+		animation: none;
+	}
 }
