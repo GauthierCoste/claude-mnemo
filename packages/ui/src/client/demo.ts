@@ -951,7 +951,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			case ROUTES.reglages:
 				return reglagesDemo();
 			case ROUTES.sante:
-				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.7.0' } satisfies SanteVue;
+				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.7.1' } satisfies SanteVue;
 			case ROUTES.graphe:
 				return graphe(monde.memoire);
 			case ROUTES.fiche:
