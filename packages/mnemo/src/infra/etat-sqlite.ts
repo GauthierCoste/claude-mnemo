@@ -155,6 +155,8 @@ CREATE TABLE IF NOT EXISTS gestes (
 CREATE INDEX IF NOT EXISTS gestes_fiche ON gestes (fiche, horodatage_ms);
 CREATE INDEX IF NOT EXISTS gestes_horodatage ON gestes (horodatage_ms);
 CREATE INDEX IF NOT EXISTS gestes_session ON gestes (session);
+-- suivi des injections automatiques : la dernière réactivation, les dernières injections d'un niveau
+CREATE INDEX IF NOT EXISTS gestes_sorte ON gestes (geste, horodatage_ms);
 ${SCHEMA_ECARTEES_TOUJOURS}`;
 
 const SCHEMA = `
@@ -449,7 +451,7 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
 			} else if (version === VERSION_ETAT) {
 				// 13 non publiée : un état déjà en 13 (développement) reçoit l'état d'affinage du classement, la durée vue du service,
-				// la calibration du classement et les écartées toujours
+				// la calibration du classement, les écartées toujours et l'index du suivi des injections automatiques
 				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
 				if (!colonnesServis.includes('ms_service')) base.exec('ALTER TABLE servis ADD COLUMN ms_service INTEGER');
@@ -457,6 +459,7 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				base.exec(SCHEMA_ECARTEES_TOUJOURS);
 				const colonnesEcartees = (base.prepare('PRAGMA table_info(ecartees_toujours)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesEcartees.includes('retablie_ms')) base.exec('ALTER TABLE ecartees_toujours ADD COLUMN retablie_ms INTEGER');
+				base.exec('CREATE INDEX IF NOT EXISTS gestes_sorte ON gestes (geste, horodatage_ms)');
 			} else if (version !== VERSION_ETAT) {
 				throw new ErreurEtat(
 					`L'état des sessions (${chemin}) est en version de schéma ${version}, ce Mnemo lit la version ${VERSION_ETAT} : rien n'est effacé, mettre Mnemo à jour.`,
@@ -1053,6 +1056,10 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 			if (filtre.depuisMs !== undefined) {
 				conditions.push('horodatage_ms >= ?');
 				parametres.push(filtre.depuisMs);
+			}
+			if (filtre.niveau !== undefined) {
+				conditions.push("json_extract(note, '$.niveau') = ?");
+				parametres.push(filtre.niveau);
 			}
 			if (filtre.sortes !== undefined) {
 				if (filtre.sortes.length === 0) return [];

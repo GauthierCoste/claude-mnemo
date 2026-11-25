@@ -5,6 +5,7 @@ import { CODE_FERMETURE_LENT, ENTREE_MAX_OCTETS, MESSAGE_CLIENT_MAX_OCTETS, ROUT
 import type { MessageClient, MessageServeur, SessionVue } from '@mnemo/contrat';
 import type { Session } from '../../src/domaine/session.ts';
 import { echelleDesSignaux, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
+import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import { signalerGroupe } from '../../src/infra/processus.ts';
 import { terminauxPty } from '../../src/infra/terminaux-pty.ts';
@@ -299,6 +300,34 @@ describe('WebSocket : messages', () => {
 		expect((await appeler(c.service.port, 'POST', ROUTES.injectionAutomatique, { jeton: c.service.jeton, corps: { session: UUID } })).statut).toBe(200);
 		const levee = (m: MessageServeur) => m.type === 'session' && m.session.id === UUID && m.session.injectionCoupee === undefined;
 		expect(await jusqua(() => client.recus.slice(avant).some(levee), 2000)).toBe(true);
+	});
+
+	it('vue de session rediffusée au démarrage (coupure déjà là) et après un nouvel apprentissage qui la lève, sans geste', async () => {
+		const T = Date.parse('2026-11-25T11:00:00.000Z');
+		const sens = (apprisLe: string) => ({ ...modeleNonAppris(), apprisLe, refus: [], accepte: true, echelle: echelleDesSignaux(REGLAGES_PAR_DEFAUT.contexte), biais: 3, poids: { cosinusRelatif: 0 } });
+		let apprisLe = '2026-11-25T10:00:00.000Z';
+		const c = await serviceFaux(
+			{ sondageMs: 100 },
+			{
+				avant: async (etat, _racine, dep) => {
+					await etat.creer(sessionFixe(UUID));
+					dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens: sens(apprisLe) }, installes: { sens: null, reranker: null } });
+					for (let i = 0; i < 17; i++) {
+						await etat.noterGeste({ geste: 'injectee_auto', session: UUID, fiche: `notes/n${i}.md`, empreinte: null, horodatageMs: T + i, note: { niveau: 'sens' } });
+						await etat.noterGeste({ geste: 'ecartee_ici', session: UUID, fiche: `notes/n${i}.md`, empreinte: null, horodatageMs: T + 100 + i });
+					}
+				},
+			},
+		);
+		const client = await connecter(c);
+		const coupee = (m: MessageServeur) => (m.type === 'session' && m.session.id === UUID && (m.session.injectionCoupee?.length ?? 0) > 0) || (m.type === 'sessions' && m.sessions.some((s) => s.id === UUID && (s.injectionCoupee?.length ?? 0) > 0));
+		expect(await jusqua(() => client.recus.some(coupee), 2000)).toBe(true);
+		const avant = client.recus.length;
+		// apprentissage plus récent que les écarts : la coupure tombe, rediffusée sans geste ni message
+		apprisLe = '2026-11-25T12:00:00.000Z';
+		const levee = (m: MessageServeur) => m.type === 'session' && m.session.id === UUID && m.session.injectionCoupee === undefined;
+		expect(await jusqua(() => client.recus.slice(avant).some(levee), 3000)).toBe(true);
+		expect(await c.etat.gestes({ sortes: ['injection_reactivee'], limite: null })).toEqual([]);
 	});
 
 	it('sondage : une entrée journalisée est diffusée ; la fin d’une session diffuse ses écartés vidés', { timeout: 20_000 }, async () => {

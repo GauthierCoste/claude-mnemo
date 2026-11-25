@@ -84,7 +84,18 @@ export function noteApprise(m: ModelesDeNote): boolean {
  * `aprioriConnu` faux (l'a priori des gestes n'a pas été lu : hook sans service) : une note dont le modèle pèse l'a priori n'est
  * pas calibrée (elle ordonne, sans %).
  */
-export type NoteDeLaCandidate = { p: number; pSansApriori: number; niveau: NiveauDeNote; accepte: boolean; coupee?: true };
+export type NoteDeLaCandidate = {
+	p: number;
+	pSansApriori: number;
+	niveau: NiveauDeNote;
+	accepte: boolean;
+	coupee?: true;
+	/**
+	 * Niveau coupé par le suivi : la note du niveau suivant (Sens seul) s'il est accepté et pas coupé ; c'est elle qui décide de
+	 * l'injection automatique (le % affiché et l'ordre restent ceux du niveau coupé).
+	 */
+	relais?: NoteDeLaCandidate;
+};
 
 /** Un modèle qui donne des % : accepté, coupé par le suivi compris (la coupure n'arrête que l'injection automatique). */
 const calibre = (etat: EtatDuModele): boolean => etat === 'accepte' || etat === 'coupe';
@@ -92,15 +103,30 @@ const calibre = (etat: EtatDuModele): boolean => etat === 'accepte' || etat === 
 export function noterLaCandidate(m: ModelesDeNote, s: SignauxDeNote, options: { aprioriConnu?: boolean } = {}): NoteDeLaCandidate | null {
 	const completsPermis = calibre(m.complets.etat) || !calibre(m.sens.etat);
 	const niveaux: NiveauDeNote[] = s.logit !== undefined && s.logit !== null && completsPermis ? ['complets', 'sens'] : ['sens'];
-	for (const niveau of niveaux) {
+	const noterAu = (niveau: NiveauDeNote): NoteDeLaCandidate | null => {
 		const { modele, etat } = m[niveau];
-		if (etat === 'non_appris') continue;
+		if (etat === 'non_appris') return null;
 		const n = noteDeConfiance(modele, niveau, s);
-		if (n === null) continue;
+		if (n === null) return null;
 		const aprioriManquant = options.aprioriConnu === false && (modele.poids.apriori ?? 0) > 0;
 		return { ...n, niveau, accepte: calibre(etat) && !aprioriManquant, ...(etat === 'coupe' ? { coupee: true as const } : {}) };
+	};
+	for (const [i, niveau] of niveaux.entries()) {
+		const n = noterAu(niveau);
+		if (n === null) continue;
+		if (n.coupee !== true) return n;
+		// niveau coupé : le suivant, accepté et pas coupé, relaie l'injection automatique
+		const relais = niveaux.slice(i + 1).map(noterAu).find((r) => r !== null && r.accepte && r.coupee !== true) ?? null;
+		return relais === null ? n : { ...n, relais };
 	}
 	return null;
+}
+
+/** La note qui décide de l'injection automatique : celle de la candidate, ou son relais si son niveau est coupé ; null : aucune. */
+export function noteDInjection(n: NoteDeLaCandidate | null | undefined): NoteDeLaCandidate | null {
+	if (n === null || n === undefined) return null;
+	if (n.coupee !== true) return n;
+	return n.relais ?? null;
 }
 
 /**

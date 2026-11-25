@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Carte, CartesCalculees } from '../../src/application/cartes.ts';
 import { rendreServi, servir, TITRE_INJECTEES_PAR_MNEMO } from '../../src/application/servir.ts';
 import type { DemandeServir, Servi } from '../../src/application/servir.ts';
@@ -308,6 +308,10 @@ describe('servir : injection automatique (note de confiance acceptée)', () => {
 		const deja = await servir(dep, demande({ dejaServies: new Map([[AVOIRS, await empreinte(dep, AVOIRS)]]) }));
 		expect(injectees(deja)).toEqual([]);
 		expect(cartes(deja)).not.toContain(AVOIRS);
+		// sans la trace « servie », la fiche passerait : même note, au seuil et au-dessus de la garde
+		const ligne = deja.calcul.classement.find((l) => l.chemin === AVOIRS)!;
+		expect(ligne.p).toBeGreaterThanOrEqual(REGLAGES_PAR_DEFAUT.contexte.seuilInjection / 100);
+		expect(ligne.pSansApriori).toBeGreaterThanOrEqual(0.7);
 		expect(injectees(await servir(dep, demande({ dejaServies: new Map([[AVOIRS, 'ancienne']]) })))).toEqual([AVOIRS]);
 	});
 
@@ -378,6 +382,74 @@ describe('servir : injection automatique (note de confiance acceptée)', () => {
 		expect(s.calcul.classement.map((l) => [l.chemin, l.p])).toEqual(libre.calcul.classement.map((l) => [l.chemin, l.p]));
 		expect(s.calcul.classement.find((l) => l.chemin === AVOIRS)!.p).toBeGreaterThanOrEqual(0.9);
 		expect(cartes(s)[0]).toBe(AVOIRS);
+	});
+
+	it('Complets coupé, Sens seul accepté : la candidate notée par Complets est injectée selon sa note Sens ; les % affichés restent ceux de Complets', async () => {
+		const dep = await memoireNotee();
+		const complets = modele({ biais: -2, poids: { logit: 1, cosinusRelatif: 0 } });
+		avecModeles(dep, { complets, sens: modele() });
+		// le reranker trouve aussi Avoirs : notée par Complets (logit), elle passerait à ce niveau
+		dep.reranker = { noter: async (_r, textes) => textes.map((t) => (t.startsWith('Avoirs') ? 6 : -6)) };
+		const duree = dureeDuReranker();
+		for (const [documents, ms] of [[5, 35], [10, 60], [5, 35]] as const) duree.noter({ documents, ms });
+		const libre = await servir(dep, demande({ dureeReranker: duree }));
+		expect(libre.calcul.injectees.map((f) => [f.chemin, f.niveau])).toEqual([[AVOIRS, 'complets']]);
+		const coupure = { niveau: 'complets' as const, injections: 20, ecartees: 17, depuisMs: 1, motif: 'm' };
+		const s = await servir(dep, demande({ dureeReranker: duree, modeles: avecLesCoupures(modelesActifs(dep), { complets: coupure, sens: null }) }));
+		// la mieux classée n'est pas bloquée : sa note Sens la fait passer
+		expect(s.calcul.injectees.map((f) => [f.chemin, f.niveau])).toEqual([[AVOIRS, 'sens']]);
+		expect(s.calcul.classement.map((l) => [l.chemin, l.p])).toEqual(libre.calcul.classement.map((l) => [l.chemin, l.p]));
+		// les deux niveaux coupés : rien
+		const deux = await servir(dep, demande({ dureeReranker: duree, modeles: avecLesCoupures(modelesActifs(dep), { complets: coupure, sens: { ...coupure, niveau: 'sens' } }) }));
+		expect(injectees(deux)).toEqual([]);
+	});
+
+	it('session inconnue (`injectionAutomatique: false`) : aucune injection automatique', async () => {
+		const dep = await memoireNotee();
+		avecModeles(dep, { sens: modele() });
+		expect(injectees(await servir(dep, demande({ injectionAutomatique: false })))).toEqual([]);
+		expect(injectees(await servir(dep, demande()))).toEqual([AVOIRS]);
+	});
+
+	it('message muet avec une fiche demandée : classé (geste), jamais d’injection automatique, même au seuil', async () => {
+		const dep = await memoireNotee();
+		// toutes les candidates au-dessus du seuil
+		avecModeles(dep, { sens: modele({ biais: 3, poids: { cosinusRelatif: 0 } }) });
+		const s = await servir(dep, demande({ message: 'ok', muet: 'sans_contenu', demandees: [REMISES] }));
+		expect(s.demandees.map((f) => f.chemin)).toEqual([REMISES]);
+		expect(injectees(s)).toEqual([]);
+		expect(s.texte).not.toContain(TITRE_INJECTEES_PAR_MNEMO);
+		// le message est classé (le geste vaut désignation), sans requête : aucune candidate n'est notée, et `injecter` est faux
+		expect(s.calcul.classement.length).toBeGreaterThan(0);
+		expect(s.calcul.classement.every((l) => l.p === null)).toBe(true);
+		// le même geste sur un message porteur : l'injection a lieu
+		expect(injectees(await servir(dep, demande({ demandees: [REMISES] }))).length).toBeGreaterThan(0);
+	});
+
+	describe('réserve après injection', () => {
+		afterEach(() => vi.restoreAllMocks());
+		it('plus le temps de lire la fiche suivante (moins de 20 ms avant la fin du calcul) : elle n’est pas injectée, elle devient une piste', async () => {
+			const dep = await memoireNotee();
+			avecModeles(dep, { sens: modele({ biais: 3, poids: { cosinusRelatif: 0 } }) });
+			const tout = await servir(dep, demande());
+			expect(injectees(tout)).toHaveLength(2);
+			const [premiere, seconde] = injectees(tout);
+			// la lecture de la première fiche injectée fait passer l'horloge à 10 ms de la fin
+			const fin = Date.now() + 5000;
+			const reel = Date.now.bind(Date);
+			let decalage = 0;
+			vi.spyOn(Date, 'now').mockImplementation(() => reel() + decalage);
+			const lire = dep.coffre.lire.bind(dep.coffre);
+			dep.coffre.lire = async (chemin) => {
+				const texte = await lire(chemin);
+				if (chemin === premiere) decalage = fin - 10 - reel();
+				return texte;
+			};
+			const s = await servir(dep, demande({ fin }));
+			expect(injectees(s)).toEqual([premiere]);
+			expect(cartes(s)).toContain(seconde);
+			expect(s.calcul.classement.find((l) => l.chemin === seconde)).toMatchObject({ piste: true });
+		});
 	});
 
 	it('ni à un message muet, ni à l’outil `contexte`', async () => {

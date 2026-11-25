@@ -29,11 +29,13 @@ import type { AppClaude } from './claude-desktop.ts';
 import { fichierConfigClaudeDesktop } from '../../infra/config-claude-desktop.ts';
 import { nodeDurable } from '../../infra/node-durable.ts';
 import { choixDesTypesAConfirmer } from '../../application/types-du-coffre.ts';
-import { CORPS_MAX, coupuresConnues, ErreurHttp, routes, trouverRoute } from './routes.ts';
+import { CORPS_MAX, ErreurHttp, routes, trouverRoute } from './routes.ts';
 import type { Reponse, Route } from './routes.ts';
 import { ENTETES_SECURITE, hoteValide, jetonDeLEntete, jetonDuWebSocket, jetonValide, origineValide } from './securite.ts';
 import { dossierInterface, servirInterface } from './statique.ts';
-import { racineAffichee, titresDeLIndex } from './vues.ts';
+import { racineAffichee, titresDeLIndex, vueCoupures } from './vues.ts';
+import { suiviDesInjections } from '../../application/suivi-injection.ts';
+import { modelesActifs } from '../../application/note-du-classement.ts';
 import { creerHub } from './websocket.ts';
 import { aprioriDesGestes } from '../../application/apriori.ts';
 import { dureeDuReranker } from '../../application/duree-reranker.ts';
@@ -319,12 +321,18 @@ export async function demarrerService(options: {
 	// a priori des gestes entre sessions : lu une fois en arrière-plan, puis seulement les gestes nouveaux
 	const apriori = aprioriDesGestes(pil.etat, { chemins: async () => (await dep.index.titres()).map((t) => t.chemin), journal });
 	enFond(apriori.actualiser({ ecartees: true }));
-	// injection automatique coupée par le suivi : lue au démarrage, puis après chaque geste (vue des sessions)
-	const coupures = coupuresConnues(dep, pil.etat);
-	enFond(coupures.relire().catch(() => false));
+	// injection automatique coupée par le suivi : tenue ici, lue au démarrage (après la création du hub), puis en fond après
+	// chaque geste et à chaque nouvel apprentissage ; la vue des sessions en cours est rediffusée quand elle change
+	const suivi = suiviDesInjections(
+		pil.etat,
+		() => modelesActifs(dep),
+		async () => {
+			for (const s of await pil.etat.lister({ archivees: false }).catch(() => [])) hub.signaler(s);
+		},
+	);
 	const hub = creerHub({
 		suggestions: (session) => apriori.suggestions(session),
-		coupures: () => coupures.lire(),
+		coupures: () => vueCoupures(suivi.derniere()),
 		etatModeles: async () => vueModeles(await modeles.etat()),
 		pilote,
 		etat: pil.etat,
@@ -335,6 +343,7 @@ export async function demarrerService(options: {
 		...(reglages.pingMs === undefined ? {} : { pingMs: reglages.pingMs }),
 		...(reglages.sondageMs === undefined ? {} : { sondageMs: reglages.sondageMs }),
 	});
+	enFond(suivi.actualiser().catch(() => false));
 	// état des modèles de la machine, diffusé quand il change (surveillance de ses fichiers, sondage de secours)
 	const diffusionModeles = diffuserModeles({
 		modeles,
@@ -376,7 +385,7 @@ export async function demarrerService(options: {
 			journal,
 			depotMax,
 			apriori,
-			coupures,
+			suivi,
 			dureeReranker,
 		}),
 		...routesProfils(dep, () => hub.diffuser({ type: 'memoire', modifieeMs: Date.now() })),
@@ -485,6 +494,8 @@ export async function demarrerService(options: {
 			// tout le corps doit avoir été accepté (taille), même par une route qui ne l'a pas lu
 			await corps;
 			await repondreApresFlux(r, false);
+			// la réponse est écrite : ce qui l'attendait (jamais avant)
+			r.apres?.();
 		} catch (erreur) {
 			// personne n'attend plus la réponse
 			if (abandon.signal.aborted) return;
@@ -574,7 +585,12 @@ export async function demarrerService(options: {
 		void arreter().finally(signalerPerte);
 		return false;
 	};
-	const surveillance = setInterval(() => verifierVerrou('surveillance'), reglages.sondageMs ?? SURVEILLANCE_VERROU_MS);
+	const surveillance = setInterval(() => {
+		if (!verifierVerrou('surveillance')) return;
+		// un nouvel apprentissage (coefficients relus s'ils ont changé) périme le suivi des injections : relu en fond, rediffusé
+		// s'il change, sans attendre le prochain message
+		suivi.coupures(modelesActifs(dep));
+	}, reglages.sondageMs ?? SURVEILLANCE_VERROU_MS);
 	surveillance.unref();
 
 	// relance des sessions du service précédent, puis préchauffage du cache de vecteurs (les hooks servis ici en profitent)

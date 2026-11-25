@@ -1,8 +1,13 @@
 /**
- * Suivi des injections automatiques (spec classement vivant § 6.4) : les coupures se déduisent du journal des gestes à chaque
- * lecture (`domaine/suivi-injection.ts`), et la réactivation par l'utilisateur est un geste noté (`injection_reactivee`).
+ * Suivi des injections automatiques (spec classement vivant § 6.4) : les coupures se déduisent du journal des gestes
+ * (`domaine/suivi-injection.ts`), et la réactivation par l'utilisateur est un geste noté (`injection_reactivee`).
+ *
+ * Lecture bornée : par niveau, la dernière réactivation, puis les `FENETRE_SUIVI` dernières injections automatiques depuis la
+ * référence (apprentissage ou réactivation), puis seulement les gestes d'après la plus ancienne d'entre elles. Le service garde
+ * l'état en mémoire (`suiviDesInjections`) et le relit en fond, après les gestes et quand les modèles changent ; le hook ne le
+ * relit pas. Sans service (ou avant la première lecture), le hook fait cette lecture bornée.
  */
-import { AUCUNE_COUPURE, avecLesCoupures, coupuresDesNiveaux, GESTES_DU_SUIVI, instantDApprentissage } from '../domaine/suivi-injection.ts';
+import { AUCUNE_COUPURE, avecLesCoupures, coupuresDesNiveaux, FENETRE_SUIVI, instantDApprentissage } from '../domaine/suivi-injection.ts';
 import type { CoupuresDInjection, GesteDuSuivi } from '../domaine/suivi-injection.ts';
 import type { ModelesDeNote } from '../domaine/note-de-confiance.ts';
 import type { NiveauDeNote } from '../domaine/modele-de-note.ts';
@@ -15,29 +20,107 @@ const niveauDe = (g: GesteNote): NiveauDeNote | null => {
 	const n = g.note?.['niveau'];
 	return n === 'complets' || n === 'sens' ? n : null;
 };
+const versSuivi = (g: GesteNote): GesteDuSuivi => ({ rang: g.rang, horodatageMs: g.horodatageMs, geste: g.geste, session: g.session, fiche: g.fiche, niveau: niveauDe(g) });
 
 /**
- * Les coupures des niveaux dont le modèle est accepté, lues dans le journal des gestes depuis le plus ancien apprentissage en
- * service (sans les vecteurs) ; aucune lecture si aucun modèle n'est accepté. Journal illisible : aucune coupure (le suivi est
- * un filet sur 100 injections ; un message sans lui n'en change pas l'issue).
+ * Les coupures des niveaux dont le modèle est accepté, par une lecture bornée du journal des gestes (sans les vecteurs) ; aucune
+ * lecture si aucun modèle n'est accepté. Journal illisible : aucune coupure (le suivi est un filet sur 100 injections ; un
+ * message sans lui n'en change pas l'issue).
  */
 export async function coupuresDesInjections(etat: Pick<EtatSessions, 'gestes'>, modeles: ModelesDeNote): Promise<CoupuresDInjection> {
 	const acceptes = NIVEAUX.filter((n) => modeles[n].etat === 'accepte');
 	if (acceptes.length === 0) return AUCUNE_COUPURE;
-	const references = acceptes.map((n) => instantDApprentissage(modeles[n].modele.apprisLe));
-	const depuisMs = references.some((r) => r === null) ? undefined : Math.min(...(references as number[]));
 	try {
-		const lus = await etat.gestes({ sortes: GESTES_DU_SUIVI, sansVecteur: true, limite: null, ...(depuisMs === undefined ? {} : { depuisMs }) });
-		const gestes: GesteDuSuivi[] = lus.map((g) => ({ rang: g.rang, horodatageMs: g.horodatageMs, geste: g.geste, session: g.session, fiche: g.fiche, niveau: niveauDe(g) }));
-		return coupuresDesNiveaux(gestes, modeles);
+		const lus: GesteNote[] = [];
+		let borne = Infinity;
+		for (const niveau of acceptes) {
+			const apprentissage = instantDApprentissage(modeles[niveau].modele.apprisLe);
+			const [reactivation] = await etat.gestes({ sortes: ['injection_reactivee'], niveau, sansVecteur: true, limite: 1 });
+			if (reactivation !== undefined) lus.push(reactivation);
+			const reference = Math.max(apprentissage ?? -Infinity, reactivation?.horodatageMs ?? -Infinity);
+			const injections = await etat.gestes({ sortes: ['injectee_auto'], niveau, sansVecteur: true, limite: FENETRE_SUIVI, ...(Number.isFinite(reference) ? { depuisMs: reference } : {}) });
+			for (const g of injections) borne = Math.min(borne, g.horodatageMs);
+		}
+		// aucune injection automatique depuis les références : rien à couper
+		if (!Number.isFinite(borne)) return AUCUNE_COUPURE;
+		lus.push(...(await etat.gestes({ sortes: ['injectee_auto', 'ecartee_ici', 'ecartee_toujours', 'retablie'], depuisMs: borne, sansVecteur: true, limite: null })));
+		return coupuresDesNiveaux(lus.map(versSuivi), modeles);
 	} catch {
 		return AUCUNE_COUPURE;
 	}
 }
 
-/** Les modèles du message, avec les coupures du suivi appliquées (un niveau coupé : ni % ni injection). */
-export async function modelesSuivis(etat: Pick<EtatSessions, 'gestes'>, modeles: ModelesDeNote): Promise<ModelesDeNote> {
-	return avecLesCoupures(modeles, await coupuresDesInjections(etat, modeles));
+/** Identité de ce que le suivi a lu : l'état et l'apprentissage du modèle de chaque niveau. */
+const signature = (m: ModelesDeNote): string => JSON.stringify(NIVEAUX.map((n) => [m[n].etat, m[n].modele.apprisLe]));
+
+/**
+ * Le suivi tenu par le service. `coupures(modeles)` : l'état gardé s'il a été lu pour ces modèles (même état, même
+ * apprentissage) ; null sinon (pas encore lu, ou nouvel apprentissage), une relecture est alors lancée. `actualiser` relit
+ * (une relecture à la fois, plus une seule en attente pour toutes les demandes qui arrivent entre-temps) et rend vrai si les
+ * coupures ont changé. `perime` : les modèles ont changé depuis la dernière lecture. `derniere` : les dernières lues (vue des
+ * sessions). `quandChange` : appelé après la première lecture et après chaque lecture qui change les coupures (rediffusion).
+ */
+export type SuiviDesInjections = {
+	coupures(modeles: ModelesDeNote): CoupuresDInjection | null;
+	actualiser(): Promise<boolean>;
+	perime(modeles: ModelesDeNote): boolean;
+	derniere(): CoupuresDInjection;
+};
+
+export function suiviDesInjections(
+	etat: Pick<EtatSessions, 'gestes'>,
+	modeles: () => ModelesDeNote,
+	quandChange: (coupures: CoupuresDInjection) => Promise<void> | void = () => {},
+): SuiviDesInjections {
+	let lu: { signature: string; coupures: CoupuresDInjection } | null = null;
+	let enCours: Promise<boolean> | null = null;
+	let suivante: Promise<boolean> | null = null;
+
+	const lire = async (): Promise<boolean> => {
+		const m = modeles();
+		const coupures = await coupuresDesInjections(etat, m);
+		const premiere = lu === null;
+		const change = JSON.stringify(coupures) !== JSON.stringify(lu?.coupures ?? AUCUNE_COUPURE);
+		lu = { signature: signature(m), coupures };
+		if (premiere || change) await Promise.resolve(quandChange(coupures)).catch(() => {});
+		return change;
+	};
+	const lancer = (): Promise<boolean> => {
+		const p = lire().finally(() => {
+			if (enCours === p) enCours = null;
+		});
+		enCours = p;
+		return p;
+	};
+	const actualiser = (): Promise<boolean> => {
+		if (enCours === null) return lancer();
+		suivante ??= enCours
+			.catch(() => false)
+			.then(() => {
+				suivante = null;
+				return lancer();
+			});
+		return suivante;
+	};
+	const perime = (m: ModelesDeNote): boolean => lu === null || lu.signature !== signature(m);
+	return {
+		coupures(m) {
+			if (!perime(m)) return lu!.coupures;
+			void actualiser().catch(() => false);
+			return null;
+		},
+		actualiser,
+		perime,
+		derniere: () => lu?.coupures ?? AUCUNE_COUPURE,
+	};
+}
+
+/**
+ * Les modèles du message avec les coupures appliquées : celles du suivi du service s'il les a lues pour ces modèles, sinon une
+ * lecture bornée du journal.
+ */
+export async function modelesSuivis(etat: Pick<EtatSessions, 'gestes'>, modeles: ModelesDeNote, suivi?: Pick<SuiviDesInjections, 'coupures'>): Promise<ModelesDeNote> {
+	return avecLesCoupures(modeles, suivi?.coupures(modeles) ?? (await coupuresDesInjections(etat, modeles)));
 }
 
 /**

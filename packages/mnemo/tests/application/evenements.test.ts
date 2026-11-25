@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
 import { DEMANDE_MAX, relatifALaRacine, traiterEvenement } from '../../src/application/evenements.ts';
 import type { EntreeHook } from '../../src/application/evenements.ts';
@@ -10,7 +10,8 @@ import { porteursRecents } from '../../src/application/porteurs-recents.ts';
 import { aprioriDesGestes } from '../../src/application/apriori.ts';
 import { affiner } from '../../src/application/affiner.ts';
 import { modelesActifs } from '../../src/application/note-du-classement.ts';
-import { coupuresDesInjections, reactiverInjection } from '../../src/application/suivi-injection.ts';
+import { coupuresDesInjections, reactiverInjection, suiviDesInjections } from '../../src/application/suivi-injection.ts';
+import { noterGeste } from '../../src/application/gestes.ts';
 import type { DemandeAffinage } from '../../src/application/affiner.ts';
 import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
@@ -879,15 +880,108 @@ describe('traiterEvenement : injection automatique', () => {
 		expect((await etat.servis(ID, 1))[0]!.cartes.every((c) => c.raison !== 'liee')).toBe(true);
 		// une fois par session
 		expect(suivant.contexte ?? '').not.toContain('Un avoir annule une facture.');
+		// le même message encore : la fiche passerait sans la trace « servie » (au seuil, au-dessus de la garde), elle ne repart pas
+		const encore = await traiterEvenement(dep, pil, message(12, 'montant exact des avoirs annulés en novembre'), local);
+		expect(encore.contexte ?? '').not.toContain('Un avoir annule une facture.');
+		const ligne = (await etat.servis(ID, 1))[0]!.classement.find((c) => c.id === AVOIRS)!;
+		expect(ligne.p).toBeGreaterThanOrEqual(REGLAGES_PAR_DEFAUT.contexte.seuilInjection / 100);
+		expect(ligne.pSansApriori ?? ligne.p).toBeGreaterThanOrEqual(0.7);
+		expect(ligne.auto).toBeUndefined();
+		// Avoirs une seule fois (la deuxième injection est celle de Remises, au message sur les remises)
+		expect((await etat.gestes({ sortes: ['injectee_auto'], limite: null })).map((g) => g.fiche).filter((f) => f === AVOIRS)).toEqual([AVOIRS]);
 	});
 
-	it('service : le geste est noté après la réponse, par `enFond`', async () => {
+	it('service : le geste attend que la route ait écrit la réponse (`aLaReponse`) ; la trace « servie » est notée avec la réponse', async () => {
 		const { dep, etat, pil } = await memoire();
-		const taches: Promise<unknown>[] = [];
-		await traiterEvenement(dep, pil, message(10, 'montant exact des avoirs annulés en novembre'), { ...local, enFond: (t) => taches.push(t) });
+		const apres: (() => Promise<unknown>)[] = [];
+		const enFond: Promise<unknown>[] = [];
+		const r = await traiterEvenement(dep, pil, message(10, 'montant exact des avoirs annulés en novembre'), { ...local, enFond: (t) => enFond.push(t), aLaReponse: (t) => apres.push(t) });
+		expect(r.contexte).toContain('Fiches injectées par Mnemo');
+		await Promise.all(enFond);
 		expect(await etat.gestes({ limite: null })).toEqual([]);
-		await Promise.all(taches);
+		expect((await etat.fichesServiesLuesOuEcrites(ID)).some((f) => f.chemin === AVOIRS)).toBe(true);
+		expect(apres).toHaveLength(1);
+		await apres[0]!();
 		expect((await etat.gestes({ limite: null })).map((g) => g.geste)).toEqual(['injectee_auto']);
+	});
+
+	describe('plus le temps d’écrire les traces d’une injection automatique', () => {
+		afterEach(() => vi.restoreAllMocks());
+		/** La lecture de la fiche pour l'injecter amène l'horloge à `resteMs` de l'échéance du hook. */
+		function horlogeAuBord(dep: Awaited<ReturnType<typeof memoire>>['dep'], echeance: number, resteMs: number) {
+			const reel = Date.now.bind(Date);
+			let decalage = 0;
+			vi.spyOn(Date, 'now').mockImplementation(() => reel() + decalage);
+			const lire = dep.coffre.lire.bind(dep.coffre);
+			dep.coffre.lire = async (chemin) => {
+				const texte = await lire(chemin);
+				if (chemin === AVOIRS && decalage === 0) decalage = echeance - resteMs - reel();
+				return texte;
+			};
+		}
+		for (const avecService of [false, true]) {
+			it(`${avecService ? 'service' : 'sans service'} : la fiche ne part pas ; ni servie, ni journalisée \`auto\`, ni geste ; injectable au message suivant`, async () => {
+				const { dep, etat, pil } = await memoire();
+				const echeance = Date.now() + 10_000;
+				// assez pour noter le reste et répondre (MARGE_ECRITURE_MS), pas pour les traces de l'injection automatique
+				horlogeAuBord(dep, echeance, 45);
+				const apres: (() => Promise<unknown>)[] = [];
+				const service = avecService ? { enFond: () => {}, aLaReponse: (t: () => Promise<unknown>) => apres.push(t) } : {};
+				const r = await traiterEvenement(dep, pil, message(10, 'montant exact des avoirs annulés en novembre'), { ...local, echeance, ...service });
+				expect(r.contexte ?? '').not.toContain('Fiches injectées par Mnemo');
+				expect(r.contexte ?? '').not.toContain('Un avoir annule une facture.');
+				expect(apres).toEqual([]);
+				expect(await etat.gestes({ limite: null })).toEqual([]);
+				expect((await etat.fichesServiesLuesOuEcrites(ID)).some((f) => f.chemin === AVOIRS)).toBe(false);
+				const [j] = await etat.servis(ID, 1);
+				expect(j!.ids).not.toContain(AVOIRS);
+				expect(j!.classement.some((c) => c.auto === true)).toBe(false);
+				vi.restoreAllMocks();
+				// le message suivant, avec le temps : elle part
+				expect((await traiterEvenement(dep, pil, message(11, 'montant exact des avoirs annulés en novembre'), local)).contexte).toContain('Un avoir annule une facture.');
+			});
+		}
+	});
+
+	it('session inconnue : aucune injection automatique', async () => {
+		const { dep, etat, pil } = await memoire();
+		const r = await traiterEvenement(dep, pil, message(10, 'montant exact des avoirs annulés en novembre'), local);
+		expect(r.contexte).toContain('Fiches injectées par Mnemo');
+		const inconnue = await traiterEvenement(dep, pil, entree('message', 11, { session: '99999999-2222-4333-8444-555555555555', prompt: 'montant exact des avoirs annulés en novembre' }), local);
+		expect(inconnue.contexte ?? '').not.toContain('Fiches injectées par Mnemo');
+		expect((await etat.gestes({ limite: null })).map((g) => g.geste)).toEqual(['injectee_auto']);
+	});
+
+	it('chaîne complète, après l’apprentissage : hook → geste `injectee_auto` → écart → coupure ; le suivi du service la tient sans relire au hook', async () => {
+		const { dep, etat, pil } = await memoire();
+		const T = Date.parse('2026-11-25T11:00:00.000Z');
+		const PROMPT = 'montant exact des avoirs annulés en novembre';
+		// 17 sessions : Avoirs injectée par le hook dans chacune, puis écartée ici par l'utilisateur
+		for (let i = 0; i < 17; i++) {
+			const id = `${String(i + 10).padStart(8, '0')}-2222-4333-8444-555555555555`;
+			await etat.creer(session({ id }));
+			const r = await traiterEvenement(dep, pil, entree('message', T + i * 1000, { session: id, prompt: PROMPT }), local);
+			expect(r.contexte).toContain('Un avoir annule une facture.');
+			await noterGeste(dep, etat, { geste: 'ecartee_ici', session: id, fiche: AVOIRS, empreinte: null, horodatageMs: T + i * 1000 + 500 });
+		}
+		const gestes = await etat.gestes({ sortes: ['injectee_auto'], limite: null });
+		expect(gestes).toHaveLength(17);
+		expect(gestes.every((g) => g.horodatageMs > Date.parse('2026-11-25T10:00:00.000Z') && g.note?.['niveau'] === 'sens')).toBe(true);
+		expect((await coupuresDesInjections(etat, modelesActifs(dep))).sens).toMatchObject({ injections: 17, ecartees: 17 });
+		// sans service : coupée au message suivant (lecture bornée)
+		expect((await traiterEvenement(dep, pil, message(T + 20_000, PROMPT), local)).contexte ?? '').not.toContain('Fiches injectées par Mnemo');
+		// le service : l'état tenu en mémoire ; le hook ne lit plus le journal des gestes
+		const changements: unknown[] = [];
+		const suivi = suiviDesInjections(etat, () => modelesActifs(dep), (c) => void changements.push(c));
+		await suivi.actualiser();
+		expect(changements).toHaveLength(1);
+		const lire = vi.spyOn(etat, 'gestes');
+		const AUTRE = '33333333-2222-4333-8444-555555555555';
+		await etat.creer(session({ id: AUTRE }));
+		const r = await traiterEvenement(dep, pil, entree('message', T + 30_000, { session: AUTRE, prompt: PROMPT }), { ...local, suivi });
+		expect(r.contexte ?? '').not.toContain('Fiches injectées par Mnemo');
+		expect(lire.mock.calls.filter(([f]) => f.sortes?.includes('injectee_auto') === true)).toEqual([]);
+		lire.mockRestore();
 	});
 
 	it('suivi : une série d’écarts après les injections coupe le niveau sans intervention ; réactivé par l’utilisateur ou un nouvel apprentissage', async () => {

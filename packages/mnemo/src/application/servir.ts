@@ -88,6 +88,8 @@ export type DemandeServir = Omit<DemandeCartes, 'classer' | 'pistes' | 'premier'
 	demandees?: readonly string[];
 	/** Faux : l'index est lu tel qu'il est, sans synchroniser (banc sur la mémoire réelle) ; vrai par défaut. */
 	synchroniser?: boolean;
+	/** Faux : aucune injection automatique (session inconnue : rien n'y serait noté, ni servie ni suivie) ; vrai par défaut. */
+	injectionAutomatique?: boolean;
 };
 
 /** `consignes` : le texte des consignes seul (le banc vérifie qu'une consigne attendue est servie) ; `demandees` : les fiches demandées injectées. */
@@ -154,7 +156,7 @@ async function consignesTrouvees(dep: Dependances, rappelees: readonly ElementIn
 
 export async function servir(dep: Dependances, demande: DemandeServir): Promise<Servi> {
 	if (demande.synchroniser !== false) await synchroniser(dep, SANS_EXTRACTION);
-	const { moment, muet, premier, rappels: tousLesRappels, demandees: voulues, injectees: anciennes, synchroniser: _synchroniser, ...cartes } = demande;
+	const { moment, muet, premier, rappels: tousLesRappels, demandees: voulues, injectees: anciennes, synchroniser: _synchroniser, injectionAutomatique, ...cartes } = demande;
 	// les fiches injectées à la main à ce message ont l'âge 0 (une réinjection fait repartir le poids)
 	const aInjecter = [...new Set(voulues ?? [])];
 	const aLaMain = [...(anciennes ?? []).filter((i) => !aInjecter.includes(i.chemin)), ...aInjecter.map((chemin) => ({ chemin, messages: 0 }))];
@@ -176,11 +178,22 @@ export async function servir(dep: Dependances, demande: DemandeServir): Promise<
 		servirPosition: moment === 'message',
 		question: moment === 'contexte',
 		// injection automatique : au hook d'un message porteur seulement (jamais à l'outil `contexte`, ni à un message muet)
-		injecter: moment === 'message' && muet === null,
+		injecter: moment === 'message' && muet === null && injectionAutomatique !== false,
 		injectees: aLaMain,
 		// une fiche demandée, injectée entière, n'est pas aussi candidate : écartée avant le plafond, elle ne prend la place d'aucune carte
 		demandees: aInjecter,
 	});
 	const demandees = await fichesDemandees(dep, aInjecter, calcul.position?.chemin ?? null);
 	return { texte: rendreServi(consignes, calcul, demandees), consignes, calcul, demandees };
+}
+
+/**
+ * Le même contexte sans les fiches injectées par Mnemo (le hook n'a plus le temps de les noter : elles ne partent pas, et
+ * restent injectables à un message suivant) ; leurs lignes du classement ne sont plus marquées `auto`.
+ */
+export function sansInjectionsAutomatiques(servi: Servi): Servi {
+	if (servi.calcul.injectees.length === 0) return servi;
+	const classement = servi.calcul.classement.map(({ auto: _auto, ...l }) => l);
+	const calcul: CartesCalculees = { ...servi.calcul, injectees: [], classement };
+	return { ...servi, calcul, texte: rendreServi(servi.consignes, calcul, servi.demandees) };
 }

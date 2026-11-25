@@ -2,6 +2,7 @@
 // confiance permet d'injecter, de la mieux notée à la moins bien notée. Pur. Le plafond par message et la taille de la fiche
 // (lue dans le coffre) restent à l'appelant : une fiche trop longue n'est pas injectée, elle reste une piste.
 
+import { noteDInjection } from './note-de-confiance.ts';
 import type { NoteDeLaCandidate } from './note-de-confiance.ts';
 
 /**
@@ -15,7 +16,8 @@ export const SEUIL_JAMAIS = 100;
 
 /**
  * Les candidates injectables, `p` décroissant (à égalité, l'ordre donné) : notées par un modèle accepté (ni refusé, a priori
- * lu s'il le pèse : `accepte`) et pas coupé par le suivi (`coupee`), toutes ses variables calculées (une note non nulle), `p ≥ seuil`
+ * lu s'il le pèse : `accepte`) et pas coupé par le suivi (`coupee` ; un niveau coupé passe la main à son relais,
+ * `noteDInjection`), toutes ses variables calculées (une note non nulle), `p ≥ seuil`
  * (`seuilInjection`, en % ; 100 : aucune), `p_sans_apriori ≥ GARDE_APRIORI`, et pas déjà vues par la session (`vue` :
  * injectée, lue ou écrite à cette empreinte).
  */
@@ -30,8 +32,8 @@ export function injectables(
 	const rang = new Map(candidates.map((c, i) => [c, i]));
 	return candidates
 		.flatMap((chemin) => {
-			const n = note(chemin);
-			return n !== null && n !== undefined && n.accepte && n.coupee !== true && n.p >= seuil && n.pSansApriori >= GARDE_APRIORI && !vue(chemin) ? [{ chemin, p: n.p }] : [];
+			const n = noteDInjection(note(chemin));
+			return n !== null && n.accepte && n.p >= seuil && n.pSansApriori >= GARDE_APRIORI && !vue(chemin) ? [{ chemin, p: n.p }] : [];
 		})
 		.sort((a, b) => b.p - a.p || rang.get(a.chemin)! - rang.get(b.chemin)!)
 		.map((c) => c.chemin);

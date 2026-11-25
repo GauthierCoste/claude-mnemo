@@ -17,8 +17,9 @@ import { cartesDuJournal, dejaLuesDe } from './cartes.ts';
 import type { DemandeAffinage } from './affiner.ts';
 import { classementDuJournal } from './classement-du-message.ts';
 import { modelesActifs, requeteDesModeles } from './note-du-classement.ts';
-import { servir } from './servir.ts';
+import { sansInjectionsAutomatiques, servir } from './servir.ts';
 import { modelesSuivis } from './suivi-injection.ts';
+import type { SuiviDesInjections } from './suivi-injection.ts';
 import type { DemandeServir, Servi } from './servir.ts';
 import { verifierAction } from './verifier-action.ts';
 import { noterGeste } from './gestes.ts';
@@ -93,6 +94,16 @@ export type ReglagesEvenement = {
 	 */
 	apriori?: AprioriDesGestes;
 	/**
+	 * Le service : les coupures du suivi des injections automatiques, tenues en mémoire et relues en fond ; le hook ne relit pas
+	 * le journal tant qu'elles valent pour les modèles du message. Sans lui (`mnemo hook` sans service) : lecture bornée.
+	 */
+	suivi?: Pick<SuiviDesInjections, 'coupures'>;
+	/**
+	 * Le service : ce qui doit attendre que la réponse parte vraiment (les gestes `injectee_auto`) ; la route le lance après
+	 * l'avoir écrite. Sans lui, c'est écrit juste avant de répondre.
+	 */
+	aLaReponse?: (tache: () => Promise<unknown>) => void;
+	/**
 	 * Le service : la durée du reranker estimée d'après ses dernières durées mesurées ; le hook ne le lance sur les premières
 	 * candidates que si elle tient dans le temps restant. Sans elle (`mnemo hook` sans service) : pas de reranker au hook.
 	 */
@@ -125,6 +136,11 @@ export const MARGE_SORTIE_MS = 100;
  * rendu, et le hook (en repli local) sert ce qui n'a pas été noté.
  */
 export const MARGE_ECRITURE_MS = 30;
+/**
+ * Temps qu'il doit rester pour qu'une fiche injectée par Mnemo parte : noter ce qui part, puis ses propres traces (servie,
+ * journal, geste `injectee_auto`) ; la réponse n'est plus retenue ensuite.
+ */
+export const MARGE_INJECTION_AUTO_MS = 2 * MARGE_ECRITURE_MS;
 
 /** « C:\a\b\ » → « C:/a/b » : séparateurs en « / », sans « / » final (sauf la racine du système). */
 function net(chemin: string): string {
@@ -376,7 +392,7 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 	// requête du classement : le message seul, ou joint au message porteur d'avant (variante jointe, message court ou anaphorique) ;
 	// celle avec laquelle la note de confiance a été apprise, s'il y en a une
 	// les modèles de la note : lus une fois pour le message (hook, puis affinage), avec les coupures du suivi des injections
-	const modeles = await modelesSuivis(pil.etat, modelesActifs(dep));
+	const modeles = await modelesSuivis(pil.etat, modelesActifs(dep), reglages.suivi);
 	const variante = reglages.varianteRequete ?? requeteDesModeles(modeles) ?? VARIANTE_DE_LA_REQUETE;
 	const precedent = session !== null && muet === null && precedentUtile(message, variante) ? await messagePorteurPrecedent(pil.etat, session.id, entree.horodatageMs) : null;
 	const requete = requeteDuMessage(message, precedent, variante);
@@ -400,6 +416,8 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 		rappels,
 		exclusDefinitivement,
 		modeles,
+		// session inconnue : une fiche injectée n'y serait ni notée servie ni suivie
+		...(session === null ? { injectionAutomatique: false } : {}),
 		...(apriori === undefined ? {} : { aprioris: (vecteur: VecteurDuMessage | null) => apriori.aprioris({ ...contexte, vecteur }) }),
 	};
 }
@@ -493,7 +511,12 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 			: null;
 	const lue = await demandeDe(dep, pil, session, entree, reglages, fin);
 	const demande = demandees.length === 0 ? lue : { ...lue, demandees };
-	const servi = await servir(dep, demande);
+	const calcule = await servir(dep, demande);
+	// les injections automatiques : décidées ici, avant toute écriture, avec le temps d'écrire leurs traces puis de répondre ;
+	// sinon elles ne partent pas (ni notées servies, ni journalisées, ni suivies) et restent injectables à un message suivant.
+	// Décidées, elles partent : aucun contrôle ne retient plus la réponse.
+	const auto = session !== null && calcule.calcul.injectees.length > 0 && aTemps(reglages, MARGE_INJECTION_AUTO_MS);
+	const servi = auto ? calcule : sansInjectionsAutomatiques(calcule);
 	const classement = classementDuJournal(servi.calcul.classement);
 	// le classement que voyait l'utilisateur quand il a demandé une fiche : lu avant d'être remplacé par celui de ce message
 	const precedent = session === null ? null : (reglages.porteurs?.lire(session.id) ?? null);
@@ -501,20 +524,20 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 		reglages.porteurs?.noter(session.id, { rang, position: demande.position, vecteur: servi.calcul.vecteur ?? null, classement: notesDuClassement(classement) });
 	}
 	// noter prend du temps : il faut qu'il en reste assez pour noter puis répondre avant que le hook cesse d'attendre
-	const aTempsPourNoter = aTemps(reglages, MARGE_ECRITURE_MS);
+	const aTempsPourNoter = auto || aTemps(reglages, MARGE_ECRITURE_MS);
 	let injecte = servi.texte !== '' && aTempsPourNoter;
 	// un message porteur est journalisé même sans texte injecté : son classement en est la trace (panneau, apprentissage)
 	if (session !== null && (injecte || (rang !== null && aTempsPourNoter))) {
 		await noterInjection(dep, pil, session, entree, demande, servi, debut, reglages.appelMs, rang, classement, (chemin) => noteDuPorteur(precedent, chemin));
-		// sans service, les gestes des injections automatiques se notent avant de répondre (après, le processus n'a plus le temps)
-		if (injecte && reglages.enFond === undefined && servi.calcul.injectees.length > 0) await noterInjectionsAuto(dep, pil, session, entree, servi, rang, classement);
-		// après les écritures : le hook attend-il encore ? Sinon, la réponse ne lui parviendrait pas
-		if (!aTemps(reglages)) injecte = false;
-		// le service : une fois la réponse décidée, sans la retarder ; seulement si elle part (une injection perdue ne compte pas au suivi)
-		if (injecte && reglages.enFond !== undefined && servi.calcul.injectees.length > 0) {
-			// au tour suivant de la boucle : l'écriture (synchrone dans la base) ne passe pas avant la réponse
+		if (auto) {
+			// la réponse part : le service écrit les gestes quand la route l'a écrite ; sans lui, juste avant de répondre
 			const s = session;
-			reglages.enFond(new Promise((resoudre) => setTimeout(resoudre, 0)).then(() => noterInjectionsAuto(dep, pil, s, entree, servi, rang, classement)));
+			const gestes = () => noterInjectionsAuto(dep, pil, s, entree, servi, rang, classement);
+			if (reglages.aLaReponse !== undefined) reglages.aLaReponse(gestes);
+			else await gestes();
+		} else if (!aTemps(reglages)) {
+			// après les écritures : le hook attend-il encore ? Sinon, la réponse ne lui parviendrait pas
+			injecte = false;
 		}
 	}
 	// le hook n'attend plus : les fiches demandées partiront au message suivant

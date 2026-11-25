@@ -1,5 +1,5 @@
 import { ENTETE_REMPLACEMENT, ROUTES } from '@mnemo/contrat';
-import type { BilanAmorceVue, CoupureInjectionVue, ReponseEcarteesToujours, ReponseInjectionAutomatique, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseArretModeles, ReponseNiveauModeles, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
+import type { BilanAmorceVue, ReponseEcarteesToujours, ReponseInjectionAutomatique, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseArretModeles, ReponseNiveauModeles, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
 import { avertissementsDe, CARACTERES_INVISIBLES, CHEMINS_LOT_MAX, demandeTout, estNiveauModeles, modelesPermis, NIVEAUX_MODELES, nomAffichable, OBJECTIF_MAX, PROFIL_TRAVAIL, SAUF_MAX } from '@mnemo/commun';
 import type { AvecAvertissements, NiveauModeles } from '@mnemo/commun';
 import { amorcer, marquerTraitees } from '../../application/amorcer.ts';
@@ -21,6 +21,7 @@ import type { DemandeAffinage } from '../../application/affiner.ts';
 import { traiterEvenement } from '../../application/evenements.ts';
 import { modelesActifs } from '../../application/note-du-classement.ts';
 import { coupuresDesInjections, reactiverInjection } from '../../application/suivi-injection.ts';
+import type { SuiviDesInjections } from '../../application/suivi-injection.ts';
 import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
 import { notesDuClassement, noteDuPorteur, porteursRecents, vecteurDuPorteur } from '../../application/porteurs-recents.ts';
@@ -103,7 +104,8 @@ export class ErreurHttp extends Error {
 	}
 }
 
-export type Reponse = { statut: number; corps: unknown };
+/** `apres` : lancé par le serveur une fois la réponse écrite (jamais si elle ne l'est pas). */
+export type Reponse = { statut: number; corps: unknown; apres?: () => void };
 
 /**
  * Ce qu'une route reçoit : paramètres de requête, `:id` du chemin, en-têtes, corps (lu à la demande, borné par le
@@ -118,23 +120,6 @@ export type Requete = {
 	json(): Promise<unknown>;
 	flux(): AsyncIterable<Uint8Array>;
 };
-
-/** L'injection automatique coupée, telle que le service l'a lue en dernier. */
-export type CoupuresConnues = { lire(): CoupureInjectionVue[]; relire(): Promise<boolean> };
-
-/** Les coupures lues dans le journal des gestes, gardées ; `relire` dit si elles ont changé. Une lecture en panne garde les précédentes. */
-export function coupuresConnues(dep: Dependances, etat: Pilotage['etat']): CoupuresConnues {
-	let connues: CoupureInjectionVue[] = [];
-	return {
-		lire: () => connues,
-		async relire() {
-			const lues = vueCoupures(await coupuresDesInjections(etat, modelesActifs(dep)));
-			const change = JSON.stringify(lues) !== JSON.stringify(connues);
-			connues = lues;
-			return change;
-		},
-	};
-}
 
 /** Ce dont les routes ont besoin : cas d'usage, pilote, et la diffusion vers les clients WebSocket. */
 export type ContexteRoutes = {
@@ -171,10 +156,10 @@ export type ContexteRoutes = {
 	/** A priori des gestes et fiches écartées toujours, tenus en mémoire par le service ; actualisés après chaque geste. */
 	apriori: AprioriDesGestes;
 	/**
-	 * L'injection automatique coupée par le suivi, gardée par le service pour la vue des sessions ; `relire` la relit dans le
-	 * journal des gestes et rend vrai si elle a changé. Absent : lue à chaque demande, sans rediffusion.
+	 * Le suivi des injections automatiques, tenu en mémoire par le service (coupures par niveau) : relu en fond après chaque
+	 * geste, il rediffuse lui-même la vue des sessions quand les coupures changent. Absent : lu à chaque demande, sans rediffusion.
 	 */
-	coupures?: CoupuresConnues;
+	suivi?: SuiviDesInjections;
 	/**
 	 * Durée du reranker estimée d'après les durées mesurées de ses appels « injection » faits par ce service, et ses appels en
 	 * cours : le hook de message ne le lance que si l'estimation est fiable, tient dans son temps et qu'aucun appel n'est en cours.
@@ -360,41 +345,32 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	const { dep, pil, pilote, apriori } = ctx;
 	/** Recherche complète en cours par clé de remplacement (la suivante de même clé l'abandonne). */
 	const recherchesEnCours = new Map<string, AbortController>();
-	const vue = (s: Session) => vueSession(s, pilote.enCours(s.id), apriori.suggestions(s.id), ctx.coupures?.lire());
+	const vue = (s: Session) => vueSession(s, pilote.enCours(s.id), apriori.suggestions(s.id), ctx.suivi === undefined ? [] : vueCoupures(ctx.suivi.derniere()));
 	/**
 	 * Après un geste : l'a priori relit les gestes nouveaux (et les écartées toujours si `ecartees`), puis la vue de chaque
 	 * session dont les suggestions « écartée toujours » ont changé est rediffusée. Une panne de lecture n'empêche pas le geste
 	 * d'être fait.
 	 */
 	const apresGeste = async (ecartees = false): Promise<void> => {
-		let changees: Set<string>;
+		// le suivi des injections ne dépend pas de l'a priori : relu même si l'a priori est en panne
+		const suivi = apresSuivi();
 		try {
-			changees = await apriori.actualiser({ ecartees });
+			const changees = await apriori.actualiser({ ecartees });
+			for (const id of changees) {
+				const s = await pil.etat.lire(id).catch(() => null);
+				if (s !== null) ctx.signaler(s);
+			}
 		} catch (erreur) {
 			ctx.journal(`a priori des gestes : relecture impossible (${messageDErreur(erreur)}).`);
-			return;
 		}
-		for (const id of changees) {
-			const s = await pil.etat.lire(id).catch(() => null);
-			if (s !== null) ctx.signaler(s);
-		}
-		await apresSuivi();
+		await suivi;
 	};
 	/**
-	 * Après un écart, un rétablissement ou une réactivation : le suivi des injections est relu ; si la coupure a changé (un écart
-	 * l'a déclenchée, une réactivation l'a levée), la vue de chaque session en cours est rediffusée.
+	 * Après un geste ou une réactivation : le suivi des injections est relu (une relecture à la fois, plus une en attente) ; s'il
+	 * change, il rediffuse lui-même la vue des sessions.
 	 */
 	const apresSuivi = async (): Promise<void> => {
-		if (ctx.coupures === undefined) return;
-		let change: boolean;
-		try {
-			change = await ctx.coupures.relire();
-		} catch (erreur) {
-			ctx.journal(`suivi des injections : relecture impossible (${messageDErreur(erreur)}).`);
-			return;
-		}
-		if (!change) return;
-		for (const s of await pil.etat.lister({ archivees: false }).catch(() => [])) ctx.signaler(s);
+		await ctx.suivi?.actualiser().catch((erreur: unknown) => ctx.journal(`suivi des injections : relecture impossible (${messageDErreur(erreur)}).`));
 	};
 	/** Les fiches écartées toujours (pas celles rétablies), avec leur titre. */
 	const ecarteesToujours = async (): Promise<Reponse> => {
@@ -809,6 +785,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const depDuHook = entree.session === '' ? depMesure : dependancesDeSession(depMesure, pil.etat, entree.session);
 				// le classement du message, à affiner après la réponse (noté par le hook, lancé après la diffusion de son entrée)
 				const aAffiner: { demande: DemandeAffinage | null; controle: AbortController | null } = { demande: null, controle: null };
+				// ce qui attend que la réponse soit écrite (gestes des fiches injectées par Mnemo)
+				const aLaReponse: Array<() => Promise<unknown>> = [];
 				const reponse = await traiterEvenement(depDuHook, pil, entree, {
 					froid: 'permis',
 					...(echeance === undefined ? {} : { echeance }),
@@ -820,6 +798,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 					demandees,
 					porteurs,
 					apriori,
+					...(ctx.suivi === undefined ? {} : { suivi: ctx.suivi }),
+					aLaReponse: (tache) => aLaReponse.push(tache),
 					...(ctx.dureeReranker === undefined ? {} : { dureeReranker: ctx.dureeReranker }),
 					rattachee: (id) => pilote.reecrirePlugin(id),
 					affiner: (d) => {
@@ -865,7 +845,18 @@ export function routes(ctx: ContexteRoutes): Route[] {
 						}
 					}
 				}
-				return ok(reponse);
+				if (aLaReponse.length === 0) return ok(reponse);
+				// la réponse écrite : les gestes, puis le suivi qui les lit
+				return {
+					...ok(reponse),
+					apres: () =>
+						ctx.enFond(
+							(async () => {
+								for (const tache of aLaReponse) await tache().catch(() => {});
+								await apresSuivi();
+							})(),
+						),
+				};
 			},
 		},
 

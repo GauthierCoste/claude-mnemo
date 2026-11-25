@@ -42,36 +42,63 @@ const ECARTS: readonly Geste[] = ['ecartee_ici', 'ecartee_toujours'];
 export const motifDeCoupure = (ecartees: number, injections: number): string =>
 	`${ecartees} des ${injections} dernières fiches injectées par Mnemo ont été écartées`;
 
+/** L'écart qui rend une injection automatique fausse (null : juste), par rang de l'injection. */
+type IssueDesInjections = Map<number, GesteDuSuivi | null>;
+
 /**
- * La coupure d'un niveau, ou null. `reference` : l'instant d'apprentissage du modèle en service (null : inconnu, tout compte).
+ * L'issue de chaque injection automatique, en un seul passage chronologique (linéaire après le tri) : par (session, fiche),
+ * l'injection en cours reçoit le premier écart qui la suit ; un rétablissement l'annule ; l'injection automatique suivante de
+ * la même fiche dans la session la clôt.
  */
-export function coupureDuNiveau(gestes: readonly GesteDuSuivi[], niveau: NiveauDeNote, reference: number | null): CoupureDInjection | null {
-	const reactivation = gestes.filter((g) => g.geste === 'injection_reactivee' && (g.niveau === null || g.niveau === niveau)).reduce((m, g) => Math.max(m, g.horodatageMs), -Infinity);
-	const depuis = Math.max(reference ?? -Infinity, reactivation);
-	const tries = [...gestes].sort(chronologique);
-	const fenetre = tries.filter((g) => g.geste === 'injectee_auto' && g.niveau === niveau && g.horodatageMs > depuis).slice(-FENETRE_SUIVI);
+function issuesDesInjections(gestes: readonly GesteDuSuivi[]): IssueDesInjections {
+	const issues: IssueDesInjections = new Map();
+	const enCours = new Map<string, number>();
+	for (const g of [...gestes].sort(chronologique)) {
+		const cle = `${g.session}\u0000${g.fiche}`;
+		if (g.geste === 'injectee_auto') {
+			issues.set(g.rang, null);
+			enCours.set(cle, g.rang);
+			continue;
+		}
+		const rang = enCours.get(cle);
+		if (rang === undefined) continue;
+		if (ECARTS.includes(g.geste)) {
+			if (issues.get(rang) === null) issues.set(rang, g);
+		} else if (g.geste === 'retablie') issues.set(rang, null);
+	}
+	return issues;
+}
+
+/** La référence d'un niveau : son apprentissage, ou sa dernière réactivation par l'utilisateur si elle est plus récente. */
+function referenceDuNiveau(gestes: readonly GesteDuSuivi[], niveau: NiveauDeNote, apprentissage: number | null): number {
+	let depuis = apprentissage ?? -Infinity;
+	for (const g of gestes) if (g.geste === 'injection_reactivee' && (g.niveau === null || g.niveau === niveau) && g.horodatageMs > depuis) depuis = g.horodatageMs;
+	return depuis;
+}
+
+function coupureAvecIssues(gestes: readonly GesteDuSuivi[], issues: IssueDesInjections, niveau: NiveauDeNote, reference: number | null): CoupureDInjection | null {
+	const depuis = referenceDuNiveau(gestes, niveau, reference);
+	const fenetre = gestes.filter((g) => g.geste === 'injectee_auto' && g.niveau === niveau && g.horodatageMs > depuis).sort(chronologique).slice(-FENETRE_SUIVI);
 	if (fenetre.length === 0) return null;
 	let ecartees = 0;
 	let depuisMs = -Infinity;
 	for (const inj of fenetre) {
-		const cle = (g: GesteDuSuivi) => g.session === inj.session && g.fiche === inj.fiche;
-		// les gestes de la même fiche, dans la même session, après l'injection et avant la suivante (automatique) de cette fiche
-		const apres = tries.filter((g) => cle(g) && chronologique(g, inj) > 0);
-		const suivante = apres.findIndex((g) => g.geste === 'injectee_auto');
-		let ecart: GesteDuSuivi | null = null;
-		for (const g of suivante < 0 ? apres : apres.slice(0, suivante)) {
-			if (ECARTS.includes(g.geste)) ecart ??= g;
-			else if (g.geste === 'retablie') ecart = null;
-		}
-		if (ecart !== null) {
-			ecartees += 1;
-			depuisMs = Math.max(depuisMs, ecart.horodatageMs);
-		}
+		const ecart = issues.get(inj.rang) ?? null;
+		if (ecart === null) continue;
+		ecartees += 1;
+		depuisMs = Math.max(depuisMs, ecart.horodatageMs);
 	}
 	// les injections qui manquent à une fenêtre incomplète comptent justes
-	const justes = FENETRE_SUIVI - ecartees;
-	if (intervalleWilson(justes, FENETRE_SUIVI).basse >= WILSON_COUPURE) return null;
+	if (intervalleWilson(FENETRE_SUIVI - ecartees, FENETRE_SUIVI).basse >= WILSON_COUPURE) return null;
 	return { niveau, injections: fenetre.length, ecartees, depuisMs, motif: motifDeCoupure(ecartees, fenetre.length) };
+}
+
+/**
+ * La coupure d'un niveau, ou null. `reference` : l'instant d'apprentissage du modèle en service (null : inconnu, tout compte).
+ * Linéaire en nombre de gestes (après un tri).
+ */
+export function coupureDuNiveau(gestes: readonly GesteDuSuivi[], niveau: NiveauDeNote, reference: number | null): CoupureDInjection | null {
+	return coupureAvecIssues(gestes, issuesDesInjections(gestes), niveau, reference);
 }
 
 /** Instant d'un `apprisLe` (date ou instant ISO) ; null s'il est illisible. */
@@ -83,7 +110,8 @@ export function instantDApprentissage(apprisLe: string | null): number | null {
 
 /** Les coupures des niveaux dont le modèle est accepté (les autres n'injectent pas : rien à suivre). */
 export function coupuresDesNiveaux(gestes: readonly GesteDuSuivi[], modeles: ModelesDeNote): CoupuresDInjection {
-	const niveau = (n: NiveauDeNote) => (modeles[n].etat === 'accepte' ? coupureDuNiveau(gestes, n, instantDApprentissage(modeles[n].modele.apprisLe)) : null);
+	const issues = issuesDesInjections(gestes);
+	const niveau = (n: NiveauDeNote) => (modeles[n].etat === 'accepte' ? coupureAvecIssues(gestes, issues, n, instantDApprentissage(modeles[n].modele.apprisLe)) : null);
 	return { complets: niveau('complets'), sens: niveau('sens') };
 }
 

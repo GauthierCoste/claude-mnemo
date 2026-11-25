@@ -2,7 +2,7 @@ import { request } from 'node:http';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach } from 'vitest';
-import type { ArretModeles, EtatModeles, EtatSessions, Modeles, Pilotage } from '../../src/application/ports.ts';
+import type { ArretModeles, Dependances, EtatModeles, EtatSessions, Modeles, Pilotage } from '../../src/application/ports.ts';
 import { demarrerService } from '../../src/adaptateurs/http/serveur.ts';
 import type { ReglagesService, Service } from '../../src/adaptateurs/http/serveur.ts';
 import type { AppClaude } from '../../src/adaptateurs/http/claude-desktop.ts';
@@ -61,7 +61,7 @@ export function etatModelesFaux(): EtatModeles {
  */
 export async function serviceFaux(
 	reglages: ReglagesService = {},
-	options: { pil?: (pil: Pilotage) => void; avant?: (etat: EtatSessions, racine: string) => Promise<void>; interface?: string; dossierClaude?: string; portFixePar?: string; appClaude?: Partial<Omit<AppClaude, 'racine'>> } = {},
+	options: { pil?: (pil: Pilotage) => void; avant?: (etat: EtatSessions, racine: string, dep: Dependances) => Promise<void>; interface?: string; dossierClaude?: string; portFixePar?: string; appClaude?: Partial<Omit<AppClaude, 'racine'>> } = {},
 ): Promise<ContexteService> {
 	const racine = await dossierTemporaire();
 	const dep = fauxPorts();
@@ -91,7 +91,7 @@ export async function serviceFaux(
 		},
 	};
 	options.pil?.(pil);
-	await options.avant?.(etat, racine);
+	await options.avant?.(etat, racine, dep);
 	for (const d of existants) await mkdir(join(racine, d), { recursive: true });
 	// interface : un dossier absent par défaut (les tests ne dépendent pas de `packages/ui/dist`)
 	// configuration de Claude Code : jamais la vraie (~/.claude) ; un dossier absent par défaut

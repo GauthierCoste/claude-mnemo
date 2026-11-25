@@ -28,7 +28,7 @@ import { expressionFts } from '../domaine/requete.ts';
 import { sansFaitsInactifs } from '../domaine/sans-faits-inactifs.ts';
 import { requeteDuReranker, syntheseDuTexte, texteDuReranker as texteDeFiche } from '../domaine/textes-du-reranker.ts';
 import { normaliser } from '../domaine/sens.ts';
-import { noteApprise, noterLaCandidate, pCalibre } from '../domaine/note-de-confiance.ts';
+import { noteApprise, noteDInjection, noterLaCandidate, pCalibre } from '../domaine/note-de-confiance.ts';
 import type { ModelesDeNote } from '../domaine/note-de-confiance.ts';
 import type { NiveauDeNote } from '../domaine/modele-de-note.ts';
 import { injectables } from '../domaine/injection-automatique.ts';
@@ -523,7 +523,8 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 				const brut = await dep.coffre.lire(chemin);
 				const texte = brut === null ? null : sansFaitsInactifs(brut, jour);
 				if (texte === null || texte.length > TAILLE_POSITION_MAX) continue;
-				const n = note.notes.get(chemin)!;
+				// la note qui l'a fait injecter : celle de son niveau, ou du relais si son niveau est coupé
+				const n = noteDInjection(note.notes.get(chemin))!;
 				injectees.push({ chemin, titre: titre(chemin), texte, empreinte: empreintes.get(chemin) ?? '', encadree: false, p: n.p, niveau: n.niveau });
 			}
 		}

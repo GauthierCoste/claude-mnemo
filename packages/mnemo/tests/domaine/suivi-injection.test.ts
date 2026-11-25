@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { avecLesCoupures, coupureDuNiveau, coupuresDesNiveaux, FENETRE_SUIVI, instantDApprentissage } from '../../src/domaine/suivi-injection.ts';
 import type { GesteDuSuivi } from '../../src/domaine/suivi-injection.ts';
-import { noterLaCandidate } from '../../src/domaine/note-de-confiance.ts';
+import { noteDInjection, noterLaCandidate } from '../../src/domaine/note-de-confiance.ts';
 import type { ModelesDeNote } from '../../src/domaine/note-de-confiance.ts';
 import { modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
 import type { Geste } from '../../src/domaine/gestes.ts';
@@ -116,5 +116,39 @@ describe('coupuresDesNiveaux et avecLesCoupures', () => {
 		expect(noterLaCandidate(modeles(), signaux)).not.toHaveProperty('coupee');
 		// rien de coupé : inchangés
 		expect(avecLesCoupures(modeles(), { complets: null, sens: null })).toEqual(modeles());
+	});
+
+	it('Complets coupé, Sens seul accepté : la note affichée reste celle de Complets, son relais Sens décide de l’injection', () => {
+		const tous = (): ModelesDeNote => ({
+			complets: { modele: { ...modele('1970-01-01T00:00:00.000Z'), biais: -1, poids: { logit: 1 } }, etat: 'accepte' },
+			sens: { modele: modele('1970-01-01T00:00:00.000Z'), etat: 'accepte' },
+		});
+		const coupure = { niveau: 'complets' as const, injections: 20, ecartees: 17, depuisMs: 1, motif: 'm' };
+		const signaux = { cosinus: 0.5, cosinusRelatif: 0.1, cosinusZ: 0.1, bm25Relatif: 1, signalSession: 0, apriori: 0, logit: 4 };
+		const libre = noterLaCandidate(tous(), signaux)!;
+		expect(libre.niveau).toBe('complets');
+		expect(noteDInjection(libre)).toBe(libre);
+		const n = noterLaCandidate(avecLesCoupures(tous(), { complets: coupure, sens: null }), signaux)!;
+		expect(n).toMatchObject({ niveau: 'complets', coupee: true, p: libre.p });
+		expect(noteDInjection(n)).toMatchObject({ niveau: 'sens', accepte: true });
+		expect(noteDInjection(n)).not.toHaveProperty('coupee');
+		// Sens coupé aussi, ou refusé : aucun relais
+		expect(noteDInjection(noterLaCandidate(avecLesCoupures(tous(), { complets: coupure, sens: { ...coupure, niveau: 'sens' } }), signaux))).toBeNull();
+		const sensRefuse: ModelesDeNote = { ...tous(), sens: { ...tous().sens, etat: 'refuse' } };
+		expect(noteDInjection(noterLaCandidate(avecLesCoupures(sensRefuse, { complets: coupure, sens: null }), signaux))).toBeNull();
+	});
+});
+
+describe('coût du calcul', () => {
+	it('linéaire : 30 000 gestes de 3 000 sessions se comptent vite', () => {
+		const gestes: GesteDuSuivi[] = [];
+		for (let i = 0; i < 15_000; i++) {
+			const session = `s${i % 3000}`;
+			gestes.push(g('injectee_auto', i * 10, `f${i % 50}.md`, session));
+			gestes.push(g(i % 7 === 0 ? 'ecartee_ici' : 'retablie', i * 10 + 5, `f${i % 50}.md`, session, null));
+		}
+		const debut = performance.now();
+		coupureDuNiveau(gestes, 'sens', null);
+		expect(performance.now() - debut).toBeLessThan(500);
 	});
 });
