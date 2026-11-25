@@ -64,12 +64,22 @@
 }
 
 .actif {
+	position: relative;
 	background: var(--ac);
+}
+
+/* Le pouls, un halo d'accent sur un calque à part : l'anneau du point (posé sur l'icône) reste. */
+.actif::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+	box-shadow: 0 0 0 0 color-mix(in srgb, var(--ac) 50%, transparent);
 	animation: mnemo-pouls 1.4s infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.actif {
+	.actif::after {
 		animation: none;
 	}
 }
@@ -131,6 +141,11 @@
 	text-transform: none;
 	letter-spacing: normal;
 	color: var(--tx);
+}
+
+.items {
+	display: flex;
+	flex-direction: column;
 }
 
 .entete {
@@ -229,15 +244,19 @@
 	cursor: pointer;
 }
 
-.item:hover:not(:disabled),
+/* Le survol et le focus ont le fond ; l'anneau global de `:focus-visible` reste. */
+.item:hover:not([aria-disabled='true']),
 .item:focus-visible {
 	background: var(--s3);
-	outline: none;
 }
 
-.item:disabled {
-	opacity: 0.45;
+/* Désactivé : seul le libellé est grisé, le motif reste lisible. */
+.item[aria-disabled='true'] {
 	cursor: default;
+}
+
+.item[aria-disabled='true'] .libelleItem {
+	opacity: 0.45;
 }
 
 .coche {

@@ -1,4 +1,4 @@
-/** Vue des modèles locaux pour les tests : installés (bge-m3, bge-reranker-v2-m3, llama.cpp b11671), complets, prêts. */
+/** Vue des modèles locaux pour les tests : installés (bge-m3, bge-reranker-v2-m3, llama.cpp b11671), complets, prêts (arrêt après 15 min). */
 import type { EtatModelesVue } from '@mnemo/contrat';
 
 export function vueModeles(e: Partial<EtatModelesVue> = {}): EtatModelesVue {
@@ -6,6 +6,8 @@ export function vueModeles(e: Partial<EtatModelesVue> = {}): EtatModelesVue {
 		installes: true,
 		niveau: 'complets',
 		gardien: 'pret',
+		// le délai n'est connu que d'un gardien en marche
+		inactiviteMinutes: e.gardien === undefined || e.gardien === 'pret' || e.gardien === 'demarrage' ? 15 : null,
 		sens: 'pret',
 		reranker: 'pret',
 		pieces: {

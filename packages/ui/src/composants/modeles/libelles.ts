@@ -1,6 +1,7 @@
 /** Libellés des modèles locaux : niveaux, activités, texte et point du bouton global, état et détail de chaque pièce. */
 import { tailleLisible, type NiveauModeles } from '@mnemo/commun';
 import type { ActiviteModeleVue, EtatModelesVue, PieceModeleVue } from '@mnemo/contrat';
+import { modelesUtilesPrets } from '../../modeles/etat.ts';
 
 export const NOMS_NIVEAUX: Record<NiveauModeles, string> = { complets: 'Complets', sens: 'Sens seul', coupes: 'Coupés' };
 export const DETAILS_NIVEAUX: Record<NiveauModeles, string> = {
@@ -25,7 +26,10 @@ export function libelleActivite(a: ActiviteModeleVue): string {
 /** Point d'état : `actif` (pouls), `pret` (fixe), `veille`, `alerte`, ou rien. */
 export type Point = 'actif' | 'pret' | 'veille' | 'alerte' | null;
 
-/** Texte et point du bouton global. */
+/**
+ * Texte et point du bouton global. « Prêts » seulement si chaque modèle permis et installé l'est : un gardien prêt à qui en
+ * manque un (niveau élargi depuis son lancement) est dit « en veille », et le menu propose « Démarrer ».
+ */
 export function resume(e: EtatModelesVue): { texte: string; point: Point } {
 	if (e.niveau === 'coupes') return { texte: 'Modèles coupés', point: null };
 	if (e.gardien === 'echec') return { texte: 'Modèles en échec', point: 'alerte' };
@@ -33,7 +37,7 @@ export function resume(e: EtatModelesVue): { texte: string; point: Point } {
 	if (derniere !== undefined) return { texte: libelleActivite(derniere) + (e.activites.length > 1 ? ` +${e.activites.length - 1}` : ''), point: 'actif' };
 	if (e.gardien === 'demarrage') return { texte: 'Chargement…', point: 'actif' };
 	const sens = e.niveau === 'sens';
-	if (e.gardien === 'pret') return { texte: sens ? 'Sens seul prêt' : 'Modèles prêts', point: 'pret' };
+	if (e.gardien === 'pret' && modelesUtilesPrets(e)) return { texte: sens ? 'Sens seul prêt' : 'Modèles prêts', point: 'pret' };
 	return { texte: sens ? 'Sens seul en veille' : 'Modèles en veille', point: 'veille' };
 }
 

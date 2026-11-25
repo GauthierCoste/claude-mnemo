@@ -121,7 +121,7 @@ export async function garder(env: NodeJS.ProcessEnv = process.env): Promise<void
 	const publier = (): Promise<void> => {
 		const ecrire = () =>
 			ecrireEtatServeurs(dossier, {
-				gardien: { pid: process.pid, depuis, etat: phase },
+				gardien: { pid: process.pid, depuis, etat: phase, inactiviteMs },
 				...Object.fromEntries([...serveurs.values()].map((s) => [s.type, s.entree])),
 			});
 		ecritures = ecritures.then(ecrire, ecrire);

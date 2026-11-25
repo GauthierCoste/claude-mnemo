@@ -224,6 +224,8 @@ function PaletteOuverte(p: { texteInitial: string; surOuverture(): void; ancre: 
 							</p>
 						) : avis?.motif === 'absents' ? (
 							<p className={s.modeles}>Mots seulement : modèles non installés.</p>
+						) : avis?.motif === 'chargement' ? (
+							<p className={s.modeles}>Modèles en chargement : les notes viendront à la prochaine recherche.</p>
 						) : avis?.motif === 'coupes' ? (
 							<p className={s.modeles}>Mots seulement : modèles coupés.</p>
 						) : avis?.motif === 'sens' ? (

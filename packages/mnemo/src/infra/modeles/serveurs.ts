@@ -16,7 +16,8 @@ export type EntreeServeur = { port: number; cle: string; modele: string; pid: nu
 export type EtatGardien = 'demarrage' | 'pret' | 'echec';
 /** Contenu de `serveurs/modeles.json` (droits 0600 : il contient les clés). */
 export type EtatServeurs = {
-	gardien: { pid: number; depuis: string; etat: EtatGardien };
+	/** `inactiviteMs` : l'inactivité tolérée par le gardien (écrite par lui ; absente avant sa première publication). */
+	gardien: { pid: number; depuis: string; etat: EtatGardien; inactiviteMs?: number };
 	sens?: EntreeServeur;
 	reranker?: EntreeServeur;
 };
@@ -93,8 +94,14 @@ export async function lireEtatServeurs(dossier: string): Promise<EtatServeurs | 
 	const s = lireEntree(sens);
 	const r = lireEntree(reranker);
 	if (s === null || r === null) return null;
+	const inactiviteMs = g['inactiviteMs'];
 	return {
-		gardien: { pid: g['pid'] as number, depuis: g['depuis'] as string, etat: g['etat'] as EtatGardien },
+		gardien: {
+			pid: g['pid'] as number,
+			depuis: g['depuis'] as string,
+			etat: g['etat'] as EtatGardien,
+			...(Number.isInteger(inactiviteMs) && (inactiviteMs as number) > 0 ? { inactiviteMs: inactiviteMs as number } : {}),
+		},
 		...(s === undefined ? {} : { sens: s }),
 		...(r === undefined ? {} : { reranker: r }),
 	};
@@ -396,8 +403,8 @@ export type Demarrage = 'attendre' | 'sans-attendre' | 'jamais';
 
 /**
  * `inactiviteMs` : l'inactivité tolérée transmise au gardien s'il est lancé (sinon la sienne par défaut). `forcer` : geste
- * explicite de l'utilisateur, qui relance le gardien même dans la minute qui suit un échec (les appels automatiques, hooks
- * et recherches, gardent cette pause).
+ * explicite de l'utilisateur, pour un modèle permis et installé, qui relance le gardien même dans la minute qui suit un échec
+ * (les appels automatiques, hooks et recherches, gardent cette pause), et remplace un gardien prêt à qui ce modèle manque.
  */
 export type OptionsServeur = { finMs: number; demarrage: Demarrage; env?: NodeJS.ProcessEnv; inactiviteMs?: () => number; forcer?: boolean };
 
@@ -412,6 +419,13 @@ export async function serveurPret(dossier: string, type: TypeServeur, options: O
 	const pret = await utilisable(etat, type, finMs);
 	if (pret !== null || demarrage === 'jamais' || Date.now() >= finMs) return pret;
 	const forcer = options.forcer === true;
+	// geste explicite : un gardien prêt à qui manque ce modèle (permis et installé, garanti par l'appelant ; exclu par le niveau
+	// à son lancement, ou qui n'avait pas chargé) est arrêté proprement, puis relancé avec tous les modèles permis
+	if (forcer && etat !== null && etat.gardien.etat === 'pret' && pidVivant(etat.gardien.pid) && etat[type] === undefined) {
+		await journaliser(dossier, `gardien prêt sans le ${type} : remplacé`);
+		await arreterServeurs(dossier, options.env ?? process.env);
+		etat = await lireEtatServeurs(dossier);
+	}
 	if (!gardienEnCharge(etat, type, forcer)) await lancerGardien(dossier, type, finMs, options.env ?? process.env, options.inactiviteMs, forcer);
 	if (demarrage === 'sans-attendre') return null;
 	for (;;) {

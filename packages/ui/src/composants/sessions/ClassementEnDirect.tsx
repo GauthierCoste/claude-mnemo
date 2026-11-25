@@ -17,7 +17,7 @@
  * indexées), un repère discret le dit à côté du titre de la section (« sans note de sens ») : les « — » ne restent pas muets. Pas
  * de repère pour un message muet : son texte n'est pas noté, le modèle n'y est pour rien. À droite du titre, le niveau des
  * modèles de la session (`ModelesSession`) ; sans notes, une ligne sous la liste en dit la raison selon ce niveau (coupés, sens
- * seul, arrêtés : avec « Démarrer », non installés).
+ * seul, en chargement, arrêtés : avec « Démarrer », non installés).
  */
 import { libelleRaison, niveauEffectif, type NiveauModeles } from '@mnemo/commun';
 import type { ClassementVue, EntreeServieVue, LueVue, RaisonCarteVue } from '@mnemo/contrat';
@@ -159,7 +159,8 @@ export function ClassementEnDirect(p: {
 	const ordre = [...serviesLues, ...enLice].map((l) => l.id).join('\n');
 	// notes absentes : on dit pourquoi (modèles arrêtés ou non installés), et le démarrage reste un geste explicite
 	const sansNotes = lignes.length > 0 && lignes.every((l) => l.note === null);
-	const modeles = useModeles(sansNotes);
+	// l'état sert aussi au repère « sans note de sens » (rien à dire de plus quand la session est coupée)
+	const modeles = useModeles(sansNotes || sansSens);
 	const niveauPropre = p.niveauModeles ?? null;
 	const avis = sansNotes ? avisModeles(modeles.etat, niveauPropre) : null;
 	// coupés pour la session : le bouton de niveau le dit déjà sur la même ligne, le repère « sans note de sens » serait de trop
@@ -365,6 +366,8 @@ export function ClassementEnDirect(p: {
 				</p>
 			) : avis?.motif === 'absents' ? (
 				<p className={s.avis}>Notes indisponibles : modèles non installés</p>
+			) : avis?.motif === 'chargement' ? (
+				<p className={s.avis}>Modèles en chargement : les notes viendront au prochain message.</p>
 			) : avis?.motif === 'coupes' || avis?.motif === 'sens' ? (
 				<p className={s.avis}>
 					{`Notes indisponibles : ${avis.motif === 'coupes' ? 'modèles coupés' : 'sens seul'}${avis.pourLaSession ? ' pour cette session' : ''}`}

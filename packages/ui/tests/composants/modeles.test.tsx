@@ -3,7 +3,7 @@ import type { NiveauModeles } from '@mnemo/commun';
 import type { ActiviteModeleVue, EntreeServieVue, EtatModelesVue } from '@mnemo/contrat';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useEffect, type ReactNode } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FournisseurClient } from '../../src/client/contexte.tsx';
 import { BoutonModeles, ENCORE_EN_CHARGEMENT } from '../../src/composants/modeles/BoutonModeles.tsx';
 import { ModelesSession } from '../../src/composants/modeles/ModelesSession.tsx';
@@ -83,15 +83,20 @@ describe('bouton global des modèles', () => {
 			vue,
 		);
 		const menu = await ouvrir(boutonGlobal());
-		const pieces = within(menu).getAllByRole('listitem').slice(0, 3);
+		// l'en-tête est hors du menu : le menu ne contient que des items, des séparateurs et des groupes
+		expect(within(menu).queryAllByRole('listitem')).toEqual([]);
+		for (const enfant of menu.children) expect(['separator', 'group', 'menuitem', 'menuitemradio']).toContain(enfant.getAttribute('role'));
+		for (const groupe of within(menu).getAllByRole('group'))
+			for (const enfant of groupe.children) expect(enfant.getAttribute('aria-hidden') === 'true' || enfant.getAttribute('role')?.startsWith('menuitem')).toBe(true);
+		const pieces = screen.getAllByRole('listitem').slice(0, 3);
 		expect(pieces.map((x) => x.textContent)).toEqual([
 			'Sensprêtbge-m3BAAI – Q8_0 – 605,2 Mo – aa473d51',
 			'Reclassementnon installé',
 			'Moteurllama.cpp b11671macOS arm64 – local, 127.0.0.1',
 		]);
-		const activites = within(menu).getAllByRole('listitem').slice(3);
+		const activites = screen.getAllByRole('listitem').slice(3);
 		expect(activites.map((x) => x.textContent)).toEqual(['Recherche… – cette session', 'Vectorisation 3/10 – autre dossier']);
-		expect(menu.textContent).not.toContain('·');
+		expect(menu.parentElement!.textContent).not.toContain('·');
 	});
 
 	it('niveaux : le niveau de la machine coché ; un autre choisi appelle la route', async () => {
@@ -112,12 +117,51 @@ describe('bouton global des modèles', () => {
 		expect((await boutonGlobal()).textContent).toBe('Sens seul prêt');
 	});
 
-	it('Échap ferme le menu et rend le focus au bouton', async () => {
-		monter(<BoutonModeles />, vueModeles());
+	it('Échap ferme le menu, rend le focus au bouton, et ne va pas plus loin (la grille ne se dézoome pas) ; double-clic arrêté aussi', async () => {
+		const derriere = vi.fn();
+		document.addEventListener('keydown', derriere);
+		document.addEventListener('dblclick', derriere);
+		try {
+			monter(<BoutonModeles />, vueModeles());
+			const menu = await ouvrir(boutonGlobal());
+			await act(async () => fireEvent.doubleClick(menu));
+			await act(async () => fireEvent.keyDown(menu, { key: 'Escape' }));
+			expect(screen.queryByRole('menu')).toBeNull();
+			expect(document.activeElement).toBe(await boutonGlobal());
+			expect(derriere).not.toHaveBeenCalled();
+		} finally {
+			document.removeEventListener('keydown', derriere);
+			document.removeEventListener('dblclick', derriere);
+		}
+	});
+
+	it('gardien prêt à qui manque un modèle permis et installé (niveau élargi) : « en veille », et « Démarrer maintenant »', async () => {
+		const faux = monter(<BoutonModeles />, vueModeles({ reranker: 'arrete' }), { '/api/modeles/demarrer': vueModeles({ gardien: 'demarrage', sens: 'arrete', reranker: 'arrete' }) });
+		const bouton = await boutonGlobal();
+		expect(bouton.textContent).toBe('Modèles en veille');
+		expect(bouton.querySelector('[class*="veille"]')).not.toBeNull();
 		const menu = await ouvrir(boutonGlobal());
-		await act(async () => fireEvent.keyDown(menu, { key: 'Escape' }));
-		expect(screen.queryByRole('menu')).toBeNull();
-		expect(document.activeElement).toBe(await boutonGlobal());
+		expect(within(menu).queryByRole('menuitem', { name: 'Arrêter maintenant' })).toBeNull();
+		await act(async () => fireEvent.click(within(menu).getByRole('menuitem', { name: 'Démarrer maintenant' })));
+		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/modeles/demarrer', undefined);
+		cleanup();
+		// un modèle non installé ne compte pas : le sens seul prêt suffit
+		monter(<BoutonModeles />, vueModeles({ reranker: 'absent', pieces: { ...vueModeles().pieces, reranker: null } }));
+		expect((await boutonGlobal()).textContent).toBe('Modèles prêts');
+	});
+
+	it('délai d’arrêt : celui du gardien en marche ; arrêté, celui des réglages ; rien tant qu’il n’est pas connu', async () => {
+		let reponse: (v: unknown) => void = () => {};
+		const reglages = { champs: [{ cle: 'modeles.inactiviteMinutes', valeur: 20 }], avertissements: [], enAttente: [] };
+		monter(<BoutonModeles />, vueModeles({ inactiviteMinutes: 7 }), { '/api/reglages': reglages });
+		await ouvrir(boutonGlobal());
+		expect(screen.getByText(/s’arrêtent seuls/u).textContent).toBe('Ils démarrent au besoin et s’arrêtent seuls après 7 min sans requête.');
+		cleanup();
+		monter(<BoutonModeles />, vueModeles({ gardien: 'arrete', sens: 'arrete', reranker: 'arrete' }), { '/api/reglages': () => new Promise((r) => (reponse = r)) });
+		await ouvrir(boutonGlobal());
+		expect(screen.queryByText(/s’arrêtent seuls/u)).toBeNull();
+		await act(async () => reponse(reglages));
+		expect(screen.getByText(/s’arrêtent seuls/u).textContent).toBe('Ils démarrent au besoin et s’arrêtent seuls après 20 min sans requête.');
 	});
 
 	it('en veille : « Démarrer maintenant » appelle la route ; coupés : désactivé, avec son motif visible', async () => {
@@ -129,8 +173,15 @@ describe('bouton global des modèles', () => {
 		monter(<BoutonModeles />, vueModeles({ niveau: 'coupes', gardien: 'arrete', sens: 'exclu', reranker: 'exclu' }));
 		menu = await ouvrir(boutonGlobal());
 		const demarrer = within(menu).getByRole('menuitem', { name: /Démarrer maintenant/u }) as HTMLButtonElement;
-		expect(demarrer.disabled).toBe(true);
+		// désactivé mais atteignable aux flèches ; le clic ne fait rien ; le motif se lit
+		expect(demarrer.getAttribute('aria-disabled')).toBe('true');
+		expect(demarrer.disabled).toBe(false);
+		await act(async () => fireEvent.keyDown(menu, { key: 'End' }));
+		expect(document.activeElement).toBe(demarrer);
+		await act(async () => fireEvent.click(demarrer));
+		expect(screen.getByRole('menu')).toBeTruthy();
 		expect(demarrer.textContent).toContain('Les modèles sont coupés partout');
+		expect(demarrer.querySelector('[class*="detail"]')?.textContent).toBe('Les modèles sont coupés partout');
 	});
 
 	it('prêts : « Arrêter maintenant » ; des modèles encore en chargement : un toast le dit', async () => {
@@ -167,11 +218,17 @@ describe('bouton de session', () => {
 		const faux = monter(<ModelesSession session="s1" niveau={null} />, vueModeles({ niveau: 'sens', reranker: 'exclu' }), { 'PUT /api/sessions/s1/modeles': { session: {} } });
 		const menu = await ouvrir(boutonSession());
 		const choix = within(menu).getAllByRole('menuitemradio') as HTMLButtonElement[];
-		expect(choix.map((x) => x.disabled)).toEqual([false, true, false, false]);
+		expect(choix.map((x) => x.getAttribute('aria-disabled') === 'true')).toEqual([false, true, false, false]);
+		expect(within(menu).getByRole('group', { name: 'Niveau pour cette session' })).toBeTruthy();
+		// le choix désactivé : atteint aux flèches, son clic n'appelle rien
+		await act(async () => fireEvent.keyDown(menu, { key: 'ArrowDown' }));
+		expect(document.activeElement).toBe(choix[1]);
+		await act(async () => fireEvent.click(choix[1]!));
+		expect(faux.api.remplacer).not.toHaveBeenCalled();
 		expect(choix[0]!.getAttribute('aria-checked')).toBe('true');
 		expect(choix[0]!.textContent).toContain('Comme partout (Sens seul)');
 		expect(choix[1]!.textContent).toContain('Indisponible : limité partout à « Sens seul »');
-		expect(within(menu).getByText('Reclassement').nextElementSibling?.textContent).toBe('non utilisé');
+		expect(screen.getByText('Reclassement').nextElementSibling?.textContent).toBe('non utilisé');
 		await act(async () => fireEvent.click(choix[3]!));
 		expect(faux.api.remplacer).toHaveBeenCalledWith('/api/sessions/s1/modeles', { niveau: 'coupes' });
 		expect(screen.queryByRole('menu')).toBeNull();
@@ -185,6 +242,8 @@ describe('« Injecté dans la session » sans notes : la raison selon le niveau'
 	const c = (id: string, rang: number) => ({ id, titre: id, note: null, servi: false, rang });
 	const SANS_NOTES: EntreeServieVue = { session: 's1', moment: 'message', horodatageMs: 1, ids: [], texte: '', ms: 1, sens: false, classement: [c('a.md', 1), c('b.md', 2)], muet: null, cartes: [] };
 
+	/** L'avis de chargement vu par le dernier `classement`. */
+	let avisChargement: string | null = null;
 	async function classement(vue: EtatModelesVue, niveau: NiveauModeles | null): Promise<string | null> {
 		monter(<ClassementEnDirect session="s1" entrees={[SANS_NOTES]} modifiable niveauModeles={niveau} surOuvrirFiche={() => {}} couleur={() => ''} />, vue, {
 			'/api/sessions/s1/ecartes': { ecartes: [] },
@@ -192,6 +251,7 @@ describe('« Injecté dans la session » sans notes : la raison selon le niveau'
 		});
 		await act(async () => {});
 		const avis = screen.queryByText(/^Notes indisponibles/u)?.textContent ?? null;
+		avisChargement = screen.queryByText(/^Modèles en chargement/u)?.textContent ?? null;
 		cleanup();
 		return avis;
 	}
@@ -205,5 +265,16 @@ describe('« Injecté dans la session » sans notes : la raison selon le niveau'
 		// arrêtés : le bouton reste, la session en sens seul comprise (le sens est permis, il ne tourne pas)
 		expect(await classement(vueModeles({ gardien: 'arrete', sens: 'arrete', reranker: 'arrete' }), 'sens')).toBe('Notes indisponibles : modèles arrêtésDémarrer');
 		expect(await classement(vueModeles(), null)).toBeNull();
+	});
+
+	it('en chargement : le dire, sans « Démarrer » ; un seul modèle installé, utile au niveau : pas « non installés »', async () => {
+		expect(await classement(vueModeles({ gardien: 'demarrage', sens: 'arrete', reranker: 'arrete' }), null)).toBeNull();
+		expect(avisChargement).toBe('Modèles en chargement : les notes viendront au prochain message.');
+		const sansReranker = { reranker: 'absent', pieces: { ...vueModeles().pieces, reranker: null } } as const;
+		expect(await classement(vueModeles(sansReranker), null)).toBeNull();
+		expect(avisChargement).toBeNull();
+		expect(await classement(vueModeles({ ...sansReranker, gardien: 'arrete', sens: 'arrete' }), null)).toBe('Notes indisponibles : modèles arrêtésDémarrer');
+		const rien = { installes: false, sens: 'absent', reranker: 'absent', pieces: { sens: null, reranker: null, moteur: null } } as const;
+		expect(await classement(vueModeles(rien), null)).toBe('Notes indisponibles : modèles non installés');
 	});
 });

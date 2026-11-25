@@ -96,6 +96,7 @@ describe('modelesLocaux : état', () => {
 			installes: false,
 			niveau: 'complets',
 			gardien: 'arrete',
+			inactiviteMinutes: null,
 			sens: 'absent',
 			reranker: 'absent',
 			pieces: { sens: null, reranker: null, moteur: null },
@@ -118,15 +119,17 @@ describe('modelesLocaux : état', () => {
 		expect(await b.modeles.etat()).toMatchObject({ niveau: 'coupes', sens: 'exclu', reranker: 'exclu' });
 	});
 
-	it('demarrer : prêts, vérifiés ; arreter : arrêtés, niveau inchangé', async () => {
+	it('demarrer : prêts, vérifiés, avec le délai d’inactivité du gardien ; arreter : arrêtés, niveau inchangé, plus de délai', async () => {
 		const b = await banc();
 		await b.modeles.demarrer();
 		await attendreQue(async () => {
 			const e = await b.modeles.etat();
 			return e.gardien === 'pret' && e.sens === 'pret' && e.reranker === 'pret';
 		});
+		// le délai réel du gardien (60 000 ms transmis à son lancement), écrit dans son état
+		expect((await b.modeles.etat()).inactiviteMinutes).toBe(1);
 		await b.modeles.arreter();
-		expect(await b.modeles.etat()).toMatchObject({ niveau: 'complets', gardien: 'arrete', sens: 'arrete', reranker: 'arrete' });
+		expect(await b.modeles.etat()).toMatchObject({ niveau: 'complets', gardien: 'arrete', sens: 'arrete', reranker: 'arrete', inactiviteMinutes: null });
 	}, 30_000);
 
 	it('activités : les appels en cours, du plus ancien au plus récent, sans échéance ni chemin (ceDossier : ceux du service)', async () => {

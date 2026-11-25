@@ -1,18 +1,21 @@
 /**
  * Bouton à état des modèles locaux (barre de titre, entre les quotas et l'Archiviste) : icône, point d'état et texte en direct
- * (« Modèles prêts », « Vectorisation 120/800 », « Recherche… »). Un clic ouvre le menu : état de chaque pièce, activités en
- * cours, niveau partout (complets, sens seul, coupés), démarrer ou arrêter. Absent tant que les modèles ne sont pas installés.
+ * (« Modèles prêts », « Vectorisation 120/800 », « Recherche… »). Un clic ouvre le panneau : état de chaque pièce et activités
+ * en cours (en-tête), puis le menu (niveau partout : complets, sens seul, coupés ; démarrer ou arrêter), puis le délai d'arrêt.
+ * Absent tant que les modèles ne sont pas installés.
  */
 import { NIVEAUX_MODELES, type NiveauModeles } from '@mnemo/commun';
+import type { EtatModelesVue } from '@mnemo/contrat';
 import type { ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
 import { useModeles, useReglages } from '../../client/hooks.ts';
+import { aDemarrer } from '../../modeles/etat.ts';
 import { useNavigation } from '../../navigation.tsx';
 import { cx } from '../commun/classes.ts';
 import { useToast } from '../Toast.tsx';
 import { IconeModeles } from './IconeModeles.tsx';
 import { DETAILS_NIVEAUX, NOMS_NIVEAUX, libelleActivite, lignesPieces, resume } from './libelles.ts';
-import { ChoixMenu, MenuModeles } from './MenuModeles.tsx';
+import { GroupeMenu, ItemMenu, MenuModeles } from './MenuModeles.tsx';
 import s from './Modeles.module.css';
 
 export const ENCORE_EN_CHARGEMENT = 'Des modèles chargent encore : réessayez dans un instant.';
@@ -43,83 +46,91 @@ export function BoutonModeles(): ReactNode {
 					<span className={s.texte}>{texte}</span>
 				</>
 			}
+			entete={<EtatPieces e={e} sessionAffichee={sessionPremierPlan} />}
+			pied={<NoteInactivite minutes={e.inactiviteMinutes} />}
 		>
 			{(fermer) => (
 				<>
-					<div className={s.entete}>Modèles locaux</div>
-					<ul className={s.pieces}>
-						{lignesPieces(e).map((x) => (
-							<li key={x.role} title={x.titre}>
-								<span className={s.role}>{x.role}</span>
-								<span className={s.etatPiece}>{x.etat}</span>
-								{x.modele !== '' && <span className={s.modele}>{x.modele}</span>}
-								{x.detail !== '' && <span className={s.detail}>{x.detail}</span>}
-							</li>
+					<div className={s.separateur} role="separator" />
+					<GroupeMenu titre="Partout">
+						{NIVEAUX_MODELES.map((n) => (
+							<ItemMenu key={n} coche={e.niveau === n} libelle={NOMS_NIVEAUX[n]} detail={DETAILS_NIVEAUX[n]} surChoix={() => choisirNiveau(n)} />
 						))}
-					</ul>
-					{e.activites.length > 0 && (
-						<ul className={s.activites}>
-							{e.activites.map((a, i) => (
-								<li key={i}>
-									<span className={cx(s.point, s.actif)} aria-hidden="true" />
-									{libelleActivite(a)}
-									{a.session !== null && a.session === sessionPremierPlan && <span className={s.detail}> – cette session</span>}
-									{!a.ceDossier && <span className={s.detail}> – autre dossier</span>}
-								</li>
-							))}
-						</ul>
-					)}
+					</GroupeMenu>
 					<div className={s.separateur} role="separator" />
-					<div className={s.sousTitre}>Partout</div>
-					{NIVEAUX_MODELES.map((n) => (
-						<ChoixMenu key={n} coche={e.niveau === n} libelle={NOMS_NIVEAUX[n]} detail={DETAILS_NIVEAUX[n]} surChoix={() => choisirNiveau(n)} />
-					))}
-					<div className={s.separateur} role="separator" />
-					{e.gardien === 'arrete' || e.gardien === 'echec' ? (
-						<button
-							type="button"
-							role="menuitem"
-							className={s.item}
-							disabled={coupes}
-							onClick={() => {
+					{aDemarrer(e) ? (
+						<ItemMenu
+							libelle="Démarrer maintenant"
+							desactive={coupes}
+							detail={coupes ? COUPES_PARTOUT : undefined}
+							surChoix={() => {
 								agir(modeles.demarrer);
 								fermer();
 							}}
-						>
-							<span className={s.coche} />
-							<span className={s.texteItem}>
-								<span>Démarrer maintenant</span>
-								{coupes && <span className={s.detail}>{COUPES_PARTOUT}</span>}
-							</span>
-						</button>
+						/>
 					) : (
-						<button
-							type="button"
-							role="menuitem"
-							className={s.item}
-							onClick={() => {
+						<ItemMenu
+							libelle="Arrêter maintenant"
+							surChoix={() => {
 								agir(async () => {
 									const arret = await modeles.arreter();
 									if (typeof arret === 'object') toast(ENCORE_EN_CHARGEMENT);
 								});
 								fermer();
 							}}
-						>
-							<span className={s.coche} />
-							Arrêter maintenant
-						</button>
+						/>
 					)}
-					<NoteInactivite />
 				</>
 			)}
 		</MenuModeles>
 	);
 }
 
-/** Délai d'arrêt pour inactivité : celui des réglages du dossier, lu à l'ouverture du menu (15 min en attendant). */
-function NoteInactivite(): ReactNode {
+/** En-tête du panneau (hors du menu) : chaque pièce, puis les appels en cours, avec leur session et leur dossier. */
+function EtatPieces(p: { e: EtatModelesVue; sessionAffichee: string | null }): ReactNode {
+	return (
+		<>
+			<div className={s.entete}>Modèles locaux</div>
+			<ul className={s.pieces}>
+				{lignesPieces(p.e).map((x) => (
+					<li key={x.role} title={x.titre}>
+						<span className={s.role}>{x.role}</span>
+						<span className={s.etatPiece}>{x.etat}</span>
+						{x.modele !== '' && <span className={s.modele}>{x.modele}</span>}
+						{x.detail !== '' && <span className={s.detail}>{x.detail}</span>}
+					</li>
+				))}
+			</ul>
+			{p.e.activites.length > 0 && (
+				<ul className={s.activites}>
+					{p.e.activites.map((a, i) => (
+						<li key={i}>
+							<span className={cx(s.point, s.actif)} aria-hidden="true" />
+							{libelleActivite(a)}
+							{a.session !== null && a.session === p.sessionAffichee && <span className={s.detail}> – cette session</span>}
+							{!a.ceDossier && <span className={s.detail}> – autre dossier</span>}
+						</li>
+					))}
+				</ul>
+			)}
+		</>
+	);
+}
+
+/**
+ * Délai d'arrêt pour inactivité : celui du gardien en marche ; sinon celui des réglages du dossier (lu à l'ouverture du
+ * panneau), qu'aura le prochain gardien lancé d'ici. Rien tant qu'aucun n'est connu.
+ */
+function NoteInactivite(p: { minutes: number | null }): ReactNode {
+	return p.minutes !== null ? <TexteInactivite minutes={p.minutes} /> : <InactiviteDesReglages />;
+}
+
+function InactiviteDesReglages(): ReactNode {
 	const reglages = useReglages();
 	const champ = reglages.donnees?.champs.find((c) => c.cle === 'modeles.inactiviteMinutes');
-	const minutes = typeof champ?.valeur === 'number' ? champ.valeur : 15;
-	return <p className={s.note}>Ils démarrent au besoin et s’arrêtent seuls après {minutes} min sans requête.</p>;
+	return typeof champ?.valeur === 'number' ? <TexteInactivite minutes={champ.valeur} /> : null;
+}
+
+function TexteInactivite(p: { minutes: number }): ReactNode {
+	return <p className={s.note}>Ils démarrent au besoin et s’arrêtent seuls après {p.minutes} min sans requête.</p>;
 }

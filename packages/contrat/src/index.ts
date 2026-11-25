@@ -237,6 +237,8 @@ export type EtatModelesVue = {
 	installes: boolean;
 	niveau: NiveauModeles;
 	gardien: 'arrete' | 'demarrage' | 'pret' | 'echec';
+	/** Arrêt après tant de minutes sans requête, celui du gardien en marche ; null quand il est arrêté (ou pas encore publié). */
+	inactiviteMinutes: number | null;
 	sens: EtatModeleVue;
 	reranker: EtatModeleVue;
 	pieces: { sens: PieceModeleVue | null; reranker: PieceModeleVue | null; moteur: { version: string; plateforme: string } | null };

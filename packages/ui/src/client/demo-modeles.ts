@@ -6,10 +6,13 @@
  */
 import { estNiveauModeles, modelesPermis } from '@mnemo/commun';
 import type { ActiviteModeleVue, EtatModelesVue, MessageServeur, ReponseArretModeles } from '@mnemo/contrat';
+import { aDemarrer } from '../modeles/etat.ts';
 import { ErreurApi } from './api.ts';
 
 /** Délai du faux chargement après « Démarrer ». */
 const CHARGEMENT_MS = 1500;
+/** Inactivité tolérée par le faux gardien (celle du réglage de démonstration). */
+const INACTIVITE_MINUTES = 15;
 
 /** Une activité de la démonstration, de ce dossier. */
 const activite = (operation: ActiviteModeleVue['operation'], session: string | null, avancement: ActiviteModeleVue['avancement'] = null): ActiviteModeleVue => ({
@@ -56,6 +59,7 @@ function etatInitial(): EtatModelesVue {
 		installes: true,
 		niveau: 'complets',
 		gardien: 'pret',
+		inactiviteMinutes: INACTIVITE_MINUTES,
 		sens: 'pret',
 		reranker: 'pret',
 		pieces: {
@@ -70,11 +74,13 @@ function etatInitial(): EtatModelesVue {
 export function creerModelesDemo(diffuser: (m: MessageServeur) => void, o: { depart?: string | null; session?: string | null } = {}) {
 	const session = o.session ?? null;
 	const depart = o.depart == null ? undefined : DEPARTS_MODELES[o.depart];
-	let etat = { ...etatInitial(), ...depart?.(session) };
+	/** Le délai d'inactivité n'est connu que d'un gardien en marche. */
+	const avecDelai = (e: EtatModelesVue): EtatModelesVue => ({ ...e, inactiviteMinutes: e.gardien === 'pret' || e.gardien === 'demarrage' ? INACTIVITE_MINUTES : null });
+	let etat = avecDelai({ ...etatInitial(), ...depart?.(session) });
 	let chargement: ReturnType<typeof setTimeout> | undefined;
 	let scenario: ReturnType<typeof setTimeout> | undefined;
 	const publier = (changement: Partial<EtatModelesVue>): EtatModelesVue => {
-		etat = { ...etat, ...changement };
+		etat = avecDelai({ ...etat, ...changement });
 		diffuser({ type: 'modeles', modeles: structuredClone(etat) });
 		return structuredClone(etat);
 	};
@@ -109,10 +115,11 @@ export function creerModelesDemo(diffuser: (m: MessageServeur) => void, o: { dep
 		etat: (): EtatModelesVue => structuredClone(etat),
 		demarrer(): EtatModelesVue {
 			clearTimeout(scenario);
-			if (etat.niveau === 'coupes' || etat.gardien === 'pret') return structuredClone(etat);
+			// comme le service : un gardien prêt à qui manque un modèle permis (niveau élargi) est relancé
+			if (etat.niveau === 'coupes' || !aDemarrer(etat)) return structuredClone(etat);
 			clearTimeout(chargement);
 			chargement = setTimeout(() => publier({ gardien: 'pret', ...modelesSelon(etat.niveau, true) }), CHARGEMENT_MS);
-			return publier({ gardien: 'demarrage' });
+			return publier({ gardien: 'demarrage', ...modelesSelon(etat.niveau, false) });
 		},
 		arreter: arreterSurDemande,
 		niveau(corps: unknown): EtatModelesVue {

@@ -175,6 +175,28 @@ describe('niveau des modèles de la machine', () => {
 		expect(relance.reranker).toBeDefined();
 	}, 30_000);
 
+	it('niveau élargi, gardien prêt sans le reranker : demarrer() l’arrête proprement et le relance avec tous les modèles permis', async () => {
+		const b = await banc();
+		await changerNiveau(b.env, 'sens');
+		const etat = await demarrer(b);
+		expect(etat.reranker).toBeUndefined();
+		await changerNiveau(b.env, 'complets');
+		// sans geste explicite (un hook, une recherche), le gardien prêt est laissé à sa surveillance
+		expect(await rerankerLlama(b.racine, { env: b.env }).noter('q', ['a'], { budgetMs: 1000, demarrer: false })).toBeNull();
+		expect((await lireEtatServeurs(b.serveurs))!.gardien.pid).toBe(etat.gardien.pid);
+		await modelesLocaux(b.racine, { env: b.env }).demarrer();
+		await attendreQue(async () => {
+			const e = await lireEtatServeurs(b.serveurs);
+			return e?.gardien.etat === 'pret' && e.sens !== undefined && e.reranker !== undefined;
+		});
+		const relance = (await lireEtatServeurs(b.serveurs))!;
+		expect(relance.gardien.pid).not.toBe(etat.gardien.pid);
+		// l'ancien gardien et son serveur sont arrêtés
+		for (const pid of [etat.gardien.pid, etat.sens!.pid]) expect(pidVivant(pid)).toBe(false);
+		expect(await readFile(cheminsModeles(b.serveurs).journal, 'utf8')).toContain('gardien prêt sans le reranker : remplacé');
+		expect(await lancements(b)).toHaveLength(3);
+	}, 30_000);
+
 	it('niveau écrit pendant que le gardien est prêt (sans changerNiveau) : un modèle servi exclu l’arrête à la surveillance suivante', async () => {
 		const b = await banc({ env: SURVEILLANCE_RAPIDE });
 		const etat = await demarrer(b);

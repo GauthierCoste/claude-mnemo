@@ -47,6 +47,7 @@ export function etatModelesFaux(): EtatModeles {
 		installes: true,
 		niveau: 'complets',
 		gardien: 'arrete',
+		inactiviteMinutes: null,
 		sens: 'arrete',
 		reranker: 'arrete',
 		pieces: { sens: piece('bge-m3'), reranker: piece('bge-reranker-v2-m3'), moteur: { version: 'b11671', plateforme: 'macOS arm64' } },

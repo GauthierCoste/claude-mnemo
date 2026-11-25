@@ -13,6 +13,7 @@ const vue = (e: Partial<EtatModelesVue> = {}): EtatModelesVue => ({
 	installes: true,
 	niveau: 'complets',
 	gardien: 'arrete',
+	inactiviteMinutes: null,
 	sens: 'arrete',
 	reranker: 'arrete',
 	pieces: { sens: null, reranker: null, moteur: null },

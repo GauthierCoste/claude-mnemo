@@ -135,7 +135,12 @@ describe('mode démo', () => {
 		expect(await api.envoyer<EtatModelesVue>(ROUTES.modelesDemarrer)).toMatchObject({ gardien: 'demarrage' });
 		await vi.advanceTimersByTimeAsync(2000);
 		expect(recus.at(-1)).toMatchObject({ gardien: 'pret', sens: 'pret', reranker: 'exclu' });
-		expect(await api.envoyer<EtatModelesVue>(ROUTES.modelesArreter)).toMatchObject({ gardien: 'arrete', sens: 'arrete' });
+		// niveau élargi, gardien prêt sans le reranker : « Démarrer » le relance avec les deux (comme le service)
+		expect(await api.remplacer<EtatModelesVue>(ROUTES.modelesNiveau, { niveau: 'complets' })).toMatchObject({ gardien: 'pret', sens: 'pret', reranker: 'arrete', inactiviteMinutes: 15 });
+		expect(await api.envoyer<EtatModelesVue>(ROUTES.modelesDemarrer)).toMatchObject({ gardien: 'demarrage' });
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(recus.at(-1)).toMatchObject({ gardien: 'pret', sens: 'pret', reranker: 'pret' });
+		expect(await api.envoyer<EtatModelesVue>(ROUTES.modelesArreter)).toMatchObject({ gardien: 'arrete', sens: 'arrete', inactiviteMinutes: null });
 		const id = '9e02b6f4-8d1a-4c37-b5e9-2a6f0c8d4e13';
 		const r = await api.remplacer<{ session: SessionVue }>(ROUTES.sessionModeles.replace(':id', id), { niveau: 'coupes' });
 		expect(r.session).toMatchObject({ id, niveauModeles: 'coupes' });

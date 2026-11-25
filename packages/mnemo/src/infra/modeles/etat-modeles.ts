@@ -73,10 +73,14 @@ export async function lireEtatModeles(racine: string, options: OptionsEtatModele
 		return (await verifierServeur(entree, finMs)) ? 'pret' : 'arrete';
 	};
 	const [sens, reranker] = await Promise.all([etatDe('sens'), etatDe('reranker')]);
+	const gardien = phaseDuGardien(etat);
+	const inactiviteMs = etat?.gardien.inactiviteMs;
 	return {
 		installes: moteur && (pieces.sens !== null || pieces.reranker !== null),
 		niveau,
-		gardien: phaseDuGardien(etat),
+		gardien,
+		// le délai du gardien en marche (celui du dossier qui l'a lancé) ; aucun quand il est arrêté ou en échec
+		inactiviteMinutes: (gardien === 'demarrage' || gardien === 'pret') && inactiviteMs !== undefined ? Math.round(inactiviteMs / 60_000) : null,
 		sens,
 		reranker,
 		pieces,
