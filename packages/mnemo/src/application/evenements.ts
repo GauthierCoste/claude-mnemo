@@ -1,5 +1,5 @@
 import type { CauseArret, EvenementHook, Session, SourceDeDebut } from '../domaine/session.ts';
-import { evenementEtranger, objectifDe } from '../domaine/session.ts';
+import { evenementEtranger, filApresClear, objectifDe } from '../domaine/session.ts';
 import { ecrireEpisodeMinimal } from './episode.ts';
 import type { Classe, Dependances, Pilotage, VecteurDuMessage } from './ports.ts';
 import { noteDeLigne } from '../domaine/gestes.ts';
@@ -299,15 +299,23 @@ async function finDeSession(dep: Dependances, pil: Pick<Pilotage, 'etat' | 'depo
  * La session de l'événement, s'il vient d'un autre moteur que celui de la session ou d'un autre fil (`evenementEtranger`) ; null
  * sinon. Lu avant d'appliquer quoi que ce soit ; session inconnue ou illisible : null (rien ne sera appliqué à une session inconnue).
  */
-async function sessionEtrangere(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil'>): Promise<Session | null> {
+async function sessionEtrangere(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil' | 'evenement' | 'source'>): Promise<Session | null> {
 	if (entree.session === '') return null;
 	const session = await pil.etat.lire(entree.session).catch(() => null);
 	return session !== null && evenementEtranger(session, entree) ? session : null;
 }
 
 /** L'événement est-il étranger à sa session (`sessionEtrangere`) ? */
-export async function estEtranger(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil'>): Promise<boolean> {
+export async function estEtranger(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil' | 'evenement' | 'source'>): Promise<boolean> {
 	return (await sessionEtrangere(pil, entree)) !== null;
+}
+
+/** Après `/clear` chez un moteur qui change alors l'identifiant de la session (`filApresClear`) : le nouveau `fil` est noté (reprise). */
+async function noterFilApresClear(pil: Pick<Pilotage, 'etat'>, entree: EntreeHook): Promise<void> {
+	if (entree.session === '' || entree.evenement !== 'debut' || entree.source !== 'clear') return;
+	const session = await pil.etat.lire(entree.session).catch(() => null);
+	const fil = session === null ? null : filApresClear(session, entree);
+	if (fil !== null) await pil.etat.modifier(entree.session, { fil }).catch(() => null);
 }
 
 /**
@@ -327,6 +335,7 @@ export async function traiterEvenement(dep: Dependances, pil: Pick<Pilotage, 'et
 		const { rattachee: _rattachee, ...sansRattachement } = reglages;
 		return verifierOutil(dep, pil, etrangere, entree, sansRattachement);
 	}
+	await noterFilApresClear(pil, entree);
 	const session = await appliquer(pil, entree);
 	if (entree.evenement === 'fin') {
 		const tache = finDeSession(dep, pil, session, entree, reglages).catch(() => {});

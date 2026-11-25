@@ -679,6 +679,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 					projet: 'projet',
 					dossierNonRattache: 'dossier_non_rattache',
 					niveauModeles: 'niveau_modeles',
+					fil: 'fil',
 				};
 				// un niveau des modèles invalide est ignoré (null : retiré, la session suit le niveau de la machine)
 				if (champs.niveauModeles !== undefined && champs.niveauModeles !== null && !estNiveauModeles(champs.niveauModeles)) delete colonnes.niveauModeles;

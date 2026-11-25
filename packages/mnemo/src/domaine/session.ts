@@ -64,12 +64,28 @@ export type Session = {
 	fil?: string;
 };
 
+/** Ce qu'un événement de hook dit de sa session chez son moteur. */
+type EvenementDeFil = { moteur?: string; fil?: string; evenement?: string; source?: string };
+
+const memeMoteur = (session: Pick<Session, 'moteur'>, evenement: EvenementDeFil): boolean => (session.moteur ?? MOTEUR_PAR_DEFAUT) === (evenement.moteur ?? MOTEUR_PAR_DEFAUT);
+
+/**
+ * `/clear` dans la session, chez un moteur qui en change l'identifiant (Mistral Vibe : non mesuré) : un `debut` de source
+ * `clear`, du même moteur, portant un autre `fil` que celui appris ; rend ce nouveau `fil`, à noter ; null sinon.
+ */
+export function filApresClear(session: Pick<Session, 'moteur' | 'fil'>, evenement: EvenementDeFil): string | null {
+	if (evenement.evenement !== 'debut' || evenement.source !== 'clear' || !memeMoteur(session, evenement)) return null;
+	return session.fil !== undefined && evenement.fil !== undefined && evenement.fil !== '' && evenement.fil !== session.fil ? evenement.fil : null;
+}
+
 /**
  * Un événement de hook qui n'est pas de cette session : envoyé par un autre moteur que le sien (un `codex` lancé depuis une
- * session Claude Code hérite de `MNEMO_SESSION`), ou portant un autre `fil` que celui déjà appris. Sans effet.
+ * session Claude Code hérite de `MNEMO_SESSION`), ou portant un autre `fil` que celui déjà appris, sauf après `/clear`
+ * (`filApresClear`). Sans effet.
  */
-export function evenementEtranger(session: Pick<Session, 'moteur' | 'fil'>, evenement: { moteur?: string; fil?: string }): boolean {
-	if ((session.moteur ?? MOTEUR_PAR_DEFAUT) !== (evenement.moteur ?? MOTEUR_PAR_DEFAUT)) return true;
+export function evenementEtranger(session: Pick<Session, 'moteur' | 'fil'>, evenement: EvenementDeFil): boolean {
+	if (!memeMoteur(session, evenement)) return true;
+	if (filApresClear(session, evenement) !== null) return false;
 	return session.fil !== undefined && evenement.fil !== undefined && evenement.fil !== session.fil;
 }
 

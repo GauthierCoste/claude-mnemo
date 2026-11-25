@@ -738,7 +738,8 @@ export interface EtatSessions {
 		complement?: { objectif?: string; commitDebut?: string | null; branche?: string | null; arret?: CauseArret; fil?: string },
 	): Promise<Session | null>;
 	/**
-	 * Une session `terminee` garde son `etat` et son `arretAttendu` (les autres champs restent modifiables). `niveauModeles` :
+	 * Une session `terminee` garde son `etat` et son `arretAttendu` (les autres champs restent modifiables). `fil` : remplacé
+	 * (après `/clear` chez un moteur qui change alors d'identifiant). `niveauModeles` :
 	 * null le retire (la session suit le niveau de la machine) ; une valeur qui n'est pas un niveau est ignorée.
 	 */
 	modifier(
@@ -746,7 +747,7 @@ export interface EtatSessions {
 		champs: Partial<
 			Pick<
 				Session,
-				'etat' | 'arretAttendu' | 'pid' | 'bilanDemandeMs' | 'bilanLuMs' | 'commitDebut' | 'branche' | 'demarrageMachineMs' | 'lanceMs' | 'vuVivantMs' | 'episodeMs' | 'position' | 'projet' | 'dossierNonRattache'
+				'etat' | 'arretAttendu' | 'pid' | 'bilanDemandeMs' | 'bilanLuMs' | 'commitDebut' | 'branche' | 'demarrageMachineMs' | 'lanceMs' | 'vuVivantMs' | 'episodeMs' | 'position' | 'projet' | 'dossierNonRattache' | 'fil'
 			>
 		> & { niveauModeles?: NiveauModeles | null },
 	): Promise<Session | null>;

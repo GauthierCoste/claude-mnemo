@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
-import { DEMANDE_MAX, relatifALaRacine, traiterEvenement } from '../../src/application/evenements.ts';
+import { DEMANDE_MAX, estEtranger, relatifALaRacine, traiterEvenement } from '../../src/application/evenements.ts';
 import type { EntreeHook } from '../../src/application/evenements.ts';
 import type { EtatSessions, Pilotage } from '../../src/application/ports.ts';
 import { dossiersNonRattaches } from '../../src/application/dossiers-non-rattaches.ts';
@@ -111,6 +111,23 @@ describe('traiterEvenement : états', () => {
 		expect((await etat.lire(ID))?.etat).toBe('attend');
 		await traiterEvenement(dep, pil, entree('fin', 14, { moteur: 'codex', fil: 'fil-a' }), local);
 		expect((await etat.lire(ID))?.etat).toBe('a_relire');
+	});
+
+	it('/clear (debut de source clear, même moteur, autre fil ; non mesuré) : le fil est remplacé, la suite vient de lui', async () => {
+		const { dep, etat, pil } = await contexte({ etat: 'travaille', moteur: 'mistral-vibe' });
+		await traiterEvenement(dep, pil, entree('arret', 10, { moteur: 'mistral-vibe', fil: 'fil-a' }), local);
+		expect(await etat.lire(ID)).toMatchObject({ fil: 'fil-a' });
+		// un autre fil sans /clear (sous-agent, /new) : toujours étranger
+		expect(await estEtranger(pil, entree('debut', 11, { moteur: 'mistral-vibe', fil: 'fil-b', source: 'startup' }))).toBe(true);
+		// /clear venant d'un autre moteur : étranger
+		expect(await estEtranger(pil, entree('debut', 11, { moteur: 'codex', fil: 'fil-b', source: 'clear' }))).toBe(true);
+		await traiterEvenement(dep, pil, entree('debut', 11, { moteur: 'mistral-vibe', fil: 'fil-b', source: 'clear' }), local);
+		expect(await etat.lire(ID)).toMatchObject({ etat: 'attend', fil: 'fil-b' });
+		await traiterEvenement(dep, pil, entree('message', 12, { moteur: 'mistral-vibe', fil: 'fil-b', prompt: 'Suite' }), local);
+		expect(await etat.lire(ID)).toMatchObject({ etat: 'travaille', fil: 'fil-b' });
+		await traiterEvenement(dep, pil, entree('message', 13, { moteur: 'mistral-vibe', fil: 'fil-a', prompt: 'Ancien' }), local);
+		expect(await estEtranger(pil, entree('message', 13, { moteur: 'mistral-vibe', fil: 'fil-a' }))).toBe(true);
+		expect(await etat.lire(ID)).toMatchObject({ fil: 'fil-b', objectif: 'Suite' });
 	});
 
 	it('fin selon arretAttendu : pause → en_pause', async () => {
