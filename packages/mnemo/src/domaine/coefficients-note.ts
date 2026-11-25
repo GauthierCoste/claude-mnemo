@@ -1,5 +1,6 @@
 // Coefficients de la note de confiance, un modèle par niveau (spec classement vivant § 4.2). Données écrites par
-// `mnemo banc contexte --apprendre` : aucun texte de fiche ni de message. Un modèle non accepté ne note rien (ordre seul).
+// `mnemo banc contexte --apprendre --module` : aucun texte de fiche ni de message. Valeur par défaut : les coefficients appris
+// d'une mémoire sont dans son `.mnemo/coefficients-note.json`. Un modèle non accepté ne note rien (ordre seul).
 
 import type { CoefficientsNote } from './modele-de-note.ts';
 
@@ -11,7 +12,7 @@ export const COEFFICIENTS_NOTE: CoefficientsNote = {
 		"methodeCosinus": "mediane",
 		"requete": "seule",
 		"lambda": null,
-		"abstention": null,
+		"converge": true,
 		"apprisLe": null,
 		"gguf": {
 			"sens": null,
@@ -32,7 +33,7 @@ export const COEFFICIENTS_NOTE: CoefficientsNote = {
 		"methodeCosinus": "mediane",
 		"requete": "seule",
 		"lambda": null,
-		"abstention": null,
+		"converge": true,
 		"apprisLe": null,
 		"gguf": {
 			"sens": null,

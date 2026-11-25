@@ -73,6 +73,20 @@ describe('apprendreRegression', () => {
 		const exemples = tirer(2000, 0, [2]);
 		const r = apprendreRegression(exemples, { lambda: 0.01 });
 		expect(perteMoyenne(r, exemples)).toBeLessThan(perteMoyenne({ biais: 0, poids: [0] }, exemples));
-		expect(apprendreRegression([], { lambda: 0.1 })).toEqual({ biais: 0, poids: [] });
+		expect(apprendreRegression([], { lambda: 0.1 })).toEqual({ biais: 0, poids: [], converge: true });
+	});
+
+	it('respecte un poids maximal, dans les unités de la variable', () => {
+		const exemples = tirer(5000, 0, [3, 0, 1]);
+		const r = apprendreRegression(exemples, { lambda: 1e-4, maximums: [null, null, 0.5] });
+		expect(r.poids[2]).toBeCloseTo(0.5, 6);
+		expect(r.poids[0]).toBeGreaterThan(2);
+		expect(r.converge).toBe(true);
+	});
+
+	it('signale l’absence de convergence sur des données séparables sans pénalité', () => {
+		const separables: Exemple[] = Array.from({ length: 200 }, (_, i) => ({ x: [i < 100 ? -1 - i / 100 : 1 + i / 100], y: i >= 100 }));
+		expect(apprendreRegression(separables, { lambda: 0, iterationsMax: 30 }).converge).toBe(false);
+		expect(apprendreRegression(separables, { lambda: 0.01 }).converge).toBe(true);
 	});
 });

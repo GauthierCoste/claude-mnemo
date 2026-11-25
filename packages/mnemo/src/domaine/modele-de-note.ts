@@ -1,7 +1,7 @@
 // Forme d'un modèle de note de confiance (spec classement vivant § 4.2) : les variables de chaque niveau, tirées des signaux
 // bruts d'une candidate, et le module de données `coefficients-note.ts` qui garde un modèle par niveau. Pur.
 
-import type { MesuresDInjection } from './acceptation-note.ts';
+import type { MesuresDAcceptation } from './acceptation-note.ts';
 
 export type NiveauDeNote = 'complets' | 'sens';
 export const NIVEAUX_DE_NOTE: readonly NiveauDeNote[] = ['complets', 'sens'];
@@ -12,6 +12,10 @@ export const VARIABLES_DU_NIVEAU: Record<NiveauDeNote, readonly VariableDeNote[]
 	sens: ['cosinusRelatif', 'bm25Relatif', 'signalSession', 'apriori'],
 };
 export const VARIABLES_MAX = 6;
+/** Poids maximal de certaines variables, dans leurs unités (l'historique et la session ne doivent pas tout décider). */
+export const MAXIMUMS_DES_POIDS: Partial<Record<VariableDeNote, number>> = { apriori: 1, signalSession: 1.5 };
+/** Au niveau Complets, le hook ne soumet au reranker que les premières selon la note Sens seul (spec § 3.6). */
+export const RERANKEES_AU_HOOK = 8;
 /** Cosinus relatif : écart à la médiane des cosinus de la mémoire pour le message, ou z-score. */
 export type MethodeCosinus = 'mediane' | 'zscore';
 /** Requête du message : seule, ou jointe au message porteur d'avant quand il est court ou anaphorique (spec § 3.2). */
@@ -50,16 +54,45 @@ export function variablesDeNote(niveau: NiveauDeNote, s: SignauxDeNote, methode:
 	return x.every((v): v is number => v !== null && Number.isFinite(v)) ? x : null;
 }
 
-/** Résumé des mesures d'acceptation, en validation croisée, au seuil par défaut. */
+/** Identité des modèles qui ont calculé des signaux : fichier GGUF du sens et du reranker, avec le début de son SHA-256. */
+export type IdentiteDesModeles = { sens: string | null; reranker: string | null };
+
+/** Vrai si une identité enregistrée diffère de celle des modèles installés (un modèle absent d'un côté ne compte pas). */
+export function identiteDifferente(enregistree: IdentiteDesModeles, installee: IdentiteDesModeles): boolean {
+	const differe = (a: string | null, b: string | null) => a !== null && b !== null && a !== b;
+	return differe(enregistree.sens, installee.sens) || differe(enregistree.reranker, installee.reranker);
+}
+
+/**
+ * Résumé des mesures d'acceptation en validation croisée emboîtée, au seuil par défaut : la médiane des découpages répétés ;
+ * `pirePrecision` : la plus basse précision pessimiste d'un découpage.
+ */
 export type MesuresDuModele = Pick<
-	MesuresDInjection,
-	'seuil' | 'injections' | 'nonJugees' | 'precision' | 'precisionPessimiste' | 'wilsonBassePessimiste' | 'sessions' | 'injectionsParMessage' | 'partSilencesAvecInjection' | 'rappel'
-> & { ece: number | null };
+	MesuresDAcceptation,
+	| 'seuil'
+	| 'injections'
+	| 'nonJugees'
+	| 'horsPileFausses'
+	| 'precision'
+	| 'precisionPessimiste'
+	| 'wilsonBassePessimiste'
+	| 'bootstrapP025'
+	| 'sessions'
+	| 'injectionsParMessage'
+	| 'silences'
+	| 'partSilencesAvecInjection'
+	| 'pente'
+	| 'ordonnee'
+	| 'ece'
+	| 'rappel'
+	| 'utilesAtteintes'
+	| 'rappel10'
+> & { pirePrecision: number | null };
 
 /**
  * Un modèle de note pour un niveau : `p = σ(biais + Σ poids·variable)`. `gguf` : fichiers des modèles de sens et du reranker
  * (nom et début du SHA-256) avec lesquels il a été appris ; un modèle appris pour d'autres fichiers n'est pas utilisé.
- * `abstention` : écart minimal entre la dernière fiche injectée d'un message et la suivante (null : pas d'abstention).
+ * `converge` : l'apprentissage final a atteint son minimum.
  */
 export type ModeleDeNote = {
 	accepte: boolean;
@@ -68,9 +101,9 @@ export type ModeleDeNote = {
 	methodeCosinus: MethodeCosinus;
 	requete: RequeteDeNote;
 	lambda: number | null;
-	abstention: number | null;
+	converge: boolean;
 	apprisLe: string | null;
-	gguf: { sens: string | null; reranker: string | null };
+	gguf: IdentiteDesModeles;
 	paires: number;
 	messages: number;
 	sessions: number;
@@ -88,7 +121,7 @@ export const modeleNonAppris = (): ModeleDeNote => ({
 	methodeCosinus: 'mediane',
 	requete: 'seule',
 	lambda: null,
-	abstention: null,
+	converge: true,
 	apprisLe: null,
 	gguf: { sens: null, reranker: null },
 	paires: 0,
@@ -106,15 +139,21 @@ function arrondir(valeur: unknown): unknown {
 	return valeur;
 }
 
-/** Texte du module `domaine/coefficients-note.ts` (données seules : aucun texte de fiche ni de message). */
+/** Les coefficients en JSON (`.mnemo/coefficients-note.json`, lu par le service). */
+export function jsonDeCoefficients(c: CoefficientsNote): string {
+	return `${JSON.stringify(arrondir(c), null, '\t')}\n`;
+}
+
+/** Texte du module `domaine/coefficients-note.ts`, la valeur par défaut (données seules : aucun texte de fiche ni de message). */
 export function moduleDeCoefficients(c: CoefficientsNote): string {
 	return [
 		'// Coefficients de la note de confiance, un modèle par niveau (spec classement vivant § 4.2). Données écrites par',
-		'// `mnemo banc contexte --apprendre` : aucun texte de fiche ni de message. Un modèle non accepté ne note rien (ordre seul).',
+		'// `mnemo banc contexte --apprendre --module` : aucun texte de fiche ni de message. Valeur par défaut : les coefficients appris',
+		"// d'une mémoire sont dans son `.mnemo/coefficients-note.json`. Un modèle non accepté ne note rien (ordre seul).",
 		'',
 		"import type { CoefficientsNote } from './modele-de-note.ts';",
 		'',
-		`export const COEFFICIENTS_NOTE: CoefficientsNote = ${JSON.stringify(arrondir(c), null, '\t')};`,
+		`export const COEFFICIENTS_NOTE: CoefficientsNote = ${jsonDeCoefficients(c).trimEnd()};`,
 		'',
 	].join('\n');
 }

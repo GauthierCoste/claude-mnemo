@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ece, intervalleWilson, plisParSession, tableDeFiabilite } from '../../src/domaine/mesures-banc.ts';
+import { ece, intervalleWilson, plisParSession, plisParSessionMelanges, tableDeFiabilite } from '../../src/domaine/mesures-banc.ts';
 
 describe('intervalleWilson', () => {
 	it('valeurs connues à 95 %', () => {
@@ -66,5 +66,24 @@ describe('plisParSession', () => {
 
 	it('k invalide : erreur', () => {
 		expect(() => plisParSession(elements, 0)).toThrow('plis');
+	});
+});
+
+describe('plisParSessionMelanges', () => {
+	const elements = Array.from({ length: 60 }, (_, i) => ({ session: `s${i % 17}` }));
+
+	it('ne coupe jamais une session, et redonne le même découpage pour la même graine', () => {
+		const plis = plisParSessionMelanges(elements, 5, 1);
+		const pliDe = new Map<string, number>();
+		elements.forEach((e, i) => {
+			if (pliDe.has(e.session)) expect(plis[i]).toBe(pliDe.get(e.session));
+			pliDe.set(e.session, plis[i]!);
+		});
+		expect(plisParSessionMelanges(elements, 5, 1)).toEqual(plis);
+		expect(new Set(plis).size).toBe(5);
+	});
+
+	it('une autre graine, un autre découpage', () => {
+		expect(plisParSessionMelanges(elements, 5, 2)).not.toEqual(plisParSessionMelanges(elements, 5, 1));
 	});
 });
