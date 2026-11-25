@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, readlink, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { hooksAttendus } from '../../src/domaine/moteurs/codex/hooks-installes.ts';
@@ -54,6 +54,31 @@ describe('hooks.json de Codex sur le poste', () => {
 		expect(await H.retirer(appel)).toBe('absent');
 	});
 
+	it('installer face aux hooks d’une autre installation de Mnemo : échec périmé, rien d’écrit ; ceux de cette installation sont complétés', async () => {
+		const { maison, appel } = await poste();
+		const fichier = join(maison, 'hooks.json');
+		expect(await H.installer({ ...appel, main: '/autre/packages/mnemo/src/adaptateurs/cli/main.ts' })).toBe('installe');
+		const avant = await readFile(fichier, 'utf8');
+		expect(await H.installer(appel)).toEqual({ echec: expect.stringContaining('mnemo declarer --moteur codex --remplacer'), perime: true });
+		expect(await readFile(fichier, 'utf8')).toBe(avant);
+		// cette installation, un événement retiré à la main : complété
+		await writeFile(fichier, JSON.stringify({ hooks: { Stop: [hooksAttendus(NODE, MAIN).get('Stop')] } }));
+		expect(await H.installer(appel)).toBe('mis_a_jour');
+		expect(await H.lire(appel)).toMatchObject({ etat: 'a_jour' });
+	});
+
+	it('retirer : les commandes de cette installation, même dans un groupe modifié ; jamais celles d’une autre (« autre »)', async () => {
+		const { maison, appel } = await poste();
+		await mkdir(maison, { recursive: true });
+		const fichier = join(maison, 'hooks.json');
+		const a = hooksAttendus(NODE, MAIN);
+		const autre = hooksAttendus('/autre/node', MAIN);
+		await writeFile(fichier, JSON.stringify({ hooks: { Stop: [{ matcher: 'x', hooks: [etranger, ...a.get('Stop')!.hooks] }, autre.get('Stop')], SessionEnd: [{ ...a.get('SessionEnd'), timeout: 9 }] } }));
+		expect(await H.retirer(appel)).toBe('retire');
+		expect(JSON.parse(await readFile(fichier, 'utf8'))).toEqual({ hooks: { Stop: [{ matcher: 'x', hooks: [etranger] }, autre.get('Stop')] } });
+		expect(await H.retirer(appel)).toBe('autre');
+	});
+
 	it('JSON illisible : échec motivé, le fichier n’est pas réécrit', async () => {
 		const { maison, appel } = await poste();
 		await mkdir(maison, { recursive: true });
@@ -71,5 +96,16 @@ describe('hooks.json de Codex sur le poste', () => {
 		expect(await H.installer(appel)).toBe('installe');
 		expect(JSON.parse(await readFile(cible, 'utf8'))).toHaveProperty('hooks.SessionEnd');
 		expect((await readdir(maison)).sort()).toEqual(['hooks.json', 'reglages-partages.json']);
+	});
+
+	it('lien symbolique cassé : échec motivé, le lien n’est jamais remplacé', async () => {
+		const { maison, appel } = await poste();
+		await mkdir(maison, { recursive: true });
+		const cible = join(maison, 'disparu.json');
+		await symlink(cible, join(maison, 'hooks.json'));
+		for (const r of [await H.installer(appel), await H.retirer(appel), await H.remplacer(appel), await H.lire(appel)]) expect(r).toEqual({ echec: expect.stringContaining('lien symbolique dont la cible est introuvable') });
+		expect((await lstat(join(maison, 'hooks.json'))).isSymbolicLink()).toBe(true);
+		expect(await readlink(join(maison, 'hooks.json'))).toBe(cible);
+		expect(await readdir(maison)).toEqual(['hooks.json']);
 	});
 });

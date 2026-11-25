@@ -14,6 +14,7 @@ import { citerPosix, citerPowerShell } from '../../domaine/citer.ts';
 import { commandeManuelle, declarerServeurMcp } from '../../infra/moteurs/claude-code/declaration-mcp.ts';
 import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
 import { MOTEUR_CODEX } from '../../infra/moteurs/codex.ts';
+import { cheminHooksJson } from '../../infra/moteurs/codex/hooks-json.ts';
 import { commandeAJour, dossierDeCommande } from '../../infra/commande-mnemo.ts';
 import type { Piece } from '../../infra/modeles/catalogue.ts';
 import { dependancesReelles } from '../../infra/systeme.ts';
@@ -46,6 +47,8 @@ export type ActionsInit = {
 	declarerCodex(): Promise<ResultatDeclaration>;
 	/** Hooks de Mnemo dans `~/.codex/hooks.json` (`--codex`). */
 	installerHooksCodex(): Promise<ResultatInstallationHooks>;
+	/** Le `hooks.json` de Codex visé (`$CODEX_HOME`, sinon `~/.codex`), pour les messages. */
+	cheminHooksCodex(): string;
 	installerModeles(racine: string, suivi?: SuiviModeles): Promise<void>;
 	creerLanceur(racine: string, ecrire?: (ligne: string) => void): Promise<void>;
 	installerCommande(ecrire?: (ligne: string) => void): Promise<void>;
@@ -72,6 +75,7 @@ const actionsReelles: ActionsInit = {
 	declarerCodex: () =>
 		MOTEUR_CODEX.declarationMcp.declarer({ executer: executeurReel(), main: MAIN, commande: MOTEUR_CODEX.trouver(process.env, process.platform), plateforme: process.platform, env: process.env }),
 	installerHooksCodex: () => MOTEUR_CODEX.hooksDuPoste!.installer({ node: nodeDurable(process.platform), main: MAIN, env: process.env }),
+	cheminHooksCodex: () => cheminHooksJson(process.env),
 	installerModeles: async (racine, suivi) => (await import('./modeles.ts')).commandeModeles(['installer'], { racine, ...suivi }),
 	creerLanceur: async (racine, ecrire) => (await import('./lanceur.ts')).commandeLanceur([], racine, ecrire),
 	installerCommande: async (ecrire) => (await import('./commande.ts')).commandeCommande([], ecrire === undefined ? {} : { ecrire }),
@@ -243,10 +247,13 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 			});
 			if (ligne !== null) ecrire(ligne);
 			let ligneHooks: string | null = null;
-			await mener('codex_hooks', 'Hooks (Codex)', 'Installation des hooks de Mnemo chez Codex (~/.codex/hooks.json).', async () => {
+			const cheminHooks = actions.cheminHooksCodex();
+			await mener('codex_hooks', 'Hooks (Codex)', `Installation des hooks de Mnemo chez Codex (${cheminHooks}).`, async () => {
 				const r = await actions.installerHooksCodex();
+				// hooks d'une autre installation de Mnemo : `mnemo declarer --moteur codex --remplacer` les reprend
+				if (typeof r !== 'string' && r.perime === true) throw new EchecMotive(r.echec, 'perime');
 				if (typeof r !== 'string') throw new Error(r.echec);
-				ligneHooks = messageHooksCodex(r);
+				ligneHooks = messageHooksCodex(r, cheminHooks);
 				return ligneHooks;
 			});
 			if (ligneHooks !== null) ecrire(ligneHooks);
@@ -400,10 +407,10 @@ export function messageCodex(declaration: ResultatDeclaration): string {
 }
 
 /** Une ligne pour les hooks installés chez Codex : approuvés une fois par l'utilisateur, sans quoi Codex ne les lance pas. */
-export function messageHooksCodex(r: Exclude<ResultatInstallationHooks, { echec: string }>): string {
-	const approuver = 'approuve-les une fois dans Codex (/hooks) : sans approbation, Codex ne les lance pas.';
-	if (r === 'deja') return 'Hooks de Mnemo déjà installés chez Codex ; s’ils ne sont pas encore approuvés, approuve-les dans Codex (/hooks).';
-	return r === 'installe' ? `Hooks de Mnemo installés chez Codex (~/.codex/hooks.json) ; ${approuver}` : `Hooks de Mnemo mis à jour chez Codex (~/.codex/hooks.json) ; ${approuver}`;
+export function messageHooksCodex(r: Exclude<ResultatInstallationHooks, { echec: string }>, chemin: string): string {
+	const approuver = 'approuvez-les une fois dans Codex (/hooks) : sans approbation, Codex ne les lance pas.';
+	if (r === 'deja') return `Hooks de Mnemo déjà installés chez Codex (${chemin}) ; s’ils ne sont pas encore approuvés, approuvez-les dans Codex (/hooks).`;
+	return r === 'installe' ? `Hooks de Mnemo installés chez Codex (${chemin}) ; ${approuver}` : `Hooks de Mnemo mis à jour chez Codex (${chemin}) ; ${approuver}`;
 }
 
 /** Ligne de démarrage à copier-coller sans la commande `mnemo` : PowerShell (`& 'node.exe' …`) sous Windows, POSIX ailleurs. */

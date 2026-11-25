@@ -351,7 +351,7 @@ describe('mnemo declarer --moteur codex (faux codex par MNEMO_CODEX)', () => {
 		await writeFile(join(d, 'hooks.json'), JSON.stringify({ hooks: { Stop: [etranger, { hooks: [{ type: 'command', ...ancien, timeout: 3 }] }] } }));
 		const lignes: string[] = [];
 		await commandeDeclarer(['--moteur', 'codex', '--remplacer', '--json'], { main: MAIN_MNEMO, env: { CODEX_HOME: d } }, (l) => lignes.push(l));
-		expect(JSON.parse(lignes[0]!).hooks).toEqual({ resultat: 'remplace', message: expect.stringContaining('approuve-les de nouveau dans Codex (/hooks)') });
+		expect(JSON.parse(lignes[0]!).hooks).toEqual({ resultat: 'remplace', message: expect.stringContaining('approuvez-les de nouveau dans Codex (/hooks)') });
 		const apres = JSON.parse(await readFile(join(d, 'hooks.json'), 'utf8')) as { hooks: Record<string, unknown[]> };
 		expect(apres.hooks.Stop![0]).toEqual(etranger);
 		expect(JSON.stringify(apres.hooks.Stop![1])).toContain(JSON.stringify(process.execPath).slice(1, -1));

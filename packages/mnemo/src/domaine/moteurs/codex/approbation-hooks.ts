@@ -1,7 +1,7 @@
 /**
  * Approbation des hooks par l'utilisateur dans Codex (`/hooks`), lue dans `config.toml` sans l'écrire : Codex 0.171 y note
- * `[hooks.state."<chemin de hooks.json>:<événement>:<groupe>:<commande>"]` avec `trusted_hash = "sha256:…"` (et `enabled =
- * false` pour un hook désactivé). L'empreinte est calculée par Codex sur l'entrée : Mnemo ne sait pas la recalculer, il ne
+ * `[hooks.state."<chemin de hooks.json>:<événement>:<groupe>:<commande>"]` avec `trusted_hash = "sha256:…"` (chaîne de base
+ * ou littérale ; et `enabled = false` pour un hook désactivé). L'empreinte est calculée par Codex sur l'entrée : Mnemo ne sait pas la recalculer, il ne
  * voit donc pas si une approbation est périmée (entrée changée depuis).
  */
 export type ApprobationHooks = { etat: 'approuves' | 'a_approuver' | 'inconnu'; motif: string };
@@ -87,7 +87,13 @@ export function etatsDansConfig(texte: string): { illisible: boolean; etats: Map
 		etats.set(cle, e);
 		return e;
 	};
+	// chaîne sur plusieurs lignes en cours (`"""` ou `'''`) : ses lignes ne sont ni des en-têtes ni des clés
+	let multiligne: string | null = null;
 	for (const brute of texte.split(/\r?\n/u)) {
+		if (multiligne !== null) {
+			if (brute.includes(multiligne)) multiligne = null;
+			continue;
+		}
 		const ligne = brute.trim();
 		if (ligne === '' || ligne.startsWith('#')) continue;
 		if (ligne.startsWith('[')) {
@@ -107,10 +113,12 @@ export function etatsDansConfig(texte: string): { illisible: boolean; etats: Map
 		if (cle === null) continue;
 		const chemin = [...table, ...cle];
 		const valeur = ligne.slice(egal + 1).trim();
+		const ouvrante = valeur.startsWith('"""') ? '"""' : valeur.startsWith("'''") ? "'''" : null;
+		if (ouvrante !== null && !valeur.slice(3).includes(ouvrante)) multiligne = ouvrante;
 		if (chemin[0] !== 'hooks') continue;
 		if (chemin.length <= 3 && valeur.startsWith('{') && (chemin.length === 1 || chemin[1] === 'state')) illisible = true;
 		if (chemin.length !== 4 || chemin[1] !== 'state') continue;
-		if (chemin[3] === 'trusted_hash' && /^"[^"]+"/u.test(valeur)) etat(chemin[2]!).approuve = true;
+		if (chemin[3] === 'trusted_hash' && /^(?:"[^"]+"|'[^']+')/u.test(valeur)) etat(chemin[2]!).approuve = true;
 		if (chemin[3] === 'enabled' && /^false\b/u.test(valeur)) etat(chemin[2]!).desactive = true;
 	}
 	return { illisible, etats };

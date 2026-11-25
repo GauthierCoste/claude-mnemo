@@ -814,8 +814,11 @@ export type ApprobationHooksDuPoste = { etat: 'approuves' | 'a_approuver' | 'inc
  * `chemin` : le fichier lu ; `approbation` : seulement s'ils sont à jour.
  */
 export type LectureHooksDuPoste = { etat: 'a_jour' | 'perime' | 'absent'; chemin: string; approbation?: ApprobationHooksDuPoste } | { echec: string };
-/** `installe` : il n'y en avait pas ; `mis_a_jour` : des hooks de Mnemo refaits ; `deja` : rien à changer. */
-export type ResultatInstallationHooks = 'installe' | 'mis_a_jour' | 'deja' | { echec: string };
+/**
+ * `installe` : il n'y en avait pas ; `mis_a_jour` : ceux de cette installation complétés ou refaits ; `deja` : rien à changer ;
+ * échec `perime` : des hooks d'une autre installation de Mnemo, laissés (`remplacer` les reprend).
+ */
+export type ResultatInstallationHooks = 'installe' | 'mis_a_jour' | 'deja' | { echec: string; perime?: true };
 /** Comme `ResultatInstallationHooks`, sans jamais installer : `absent` s'il n'y a aucun hook de Mnemo. */
 export type ResultatRemplacementHooks = 'absent' | 'mis_a_jour' | 'deja' | { echec: string };
 /** `autre` : des hooks de Mnemo d'une autre installation (autre Node, autre Mnemo) : laissés. */
@@ -824,7 +827,8 @@ export type ResultatRetraitHooks = 'absent' | 'retire' | 'autre' | { echec: stri
 /**
  * Hooks de Mnemo installés pour tout le poste chez un moteur qui ne les prend pas d'un plugin de session (Codex :
  * `~/.codex/hooks.json`). Jamais une autre entrée touchée ; un fichier illisible n'est jamais réécrit. `installer` et
- * `remplacer` refont tous les hooks de Mnemo ; `retirer` ne retire que ceux de ce Node et ce `main.ts`.
+ * `remplacer` refont les hooks de Mnemo (`installer` : seulement ceux de cette installation) ; `retirer` ne retire que ceux
+ * de ce Node et ce `main.ts`.
  */
 export type HooksDuPoste = {
 	lire(a: AppelHooksDuPoste): Promise<LectureHooksDuPoste>;

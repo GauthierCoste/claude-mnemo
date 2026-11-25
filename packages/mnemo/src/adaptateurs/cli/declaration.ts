@@ -30,8 +30,8 @@ const MESSAGES: Record<Exclude<SortieDeclarer['resultat'], 'echec'>, string> = {
 const MESSAGES_HOOKS: Record<'absent' | 'deja' | 'remplace' | 'autre' | 'retire', string> = {
 	absent: 'Aucun hook de Mnemo dans hooks.json : rien à faire.',
 	deja: 'Hooks de Mnemo déjà à jour.',
-	remplace: 'Hooks de Mnemo refaits avec ce Node et ce Mnemo ; approuve-les de nouveau dans Codex (/hooks).',
-	autre: 'Les hooks de Mnemo de hooks.json lancent un autre Node ou un autre Mnemo : laissés.',
+	remplace: 'Hooks de Mnemo refaits avec ce Node et ce Mnemo ; approuvez-les de nouveau dans Codex (/hooks).',
+	autre: 'Aucun hook de ce Mnemo dans hooks.json ; ceux d’une autre installation de Mnemo (autre Node ou autre Mnemo) sont laissés.',
 	retire: 'Hooks de Mnemo retirés de hooks.json.',
 };
 

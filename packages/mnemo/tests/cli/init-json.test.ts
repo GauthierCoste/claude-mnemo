@@ -267,6 +267,7 @@ describe('mnemo init --codex', () => {
 		...actions(),
 		declarerCodex: vi.fn(async () => declaration),
 		installerHooksCodex: vi.fn(async () => hooks),
+		cheminHooksCodex: vi.fn(() => '/h/codex-jetable/hooks.json'),
 	});
 
 	it('déclare chez Codex (étape « codex »), le reste inchangé ; sans --codex, Codex n’est jamais touché', async () => {
@@ -279,7 +280,7 @@ describe('mnemo init --codex', () => {
 		expect(a.installerHooksCodex).toHaveBeenCalledOnce();
 		expect(a.declarerMcp).not.toHaveBeenCalled();
 		expect(evenements(lignesJson(sortie.texte()))).toEqual(['memoire:debut', 'memoire:fait', 'mcp:saute', 'codex:debut', 'codex:fait', 'codex_hooks:debut', 'codex_hooks:fait', 'modeles:saute', 'commande:saute', 'lanceur:saute']);
-		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'codex_hooks', etat: 'fait', message: expect.stringContaining('approuve-les une fois dans Codex (/hooks)') });
+		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'codex_hooks', etat: 'fait', message: expect.stringContaining('(/h/codex-jetable/hooks.json) ; approuvez-les une fois dans Codex (/hooks)') });
 		const sans = avecCodex('declare');
 		const sortieSans = capture();
 		await commandeInit([racine, '--json', '--mcp'], { sortie: sortieSans.flux, plateforme: 'linux', actions: sans });
@@ -294,14 +295,14 @@ describe('mnemo init --codex', () => {
 		const sortie = capture();
 		await commandeInit([racine, '--sans-mcp', '--codex'], { sortie: sortie.flux, interactif: false, plateforme: 'linux', actions: avecCodex('deja') });
 		expect(sortie.texte()).toContain('Serveur MCP déjà déclaré à Codex.');
-		expect(sortie.texte()).toContain('Hooks de Mnemo installés chez Codex (~/.codex/hooks.json) ; approuve-les une fois dans Codex (/hooks)');
+		expect(sortie.texte()).toContain('Hooks de Mnemo installés chez Codex (/h/codex-jetable/hooks.json) ; approuvez-les une fois dans Codex (/hooks)');
 	});
 
 	it('hooks.json de Codex illisible : étape codex_hooks en échec (code 1), la déclaration MCP faite reste dite', async () => {
 		avecMcpFactice();
 		const racine = await dossierTemporaire();
 		const sortie = capture();
-		const a = avecCodex('declare', { echec: '/h/.codex/hooks.json : JSON illisible (x) ; corrige-le, Mnemo ne le réécrit pas.' });
+		const a = avecCodex('declare', { echec: '/h/.codex/hooks.json : JSON illisible (x) ; corrigez-le, Mnemo ne le réécrit pas.' });
 		await expect(commandeInit([racine, '--json', '--sans-mcp', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: a })).rejects.toMatchObject({ code: 1 });
 		const lignes = lignesJson(sortie.texte());
 		expect(lignes).toContainEqual({ etape: 'codex', etat: 'fait', message: 'Serveur MCP déclaré pour toutes les sessions Codex.' });
@@ -320,6 +321,15 @@ describe('mnemo init --codex', () => {
 			if (motif === undefined) expect(echec).not.toHaveProperty('motif');
 			else expect(echec).toMatchObject({ motif, message: expect.stringContaining('mnemo declarer --moteur codex --remplacer') });
 		}
+	});
+
+	it('hooks d’une autre installation de Mnemo chez Codex : étape codex_hooks en échec de motif « perime »', async () => {
+		avecMcpFactice();
+		const racine = await dossierTemporaire();
+		const sortie = capture();
+		const echec = '/h/codex-jetable/hooks.json porte des hooks de Mnemo d’une autre installation : lancez « mnemo declarer --moteur codex --remplacer » pour les reprendre.';
+		await expect(commandeInit([racine, '--json', '--sans-mcp', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: avecCodex('declare', { echec, perime: true }) })).rejects.toMatchObject({ code: 1 });
+		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'codex_hooks', etat: 'echec', motif: 'perime', message: expect.stringContaining('mnemo declarer --moteur codex --remplacer') });
 	});
 
 	it('MNEMO_SANS_MCP=1 l’emporte sur --codex', async () => {

@@ -106,10 +106,10 @@ async function remplacer(a: AppelDeclaration): Promise<ResultatRedeclaration> {
 		// `codex mcp add` réécrit toute la table `[mcp_servers.mnemo]` : jamais sur des réglages que Mnemo ne pose pas
 		const chemin = cheminConfig(a.env);
 		const texte = await texteConfig(chemin);
-		if (texte === null) return { echec: `${chemin} illisible : impossible de vérifier que la déclaration MCP « mnemo » ne porte pas de réglages personnels ; mets-la à jour à la main : ${lignesTomlCodex(node, a.main)}.` };
+		if (texte === null) return { echec: `${chemin} illisible : impossible de vérifier que la déclaration MCP « mnemo » ne porte pas de réglages personnels ; mettez-la à jour à la main : ${lignesTomlCodex(node, a.main)}.` };
 		const reglages = [...new Set([...e.declaration.reglages, ...reglagesDansConfig(texte)])];
 		if (reglages.length > 0)
-			return { echec: `la déclaration MCP « mnemo » de Codex porte des réglages personnels (${reglages.join(', ')}) : mets-la à jour à la main dans ${chemin}, section [mcp_servers.mnemo] : ${lignesTomlCodex(node, a.main)}.` };
+			return { echec: `la déclaration MCP « mnemo » de Codex porte des réglages personnels (${reglages.join(', ')}) : mettez-la à jour à la main dans ${chemin}, section [mcp_servers.mnemo] : ${lignesTomlCodex(node, a.main)}.` };
 		// déclaration nue de Mnemo : `codex mcp add` la réécrit, sans moment sans déclaration
 		const ajout = await ajouter();
 		if (ajout.code !== 0) return { echec: raisonCourte(ajout.erreur) || `codex mcp add : code ${ajout.code}` };
