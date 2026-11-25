@@ -26,6 +26,7 @@ import {
 	type GitDossierVue,
 	type LotVue,
 	type ReponseLots,
+	type ReponseMoteurs,
 	type ReponseDocuments,
 	type ApercuProfilVue,
 	type ClaudeDesktopVue,
@@ -73,6 +74,15 @@ export function useReglages(): Ressource<ReglagesVue> {
 export function useClaudeDesktop(): Ressource<ClaudeDesktopVue> {
 	const { api } = useClient();
 	return useRessource('claude-desktop', () => api.lire<ClaudeDesktopVue>(ROUTES.claudeDesktop));
+}
+
+/**
+ * Moteurs du service (agents de code) : trouvés ou non, version, modèles proposés ; `poste` : avec l'état du poste
+ * (déclaration MCP, hooks), plus lent, pour Réglages › Système.
+ */
+export function useMoteurs(poste = false): Ressource<ReponseMoteurs> {
+	const { api } = useClient();
+	return useRessource(poste ? 'moteurs:poste' : 'moteurs', () => api.lire<ReponseMoteurs>(ROUTES.moteurs, poste ? { poste: '1' } : undefined));
 }
 
 /** Profils de session qui peuvent être lancés ; relus quand la mémoire change (un profil ajouté sous `profils/`). */
@@ -343,7 +353,7 @@ export function useQuotas(): QuotasDesMoteursVue {
 
 /**
  * Fenêtre de contexte de Claude Code d'une session : lue au service (toutes les sessions, une requête partagée), puis tenue
- * par les messages `fenetre` ; null tant qu'aucune réponse de Claude n'a été vue.
+ * par les messages `fenetre` ; null tant qu'aucune réponse de l'agent n'a été vue.
  */
 export function useFenetre(session: string): FenetreVue | null {
 	const { api, connexion } = useClient();

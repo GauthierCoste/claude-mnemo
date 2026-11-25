@@ -1,5 +1,5 @@
 /**
- * Groupe « À traiter » de Mémoire › Archiviste : les fiches sources marquées `a_traiter` (import de la mémoire de Claude,
+ * Groupe « À traiter » de Mémoire › Archiviste : les fiches sources marquées `a_traiter` (import de la mémoire de Claude Code,
  * dépôts), chacune avec ses actions. « Traiter » envoie à l'archiviste la consigne de l'import pour ce document (le service
  * le reprend ou le lance s'il ne tourne pas) : la ligne passe « en cours » jusqu'à ce que l'archiviste retire la marque.
  * « Marquer traité » retire la marque sans rien créer : la ligne disparaît. « Ouvrir » lit la fiche dans Fichiers.

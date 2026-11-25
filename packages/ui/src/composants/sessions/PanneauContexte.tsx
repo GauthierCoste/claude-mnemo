@@ -1,13 +1,15 @@
 /**
  * Panneau Contexte, à droite de la vue Sessions : en-tête (avatar du profil, état, objectif), dossier non rattaché (texte du
- * service : aucune fiche ne couvre le dossier de la session), carte Dossier / Démarrée / Durée / Branche / Contexte (fenêtre de
- * Claude Code), « Injecté dans la session » (fiches injectées ◆, cartes proposées ◇, fiches lues ◈ ; clic → Mémoire › Fichiers),
- * puis les actions permises par l'état.
+ * service : aucune fiche ne couvre le dossier de la session), carte Dossier / Moteur / Démarrée / Durée / Branche / Contexte
+ * (fenêtre du moteur), « Injecté dans la session » (fiches injectées ◆, cartes proposées ◇, fiches lues ◈ ; clic → Mémoire ›
+ * Fichiers), puis les actions permises par l'état ; une session que son moteur ne peut pas reprendre (Codex pas encore
+ * commencé) a pause, reprise et bilan grisés, avec la raison.
  */
 import type { EntreeServieVue, LueVue, SessionVue } from '@mnemo/contrat';
 import { useState, type ReactNode } from 'react';
 import { useFenetre, useGraphe } from '../../client/hooks.ts';
 import { couleurDeBranche, rangsDesFiches } from '../../graphe/branches.ts';
+import { moteurEtModele } from '../../moteurs/noms.ts';
 import { bilanPermis, dureeSession } from '../../sessions/etats.ts';
 import { Bouton } from '../commun/Bouton.tsx';
 import { useActionSession, type ActionSession } from './actions-session.ts';
@@ -59,6 +61,10 @@ export function PanneauContexte(p: {
 
 	const actif = x.etat === 'travaille' || x.etat === 'attend';
 	const bilanPossible = bilanPermis(x.etat);
+	// ni pause, ni reprise, ni bilan : le moteur ne saurait pas reprendre la session (l'abandon reste possible)
+	const sansReprise = x.sansReprise ?? null;
+	const idRaison = `sans-reprise-${x.id}`;
+	const bloque = sansReprise === null ? {} : { 'aria-describedby': idRaison, title: 'Impossible pour l’instant : voir la raison sous les boutons' };
 	return (
 		<aside className={s.panneau} aria-label="Contexte" style={p.largeur === undefined ? undefined : { width: p.largeur }}>
 			<EnteteSession session={x} />
@@ -70,6 +76,8 @@ export function PanneauContexte(p: {
 			<div className={s.carte}>
 				<span>Dossier</span>
 				<span>{x.dossier || p.nomRacine}</span>
+				<span>Moteur</span>
+				<span>{moteurEtModele(x)}</span>
 				<span>Démarrée</span>
 				<span>{dateHeure(x.creeeMs)}</span>
 				<span>Durée</span>
@@ -88,22 +96,27 @@ export function PanneauContexte(p: {
 			<ClassementEnDirect key={x.id} session={x.id} entrees={p.entrees} modifiable={x.etat !== 'terminee'} niveauModeles={x.niveauModeles} servies={p.fiches} lues={p.lues ?? []} surOuvrirFiche={p.surOuvrirFiche} couleur={couleur} />
 			<div className={s.actions}>
 				{actif && (
-					<Bouton petit disabled={enCours} onClick={() => void agir('pause')}>
+					<Bouton petit disabled={enCours || sansReprise !== null} onClick={() => void agir('pause')} {...bloque}>
 						Mettre en pause
 					</Bouton>
 				)}
 				{x.etat === 'en_pause' && (
-					<Bouton petit disabled={enCours} onClick={() => void agir('reprise')}>
+					<Bouton petit disabled={enCours || sansReprise !== null} onClick={() => void agir('reprise')} {...bloque}>
 						Reprendre
 					</Bouton>
 				)}
 				{bilanPossible && (
-					<Bouton petit disabled={enCours || x.bilanDemandeMs !== null} onClick={() => void agir('bilan')} title={x.bilanDemandeMs !== null ? 'Bilan demandé' : undefined}>
+					<Bouton
+						petit
+						disabled={enCours || x.bilanDemandeMs !== null || sansReprise !== null}
+						onClick={() => void agir('bilan')}
+						{...(x.bilanDemandeMs !== null ? { title: 'Bilan demandé' } : bloque)}
+					>
 						Terminer avec bilan
 					</Bouton>
 				)}
 				{x.etat === 'a_relire' && (
-					<Bouton petit genre="primaire" disabled={enCours} onClick={() => void agir('bilan')}>
+					<Bouton petit genre="primaire" disabled={enCours || sansReprise !== null} onClick={() => void agir('bilan')} {...bloque}>
 						Faire le bilan
 					</Bouton>
 				)}
@@ -123,6 +136,11 @@ export function PanneauContexte(p: {
 						</Bouton>
 					))}
 			</div>
+			{sansReprise !== null && (
+				<p id={idRaison} role="note" className={s.avis}>
+					Pause, reprise et bilan impossibles pour l’instant : {sansReprise}. Abandonner reste possible.
+				</p>
+			)}
 		</aside>
 	);
 }

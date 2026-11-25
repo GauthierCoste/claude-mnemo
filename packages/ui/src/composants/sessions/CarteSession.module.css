@@ -49,6 +49,20 @@
 	min-width: 0;
 }
 
+/* moteur de la session, quand ce n'est pas Claude Code avec son modèle par défaut : discret, et le premier à se couper
+   quand la carte est étroite (la durée et les boutons restent entiers) */
+.barre > .moteur {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	padding: 0 6px;
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-pastille);
+	font-size: 10px;
+	color: var(--mu);
+}
+
 .agrandir {
 	border: 0;
 	background: none;

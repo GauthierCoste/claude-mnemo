@@ -7,6 +7,7 @@ import { lotsDemo } from './demo-lots.ts';
 import { creerModelesDemo } from './demo-modeles.ts';
 import { creerClaudeDesktopDemo } from './demo-claude-desktop.ts';
 import { creerProfilsDemo } from './demo-profils.ts';
+import { moteursDemo } from './demo-moteurs.ts';
 import type { Connexion, EtatConnexion, FluxTerminal } from './connexion.ts';
 import type { Client } from './contexte.tsx';
 import { ecranInitial, EFFACER_LIGNE, effacerInvite, indicateur, invite, majIndicateur, messageUtilisateur, NL, outil, reponse, sansSequences } from './demo-terminal.ts';
@@ -236,6 +237,9 @@ function vueSession(s: SessionDemo, maintenant: number): SessionVue {
 		terminal: s.terminal ?? true,
 		dialogueOuvert: false,
 		niveauModeles: null,
+		...(s.moteur === undefined ? {} : { moteur: s.moteur }),
+		...(s.modele === undefined ? {} : { modele: s.modele }),
+		...(s.sansReprise === undefined ? {} : { sansReprise: s.sansReprise }),
 	};
 }
 
@@ -792,6 +796,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			if (!session) throw introuvable('Session');
 			return { session };
 		}
+		if (chemin === ROUTES.moteurs) return moteursDemo(params['poste'] === '1');
 		switch (chemin) {
 			case ROUTES.fenetres:
 				// fenêtres de contexte fictives, de plus en plus pleines, pour voir les trois couleurs de la jauge
@@ -936,6 +941,8 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			const i = monde.sessions.findIndex((s) => s.id === id);
 			if (i < 0) throw introuvable('Session');
 			const avant = monde.sessions[i]!;
+			// comme le service : une session que son moteur ne peut pas reprendre n'a ni pause, ni reprise, ni bilan
+			if (action !== 'abandon' && avant.sansReprise !== undefined) throw new ErreurApi(`${action === 'bilan' ? 'Bilan' : action === 'pause' ? 'Pause' : 'Reprise'} impossible : ${avant.sansReprise} ; abandonne-la à la place.`, 409);
 			const s = {
 				...avant,
 				etat,

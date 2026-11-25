@@ -11,6 +11,9 @@ import { cx } from '../commun/classes.ts';
 import { useActionSession, type ActionSession } from './actions-session.ts';
 import s from './FermerSession.module.css';
 
+/** Ligne d'un item indisponible faute de reprise possible ; la raison complète est dans le panneau Contexte. */
+const IMPOSSIBLE = 'impossible pour l’instant (raison dans le panneau Contexte)';
+
 export function FermerSession(p: { session: SessionVue }): ReactNode {
 	const x = p.session;
 	const [ouvert, setOuvert] = useState(false);
@@ -38,13 +41,16 @@ export function FermerSession(p: { session: SessionVue }): ReactNode {
 		return () => document.removeEventListener('mousedown', ailleurs);
 	}, [ouvert, confirmer]);
 
+	// le moteur ne saurait pas reprendre la session pour son bilan (Codex pas encore commencé) : seul l'abandon reste
+	const sansBilan = x.sansReprise === undefined ? undefined : `Bilan impossible pour l’instant : ${x.sansReprise}.`;
 	const agir = (a: ActionSession) => {
 		fermer(true);
 		void action.agir(x.id, a);
 	};
-	const item = (libelle: string, surClic: () => void, o: { danger?: boolean; disabled?: boolean; title?: string } = {}) => (
+	const item = (libelle: string, surClic: () => void, o: { danger?: boolean; disabled?: boolean; title?: string; detail?: string } = {}) => (
 		<button type="button" role="menuitem" className={cx(s.item, o.danger && s.danger)} disabled={action.enCours || o.disabled} title={o.title} onClick={surClic}>
 			{libelle}
+			{o.detail !== undefined && <span className={s.detail}>{o.detail}</span>}
 		</button>
 	);
 
@@ -96,8 +102,9 @@ export function FermerSession(p: { session: SessionVue }): ReactNode {
 						</>
 					) : (
 						<>
-							{bilanPermis(x.etat) && item('Terminer avec bilan', () => agir('bilan'), x.bilanDemandeMs !== null ? { disabled: true, title: 'Bilan demandé' } : {})}
-							{x.etat === 'a_relire' && item('Faire le bilan', () => agir('bilan'))}
+							{bilanPermis(x.etat) &&
+								item('Terminer avec bilan', () => agir('bilan'), x.bilanDemandeMs !== null ? { disabled: true, title: 'Bilan demandé' } : sansBilan === undefined ? {} : { disabled: true, title: sansBilan, detail: IMPOSSIBLE })}
+							{x.etat === 'a_relire' && item('Faire le bilan', () => agir('bilan'), sansBilan === undefined ? {} : { disabled: true, title: sansBilan, detail: IMPOSSIBLE })}
 							{item('Abandonner', () => setConfirmer(true))}
 						</>
 					)}

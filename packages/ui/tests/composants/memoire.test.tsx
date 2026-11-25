@@ -746,18 +746,18 @@ describe('Mémoire › Fichiers : localiser, tout replier, tout déplier', () =>
 	});
 });
 
-describe('Mémoire › Importer la mémoire de Claude', () => {
+describe('Mémoire › Importer la mémoire de Claude Code', () => {
 	it('clic : appel du service, état en cours, puis bilan court en toast et détail dépliable', async () => {
 		let terminer: (b: BilanAmorceVue) => void = () => {};
 		const faux = monter({ amorce: () => new Promise<BilanAmorceVue>((r) => (terminer = r)), onglet: 'archiviste' });
-		const bouton = await screen.findByRole('button', { name: 'Importer la mémoire de Claude' });
+		const bouton = await screen.findByRole('button', { name: 'Importer la mémoire de Claude Code' });
 		fireEvent.click(bouton);
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/memoire/amorce', {});
 		const enCours = screen.getByRole('button', { name: 'Import en cours…' }) as HTMLButtonElement;
 		expect(enCours.disabled).toBe(true);
 		await act(async () => terminer(BILAN));
 		expect(screen.getByRole('status').textContent).toBe(
-			'Mémoire de Claude importée : 4 notes nouvelles ou modifiées, 2 CLAUDE.md nouveaux ou modifiés, 2 fiches rattachées à un projet — en attente : l’archiviste n’est pas lancé, 6 à traiter',
+			'Mémoire de Claude Code importée : 4 notes nouvelles ou modifiées, 2 CLAUDE.md nouveaux ou modifiés, 2 fiches rattachées à un projet — en attente : l’archiviste n’est pas lancé, 6 à traiter',
 		);
 		// ses avertissements ne sont qu'au bilan (durable), pas dans la pile
 		expect(within(screen.getByRole('list', { name: 'Avertissements' })).queryAllByRole('listitem')).toHaveLength(0);
@@ -769,7 +769,7 @@ describe('Mémoire › Importer la mémoire de Claude', () => {
 		expect(detail.textContent).toContain('Avertissement : Passages non indexés pour sources/claude-code/p/CLAUDE.md');
 		expect(detail.textContent).toContain('1 secret masqué');
 		expect(detail.textContent).toContain('Projets/Mnemo/.claude/settings.local.json — pas un fichier .md');
-		expect(screen.getByRole('button', { name: 'Importer la mémoire de Claude' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Importer la mémoire de Claude Code' })).toBeTruthy();
 	});
 
 	it('rien de nouveau : toast court ; erreur : en clair', async () => {
@@ -786,16 +786,16 @@ describe('Mémoire › Importer la mémoire de Claude', () => {
 		};
 		let reponse: () => unknown = () => vide;
 		monter({ amorce: () => reponse(), onglet: 'archiviste' });
-		fireEvent.click(await screen.findByRole('button', { name: 'Importer la mémoire de Claude' }));
-		await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Mémoire de Claude : rien de nouveau'));
+		fireEvent.click(await screen.findByRole('button', { name: 'Importer la mémoire de Claude Code' }));
+		await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Mémoire de Claude Code : rien de nouveau'));
 		// rien de nouveau, mais des fiches attendent encore l'archiviste, qui tourne : la consigne lui est confiée
 		reponse = () => ({ ...vide, aTraiter: 3, archiviste: 'confie' });
-		fireEvent.click(screen.getByRole('button', { name: 'Importer la mémoire de Claude' }));
-		await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Mémoire de Claude : rien de nouveau — confié à l’archiviste (3 à traiter)'));
+		fireEvent.click(screen.getByRole('button', { name: 'Importer la mémoire de Claude Code' }));
+		await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Mémoire de Claude Code : rien de nouveau — confié à l’archiviste (3 à traiter)'));
 		reponse = () => {
 			throw new ErreurApi('Mémoire verrouillée par un autre processus.', 503);
 		};
-		fireEvent.click(screen.getByRole('button', { name: 'Importer la mémoire de Claude' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Importer la mémoire de Claude Code' }));
 		await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Import impossible : Mémoire verrouillée par un autre processus.'));
 		expect(screen.getByRole('alert').textContent).toContain('Mémoire verrouillée par un autre processus.');
 	});

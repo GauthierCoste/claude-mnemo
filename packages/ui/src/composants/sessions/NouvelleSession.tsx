@@ -16,6 +16,7 @@ import { Bouton } from '../commun/Bouton.tsx';
 import { copierTexte } from '../commun/copier.ts';
 import { useToast } from '../Toast.tsx';
 import s from './NouvelleSession.module.css';
+import { moteurEtModele, moteurParticulier } from '../../moteurs/noms.ts';
 
 /** Où se lance un profil, dit dans le dialogue. */
 const LIEUX_DE_LANCEMENT: Record<ProfilVue['lancement'], string> = { projet: 'dans le dossier choisi', memoire: 'dans la mémoire' };
@@ -110,6 +111,7 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 								</select>
 							</label>
 							{profilChoisi && <span className={s.mu}>{profilChoisi.description}</span>}
+							{profilChoisi && moteurParticulier(profilChoisi) !== null && <span className={s.mu}>{`Moteur : ${moteurEtModele(profilChoisi)}`}</span>}
 							{profils.erreur !== null && <span className={s.erreur}>{`Profils illisibles : ${profils.erreur}`}</span>}
 							{lancesAPart.map((x) => (
 								<span key={x.nom} className={s.mu}>{`${x.nom} : lancé par son propre chemin, ${LIEUX_DE_LANCEMENT[x.lancement]}.`}</span>

@@ -34,6 +34,11 @@ export type SessionDemo = {
 	lues?: [string, number][];
 	/** Faux : session suivie sans terminal dans Mnemo (vrai par défaut). */
 	terminal?: boolean;
+	/** Moteur et modèle de la session (absents : Claude Code, modèle par défaut). */
+	moteur?: 'claude-code' | 'codex';
+	modele?: string;
+	/** Pourquoi elle ne peut être ni mise en pause ni reprise (Codex dont aucun hook n'est arrivé). */
+	sansReprise?: string;
 	/** Écran du terminal : [genre, texte] ; u = utilisateur, m = Mnemo, t = outil, r = résultat, a = réponse, q = question. */
 	ecran: ['u' | 'm' | 't' | 'r' | 'a' | 'q', string][];
 };
@@ -103,13 +108,17 @@ export const SESSIONS_DEMO: SessionDemo[] = [
 		ageMin: 18,
 		calmeMin: 0,
 		branche: 'test/achats',
-		servis: ['consignes/Test avant correction.md', 'projets/erp-saas/achats/Commandes fournisseurs.md'],
+		servis: [],
+		// hooks de Codex pas encore approuvés : Mnemo n'a reçu aucun événement, la session ne peut pas être reprise
+		moteur: 'codex',
+		sansReprise:
+			"session Codex dont l'identifiant chez Codex est inconnu (aucun hook reçu : hooks de Mnemo absents ou non approuvés dans Codex, ou aucun message envoyé) : elle ne peut pas être reprise",
 		ecran: [
+			['m', '[Mnemo] Les hooks de Mnemo ne sont pas approuvés dans Codex : tape /hooks pour les approuver ; sans eux, Mnemo ne suit pas cette session.'],
 			['u', 'Écris les tests manquants du module achats, sans toucher au code métier.'],
-			['m', 'Mnemo : 2 fiches injectées (Test avant correction, Commandes fournisseurs)'],
-			['t', '● Glob(src/Achat/**/*.php)'],
+			['t', '● Bash(rg --files src/Achat)'],
 			['r', '23 fichiers'],
-			['t', '● Write(tests/Achat/CommandeTest.php)'],
+			['t', '● apply_patch(tests/Achat/CommandeTest.php)'],
 			['r', '12 tests'],
 			['t', '● Bash(php bin/phpunit tests/Achat)'],
 			['r', 'en cours…'],
@@ -191,6 +200,8 @@ export const SESSIONS_DEMO: SessionDemo[] = [
 		dossier: 'api-facturation',
 		objectif: 'Faire passer les tests du dépôt SFTP',
 		etat: 'travaille',
+		moteur: 'codex',
+		modele: 'gpt-6.2-sol',
 		ageMin: 42,
 		calmeMin: 0,
 		branche: 'fix/sftp-tests',

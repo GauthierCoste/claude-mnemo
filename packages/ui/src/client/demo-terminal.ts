@@ -32,8 +32,15 @@ function cadre(lignes: string[], largeur: number, couleur: string): string {
 	return [haut, ...milieu, bas].join(NL);
 }
 
-function accueil(dossier: string): string {
+function accueil(dossier: string, s?: SessionDemo): string {
 	const cwd = dossier ? `${RACINE_DEMO}/projets/${dossier}` : RACINE_DEMO;
+	if (s?.moteur === 'codex') {
+		return cadre(
+			[` ${SGR.gras}>_ OpenAI Codex${SGR.fin} ${SGR.gris}(v0.171.0)${SGR.fin}`, '', `   ${SGR.gris}model:     ${s.modele ?? 'gpt-6.2-sol'}${SGR.fin}`, `   ${SGR.gris}directory: ${cwd}${SGR.fin}`],
+			LARGEUR_ACCUEIL,
+			SGR.gris,
+		);
+	}
 	return cadre(
 		[
 			` ${SGR.jaune}✻${SGR.fin} ${SGR.gras}Welcome to Claude Code!${SGR.fin}`,
@@ -106,7 +113,7 @@ function ligne(genre: SessionDemo['ecran'][number][0], texte: string): string {
  * session travaille, invite.
  */
 export function ecranInitial(s: SessionDemo | undefined, colonnes: number, travaille: boolean): string {
-	let corps = `${accueil(s?.dossier ?? '')}${NL}${NL}`;
+	let corps = `${accueil(s?.dossier ?? '', s)}${NL}${NL}`;
 	if (s) {
 		s.ecran.forEach(([genre, texte], i) => {
 			corps += (i === 0 ? '' : genre === 'r' ? NL : `${NL}${NL}`) + ligne(genre, texte);

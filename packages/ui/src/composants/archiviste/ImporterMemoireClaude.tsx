@@ -1,5 +1,5 @@
 /**
- * Bouton « Importer la mémoire de Claude » de Mémoire › Archiviste (colonne « Enrichir ») : un appel à `amorce` (notes de Claude Code, CLAUDE.md
+ * Bouton « Importer la mémoire de Claude Code » de Mémoire › Archiviste (colonne « Enrichir ») : un appel à `amorce` (notes de Claude Code, CLAUDE.md
  * global et des projets), état « Import en cours… » pendant l'appel, puis bilan court en toast et détail dépliable ;
  * une erreur est dite en clair. Rien n'est lancé tout seul.
  */
@@ -37,7 +37,7 @@ export function ImporterMemoireClaude(): ReactNode {
 	return (
 		<div className={s.import}>
 			<Bouton petit onClick={() => void importer()} disabled={enCours}>
-				{enCours ? 'Import en cours…' : 'Importer la mémoire de Claude'}
+				{enCours ? 'Import en cours…' : 'Importer la mémoire de Claude Code'}
 			</Bouton>
 			{erreur !== null && (
 				<span role="alert" className={s.erreur}>

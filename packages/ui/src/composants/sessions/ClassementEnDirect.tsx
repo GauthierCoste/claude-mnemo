@@ -2,7 +2,7 @@
  * « Injecté dans la session » (panneau Contexte) : une seule liste, sans séparation, où le signe distingue chaque ligne :
  * - ◆ en haut, les fiches injectées entières (la fiche de position, et celles que l'utilisateur a demandé d'injecter), de la plus
  *   ancienne à la plus récente ;
- * - ◇ puis les cartes proposées à Claude, les plus récentes d'abord, avec leur raison (« du périmètre », « nommée », « question »,
+ * - ◇ puis les cartes proposées à l'agent, les plus récentes d'abord, avec leur raison (« du périmètre », « nommée », « question »,
  *   « liée à <titre> » pour une voisine d'une fiche injectée à la main) ;
  * - ◈ parmi elles, à l'heure de leur lecture, les fiches que la session a lues (outils `lire`, `voisins`) sans qu'elles soient déjà dans la
  *   liste ; une fiche déjà là (injectée ou proposée) garde sa ligne, et son info-bulle dit « lue aussi à HH:MM » ;

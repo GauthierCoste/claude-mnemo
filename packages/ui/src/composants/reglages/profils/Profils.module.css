@@ -206,6 +206,46 @@
 	cursor: pointer;
 }
 
+/* choix indisponible (moteur réservé) : grisé, sa raison reste lisible sur sa ligne */
+.case[data-desactive] {
+	cursor: not-allowed;
+	color: var(--mu);
+}
+
+/* ligne de détail d'un choix (effet, état, raison), sous son libellé */
+.detailChoix {
+	display: block;
+	color: var(--mu);
+	font-size: 12px;
+}
+
+/* modèle proposé par le moteur : un clic le choisit */
+.pastilleChoix {
+	font: 11px var(--mono);
+	padding: 2px 8px;
+	border-radius: var(--r-pastille);
+	border: 1px solid var(--bd2);
+	background: none;
+	color: var(--mu);
+	cursor: pointer;
+}
+
+.pastilleChoix:hover {
+	color: var(--tx);
+	border-color: var(--mu);
+}
+
+.pastilleChoix[aria-pressed='true'] {
+	color: var(--ac);
+	border-color: color-mix(in srgb, var(--ac) 55%, transparent);
+	background: color-mix(in srgb, var(--ac) 8%, transparent);
+}
+
+.pastilleChoix:focus-visible {
+	outline: 2px solid var(--ac);
+	outline-offset: 1px;
+}
+
 /* case ou bouton radio : jamais rétréci par un libellé sur plusieurs lignes */
 .case > input {
 	flex-shrink: 0;

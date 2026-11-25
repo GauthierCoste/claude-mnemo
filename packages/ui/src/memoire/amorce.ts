@@ -30,7 +30,7 @@ export function resumeAmorce(b: BilanAmorceVue): string {
 		...(instructions > 0 ? [nombre(instructions, 'CLAUDE.md nouveau ou modifié', 'CLAUDE.md nouveaux ou modifiés')] : []),
 		...(b.rattachees > 0 ? [nombre(b.rattachees, 'fiche rattachée à un projet', 'fiches rattachées à un projet')] : []),
 	];
-	const tete = parties.length === 0 ? 'Mémoire de Claude : rien de nouveau' : `Mémoire de Claude importée : ${parties.join(', ')}`;
+	const tete = parties.length === 0 ? 'Mémoire de Claude Code : rien de nouveau' : `Mémoire de Claude Code importée : ${parties.join(', ')}`;
 	const archiviste = etatArchiviste(b);
 	return archiviste === null ? tete : `${tete} — ${archiviste}`;
 }

@@ -190,7 +190,7 @@ describe('Mémoire › Archiviste : onglets et navigation', () => {
 		expect(within(centre).getByRole('button', { name: 'Range les documents déposés' })).toBeTruthy();
 		expect(within(enrichir()).getByText('Dépose n\'importe quoi')).toBeTruthy();
 		expect(within(enrichir()).getByRole('group', { name: 'Destination' })).toBeTruthy();
-		expect(within(enrichir()).getByRole('button', { name: 'Importer la mémoire de Claude' })).toBeTruthy();
+		expect(within(enrichir()).getByRole('button', { name: 'Importer la mémoire de Claude Code' })).toBeTruthy();
 	});
 
 	it('rien à faire : « Rien à faire. », aucun groupe ; groupes vides masqués', async () => {

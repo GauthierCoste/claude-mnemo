@@ -1,11 +1,13 @@
 /**
- * Éditeur d'un profil (Réglages › Profils) : avatar, consigne (celle par défaut ou personnalisée), lieu de lancement, hooks
- * de Mnemo, skills de la mémoire, plugins Claude Code ; enregistrement explicite, validé par le service. Une modification
+ * Éditeur d'un profil (Réglages › Profils) : avatar, moteur et modèle, consigne (celle par défaut ou personnalisée), lieu de
+ * lancement, hooks de Mnemo, skills de la mémoire, plugins Claude Code (avec ce moteur seulement) ; enregistrement explicite,
+ * validé par le service. Une modification
  * faite ailleurs entre-temps est signalée (empreinte) : l'enregistrement est alors refusé jusqu'au rechargement.
  * Dupliquer et supprimer se font ici ; la suppression demande une confirmation dans la page.
  */
 import { DOSSIERS_FIXES, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { ROUTES } from '@mnemo/contrat';
+import type { IdMoteur } from '@mnemo/commun';
 import type { EvenementHookVue, ProfilDetailVue, ProfilEditableVue, ReponseEcritureProfil } from '@mnemo/contrat';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ErreurApi } from '../../../client/api.ts';
@@ -16,6 +18,7 @@ import { AvatarProfil, JETONS_COULEUR } from '../../commun/AvatarProfil.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
 import { ApercuProfil } from './ApercuProfil.tsx';
 import { ChoixAvatar } from './ChoixAvatar.tsx';
+import { ChoixMoteur } from './ChoixMoteur.tsx';
 import s from './Profils.module.css';
 
 const HOOKS: { cle: EvenementHookVue; libelle: string; detail: string }[] = [
@@ -142,6 +145,16 @@ export function EditeurProfil(p: {
 		}
 	};
 
+	/**
+	 * Autre moteur : le modèle repart du défaut (un modèle d'un moteur ne vaut pas pour l'autre) et les plugins, propres à
+	 * Claude Code, sont décochés ; revenir au moteur enregistré rend son modèle et ses plugins.
+	 */
+	const changerMoteur = (moteur: IdMoteur) => {
+		const enregistre = base.editable;
+		if (moteur === enregistre.moteur) changer({ moteur, modele: enregistre.modele, plugins: [...enregistre.plugins] });
+		else changer({ moteur, modele: '', plugins: moteur === 'claude-code' ? brouillon.plugins : [] });
+	};
+
 	const recharger = () => {
 		setBrouillon(structuredClone(d.editable));
 		setChangeAilleurs(false);
@@ -192,6 +205,10 @@ export function EditeurProfil(p: {
 
 			<Section titre="Avatar">
 				<ChoixAvatar avatar={brouillon.avatar} surChoix={(avatar) => changer({ avatar })} />
+			</Section>
+
+			<Section titre="Moteur" explication="L’agent de code qui fait tourner les sessions de ce profil ; une session garde le moteur et le modèle de son lancement.">
+				<ChoixMoteur profil={d.nom} moteur={brouillon.moteur} modele={brouillon.modele} surMoteur={changerMoteur} surModele={(modele) => changer({ modele })} />
 			</Section>
 
 			<Section titre="Consigne" explication="Ajoutée au prompt système de chaque session.">
@@ -303,38 +320,40 @@ export function EditeurProfil(p: {
 				)}
 			</Section>
 
-			<Section
-				titre="Plugins Claude Code"
-				explication="Cochés : allumés. Les autres : éteints dans la session."
-			>
-				{d.pluginsInstalles.length === 0 && absents.length === 0 ? (
-					<p className={s.discret}>Aucun plugin Claude Code installé.</p>
-				) : (
-					<div className={s.liste2}>
-						{d.pluginsInstalles.map((x) => (
-							<label key={x.id} className={s.case}>
-								<input type="checkbox" checked={brouillon.plugins.includes(x.id)} onChange={(e) => changer({ plugins: basculer(brouillon.plugins, x.id, e.target.checked, ordrePlugins) })} />
-								<span>
-									{x.id}{' '}
-									<span className={s.discret}>
-										— version {x.version}, {x.portee}
-										{x.skills.length > 0 && `, skills : ${x.skills.map((k) => k.nom).join(', ')}`}
-										{x.hooks && ', a ses propres hooks'}
+			{brouillon.moteur === 'claude-code' && (
+				<Section
+					titre="Plugins Claude Code"
+					explication="Cochés : allumés. Les autres : éteints dans la session."
+				>
+					{d.pluginsInstalles.length === 0 && absents.length === 0 ? (
+						<p className={s.discret}>Aucun plugin Claude Code installé.</p>
+					) : (
+						<div className={s.liste2}>
+							{d.pluginsInstalles.map((x) => (
+								<label key={x.id} className={s.case}>
+									<input type="checkbox" checked={brouillon.plugins.includes(x.id)} onChange={(e) => changer({ plugins: basculer(brouillon.plugins, x.id, e.target.checked, ordrePlugins) })} />
+									<span>
+										{x.id}{' '}
+										<span className={s.discret}>
+											— version {x.version}, {x.portee}
+											{x.skills.length > 0 && `, skills : ${x.skills.map((k) => k.nom).join(', ')}`}
+											{x.hooks && ', a ses propres hooks'}
+										</span>
 									</span>
-								</span>
-							</label>
-						))}
-						{absents.map((id) => (
-							<label key={id} className={s.case}>
-								<input type="checkbox" checked onChange={() => changer({ plugins: brouillon.plugins.filter((x) => x !== id) })} />
-								<span>
-									{id} <span className={s.inactif}>non installé</span>
-								</span>
-							</label>
-						))}
-					</div>
-				)}
-			</Section>
+								</label>
+							))}
+							{absents.map((id) => (
+								<label key={id} className={s.case}>
+									<input type="checkbox" checked onChange={() => changer({ plugins: brouillon.plugins.filter((x) => x !== id) })} />
+									<span>
+										{id} <span className={s.inactif}>non installé</span>
+									</span>
+								</label>
+							))}
+						</div>
+					)}
+				</Section>
+			)}
 
 			<ApercuProfil nom={d.nom} modifie={modifie} />
 

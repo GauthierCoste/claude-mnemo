@@ -11,6 +11,7 @@ import { ErreurApi } from '../../client/api.ts';
 import { useClient } from '../../client/contexte.tsx';
 import { avecId } from '../../client/hooks.ts';
 import type { Ressource } from '../../client/ressources.ts';
+import { moteurParticulier, nomDuMoteur } from '../../moteurs/noms.ts';
 import { useNavigation } from '../../navigation.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
 import { cx } from '../commun/classes.ts';
@@ -97,6 +98,7 @@ export function Terminees(p: { ouvert: boolean; historique: Ressource<SessionTer
 							<span className={s.mu}>
 								{x.dossier || p.nomRacine}
 								{x.profil !== PROFIL_TRAVAIL ? `, profil ${x.profil}` : ''}
+								{moteurParticulier(x) !== null ? `, ${moteurParticulier(x)}` : ''}
 							</span>
 							<span className={s.dates}>
 								{dateHeure(x.creeeMs)} → {dateHeure(x.majMs)}
@@ -122,7 +124,7 @@ export function Terminees(p: { ouvert: boolean; historique: Ressource<SessionTer
 									<Bouton
 										petit
 										disabled={enCours !== null}
-										title="Oublie la session dans Mnemo ; la transcription de Claude Code et la mémoire restent."
+										title={`Oublie la session dans Mnemo ; la transcription de ${nomDuMoteur(x.moteur)} et la mémoire restent.`}
 										onClick={() => setConfirmation(x.id)}
 									>
 										Retirer de l’historique

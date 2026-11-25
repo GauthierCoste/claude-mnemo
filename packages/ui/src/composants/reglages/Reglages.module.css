@@ -189,3 +189,92 @@
 		gap: var(--esp-3);
 	}
 }
+
+/* Groupe « Moteurs » de l'onglet Système : un encadré par moteur, un point vérifié par ligne. */
+.moteurs {
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-3);
+	min-width: 0;
+}
+
+.nomMoteur {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.okMoteur {
+	padding: 0 6px;
+	border-radius: var(--r-pastille);
+	background: color-mix(in srgb, var(--ac) 12%, transparent);
+	color: var(--ac);
+	font-size: 10px;
+}
+
+.points {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-2);
+}
+
+.point {
+	display: flex;
+	align-items: baseline;
+	gap: var(--esp-2);
+	min-width: 0;
+}
+
+.signe {
+	flex: none;
+	width: 1.2em;
+	font-weight: 700;
+}
+
+.point[data-ok='true'] .signe {
+	color: var(--ac);
+}
+
+.point[data-ok='false'] .signe {
+	color: var(--red);
+}
+
+.point[data-ok='null'] .signe {
+	color: var(--amber);
+}
+
+.corpsPoint {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.libellePoint {
+	font-weight: 600;
+}
+
+.detailPoint {
+	color: var(--mu);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+
+.remede {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--esp-2);
+}
+
+.remede code {
+	padding: 2px 6px;
+	border-radius: var(--r-1);
+	background: var(--s1);
+	font-family: var(--mono);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}

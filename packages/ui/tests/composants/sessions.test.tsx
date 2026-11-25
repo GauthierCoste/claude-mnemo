@@ -257,6 +257,27 @@ describe('vue Sessions', () => {
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions/s1/pause', undefined);
 	});
 
+	it('moteur et modèle dans le panneau ; Codex sans identifiant : pause et bilan grisés avec la raison, abandon possible', async () => {
+		const faux = await monter();
+		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
+		expect(within(contexte).getByText('Claude Code · modèle par défaut')).toBeTruthy();
+		expect(within(carte('s1')).queryByTitle(/^Moteur/u)).toBeNull();
+		const raison = 'session Codex dont l’identifiant chez Codex est inconnu : elle ne peut pas être reprise';
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'codex', modele: 'gpt-a', sansReprise: raison } }));
+		expect(within(contexte).getByText('Codex · gpt-a')).toBeTruthy();
+		expect(within(carte('s1')).getByTitle('Moteur : Codex · gpt-a').textContent).toBe('Codex');
+		const pause = within(contexte).getByRole('button', { name: 'Mettre en pause' }) as HTMLButtonElement;
+		expect(pause.disabled).toBe(true);
+		const note = document.getElementById(pause.getAttribute('aria-describedby')!)!;
+		expect(note.textContent).toBe(`Pause, reprise et bilan impossibles pour l’instant : ${raison}. Abandonner reste possible.`);
+		expect((within(contexte).getByRole('button', { name: 'Terminer avec bilan' }) as HTMLButtonElement).disabled).toBe(true);
+		expect((within(contexte).getByRole('button', { name: 'Abandonner' }) as HTMLButtonElement).disabled).toBe(false);
+		await act(async () => within(carte('s1')).getByRole('button', { name: 'Fermer la session' }).click());
+		const bilan = within(carte('s1')).getByRole('menuitem', { name: /^Terminer avec bilan/u }) as HTMLButtonElement;
+		expect(bilan.disabled).toBe(true);
+		expect(bilan.textContent).toContain('impossible pour l’instant');
+	});
+
 	it('« Abandonner » demande une confirmation', async () => {
 		const faux = await monter({ '/api/sessions/s1/abandon': { statut: 'ok' } });
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });

@@ -62,6 +62,15 @@
 	color: var(--red);
 }
 
+/* raison d'un item indisponible, sur sa ligne */
+.detail {
+	display: block;
+	font-size: 11px;
+	color: var(--mu);
+	white-space: normal;
+	max-width: 220px;
+}
+
 /* App de bureau : le menu (position fixe) peut recouvrir la barre de titre, poignée de la fenêtre ; il reste cliquable. */
 :global([data-coquille='app']) .menu {
 	-webkit-app-region: no-drag;
