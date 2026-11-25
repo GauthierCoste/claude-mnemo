@@ -6,7 +6,7 @@ import type { NoteDuGeste } from '../domaine/gestes.ts';
 import { positionDeSession, positionNotee } from './dossiers-non-rattaches.ts';
 import type { Position } from './position.ts';
 import { raisonDeMutisme } from '../domaine/message-muet.ts';
-import { precedentUtile, requeteDuMessage, VARIANTE_DE_LA_REQUETE } from '../domaine/requete-du-message.ts';
+import { ENTREES_DU_PRECEDENT, messagePrecedent, precedentUtile, requeteDuMessage, VARIANTE_DE_LA_REQUETE } from '../domaine/requete-du-message.ts';
 import type { VarianteDeRequete } from '../domaine/requete-du-message.ts';
 import type { DureeDuReranker } from './duree-reranker.ts';
 import { ficheTouchee } from '../domaine/outil-de-session.ts';
@@ -95,7 +95,12 @@ export type ReglagesEvenement = {
 	dureeReranker?: DureeDuReranker;
 	/** Variante de la requête du classement (réglage interne ; défaut : `VARIANTE_DE_LA_REQUETE`). */
 	varianteRequete?: VarianteDeRequete;
+	/** Le service : l'instant où il a reçu l'appel du hook ; le journal en tire `msService`, à côté de `ms` (depuis `debutMs`). */
+	appelMs?: number;
 };
+
+/** Budget de l'appel de mesure du reranker lancé après la réponse du hook. */
+export const BUDGET_MESURE_RERANKER_MS = 3000;
 
 /** Extrait de la demande gardé avec une entrée servie (et la trace d'un écarté) : large, la demande est journalisée presque entière. */
 export const DEMANDE_MAX = 20_000;
@@ -327,17 +332,12 @@ async function noterFicheTouchee(dep: Dependances, pil: Pick<Pilotage, 'etat'>, 
 	}
 }
 
-/** Entrées du journal relues pour trouver le message porteur d'avant. */
-const ENTREES_POUR_LE_PRECEDENT = 10;
-
 /**
- * Le dernier message porteur de la session déjà journalisé (le message en cours ne l'est pas encore) : sa demande, comme le banc
- * la lit (`banc-extraire.ts`) ; null s'il n'y en a pas parmi les dernières entrées, ou si l'état ne répond pas.
+ * Le message porteur d'avant de la session (le message en cours n'est pas encore journalisé), par la règle que le banc applique
+ * aussi (`messagePrecedent`) ; null s'il n'y en a pas, ou si l'état ne répond pas.
  */
-async function messagePorteurPrecedent(etat: Pick<Pilotage['etat'], 'servis'>, session: string): Promise<string | null> {
-	const entrees = await etat.servis(session, ENTREES_POUR_LE_PRECEDENT, 'message').catch(() => []);
-	const porteuse = entrees.find((e) => e.muet === null && e.demande !== null && e.demande.trim() !== '' && raisonDeMutisme(e.demande) === null);
-	return porteuse?.demande ?? null;
+async function messagePorteurPrecedent(etat: Pick<Pilotage['etat'], 'servis'>, session: string, instantMs: number): Promise<string | null> {
+	return messagePrecedent(await etat.servis(session, ENTREES_DU_PRECEDENT, undefined, { classement: 'dernier' }).catch(() => []), instantMs);
 }
 
 /**
@@ -360,7 +360,7 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 	const exclusDefinitivement = await exclusionDefinitive(pil.etat, reglages.apriori);
 	// requête du classement : le message seul, ou joint au message porteur d'avant (variante jointe, message court ou anaphorique)
 	const variante = reglages.varianteRequete ?? VARIANTE_DE_LA_REQUETE;
-	const precedent = session !== null && muet === null && precedentUtile(message, variante) ? await messagePorteurPrecedent(pil.etat, session.id) : null;
+	const precedent = session !== null && muet === null && precedentUtile(message, variante) ? await messagePorteurPrecedent(pil.etat, session.id, entree.horodatageMs) : null;
 	const requete = requeteDuMessage(message, precedent, variante);
 	const apriori = reglages.apriori;
 	// les gestes de la session courante passent par le signal de session et l'écart, pas par l'a priori
@@ -398,6 +398,7 @@ async function noterInjection(
 	demande: DemandeServir,
 	servi: Servi,
 	debutMs: number,
+	appelMs: number | undefined,
 	rang: number | null,
 	classement: Classe[],
 	/** La note d'une fiche demandée : sa ligne au classement que l'utilisateur voyait (celui du message porteur précédent). */
@@ -425,6 +426,7 @@ async function noterInjection(
 			ids: injectees.map((f) => f.chemin),
 			texte: servi.texte,
 			ms: Date.now() - debutMs,
+			...(appelMs === undefined ? {} : { msService: Date.now() - appelMs }),
 			sens: servi.calcul.mesure !== 'aucune',
 			demande: entree.prompt === undefined ? null : entree.prompt.slice(0, DEMANDE_MAX),
 			classement,
@@ -467,13 +469,34 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 	let injecte = servi.texte !== '' && aTempsPourNoter;
 	// un message porteur est journalisé même sans texte injecté : son classement en est la trace (panneau, apprentissage)
 	if (session !== null && (injecte || (rang !== null && aTempsPourNoter))) {
-		await noterInjection(dep, pil, session, entree, demande, servi, debut, rang, classement, (chemin) => noteDuPorteur(precedent, chemin));
+		await noterInjection(dep, pil, session, entree, demande, servi, debut, reglages.appelMs, rang, classement, (chemin) => noteDuPorteur(precedent, chemin));
 		// après les écritures : le hook attend-il encore ? Sinon, la réponse ne lui parviendrait pas
 		if (!aTemps(reglages)) injecte = false;
 	}
 	// le hook n'attend plus : les fiches demandées partiront au message suivant
 	if (session !== null && !injecte && demandees.length > 0) reglages.demandees?.remettre(session.id, demandees);
+	// pas d'estimation fiable de la durée du reranker : il est mesuré après la réponse, sans rien décider ni écrire
+	const aMesurer = servi.calcul.aMesurer;
+	if (aMesurer !== undefined && reglages.enFond !== undefined) reglages.enFond(mesurerLeReranker(dep, aMesurer));
 	return injecte ? { contexte: servi.texte } : {};
+}
+
+/** Tailles des appels de mesure successifs : les 8 premières, puis 5, puis 8 (deux tailles : la pente et le fixe). */
+const TAILLES_A_MESURER = [8, 5, 8];
+
+/**
+ * Appels de mesure du reranker (les premières de l'ordre du hook, même texte), lancés au tour suivant de la boucle : la réponse
+ * du hook part d'abord. Trois appels à la suite, de deux tailles : l'estimation est fiable dès le message suivant. Le reranker
+ * du service (`DureeDuReranker.envelopper`) en note les durées ; rien d'autre n'est fait des notes. Un appel sans réponse arrête
+ * la série (modèle arrêté : `demarrer: false`, il n'est jamais lancé pour cela).
+ */
+async function mesurerLeReranker(dep: Dependances, aMesurer: { requete: string; textes: string[] }): Promise<void> {
+	await new Promise((resoudre) => setTimeout(resoudre, 0));
+	for (const taille of TAILLES_A_MESURER) {
+		const textes = aMesurer.textes.slice(0, taille);
+		const notes = await dep.reranker.noter(aMesurer.requete, textes, { budgetMs: BUDGET_MESURE_RERANKER_MS, demarrer: false, activite: { operation: 'injection' } }).catch(() => null);
+		if (notes === null) return;
+	}
 }
 
 /**

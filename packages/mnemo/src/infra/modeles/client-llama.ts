@@ -19,7 +19,7 @@ import { changerNiveau, lireNiveau } from './niveau.ts';
 import { surveillerDossiers } from '../surveillance-dossiers.ts';
 import { lireEtatModeles, lirePiecesInstallees } from './etat-modeles.ts';
 import type { PiecesInstallees } from './pieces-installees.ts';
-import { arreterServeurs, cheminsModeles, oublierServeur, serveurPret } from './serveurs.ts';
+import { arreterServeurs, cheminsModeles, lireEtatServeurs, oublierServeur, serveurPret } from './serveurs.ts';
 import type { OptionsServeur } from './serveurs.ts';
 import type { EntreeServeur, TypeServeur } from './serveurs.ts';
 
@@ -235,6 +235,16 @@ const FICHIERS_D_ETAT = /^(modeles\.json|niveau\.json|activite$)/u;
  * `arreter` (`arreterServeurs`, le niveau ne change pas) ; `changerNiveau` ; `surveiller` : `serveurs/` (état, niveau) et
  * `serveurs/activite/`, dès qu'ils existent (jamais créés pour cela).
  */
+/**
+ * Identité du serveur du reranker en marche, lue dans l'état des serveurs : son fichier de modèle, son pid et son lancement ;
+ * null s'il ne tourne pas (ou état illisible). Une autre identité : un autre modèle, ou le même relancé (durées à remesurer).
+ */
+export async function identiteDuReranker(racine: string, options: OptionsClient = {}): Promise<string | null> {
+	const etat = await lireEtatServeurs(lieuDesServeurs(racine, options).dossier()).catch(() => null);
+	const r = etat?.reranker;
+	return r === undefined ? null : `${r.modele}|${r.pid}|${r.depuis}`;
+}
+
 export function modelesLocaux(racine: string, options: OptionsClient = {}): Modeles {
 	const disponibles = piecesDisponibles(options);
 	const lieu = lieuDesServeurs(racine, options);

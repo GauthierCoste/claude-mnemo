@@ -3,7 +3,7 @@
 //
 // La règle est celle qui a servi à figer les cas jugés du banc (variante `jointe`) : la changer rendrait ces cas faux.
 
-import { ACQUIESCEMENTS } from './message-muet.ts';
+import { ACQUIESCEMENTS, raisonDeMutisme } from './message-muet.ts';
 import { motsUtiles } from './requete.ts';
 
 /** `seule` : le message seul ; `jointe` : joint au message porteur d'avant s'il est court ou anaphorique. */
@@ -40,4 +40,31 @@ export function precedentUtile(message: string, variante: VarianteDeRequete = VA
 /** La requête du classement de ce message, selon la variante (par défaut, celle du hook). */
 export function requeteDuMessage(message: string, precedent: string | null, variante: VarianteDeRequete = VARIANTE_DE_LA_REQUETE): string {
 	return variante === 'jointe' ? (requeteJointe(message, precedent) ?? message) : message;
+}
+
+/** Au-delà de cet écart avec le message, le message porteur d'avant ne parle plus de la même chose : pas de requête jointe. */
+export const ECART_MAX_DU_PRECEDENT_MS = 30 * 60_000;
+/** Entrées du journal (les plus récentes avant le message) où chercher le message porteur d'avant : le hook et le banc. */
+export const ENTREES_DU_PRECEDENT = 20;
+
+/** Ce que le choix du message d'avant lit d'une entrée du journal. */
+export type EntreePourLePrecedent = { moment: string; horodatageMs: number; demande: string | null; muet: string | null };
+
+/**
+ * Le message porteur d'avant de l'utilisateur, pour un message à `instantMs` (spec § 3.2) : parmi les `ENTREES_DU_PRECEDENT`
+ * entrées du journal qui le précèdent, la demande de la plus récente entrée `message` porteuse (non muette, non vide), à
+ * `ECART_MAX_DU_PRECEDENT_MS` au plus ; la recherche s'arrête à une remise à zéro journalisée (entrée `debut`) : après un
+ * `/clear`, Claude ne voit plus l'échange d'avant. Null s'il n'y en a pas. Jamais une réponse de Claude : le journal n'en a pas.
+ */
+export function messagePrecedent(entrees: readonly EntreePourLePrecedent[], instantMs: number): string | null {
+	const avant = entrees
+		.filter((e) => e.horodatageMs < instantMs)
+		.sort((a, b) => b.horodatageMs - a.horodatageMs)
+		.slice(0, ENTREES_DU_PRECEDENT);
+	for (const e of avant) {
+		if (e.moment === 'debut' || instantMs - e.horodatageMs > ECART_MAX_DU_PRECEDENT_MS) return null;
+		if (e.moment !== 'message' || e.muet !== null || e.demande === null || e.demande.trim() === '' || raisonDeMutisme(e.demande) !== null) continue;
+		return e.demande;
+	}
+	return null;
 }

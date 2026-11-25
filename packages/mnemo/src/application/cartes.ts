@@ -22,6 +22,7 @@ import type { ElementIndexe } from '../domaine/elements.ts';
 import { estDocument } from '../domaine/regles.ts';
 import { expressionFts } from '../domaine/requete.ts';
 import { sansFaitsInactifs } from '../domaine/sans-faits-inactifs.ts';
+import { requeteDuReranker, syntheseDuTexte, texteDuReranker as texteDeFiche } from '../domaine/textes-du-reranker.ts';
 import { normaliser } from '../domaine/sens.ts';
 import { candidatesDuMessage, classerLeMessage, ficheProposable } from './classement-du-message.ts';
 import type { LigneDeClassement } from './classement-du-message.ts';
@@ -121,6 +122,12 @@ export type CartesCalculees = {
 	mesure: 'reranker' | 'sens' | 'aucune';
 	vecteur?: VecteurDuMessage;
 	classement: LigneDeClassement[];
+	/**
+	 * L'appel de mesure à lancer après la réponse du hook (`requete` pour le reranker, textes des premières de l'ordre) : le
+	 * service n'a pas d'estimation fiable de la durée du reranker, et aucun appel en cours n'en donnera une. Il ne décide et
+	 * n'écrit rien : sa durée seule est notée. Absent sinon.
+	 */
+	aMesurer?: { requete: string; textes: string[] };
 };
 
 /** Au-delà, la fiche de position n'est plus servie entière : elle devient la première carte. */
@@ -130,16 +137,19 @@ const CANDIDATS_QUESTION = 40;
 /** Candidates de la question soumises au reranker. */
 const CANDIDATS_RERANKER = 30;
 const LIGNE_MAX = 160;
+/**
+ * Au hook, le reranker s'arrête au plus tard ce temps avant l'échéance du calcul : ce qui suit (fiches demandées, rendu,
+ * écritures) a toujours son temps, et la fiche de position et les fiches demandées ne sont jamais perdues pour lui.
+ */
+export const RESERVE_APRES_RERANKER_MS = 45;
+/** Candidates soumises à l'appel de mesure lancé après le hook quand l'estimation n'est pas fiable : celles d'un hook plein. */
+const DOCUMENTS_A_MESURER = 8;
 
 const ficheDe = (id: string): string => id.split('#')[0]!;
 const declareUnLieu = (e: ElementIndexe): boolean => e.dossierProjet !== null || /^(projet|client):/u.test(e.portee ?? '');
 
-/** Synthèse d'une fiche indexée : son texte est le titre, une ligne vide, puis la synthèse. */
-function syntheseDe(e: ElementIndexe | undefined): string {
-	const texte = e?.texte ?? '';
-	const coupe = texte.indexOf('\n\n');
-	return coupe === -1 ? '' : texte.slice(coupe + 2).trim();
-}
+/** Synthèse d'une fiche indexée. */
+const syntheseDe = (e: ElementIndexe | undefined): string => syntheseDuTexte(e?.texte ?? '');
 
 /** Cartes du journal (chemin, raison, fiche d'où vient le poids). */
 export function cartesDuJournal(cartes: readonly Carte[]): CarteJournalisee[] {
@@ -192,7 +202,7 @@ async function notesDuReranker(dep: Dependances, question: string, textes: reado
 	const budgetMs = fin - Date.now();
 	if (budgetMs <= 0 || textes.length === 0) return null;
 	try {
-		const notes = await dep.reranker.noter(question, [...textes], { budgetMs, demarrer: false, activite: { operation: 'injection' } });
+		const notes = await dep.reranker.noter(requeteDuReranker(question), [...textes], { budgetMs, demarrer: false, activite: { operation: 'injection' } });
 		return notes === null || notes.length !== textes.length ? null : notes;
 	} catch {
 		return null;
@@ -210,8 +220,9 @@ function rerankerTient(duree: DureeDuReranker | undefined, documents: number, fi
 
 /**
  * Reranker au hook (spec classement vivant § 3.6) : il note les premières candidates de l'ordre, de 8 à 5 selon ce que
- * l'estimation de sa durée laisse tenir dans le temps restant ; rend leurs logits bruts par chemin. Vide sans estimation (hook
- * sans service, aucune mesure encore), si rien ne tient, ou s'il ne répond pas à temps : ni erreur, ni attente au-delà de `fin`.
+ * l'estimation de sa durée laisse tenir avant sa propre échéance (`fin - RESERVE_APRES_RERANKER_MS`) ; rend leurs logits bruts
+ * par chemin. Vide sans estimation fiable (hook sans service, trop peu de mesures), si rien ne tient, si un autre appel du
+ * reranker est en cours dans le service, ou s'il ne répond pas à temps : ni erreur, ni attente au-delà de son échéance.
  * Le logit n'est qu'un signal brut : il ne change ni l'ordre ni les pistes tant qu'aucune note apprise ne l'utilise.
  */
 async function logitsAuHook(
@@ -223,10 +234,11 @@ async function logitsAuHook(
 	fin: number,
 ): Promise<Map<string, number>> {
 	if (duree === undefined || ordre.length === 0 || requete.trim() === '') return new Map();
-	const k = duree.documentsAuHook(fin - Date.now(), ordre.length);
+	const finReranker = fin - RESERVE_APRES_RERANKER_MS;
+	const k = duree.documentsAuHook(finReranker - Date.now(), ordre.length);
 	if (k === null) return new Map();
 	const premieres = ordre.slice(0, k).map((n) => n.chemin);
-	const notes = await notesDuReranker(dep, requete, premieres.map(texte), fin);
+	const notes = await notesDuReranker(dep, requete, premieres.map(texte), finReranker);
 	return notes === null ? new Map() : new Map(premieres.map((c, i) => [c, notes[i]!]));
 }
 
@@ -244,8 +256,8 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 	const titreDe = new Map(titres.map((t) => [t.chemin, t.titre]));
 	const titre = (chemin: string) => titreDe.get(chemin) ?? chemin;
 	const type = (chemin: string) => elementDe.get(chemin)?.typeFiche ?? '';
-	/** Ce que le reranker lit d'une fiche : son titre et sa synthèse. */
-	const texteDuReranker = (chemin: string) => `${titre(chemin)}\n${syntheseDe(elementDe.get(chemin))}`;
+	/** Ce que le reranker lit d'une fiche : son titre et sa synthèse (`domaine/textes-du-reranker.ts`). */
+	const texteDuReranker = (chemin: string) => texteDeFiche(titre(chemin), elementDe.get(chemin)?.texte ?? '');
 
 	const fiches: FicheDuGraphe[] = elements.map((e) => ({ chemin: e.chemin, typeFiche: e.typeFiche, declareUnLieu: declareUnLieu(e) }));
 	const declarants = new Set(fiches.filter((f) => f.declareUnLieu).map((f) => f.chemin));
@@ -312,6 +324,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 	let noteDePosition: number | null = null;
 	let mesure: CartesCalculees['mesure'] = 'aucune';
 	let vecteurDuCalcul: VecteurDuMessage | null = null;
+	let aMesurer: CartesCalculees['aMesurer'];
 	const date = (chemin: string) => elementDe.get(chemin)?.date ?? '';
 
 	// Note unique : sens du message (base) plus le poids de chaque signal. Un nouveau signal s'ajoute à cette liste.
@@ -398,6 +411,9 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		if (m.sens) mesure = 'sens';
 		// reranker au hook sur les premières de l'ordre, si l'estimation de sa durée le permet : son logit va aux signaux bruts seulement
 		const logits = await logitsAuHook(dep, d.dureeReranker, requete, m.ordre, texteDuReranker, d.fin);
+		if (logits.size === 0 && d.dureeReranker !== undefined && !d.dureeReranker.fiable() && d.dureeReranker.enCours() === 0 && m.ordre.length > 0 && requete.trim() !== '') {
+			aMesurer = { requete: requeteDuReranker(requete), textes: m.ordre.slice(0, DOCUMENTS_A_MESURER).map((n) => texteDuReranker(n.chemin)) };
+		}
 		const noteHorsClassement = (chemin: string): number | null => (mesure === 'aucune' ? null : noterPiste(chemin, m.base(chemin)).total);
 		// Pistes : les premières nouvelles de l'ordre (pas de seuil tant qu'aucune note apprise n'est acceptée), seulement si la demande
 		// en veut. Sans le sens, il faut que les mots trouvent la fiche ou qu'un signal la désigne : la date seule ne dit rien du message ;
@@ -446,5 +462,5 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		});
 	}
 	if (position !== null) position = { ...position, encadree: encadrees.has(position.chemin) };
-	return { position, positionFiche, cartes, mesure, ...(vecteurDuCalcul === null ? {} : { vecteur: vecteurDuCalcul }), classement };
+	return { position, positionFiche, cartes, mesure, ...(vecteurDuCalcul === null ? {} : { vecteur: vecteurDuCalcul }), classement, ...(aMesurer === undefined ? {} : { aMesurer }) };
 }

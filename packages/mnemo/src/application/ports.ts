@@ -594,7 +594,10 @@ export type EntreeServie = {
 	horodatageMs: number;
 	ids: string[];
 	texte: string;
+	/** Durée du hook, depuis le démarrage de son processus (ou, sans lui, depuis l'appel). */
 	ms: number;
+	/** Durée vue du service, depuis l'appel qu'il a reçu du hook ; absente hors du service et des entrées anciennes. */
+	msService?: number;
 	sens: boolean;
 	demande: string | null;
 	classement: Classe[];

@@ -67,11 +67,12 @@ export function ouvrirJournalEnLecture(chemin: string): JournalEnLecture {
 			},
 			async messages(id, limite) {
 				const lignes = base
-					.prepare("SELECT moment, horodatage_ms, demande, muet, position, ids FROM servis WHERE session = ? AND moment = 'message' ORDER BY rang DESC LIMIT ?")
+					// les débuts journalisés (remises à zéro) bornent la recherche du message d'avant
+					.prepare("SELECT moment, horodatage_ms, demande, muet, position, ids FROM servis WHERE session = ? AND moment IN ('message', 'debut') ORDER BY rang DESC LIMIT ?")
 					.all(id, limite) as Ligne[];
 				return lignes.map(
 					(l): EntreeDuJournal => ({
-						moment: 'message',
+						moment: l.moment === 'debut' ? 'debut' : 'message',
 						horodatageMs: Number(l.horodatage_ms),
 						demande: (l.demande as string | null) ?? null,
 						muet: (l.muet as RaisonMuet | null) ?? null,

@@ -201,7 +201,8 @@ CREATE TABLE IF NOT EXISTS servis (
 	cartes TEXT NOT NULL DEFAULT '[]',
 	position TEXT,
 	rang_message INTEGER,
-	affinage TEXT
+	affinage TEXT,
+	ms_service INTEGER
 );
 CREATE INDEX IF NOT EXISTS servis_session ON servis (session, rang);
 ${SCHEMA_ECARTES}${SCHEMA_RATTACHEMENT}${SCHEMA_FICHES_SERVIES_LUES_ECRITES}${SCHEMA_CARTES}${SCHEMA_INJECTIONS_MANUELLES}${SCHEMA_LOTS}${SCHEMA_GESTES}`;
@@ -297,6 +298,7 @@ function ligneVersEntree(l: Ligne): EntreeServie {
 		// absent des entrées sans rang (muettes, outil `contexte`, anciennes) : elles restent égales à ce qui a été journalisé
 		...(l.rang_message === null || l.rang_message === undefined ? {} : { rangMessage: Number(l.rang_message) }),
 		...(l.affinage === 'en_cours' || l.affinage === 'fait' ? { affinage: l.affinage as Affinage } : {}),
+		...(typeof l.ms_service === 'number' ? { msService: l.ms_service } : {}),
 	};
 }
 
@@ -439,11 +441,14 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesServis.includes('rang_message')) base.exec('ALTER TABLE servis ADD COLUMN rang_message INTEGER');
 				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
+				if (!colonnesServis.includes('ms_service')) base.exec('ALTER TABLE servis ADD COLUMN ms_service INTEGER');
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
 			} else if (version === VERSION_ETAT) {
-				// 13 non publiée : un état déjà en 13 (développement) reçoit l'état d'affinage du classement et les écartées toujours
+				// 13 non publiée : un état déjà en 13 (développement) reçoit l'état d'affinage du classement, la durée vue du service
+				// et les écartées toujours
 				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
+				if (!colonnesServis.includes('ms_service')) base.exec('ALTER TABLE servis ADD COLUMN ms_service INTEGER');
 				base.exec(SCHEMA_ECARTEES_TOUJOURS);
 				const colonnesEcartees = (base.prepare('PRAGMA table_info(ecartees_toujours)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesEcartees.includes('retablie_ms')) base.exec('ALTER TABLE ecartees_toujours ADD COLUMN retablie_ms INTEGER');
@@ -688,8 +693,8 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 				base
 					// le rang du message : celui du dernier message porteur, pour une entrée de message non muette
 					.prepare(
-						`INSERT INTO servis (session, moment, horodatage_ms, ids, texte, ms, sens, demande, classement, muet, cartes, position, rang_message)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? THEN (SELECT messages_porteurs FROM sessions WHERE id = ?) END)`,
+						`INSERT INTO servis (session, moment, horodatage_ms, ids, texte, ms, sens, demande, classement, muet, cartes, position, ms_service, rang_message)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? THEN (SELECT messages_porteurs FROM sessions WHERE id = ?) END)`,
 					)
 					.run(
 						entree.session,
@@ -704,6 +709,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 						entree.muet,
 						JSON.stringify(entree.cartes),
 						entree.position,
+						entree.msService ?? null,
 						entree.moment === 'message' && entree.muet === null ? 1 : 0,
 						entree.session,
 					);
@@ -741,7 +747,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 			// `dernier` : le JSON du classement n'est lu que pour l'entrée la plus récente rendue
 			const colonnes =
 				options?.classement === 'dernier'
-					? `session, moment, horodatage_ms, ids, texte, ms, sens, demande, muet, cartes, position, rang_message, affinage,
+					? `session, moment, horodatage_ms, ids, texte, ms, sens, demande, muet, cartes, position, rang_message, affinage, ms_service,
 						CASE WHEN rang = (SELECT MAX(rang) FROM servis WHERE session = ?1${moment === undefined ? '' : ' AND moment = ?2'}) THEN classement ELSE '[]' END AS classement`
 					: '*';
 			const filtre = moment === undefined ? 'session = ?1' : 'session = ?1 AND moment = ?2';

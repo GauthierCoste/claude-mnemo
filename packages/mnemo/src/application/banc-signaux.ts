@@ -19,6 +19,7 @@ import { signalInjection } from '../domaine/signal-injection.ts';
 import type { InjectionManuelle } from '../domaine/signal-injection.ts';
 import type { SignauxBruts } from '../domaine/signaux-de-note.ts';
 import { normaliser } from '../domaine/sens.ts';
+import { requeteDuReranker, syntheseDuTexte, texteDuReranker } from '../domaine/textes-du-reranker.ts';
 import { ligneDeCarte } from './cartes.ts';
 import { ficheDePosition } from './chercher.ts';
 import { candidatesDuMessage, classerLeMessage, ficheProposable } from './classement-du-message.ts';
@@ -85,11 +86,9 @@ const BUDGET_RERANKER_MS = 15_000;
 
 const declareUnLieu = (e: ElementIndexe): boolean => e.dossierProjet !== null || /^(projet|client):/u.test(e.portee ?? '');
 
-/** Synthèse d'une fiche indexée : son texte est le titre, une ligne vide, puis la synthèse (comme `cartes.ts`). */
+/** Synthèse d'une fiche indexée (`domaine/textes-du-reranker.ts`, comme `cartes.ts`). */
 export function syntheseDe(e: ElementIndexe | undefined): string {
-	const texte = e?.texte ?? '';
-	const coupe = texte.indexOf('\n\n');
-	return coupe === -1 ? '' : texte.slice(coupe + 2).trim();
+	return syntheseDuTexte(e?.texte ?? '');
 }
 
 export async function chargerMemoireDuBanc(dep: Dependances): Promise<MemoireDuBanc> {
@@ -193,9 +192,10 @@ async function vecteurDe(dep: Dependances, requete: string, demarrer: boolean): 
 
 async function logits(dep: Dependances, memoire: MemoireDuBanc, requete: string, chemins: readonly string[], demarrer: boolean): Promise<Map<string, number> | null> {
 	if (chemins.length === 0) return new Map();
-	const textes = chemins.map((c) => `${memoire.titreDe.get(c) ?? c}\n${syntheseDe(memoire.elementDe.get(c))}`);
+	// requête et textes tronqués comme au hook : un même message donne le même logit
+	const textes = chemins.map((c) => texteDuReranker(memoire.titreDe.get(c) ?? c, memoire.elementDe.get(c)?.texte ?? ''));
 	try {
-		const notes = await dep.reranker.noter(requete, textes, { budgetMs: BUDGET_RERANKER_MS, demarrer, activite: { operation: 'recherche' } });
+		const notes = await dep.reranker.noter(requeteDuReranker(requete), textes, { budgetMs: BUDGET_RERANKER_MS, demarrer, activite: { operation: 'recherche' } });
 		if (notes === null || notes.length !== chemins.length) return null;
 		return new Map(chemins.map((c, i) => [c, notes[i]!]));
 	} catch {

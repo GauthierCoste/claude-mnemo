@@ -29,6 +29,8 @@ export function diffuserModeles(o: {
 	journal(message: string): void;
 	sondageMs?: number;
 	regroupementMs?: number;
+	/** Appelé après chaque lecture réussie de l'état (changement vu, ou sondage) : ce que le service relit avec lui. */
+	apresLecture?: () => void;
 }): DiffusionModeles {
 	let derniere: string | null = null;
 	/** La première lecture réussie sert de référence, sans diffusion ; si elle échoue, la suivante qui réussit est diffusée. */
@@ -63,6 +65,7 @@ export function diffuserModeles(o: {
 				if (!reference && texte !== derniere) o.diffuser({ type: 'modeles', modeles: vue });
 				derniere = texte;
 				reference = false;
+				o.apresLecture?.();
 			} while (encore && !ferme);
 		} finally {
 			enCours = false;

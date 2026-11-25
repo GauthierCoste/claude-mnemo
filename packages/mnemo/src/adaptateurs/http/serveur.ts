@@ -9,7 +9,7 @@ import { TAILLE_MAX_DOCUMENT, tailleLisible } from '@mnemo/commun';
 import { extractionDifferee } from '../../application/extraction-differee.ts';
 import { creerPilote } from '../../application/pilote.ts';
 import type { Dependances, Modeles, Pilotage } from '../../application/ports.ts';
-import { modelesLocaux } from '../../infra/modeles/client-llama.ts';
+import { identiteDuReranker, modelesLocaux } from '../../infra/modeles/client-llama.ts';
 import { migrerAncienGardien } from '../../infra/modeles/migration-gardien-dossier.ts';
 import { dossierClaudeParDefaut, memoireClaude, projetsClaude } from '../../infra/memoire-claude.ts';
 import { jetonDuDossier } from '../../infra/jeton-local.ts';
@@ -35,7 +35,7 @@ import { dossierInterface, servirInterface } from './statique.ts';
 import { racineAffichee, titresDeLIndex } from './vues.ts';
 import { creerHub } from './websocket.ts';
 import { aprioriDesGestes } from '../../application/apriori.ts';
-import { dureeDuReranker, rerankerMesure } from '../../application/duree-reranker.ts';
+import { dureeDuReranker } from '../../application/duree-reranker.ts';
 import { diffuserModeles, vueModeles } from './diffusion-modeles.ts';
 import { routesLots } from './lots.ts';
 import { versionMnemo } from '../../infra/version.ts';
@@ -243,6 +243,8 @@ export async function demarrerService(options: {
 	dossierClaude?: string;
 	/** Modèles locaux (état, démarrage sur demande) ; par défaut ceux de la machine (`modelesLocaux`). */
 	modeles?: Modeles;
+	/** Identité du serveur du reranker en marche (durées à remesurer quand elle change) ; par défaut lue dans l'état des serveurs. */
+	identiteReranker?: () => Promise<string | null>;
 	/** Variable d'environnement qui a fixé `port` (`MNEMO_PORT`) : le réglage `service.port` est alors sans effet. */
 	portFixePar?: string;
 	/**
@@ -272,10 +274,6 @@ export async function demarrerService(options: {
 	const orphelins = await nettoyerDepots(racine);
 	if (orphelins > 0) journal(`${orphelins} dépôt(s) interrompu(s) retiré(s) de .mnemo/depots/.`);
 
-	// chaque appel du reranker est mesuré : le hook de message ne le lance que si l'estimation de sa durée tient dans son temps
-	const dureeReranker = dureeDuReranker();
-	dep.reranker = rerankerMesure(dep.reranker, dureeReranker);
-
 	// extraction des documents à part de la recherche, qui la réveille (une recherche n'attend jamais un document de plusieurs Go)
 	const differee = dep.extractionDifferee === undefined ? extractionDifferee(dep, journal) : null;
 	if (differee !== null) dep.extractionDifferee = differee;
@@ -304,6 +302,16 @@ export async function demarrerService(options: {
 	);
 
 	const modeles = options.modeles ?? modelesLocaux(racine);
+	// durée du reranker : mesurée sur les appels « injection » du service (enveloppe posée par les routes, jamais sur `dep`) ;
+	// oubliée quand le serveur du reranker change (autre modèle, relancé), relu à chaque lecture de l'état des modèles
+	const dureeReranker = dureeDuReranker();
+	const identiteReranker = options.identiteReranker ?? (() => identiteDuReranker(racine));
+	const relireIdentiteReranker = (): void => {
+		void identiteReranker()
+			.then((identite) => dureeReranker.identifier(identite))
+			.catch(() => {});
+	};
+	relireIdentiteReranker();
 	// a priori des gestes entre sessions : lu une fois en arrière-plan, puis seulement les gestes nouveaux
 	const apriori = aprioriDesGestes(pil.etat, { chemins: async () => (await dep.index.titres()).map((t) => t.chemin), journal });
 	enFond(apriori.actualiser({ ecartees: true }));
@@ -324,6 +332,7 @@ export async function demarrerService(options: {
 		modeles,
 		diffuser: hub.diffuser,
 		journal,
+		apresLecture: relireIdentiteReranker,
 		...(reglages.sondageModelesMs === undefined ? {} : { sondageMs: reglages.sondageModelesMs }),
 	});
 	/** Processus de session tenus ici : session → pid. */

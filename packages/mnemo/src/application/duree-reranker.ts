@@ -1,96 +1,84 @@
 /**
- * Durée du reranker, estimée d'après ses dernières durées mesurées (spec classement vivant § 3.6) : le hook ne le lance sur les
- * premières candidates que si l'estimation tient dans le temps qui lui reste. Tenue en mémoire par le service (jamais écrite) :
- * le hook sans service n'a pas de mesure, donc pas de reranker.
+ * Durée du reranker, tenue en mémoire par le service (jamais écrite ; spec classement vivant § 3.6) : les dernières durées
+ * mesurées des appels « injection » (le hook, l'appel de mesure lancé après lui, l'affinage), l'identité du serveur qu'elles
+ * mesurent, et les appels en cours. L'estimation elle-même est dans `domaine/droite-des-durees.ts`.
  *
- * Estimation : `durée(k) = fixe + k × par_document`, tirée des `MESURES_GARDEES` dernières mesures par des médianes (pente de
- * Theil-Sen : médiane des pentes entre deux mesures de tailles différentes ; fixe : médiane des restes). Une mesure aberrante
- * (modèle qui démarre, serveur occupé) ne la déplace pas. Plus une marge (`MARGE_RELATIVE`, `MARGE_MS`).
+ * Le hook ne lance le reranker que si l'estimation est fiable, qu'elle tient dans son temps et qu'aucun autre appel du
+ * reranker n'est en cours dans le service (il attendrait derrière). Le hook sans service n'a pas de mesure : pas de reranker.
  */
+import { documentsQuiTiennent, dureeEstimee, estimationFiable, mesuresValables, MESURES_GARDEES, VALIDITE_MESURE_MS } from '../domaine/droite-des-durees.ts';
+import type { MesureDuReranker } from '../domaine/droite-des-durees.ts';
 import type { Reranker } from './ports.ts';
 
-/** Une durée mesurée : `documents` notés en `ms`. */
-export type MesureDuReranker = { documents: number; ms: number };
-
-/** Mesures gardées : les plus récentes. */
-export const MESURES_GARDEES = 20;
-/** Marge ajoutée à l'estimation : une part de la durée, plus un temps fixe. */
-export const MARGE_RELATIVE = 0.2;
-export const MARGE_MS = 10;
-/** Candidates soumises au reranker au hook : le plus grand nombre de `max` à `min` qui tient. */
-export const DOCUMENTS_AU_HOOK = { min: 5, max: 8 } as const;
-
-function mediane(valeurs: readonly number[]): number {
-	const triees = [...valeurs].sort((a, b) => a - b);
-	const m = Math.floor(triees.length / 2);
-	return triees.length % 2 === 1 ? triees[m]! : (triees[m - 1]! + triees[m]!) / 2;
-}
-
-/**
- * `fixe` et `parDocument` (ms, ≥ 0) tirés des mesures ; null sans mesure. Avec une seule taille mesurée, la durée est tenue
- * pour proportionnelle au nombre de documents (fixe nul).
- */
-export function droiteDesDurees(mesures: readonly MesureDuReranker[]): { fixe: number; parDocument: number } | null {
-	const valides = mesures.filter((m) => m.documents > 0 && Number.isFinite(m.ms) && m.ms >= 0);
-	if (valides.length === 0) return null;
-	const pentes: number[] = [];
-	for (const [i, a] of valides.entries()) {
-		for (const b of valides.slice(i + 1)) if (a.documents !== b.documents) pentes.push((b.ms - a.ms) / (b.documents - a.documents));
-	}
-	if (pentes.length === 0) return { fixe: 0, parDocument: Math.max(0, mediane(valides.map((m) => m.ms / m.documents))) };
-	const parDocument = Math.max(0, mediane(pentes));
-	return { fixe: Math.max(0, mediane(valides.map((m) => m.ms - parDocument * m.documents))), parDocument };
-}
+/** Un appel sans réponse qui a duré au moins son budget moins ce temps a été coupé par son échéance. */
+const TOLERANCE_COUPE_MS = 5;
 
 export type DureeDuReranker = {
-	/** Note une durée mesurée (un appel qui a rendu une note par document). */
-	noter(documents: number, ms: number): void;
-	/** Durée estimée pour `documents`, marge comprise ; null sans mesure. */
+	/** Note une durée mesurée ; `censuree` : appel coupé par son échéance (`ms` : son budget, une borne basse). */
+	noter(mesure: { documents: number; ms: number; censuree?: boolean }): void;
+	/** Durée estimée pour `documents`, marge comprise ; null si l'estimation n'est pas fiable. */
 	estimer(documents: number): number | null;
+	/** Assez de mesures récentes et complètes pour croire l'estimation (sinon, le hook fait mesurer le reranker après lui). */
+	fiable(): boolean;
 	/**
-	 * Nombre de candidates à soumettre au hook : le plus grand de `DOCUMENTS_AU_HOOK.max` à `.min` (bornés par `disponibles`) dont
-	 * l'estimation tient dans `restantMs` ; null si aucun ne tient, sans mesure ou sans candidate.
+	 * Nombre de candidates à soumettre au hook (de 8 à 5, bornés par `disponibles`) dont l'estimation tient dans `restantMs` ;
+	 * null si aucun ne tient, si l'estimation n'est pas fiable, ou si un appel du reranker est en cours dans le service.
 	 */
 	documentsAuHook(restantMs: number, disponibles: number): number | null;
+	/** Appels du reranker en cours dans le service (toutes sortes : palette, hook, mesure, affinage). */
+	enCours(): number;
+	/** Identité du serveur du reranker (modèle, lancement) ; une autre que la dernière vue oublie toutes les mesures. */
+	identifier(identite: string | null): void;
+	/**
+	 * Le reranker vu par le service : chaque appel est compté tant qu'il est en cours ; un appel « injection » est mesuré s'il
+	 * rend une note par document, ou noté coupé s'il ne rend rien après avoir pris tout son budget. Jamais une enveloppe
+	 * d'enveloppe : un reranker déjà enveloppé ici est rendu tel quel.
+	 */
+	envelopper(reranker: Reranker): Reranker;
 };
 
-export function dureeDuReranker(): DureeDuReranker {
-	const mesures: MesureDuReranker[] = [];
-	const estimer = (documents: number): number | null => {
-		const droite = droiteDesDurees(mesures);
-		return droite === null ? null : (droite.fixe + documents * droite.parDocument) * (1 + MARGE_RELATIVE) + MARGE_MS;
-	};
-	return {
-		noter(documents, ms) {
+export function dureeDuReranker(maintenant: () => number = Date.now): DureeDuReranker {
+	let mesures: MesureDuReranker[] = [];
+	let identite: string | null | undefined = undefined;
+	let enCours = 0;
+	const enveloppes = new WeakSet<Reranker>();
+	const valables = () => mesuresValables(mesures, maintenant());
+	const duree: DureeDuReranker = {
+		noter({ documents, ms, censuree }) {
 			if (!(documents > 0) || !Number.isFinite(ms) || ms < 0) return;
-			mesures.push({ documents, ms });
-			if (mesures.length > MESURES_GARDEES) mesures.splice(0, mesures.length - MESURES_GARDEES);
+			const instantMs = maintenant();
+			mesures.push({ documents, ms, instantMs, ...(censuree === true ? { censuree: true } : {}) });
+			mesures = mesures.filter((m) => instantMs - m.instantMs <= VALIDITE_MESURE_MS).slice(-MESURES_GARDEES);
 		},
-		estimer,
-		documentsAuHook(restantMs, disponibles) {
-			const max = Math.min(DOCUMENTS_AU_HOOK.max, disponibles);
-			const min = Math.min(DOCUMENTS_AU_HOOK.min, disponibles);
-			for (let k = max; k >= min && k > 0; k--) {
-				const ms = estimer(k);
-				if (ms === null) return null;
-				if (ms <= restantMs) return k;
-			}
-			return null;
+		estimer: (documents) => dureeEstimee(valables(), documents),
+		fiable: () => estimationFiable(valables()),
+		documentsAuHook: (restantMs, disponibles) => (enCours > 0 ? null : documentsQuiTiennent(valables(), restantMs, disponibles)),
+		enCours: () => enCours,
+		identifier(nouvelle) {
+			if (identite !== undefined && nouvelle !== identite) mesures = [];
+			identite = nouvelle;
+		},
+		envelopper(reranker) {
+			if (enveloppes.has(reranker)) return reranker;
+			const enveloppe: Reranker = {
+				async noter(requete, textes, options) {
+					const mesuree = options.activite?.operation === 'injection' && textes.length > 0;
+					const debut = maintenant();
+					enCours++;
+					try {
+						const notes = await reranker.noter(requete, textes, options);
+						const ms = maintenant() - debut;
+						if (mesuree && notes !== null && notes.length === textes.length) duree.noter({ documents: textes.length, ms });
+						else if (mesuree && notes === null && ms >= options.budgetMs - TOLERANCE_COUPE_MS) duree.noter({ documents: textes.length, ms: Math.max(ms, options.budgetMs), censuree: true });
+						return notes;
+					} finally {
+						enCours--;
+					}
+				},
+			};
+			enveloppes.add(enveloppe);
+			return enveloppe;
 		},
 	};
-}
-
-/**
- * Le reranker, dont chaque appel qui rend une note par document est mesuré (`duree.noter`) : outil `contexte`, recherche, hook.
- * Un appel sans réponse (modèle arrêté, délai dépassé, erreur) ne mesure rien : sa durée ne dit rien de celle d'une notation.
- */
-export function rerankerMesure(reranker: Reranker, duree: DureeDuReranker, maintenant: () => number = Date.now): Reranker {
-	return {
-		async noter(requete, textes, options) {
-			const debut = maintenant();
-			const notes = await reranker.noter(requete, textes, options);
-			if (notes !== null && textes.length > 0 && notes.length === textes.length) duree.noter(textes.length, maintenant() - debut);
-			return notes;
-		},
-	};
+	return duree;
 }

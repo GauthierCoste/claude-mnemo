@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculerCartes, ligneDeCarte } from '../../src/application/cartes.ts';
+import { calculerCartes, ligneDeCarte, RESERVE_APRES_RERANKER_MS } from '../../src/application/cartes.ts';
 import type { DemandeCartes } from '../../src/application/cartes.ts';
 import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
 import type { Dependances, Reranker, Sens } from '../../src/application/ports.ts';
@@ -554,8 +554,9 @@ describe('calculerCartes : reranker au hook et requête', () => {
 	/** Mesures de la machine de référence (documents courts) : 35 ms pour 5, 60 ms pour 10. */
 	const mesuree = () => {
 		const duree = dureeDuReranker();
-		duree.noter(5, 35);
-		duree.noter(10, 60);
+		duree.noter({ documents: 5, ms: 35 });
+		duree.noter({ documents: 10, ms: 60 });
+		duree.noter({ documents: 5, ms: 35 });
 		return duree;
 	};
 	type Appel = { requete: string; textes: string[]; budgetMs: number; demarrer: boolean };
@@ -596,8 +597,9 @@ describe('calculerCartes : reranker au hook et requête', () => {
 		dep.reranker = reranker;
 		const duree = dureeDuReranker();
 		// 10 ms par document, sans fixe : 5 documents ≈ 70 ms marge comprise, 8 ≈ 106 ms
-		duree.noter(5, 50);
-		duree.noter(10, 100);
+		duree.noter({ documents: 5, ms: 50 });
+		duree.noter({ documents: 10, ms: 100 });
+		duree.noter({ documents: 5, ms: 50 });
 		const restant = duree.estimer(6)! + 2;
 		const lent = { ...duree, documentsAuHook: (_restant: number, disponibles: number) => duree.documentsAuHook(restant, disponibles) };
 		const c = await calculerCartes(dep, demande({ message, dureeReranker: lent }));
@@ -643,8 +645,38 @@ describe('calculerCartes : reranker au hook et requête', () => {
 			// au plus le temps restant, plus ce qui suit le reranker (cartes, encadrement)
 			expect(Date.now()).toBeLessThan(fin + 50);
 		}
+		// sa propre échéance : `RESERVE_APRES_RERANKER_MS` avant celle du calcul
 		expect(budgetRecu).toBeGreaterThan(0);
-		expect(budgetRecu).toBeLessThanOrEqual(300);
+		expect(budgetRecu).toBeLessThanOrEqual(300 - RESERVE_APRES_RERANKER_MS);
+	});
+
+	it('sans estimation fiable : pas de reranker au hook, mais l’appel de mesure à lancer après lui (8 premières, même texte)', async () => {
+		const dep = await avecSens();
+		const { appels, reranker } = rerankerEspion();
+		dep.reranker = reranker;
+		const c = await calculerCartes(dep, demande({ message, dureeReranker: dureeDuReranker() }));
+		expect(appels).toHaveLength(0);
+		expect(c.aMesurer!.requete).toBe(message);
+		expect(c.aMesurer!.textes.map((t) => t.split('\n')[0])).toEqual(c.classement.slice(0, 8).map((l) => l.titre));
+		// estimation fiable : le hook note lui-même, rien à mesurer après ; hook sans service : rien non plus
+		expect((await calculerCartes(dep, demande({ message, dureeReranker: mesuree() }))).aMesurer).toBeUndefined();
+		expect((await calculerCartes(dep, demande({ message }))).aMesurer).toBeUndefined();
+	});
+
+	it('un appel du reranker en cours dans le service : ni reranker au hook, ni appel de mesure', async () => {
+		const dep = await avecSens();
+		const { appels, reranker } = rerankerEspion();
+		dep.reranker = reranker;
+		for (const duree of [mesuree(), dureeDuReranker()]) {
+			let finir: (n: number[]) => void = () => {};
+			const enCours = duree.envelopper({ noter: () => new Promise((r) => (finir = r)) }).noter('palette', ['a'], { budgetMs: 1000, demarrer: false });
+			const c = await calculerCartes(dep, demande({ message, dureeReranker: duree }));
+			expect(sansLogit(c)).toBe(true);
+			expect(c.aMesurer).toBeUndefined();
+			finir([0]);
+			await enCours;
+		}
+		expect(appels).toHaveLength(0);
 	});
 
 	it('la requête (jointe) sert au sens, aux mots et au reranker ; les fiches nommées se cherchent dans le message seul', async () => {
@@ -682,7 +714,7 @@ describe('calculerCartes : reranker au hook et requête', () => {
 		expect(tente.mesure).toBe('reranker');
 		// une estimation qui ne tient pas : pas de reranker, le sens classe
 		const lente = dureeDuReranker();
-		lente.noter(10, 50_000);
+		for (let i = 0; i < 3; i++) lente.noter({ documents: 10, ms: 50_000 });
 		appels.length = 0;
 		const sautee = await calculerCartes(dep, demande({ ...question, dureeReranker: lente }));
 		expect(appels).toHaveLength(0);

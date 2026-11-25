@@ -10,7 +10,7 @@ import { porteursRecents } from '../../src/application/porteurs-recents.ts';
 import { aprioriDesGestes } from '../../src/application/apriori.ts';
 import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
-import type { Sens } from '../../src/application/ports.ts';
+import type { Reranker, Sens } from '../../src/application/ports.ts';
 import { servirQuestion } from '../aides/servir.ts';
 import { texteDossierNonRattache } from '../../src/domaine/rattachement.ts';
 import type { EvenementHook, Session } from '../../src/domaine/session.ts';
@@ -509,8 +509,9 @@ describe('traiterEvenement : contexte sobre au message', () => {
 		const requetes: string[] = [];
 		dep.reranker = { noter: async (requete, textes) => (requetes.push(requete), textes.map(() => 1.5)) };
 		const duree = dureeDuReranker();
-		duree.noter(5, 35);
-		duree.noter(10, 60);
+		duree.noter({ documents: 5, ms: 35 });
+		duree.noter({ documents: 10, ms: 60 });
+		duree.noter({ documents: 5, ms: 35 });
 		const porteurs = porteursRecents();
 		await traiterEvenement(dep, pil, message(10, 'catalogue références'), { ...local, dureeReranker: duree, porteurs });
 		expect(requetes).toEqual(['catalogue références']);
@@ -521,6 +522,75 @@ describe('traiterEvenement : contexte sobre au message', () => {
 		await traiterEvenement(dep, pil, message(11, 'catalogue références'), local);
 		expect(requetes).toHaveLength(1);
 		expect((await etat.servis(ID, 1))[0]!.classement.find((c) => c.id === AVOIRS)!.signaux).not.toHaveProperty('logit');
+	});
+
+	it('service sans estimation fiable : le reranker est mesuré après la réponse (rien d’autre) ; le logit vient dès le message suivant', async () => {
+		const { dep, etat, pil } = await memoire();
+		for (const [i, chemin] of ['tarifs', 'remises', 'devis', 'acomptes'].entries()) {
+			await dep.coffre.ecrire(`projets/vela/${chemin}.md`, `${entete()}# Catalogue ${chemin}\n\nRéférence ${i} du catalogue.\n`);
+		}
+		const appels: { textes: number; operation: string | undefined; demarrer: boolean }[] = [];
+		const duree = dureeDuReranker();
+		const brut: Reranker = {
+			noter: async (_requete, textes, o) => (appels.push({ textes: textes.length, operation: o.activite?.operation, demarrer: o.demarrer }), textes.map(() => 0.5)),
+		};
+		dep.reranker = duree.envelopper(brut);
+		const taches: Promise<unknown>[] = [];
+		const service = { ...local, dureeReranker: duree, enFond: (t: Promise<unknown>) => void taches.push(t) };
+		await traiterEvenement(dep, pil, message(10, 'catalogue références'), service);
+		// rien au hook même : la mesure part après la réponse
+		expect(appels).toHaveLength(0);
+		expect((await etat.servis(ID, 1))[0]!.classement.every((c) => c.signaux?.logit === undefined)).toBe(true);
+		await Promise.all(taches);
+		// trois appels de mesure (8, 5 et 8 premières : ici les 5 candidates), jamais pour démarrer le modèle
+		expect(appels).toEqual([
+			{ textes: 5, operation: 'injection', demarrer: false },
+			{ textes: 5, operation: 'injection', demarrer: false },
+			{ textes: 5, operation: 'injection', demarrer: false },
+		]);
+		expect(duree.fiable()).toBe(true);
+		taches.length = 0;
+		await traiterEvenement(dep, pil, message(11, 'catalogue références des remises'), service);
+		expect((await etat.servis(ID, 1))[0]!.classement.some((c) => c.signaux?.logit === 0.5)).toBe(true);
+		// estimation fiable : plus d'appel de mesure
+		expect(taches).toHaveLength(0);
+	});
+
+	it('reranker coupé par son échéance, puis base lente : la fiche de position et la fiche demandée partent quand même', async () => {
+		const { dep, etat, pil } = await memoire();
+		await dep.coffre.ecrire('projets/vela/ristournes.md', `${entete()}# Ristournes\n\nUne ristourne baisse le prix du catalogue.\n`);
+		const duree = dureeDuReranker();
+		for (let i = 0; i < 3; i++) duree.noter({ documents: 1, ms: 1 });
+		let budgetRecu = 0;
+		// coupé : comme le client réel, il ne rend rien au-delà du budget qu'il reçoit
+		dep.reranker = duree.envelopper({ noter: (_r, _t, o) => ((budgetRecu = o.budgetMs), new Promise((r) => setTimeout(() => r(null), o.budgetMs))) });
+		// base lente : chaque écriture du journal prend 110 ms (plus que la marge de sortie seule)
+		const lente: EtatSessions = Object.create(etat) as EtatSessions;
+		lente.journaliser = async (e) => {
+			await new Promise((r) => setTimeout(r, 110));
+			return etat.journaliser(e);
+		};
+		const demandees = fichesDemandees();
+		demandees.demander(ID, AVOIRS);
+		const debut = Date.now();
+		const r = await traiterEvenement(dep, { ...pil, etat: lente }, message(10, 'catalogue références'), { ...local, dureeReranker: duree, demandees, echeance: debut + 500 });
+		expect(budgetRecu).toBeGreaterThan(0);
+		expect(r.contexte).toContain('### Projet Vela');
+		expect(r.contexte).toContain('Un avoir annule une facture.');
+		expect(Date.now()).toBeLessThan(debut + 500);
+		expect((await etat.fichesServiesLuesOuEcrites(ID)).map((f) => f.chemin).sort()).toEqual([AVOIRS, VELA].sort());
+	});
+
+	it('journal : `ms` depuis le démarrage du hook, `msService` depuis l’appel reçu par le service ; sans service, pas de `msService`', async () => {
+		const { dep, etat, pil } = await memoire();
+		const maintenant = Date.now();
+		await traiterEvenement(dep, pil, message(10, 'catalogue références'), { ...local, debutMs: maintenant - 300, appelMs: maintenant - 20 });
+		const [j] = await etat.servis(ID, 1);
+		expect(j!.ms).toBeGreaterThanOrEqual(300);
+		expect(j!.msService).toBeGreaterThanOrEqual(20);
+		expect(j!.msService).toBeLessThan(j!.ms);
+		await traiterEvenement(dep, pil, message(11, 'avoirs des factures'), local);
+		expect((await etat.servis(ID, 1))[0]).not.toHaveProperty('msService');
 	});
 
 	it('requête jointe (réglage interne) : un message court reprend le message porteur d’avant, jamais un muet ; par défaut, le message seul', async () => {

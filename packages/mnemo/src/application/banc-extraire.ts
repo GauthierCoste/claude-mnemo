@@ -9,6 +9,7 @@ import { empreinte } from '../domaine/empreinte.ts';
 import { choisirMessages, cleDeMessage, entrelacer } from '../domaine/echantillon-banc.ts';
 import type { MessageDuJournal } from '../domaine/echantillon-banc.ts';
 import { raisonDeMutisme } from '../domaine/message-muet.ts';
+import { messagePrecedent } from '../domaine/requete-du-message.ts';
 import type { InjectionManuelle } from '../domaine/signal-injection.ts';
 import { designe } from './banc-contexte.ts';
 import type { CandidateAJuger, CasContexte, Jugement, VarianteRequete } from './banc-contexte.ts';
@@ -39,7 +40,7 @@ export type LectureDuJournal = {
 	/** Toutes les sessions connues, terminées comprises. */
 	sessions(): Promise<SessionDuJournal[]>;
 	session(id: string): Promise<SessionDuJournal | null>;
-	/** Les `limite` dernières entrées `message` de la session (muettes comprises), les plus récentes d'abord. */
+	/** Les `limite` dernières entrées `message` (muettes comprises) et `debut` (remises à zéro) de la session, les plus récentes d'abord. */
 	messages(session: string, limite: number): Promise<EntreeDuJournal[]>;
 };
 
@@ -67,7 +68,8 @@ export async function messagesDuJournal(journal: LectureDuJournal, session?: str
 	if (session !== undefined && sessions.length === 0) throw new Error(`Session inconnue : ${session}`);
 	const messages: MessageAExtraire[] = [];
 	for (const s of sessions) {
-		const entrees = (await journal.messages(s.id, ENTREES_PAR_SESSION)).filter((e) => e.moment === 'message').sort((a, b) => a.horodatageMs - b.horodatageMs);
+		const journalise = await journal.messages(s.id, ENTREES_PAR_SESSION);
+		const entrees = journalise.filter((e) => e.moment === 'message').sort((a, b) => a.horodatageMs - b.horodatageMs);
 		const porteuse = (e: EntreeDuJournal) => e.muet === null && e.demande !== null && e.demande.trim() !== '' && raisonDeMutisme(e.demande) === null;
 		const porteurs = entrees.filter(porteuse);
 		porteurs.forEach((e, i) => {
@@ -85,7 +87,8 @@ export async function messagesDuJournal(journal: LectureDuJournal, session?: str
 				horodatageMs: e.horodatageMs,
 				message: e.demande!,
 				position: e.position ?? s.position,
-				precedent: i === 0 ? null : porteurs[i - 1]!.demande,
+				// le message d'avant par la règle du hook (écart, remise à zéro, fenêtre)
+				precedent: messagePrecedent(journalise, e.horodatageMs),
 				injectionsDuJournal,
 			});
 		});

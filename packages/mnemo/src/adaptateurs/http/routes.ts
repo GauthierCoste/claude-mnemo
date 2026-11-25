@@ -150,8 +150,9 @@ export type ContexteRoutes = {
 	/** A priori des gestes et fiches écartées toujours, tenus en mémoire par le service ; actualisés après chaque geste. */
 	apriori: AprioriDesGestes;
 	/**
-	 * Durée du reranker estimée d'après ses dernières durées mesurées (le service mesure chaque appel) : le hook de message ne le
-	 * lance que si elle tient dans son temps. Absente : pas de reranker au hook.
+	 * Durée du reranker estimée d'après les durées mesurées de ses appels « injection » faits par ce service, et ses appels en
+	 * cours : le hook de message ne le lance que si l'estimation est fiable, tient dans son temps et qu'aucun appel n'est en cours.
+	 * Absente : pas de reranker au hook.
 	 */
 	dureeReranker?: DureeDuReranker;
 };
@@ -388,6 +389,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		return ok(vueModeles(await ctx.modeles.etat()));
 	};
 	const demandees = fichesDemandees();
+	/** Le reranker de `d` compté (appels en cours) et mesuré (appels « injection ») par le service ; une enveloppe par appel. */
+	const avecRerankerMesure = (d: Dependances): Dependances => (ctx.dureeReranker === undefined ? d : { ...d, reranker: ctx.dureeReranker.envelopper(d.reranker) });
 	/** Dernier message porteur de chaque session (vecteur compris) : les gestes de l'interface le reprennent. */
 	const porteurs = porteursRecents();
 	/** Fiches à injecter au prochain message de la session, rendues et diffusées après un changement. */
@@ -698,16 +701,19 @@ export function routes(ctx: ContexteRoutes): Route[] {
 			chemin: ROUTES.hook,
 			corps: 'json',
 			action: async (r) => {
+				const appelMs = Date.now();
 				const brut = await r.json();
 				const entree = entreeHook(brut);
 				const echeance = echeanceDuHook(brut, entree.evenement);
 				const transcription = transcriptionDuHook(brut);
-				// les modèles de la session bornés par son niveau (relu à chaque appel)
-				const depDuHook = entree.session === '' ? dep : dependancesDeSession(dep, pil.etat, entree.session);
+				// le reranker compté et mesuré par le service ; les modèles de la session bornés par son niveau (relu à chaque appel)
+				const depMesure = avecRerankerMesure(dep);
+				const depDuHook = entree.session === '' ? depMesure : dependancesDeSession(depMesure, pil.etat, entree.session);
 				const reponse = await traiterEvenement(depDuHook, pil, entree, {
 					froid: 'permis',
 					...(echeance === undefined ? {} : { echeance }),
 					...debutDuHook(entree.horodatageMs),
+					appelMs,
 					racine: ctx.racine,
 					sansCasse: ctx.sansCasse,
 					enFond: ctx.enFond,
@@ -841,7 +847,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 					recherchesEnCours.set(onglet, remplacee);
 				}
 				try {
-					const { trouves, avis, notes } = await chercherAvecAvis(dep, requete, {
+					const { trouves, avis, notes } = await chercherAvecAvis(avecRerankerMesure(dep), requete, {
 						rapide: a.rapide === true,
 						demarrer: false,
 						signal: AbortSignal.any([r.signal, remplacee.signal]),

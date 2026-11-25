@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estCourtOuAnaphorique, precedentUtile, requeteDuMessage, requeteJointe, VARIANTE_DE_LA_REQUETE } from '../../src/domaine/requete-du-message.ts';
+import { ECART_MAX_DU_PRECEDENT_MS, ENTREES_DU_PRECEDENT, estCourtOuAnaphorique, messagePrecedent, precedentUtile, requeteDuMessage, requeteJointe, VARIANTE_DE_LA_REQUETE } from '../../src/domaine/requete-du-message.ts';
 
 describe('requête du message', () => {
 	it('court (moins de 6 mots porteurs) ou début anaphorique : joint au message d’avant', () => {
@@ -39,5 +39,31 @@ describe('requête du message', () => {
 	it('le hook prend le message seul tant que le banc n’a pas montré que la variante jointe gagne', () => {
 		expect(VARIANTE_DE_LA_REQUETE).toBe('seule');
 		expect(requeteDuMessage('et le four ?', 'parle-moi du chantier de vitrail')).toBe('et le four ?');
+	});
+});
+
+describe('message porteur d’avant', () => {
+	const message = (horodatageMs: number, demande: string | null, muet: string | null = null) => ({ moment: 'message', horodatageMs, demande, muet });
+	const T = 10 * ECART_MAX_DU_PRECEDENT_MS;
+
+	it('la plus récente entrée porteuse avant le message ; ni muette, ni sans contenu, ni après lui', () => {
+		const entrees = [message(T - 3000, 'le devis des vitraux de Corvel'), message(T - 2000, null, 'balise'), message(T - 1000, 'ok merci'), message(T + 10, 'plus tard')];
+		expect(messagePrecedent(entrees, T)).toBe('le devis des vitraux de Corvel');
+	});
+
+	it('au plus 30 min d’écart', () => {
+		expect(messagePrecedent([message(T - ECART_MAX_DU_PRECEDENT_MS, 'le devis des vitraux')], T)).toBe('le devis des vitraux');
+		expect(messagePrecedent([message(T - ECART_MAX_DU_PRECEDENT_MS - 1, 'le devis des vitraux')], T)).toBeNull();
+	});
+
+	it('une remise à zéro journalisée (début, /clear) arrête la recherche', () => {
+		const entrees = [message(T - 3000, 'le devis des vitraux'), { moment: 'debut', horodatageMs: T - 2000, demande: null, muet: null }];
+		expect(messagePrecedent(entrees, T)).toBeNull();
+	});
+
+	it('dans les dernières entrées seulement (la même fenêtre au hook et au banc)', () => {
+		const muets = Array.from({ length: ENTREES_DU_PRECEDENT }, (_, i) => message(T - 100 + i, 'ok merci'));
+		expect(messagePrecedent([message(T - 1000, 'le devis des vitraux'), ...muets], T)).toBeNull();
+		expect(messagePrecedent([message(T - 1000, 'le devis des vitraux'), ...muets.slice(1)], T)).toBe('le devis des vitraux');
 	});
 });

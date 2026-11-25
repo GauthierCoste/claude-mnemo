@@ -46,11 +46,13 @@ const textes = (v: unknown, nom: string, i: number): string[] => {
 };
 const nombreOuNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-/** Signaux d'une candidate ; `signalSession` et `apriori`, venus après les premières extractions, sont facultatifs. */
+/** Signaux d'une candidate ; `signalSession`, `apriori` et `cosinusZ`, venus après les premières extractions, sont facultatifs. */
 function lireSignaux(v: unknown): Signaux | undefined {
 	if (!estObjet(v)) return undefined;
 	const signalSession = nombreOuNull(v['signalSession']);
 	const apriori = nombreOuNull(v['apriori']);
+	// absent des cas extraits avant lui
+	const cosinusZ = v['cosinusZ'] === null ? null : nombreOuNull(v['cosinusZ']);
 	return {
 		logit: nombreOuNull(v['logit']),
 		cosinus: nombreOuNull(v['cosinus']),
@@ -59,6 +61,7 @@ function lireSignaux(v: unknown): Signaux | undefined {
 		bm25Relatif: v['bm25Relatif'] === null ? null : (nombreOuNull(v['bm25Relatif']) ?? 0),
 		...(signalSession === null ? {} : { signalSession }),
 		...(apriori === null ? {} : { apriori }),
+		...(v['cosinusZ'] === undefined ? {} : { cosinusZ }),
 	};
 }
 

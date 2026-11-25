@@ -60,6 +60,15 @@ describe('banc-contexte.json', () => {
 		expect(lireCasContexte(JSON.stringify([JUGE]))[0]!.candidates![0]!.signaux.seule).toEqual({ logit: 2.5, cosinus: 0.71, cosinusRelatif: 0.12, bm25Relatif: 1 });
 	});
 
+	it('cosinus relatif en z-score : relu s’il est là (nombre ou null), absent d’un cas d’avant', () => {
+		for (const cosinusZ of [1.42, null]) {
+			const signaux = { seule: { logit: 2.5, cosinus: 0.71, cosinusRelatif: 0.12, cosinusZ, bm25Relatif: 1 } };
+			const avec = { ...JUGE, candidates: [{ ...JUGE.candidates![0]!, signaux }] };
+			expect(lireCasContexte(JSON.stringify([avec]))).toEqual([avec]);
+		}
+		expect(lireCasContexte(JSON.stringify([JUGE]))[0]!.candidates![0]!.signaux.seule).not.toHaveProperty('cosinusZ');
+	});
+
 	it('un ancien cas étiqueté reste lisible, sans champ ajouté', () => {
 		const ancien = { nom: 'n', position: 'p', message: 'm', premier: true, attendues: ['A.md'], interdites: [], silence: false };
 		expect(lireCasContexte(JSON.stringify([ancien]))).toEqual([ancien]);
