@@ -94,8 +94,14 @@ export type ProfilDetailVue = {
 	avertissements: string[];
 };
 
+/**
+ * Ce qu'un `profil` PUT envoie : `ProfilEditableVue`, avec `moteur` et `modele` facultatifs (un client d'avant les moteurs ne
+ * les envoie pas) ; absents, ceux déjà enregistrés sont gardés.
+ */
+export type ProfilEditableEntreeVue = Omit<ProfilEditableVue, 'moteur' | 'modele'> & { moteur?: IdMoteur; modele?: string };
+
 /** Corps de `profil` PUT : le profil réglé et l'empreinte de la fiche lue. */
-export type EnregistrementProfil = { editable: ProfilEditableVue; empreinte: string | null };
+export type EnregistrementProfil = { editable: ProfilEditableEntreeVue; empreinte: string | null };
 
 /** Réponse d'une écriture de profil réussie ; `commit` null quand rien n'a changé. */
 export type ReponseEcritureProfil = { commit: string | null };

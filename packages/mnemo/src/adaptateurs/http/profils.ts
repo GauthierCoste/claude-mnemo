@@ -7,7 +7,7 @@ import { ROUTES } from '@mnemo/contrat';
 import type { ApercuProfilVue, EnregistrementProfil, ProfilDetailVue, RefusProfil, ReponseEcritureProfil } from '@mnemo/contrat';
 import { apercuProfil } from '../../application/apercu-profil.ts';
 import { detailProfil, dupliquerProfil, enregistrerProfil, supprimerProfil } from '../../application/gerer-profils.ts';
-import type { ProfilEditable, ResultatProfil } from '../../application/gerer-profils.ts';
+import type { ProfilEntree, ResultatProfil } from '../../application/gerer-profils.ts';
 import type { Dependances } from '../../application/ports.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
 import { ErreurHttp } from './routes.ts';
@@ -19,7 +19,7 @@ export const MOTIF_CONFLIT_PROFIL = 'La fiche du profil a changé depuis son ouv
 const CLES_EDITABLES = ['avatar', 'consigne', 'lancement', 'hooks', 'skillsMemoire', 'plugins', 'moteur', 'modele'] as const;
 
 /** Profil réglé reçu au `PUT` : forme vérifiée ici, contenu validé par le cas d'usage. */
-function editableDe(brut: unknown): ProfilEditable {
+function editableDe(brut: unknown): ProfilEntree {
 	if (!estObjet(brut)) throw new ErreurHttp(400, 'Champ « editable » : objet attendu.');
 	for (const cle of Object.keys(brut)) if (!(CLES_EDITABLES as readonly string[]).includes(cle)) throw new ErreurHttp(400, `Champ inconnu « editable.${cle} ».`);
 	const { avatar, consigne, lancement, hooks, skillsMemoire, plugins, moteur, modele } = brut;
@@ -31,9 +31,10 @@ function editableDe(brut: unknown): ProfilEditable {
 	if (!listeDeTextes(hooks)) throw new ErreurHttp(400, 'Champ « editable.hooks » : liste de textes attendue.');
 	if (skillsMemoire !== 'tous' && !listeDeTextes(skillsMemoire)) throw new ErreurHttp(400, 'Champ « editable.skillsMemoire » : « tous » ou liste de textes attendu.');
 	if (!listeDeTextes(plugins)) throw new ErreurHttp(400, 'Champ « editable.plugins » : liste de textes attendue.');
-	if (typeof moteur !== 'string') throw new ErreurHttp(400, 'Champ « editable.moteur » : texte attendu.');
-	if (typeof modele !== 'string' || modele.length > MODELE_MAX) throw new ErreurHttp(400, `Champ « editable.modele » : texte de ${MODELE_MAX} caractères au plus attendu (« » : le modèle par défaut du moteur).`);
-	return { avatar, consigne, lancement, hooks, skillsMemoire, plugins, moteur, modele } as ProfilEditable;
+	// `moteur` et `modele` absents (client d'avant les moteurs) : ceux déjà enregistrés sont gardés
+	if (moteur !== undefined && typeof moteur !== 'string') throw new ErreurHttp(400, 'Champ « editable.moteur » : texte attendu.');
+	if (modele !== undefined && (typeof modele !== 'string' || modele.length > MODELE_MAX)) throw new ErreurHttp(400, `Champ « editable.modele » : texte de ${MODELE_MAX} caractères au plus attendu (« » : le modèle par défaut du moteur).`);
+	return { avatar, consigne, lancement, hooks, skillsMemoire, plugins, ...(moteur === undefined ? {} : { moteur }), ...(modele === undefined ? {} : { modele }) } as ProfilEntree;
 }
 
 /**
@@ -70,7 +71,7 @@ export function routesProfils(dep: Dependances, diffuser: () => void): Route[] {
 				const empreinte = corps['empreinte'];
 				if (empreinte !== null && typeof empreinte !== 'string') throw new ErreurHttp(400, 'Champ « empreinte » : texte ou null attendu.');
 				const demande: EnregistrementProfil = { editable: editableDe(corps['editable']), empreinte };
-				return reponseDe(await enregistrerProfil(dep, r.id, demande.editable as ProfilEditable, demande.empreinte), diffuser);
+				return reponseDe(await enregistrerProfil(dep, r.id, demande.editable as ProfilEntree, demande.empreinte), diffuser);
 			},
 		},
 		{

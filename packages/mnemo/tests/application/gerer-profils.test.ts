@@ -54,6 +54,27 @@ describe('profil : moteur et modèle', () => {
 		expect(dep.fichiers.get(cheminDeProfil('redaction'))).not.toMatch(/^moteur:|^modele:/mu);
 	});
 
+	it('moteur ou modèle absents (client d\'avant les moteurs) : ceux de la fiche gardés tels quels, même inconnus', async () => {
+		const dep = fauxPorts();
+		await enregistrerProfil(dep, 'revue', { ...EDITABLE, moteur: 'codex', modele: 'gpt-6.2-sol' }, null);
+		let detail = (await detailProfil(dep, 'revue'))!;
+		const { moteur: _m, modele: _o, ...ancien } = detail.editable;
+		expect((await enregistrerProfil(dep, 'revue', { ...ancien, consigne: 'Relis.' }, detail.empreinte)).ok).toBe(true);
+		expect(await chargerProfil(dep, 'revue')).toMatchObject({ moteur: 'codex', modele: 'gpt-6.2-sol', consigne: 'Relis.' });
+		// seulement le modèle envoyé : le moteur reste
+		detail = (await detailProfil(dep, 'revue'))!;
+		expect((await enregistrerProfil(dep, 'revue', { ...ancien, modele: '' }, detail.empreinte)).ok).toBe(true);
+		expect(await chargerProfil(dep, 'revue')).toMatchObject({ moteur: 'codex', modele: '' });
+		// une valeur inconnue écrite à la main reste telle quelle
+		dep.fichiers.set(cheminDeProfil('revue'), '---\ntype: profil\nmoteur: gemini\n---\n# Revue\n\nRelis.\n');
+		detail = (await detailProfil(dep, 'revue'))!;
+		expect((await enregistrerProfil(dep, 'revue', { ...ancien, consigne: 'Relis vite.' }, detail.empreinte)).ok).toBe(true);
+		expect(dep.fichiers.get(cheminDeProfil('revue'))).toMatch(/^moteur: gemini$/mu);
+		// fiche neuve : défauts
+		expect((await enregistrerProfil(dep, 'neuf', ancien, null)).ok).toBe(true);
+		expect(dep.fichiers.get(cheminDeProfil('neuf'))).not.toMatch(/^moteur:|^modele:/mu);
+	});
+
 	it('moteur inconnu, modèle invalide, plugins avec un autre moteur que Claude Code, archiviste hors Claude Code : refusés, rien n\'est écrit', async () => {
 		const dep = fauxPorts();
 		const refus = async (nom: string, editable: ProfilEditable) => {

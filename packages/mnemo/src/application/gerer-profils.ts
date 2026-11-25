@@ -1,6 +1,6 @@
 // Gestion des profils par l'utilisateur (interface, route HTTP) : détail éditable, enregistrement, duplication, suppression.
 import type { Avatar, IdMoteur } from '@mnemo/commun';
-import { COULEURS_AVATAR, DOSSIERS_FIXES, estIdMoteur, estModele, FORMES_AVATAR, IDS_MOTEURS, MODELE_MAX, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
+import { COULEURS_AVATAR, DOSSIERS_FIXES, estIdMoteur, estModele, FORMES_AVATAR, IDS_MOTEURS, MODELE_MAX, MOTEUR_PAR_DEFAUT, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { empreinte } from '../domaine/empreinte.ts';
 import { lireFiche, separerFrontmatter } from '../domaine/fiche.ts';
 import type { Fiche } from '../domaine/fiche.ts';
@@ -27,6 +27,12 @@ export type ProfilEditable = {
 	moteur: IdMoteur;
 	modele: string;
 };
+
+/**
+ * Ce qu'un enregistrement reçoit : `ProfilEditable`, avec `moteur` et `modele` facultatifs (client d'avant les moteurs) ; absents,
+ * les valeurs déjà écrites dans la fiche sont gardées telles quelles.
+ */
+export type ProfilEntree = Omit<ProfilEditable, 'moteur' | 'modele'> & { moteur?: IdMoteur; modele?: string };
 
 /**
  * Détail d'un profil pour son éditeur. `empreinte` : celle du texte de la fiche lue (null : fiche absente), à renvoyer à
@@ -144,8 +150,11 @@ async function motifsDe(dep: Dependances, nom: string, editable: ProfilEditable)
 	return motifs;
 }
 
-/** Fiche à écrire : celle du disque (sections et clés non gérées gardées) ou une fiche neuve, avec les clés gérées réécrites. */
-function ficheAEcrire(dep: Dependances, nom: string, existante: Fiche | null, editable: ProfilEditable): Fiche {
+/**
+ * Fiche à écrire : celle du disque (sections et clés non gérées gardées) ou une fiche neuve, avec les clés gérées réécrites ;
+ * les clés de `gardees` reprennent la valeur de la fiche du disque telle quelle (absente : retirée).
+ */
+function ficheAEcrire(dep: Dependances, nom: string, existante: Fiche | null, editable: ProfilEditable, gardees: readonly ('moteur' | 'modele')[] = []): Fiche {
 	const fiche = existante ?? ficheVide(dep, cheminDeProfil(nom), 'profil', `Profil ${nom}`);
 	const parDefaut = profilParDefaut(nom);
 	const profil: Profil = {
@@ -160,7 +169,12 @@ function ficheAEcrire(dep: Dependances, nom: string, existante: Fiche | null, ed
 	};
 	const donnees = { ...fiche.donnees };
 	for (const cle of CLES_GEREES_DU_PROFIL) delete donnees[cle];
-	fiche.donnees = { ...donnees, ...donneesDeProfil(profil) };
+	const nouvelles = donneesDeProfil(profil);
+	for (const cle of gardees) {
+		delete nouvelles[cle];
+		if (existante !== null && existante.donnees[cle] !== undefined) nouvelles[cle] = existante.donnees[cle];
+	}
+	fiche.donnees = { ...donnees, ...nouvelles };
 	const consigne = editable.consigne ?? '';
 	// une consigne égale à celle par défaut (actuelle ou ancienne) reste « par défaut » : synthèse vide
 	fiche.synthese = estConsigneParDefaut(consigne, [parDefaut.consigne, ...anciennesConsignes(nom)]) ? '' : consigne;
@@ -169,17 +183,22 @@ function ficheAEcrire(dep: Dependances, nom: string, existante: Fiche | null, ed
 
 /**
  * Enregistre le profil `nom` (le crée si sa fiche manque). Refusé en bloc si un champ est invalide (`motifs`), ou en conflit si
- * la fiche sur disque n'a plus l'empreinte `empreinteLue` (null : elle ne devait pas exister). Un commit
+ * la fiche sur disque n'a plus l'empreinte `empreinteLue` (null : elle ne devait pas exister). `moteur` ou `modele` absents :
+ * ceux de la fiche sont gardés tels quels (jamais remis à Claude Code ni à vide). Un commit
  * `mnemo: profil profils/<nom>/<nom>.md`, puis l'index est remis à jour.
  */
-export async function enregistrerProfil(dep: Dependances, nom: string, editable: ProfilEditable, empreinteLue: string | null): Promise<ResultatProfil> {
+export async function enregistrerProfil(dep: Dependances, nom: string, entree: ProfilEntree, empreinteLue: string | null): Promise<ResultatProfil> {
+	const gardees = (['moteur', 'modele'] as const).filter((cle) => entree[cle] === undefined);
+	// valeurs enregistrées, pour valider le reste (les plugins dépendent du moteur) ; la fiche relue sous verrou fait foi
+	const enregistre = gardees.length > 0 ? await chargerProfil(dep, nom) : null;
+	const editable: ProfilEditable = { ...entree, moteur: entree.moteur ?? enregistre?.moteur ?? MOTEUR_PAR_DEFAUT, modele: entree.modele ?? enregistre?.modele ?? '' };
 	const motifs = await motifsDe(dep, nom, editable);
 	if (Object.keys(motifs).length > 0) return { ok: false, motifs };
 	const chemin = cheminDeProfil(nom);
 	const resultat = await sousVerrou(dep, async (): Promise<ResultatProfil> => {
 		const texte = await dep.coffre.lire(chemin);
 		if ((texte === null ? null : empreinte(texte)) !== empreinteLue) return { ok: false, conflit: true };
-		const fiche = ficheAEcrire(dep, nom, texte === null ? null : lireFiche(chemin, texte), editable);
+		const fiche = ficheAEcrire(dep, nom, texte === null ? null : lireFiche(chemin, texte), editable, gardees);
 		const nouveau = texteDeFiche(dep, fiche);
 		if (nouveau === texte) return { ok: true, commit: null };
 		return { ok: true, commit: await ecrireEtCommiter(dep, [{ chemin, texte: nouveau }], `mnemo: profil ${chemin}`) };

@@ -113,7 +113,7 @@ describe('routes : sessions', () => {
 		expect(corps.ignores.map((x) => x.nom)).toEqual(['A b']);
 	});
 
-	it('profils : moteur et modèle dans la liste, le détail et l\'enregistrement ; refus motivés ; champs absents refusés', async () => {
+	it('profils : moteur et modèle dans la liste, le détail et l\'enregistrement ; refus motivés ; mal typés refusés', async () => {
 		const c = await serviceFaux();
 		const { port, jeton } = c.service;
 		const detail = (await api(c).get(chemin(ROUTES.profil, PROFIL_TRAVAIL))).corps as ProfilDetailVue;
@@ -122,8 +122,7 @@ describe('routes : sessions', () => {
 		const refus = await put({ ...detail.editable, moteur: 'codex', plugins: ['superpowers@superpowers-marketplace'], modele: '-x' });
 		expect(refus.statut).toBe(400);
 		expect(Object.keys((refus.corps as RefusProfil).motifs).sort()).toEqual(['modele', 'plugins']);
-		const { moteur: _moteur, ...sansMoteur } = detail.editable;
-		expect((await put(sansMoteur)).statut).toBe(400);
+		expect((await put({ ...detail.editable, moteur: 3 })).statut).toBe(400);
 		const long = await put({ ...detail.editable, modele: 'a'.repeat(MODELE_MAX + 1) });
 		expect(long.statut).toBe(400);
 		expect((long.corps as { erreur: string }).erreur).toContain(`${MODELE_MAX} caractères au plus`);
@@ -131,6 +130,18 @@ describe('routes : sessions', () => {
 		const liste = (await api(c).get(ROUTES.profils)).corps as ReponseProfils;
 		expect(liste.profils.find((p) => p.nom === PROFIL_TRAVAIL)).toMatchObject({ moteur: 'claude-code', modele: 'opus' });
 		expect(((await api(c).get(chemin(ROUTES.profil, PROFIL_TRAVAIL))).corps as ProfilDetailVue).editable.modele).toBe('opus');
+	});
+
+	it('profil PUT sans moteur ni modèle (client d\'avant les moteurs) : ceux enregistrés sont gardés', async () => {
+		const c = await serviceFaux();
+		const { port, jeton } = c.service;
+		await c.dep.coffre.ecrire('profils/revue/revue.md', '---\ntype: profil\nmoteur: codex\nmodele: gpt-6.2-sol\n---\n# Revue\n\nRelis.\n');
+		const detail = (await api(c).get(chemin(ROUTES.profil, 'revue'))).corps as ProfilDetailVue;
+		const { moteur: _moteur, modele: _modele, ...ancien } = detail.editable;
+		const r = await appeler(port, 'PUT', chemin(ROUTES.profil, 'revue'), { jeton, corps: { editable: { ...ancien, consigne: 'Relis le code.' }, empreinte: detail.empreinte } });
+		expect(r.statut).toBe(200);
+		const relu = (await api(c).get(chemin(ROUTES.profil, 'revue'))).corps as ProfilDetailVue;
+		expect(relu.editable).toMatchObject({ moteur: 'codex', modele: 'gpt-6.2-sol', consigne: 'Relis le code.' });
 	});
 
 	it('POST sessions sans profil : PROFIL_TRAVAIL ; avec un profil de profils/ : ce profil', async () => {
