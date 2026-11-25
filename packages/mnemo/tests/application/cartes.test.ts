@@ -296,7 +296,8 @@ describe('calculerCartes : par le sens', () => {
 		const c = await calculerCartes(dep, demande({ message: 'on reprend la maquette', perimetre: false }));
 		expect(appels).toBe(0);
 		expect(c.mesure).not.toBe('sens');
-		expect(c.cartes).toEqual([]);		// aucun vecteur calculé : aucun rendu
+		expect(c.cartes).toEqual([]);
+		// le sens n'a pas tourné : aucun vecteur du message n'est rendu
 		expect(c.vecteur).toBeUndefined();
 	});
 

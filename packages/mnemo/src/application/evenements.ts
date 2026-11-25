@@ -13,7 +13,8 @@ import { servir } from './servir.ts';
 import type { DemandeServir, Servi } from './servir.ts';
 import { verifierAction } from './verifier-action.ts';
 import { noterGeste } from './gestes.ts';
-import { derniereProposition } from '../domaine/gestes.ts';
+import { vecteurDuPorteur } from './porteurs-recents.ts';
+import type { PorteursRecents } from './porteurs-recents.ts';
 import { refusDelai, refusSurErreur, reponseDe, selonIndicateur } from '../domaine/refus-outil.ts';
 import type { AccordNonVerifie } from '../domaine/refus-outil.ts';
 import type { ActionNonLue, ActionOutil, Verdict } from '../domaine/regles-verifiees.ts';
@@ -69,6 +70,11 @@ export type ReglagesEvenement = {
 	rattachee?: (session: string) => Promise<void>;
 	/** Le service : fiches que l'utilisateur a demandé d'injecter, injectées entières au prochain message de la session (jamais après un outil). */
 	demandees?: FichesDemandees;
+	/**
+	 * Le service : dernier message porteur de chaque session (rang, position, vecteur), noté à chaque message porteur ; les gestes
+	 * en reprennent le vecteur. Sans lui (`mnemo hook` sans service), seule l'injection à la main garde le vecteur de son message.
+	 */
+	porteurs?: PorteursRecents;
 };
 
 /** Extrait de la demande gardé avec une entrée servie (et la trace d'un écarté) : large, la demande est journalisée presque entière. */
@@ -260,7 +266,7 @@ async function servirEvenement(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 			return {};
 		case 'apres_outil':
 			// rien n'est calculé ni servi après un outil : seule la fiche lue ou écrite est notée
-			if (session !== null) await noterFicheTouchee(dep, pil, session, entree);
+			if (session !== null) await noterFicheTouchee(dep, pil, session, entree, reglages);
 			return {};
 		case 'message':
 			return entree.sansContexte === true ? {} : servirAuMessage(dep, pil, session, entree, reglages);
@@ -269,31 +275,21 @@ async function servirEvenement(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 	}
 }
 
-/** Geste `lue_apres_carte` : la fiche a été proposée en carte dans la session ; une seule lecture comptée par proposition. */
-async function noterLectureApresCarte(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session: Session, fiche: string, empreinte: string | null, horodatageMs: number): Promise<void> {
-	try {
-		const proposeeMs = derniereProposition(await pil.etat.actions(session.id), fiche);
-		if (proposeeMs === null) return;
-		const deja = await pil.etat.gestes({ fiche, depuisMs: proposeeMs, limite: null });
-		if (deja.some((g) => g.session === session.id && g.geste === 'lue_apres_carte')) return;
-		await noterGeste(dep, pil.etat, { geste: 'lue_apres_carte', session: session.id, fiche, empreinte, horodatageMs });
-	} catch {
-		// Geste perdu : la lecture est notée quand même.
-	}
-}
-
 /**
  * La fiche lue est notée avec son empreinte du moment (elle ne sera plus tenue pour vue si elle change) ; une écriture n'en note pas.
- * Lue après une carte qui la proposait : geste `lue_apres_carte` (une fois par proposition).
+ * Lue ensuite par l'outil `lire` après une carte qui la proposait : geste `lue_apres_carte` (l'état n'en compte qu'un par proposition).
  */
-async function noterFicheTouchee(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session: Session, entree: EntreeHook): Promise<void> {
+async function noterFicheTouchee(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session: Session, entree: EntreeHook, reglages: ReglagesEvenement): Promise<void> {
 	const appel = entree.outil !== undefined && 'nom' in entree.outil ? entree.outil : null;
 	const touchee = appel === null ? null : ficheTouchee(appel);
 	if (touchee === null) return;
 	const empreinte = touchee.action === 'lue' ? ((await dep.index.fiches().catch(() => [])).find((f) => f.chemin === touchee.chemin)?.empreinte ?? null) : null;
-	// seul l'outil `lire` compte : `voisins` ne lit pas la fiche pour elle-même
-	if (touchee.action === 'lue' && appel?.nom === 'mcp__mnemo__lire') await noterLectureApresCarte(dep, pil, session, touchee.chemin, empreinte, entree.horodatageMs);
 	await pil.etat.noterFicheServieLueOuEcrite(session.id, { chemin: touchee.chemin, action: touchee.action, horodatageMs: entree.horodatageMs, empreinte }).catch(() => {});
+	// la lecture d'abord, le geste ensuite ; seul `lire` compte : `voisins` ne lit pas la fiche pour elle-même
+	if (touchee.outil === 'lire') {
+		const vecteur = vecteurDuPorteur(reglages.porteurs?.lire(session.id) ?? null);
+		await noterGeste(dep, pil.etat, { geste: 'lue_apres_carte', session: session.id, fiche: touchee.chemin, empreinte, horodatageMs: entree.horodatageMs, vecteur });
+	}
 }
 
 /**
@@ -333,7 +329,16 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
  * Note la fiche de position et les fiches demandées injectées (et, pour ces dernières, l'injection à la main, qui pèse sur leurs
  * voisines), les cartes proposées (avec leur empreinte), et journalise le calcul pour le panneau Contexte.
  */
-async function noterInjection(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session: Session, entree: EntreeHook, demande: DemandeServir, servi: Servi, debutMs: number): Promise<void> {
+async function noterInjection(
+	dep: Dependances,
+	pil: Pick<Pilotage, 'etat'>,
+	session: Session,
+	entree: EntreeHook,
+	demande: DemandeServir,
+	servi: Servi,
+	debutMs: number,
+	rang: number | null,
+): Promise<void> {
 	const { position, cartes } = servi.calcul;
 	const injectees = [...(position === null ? [] : [position]), ...servi.demandees];
 	for (const f of injectees) {
@@ -366,17 +371,10 @@ async function noterInjection(dep: Dependances, pil: Pick<Pilotage, 'etat'>, ses
 	} catch {
 		// Journal perdu (base occupée) : le contexte est servi quand même.
 	}
-	// geste ➤ : le message qui porte la fiche s'il est porteur (avec son vecteur s'il a été calculé), sinon le dernier porteur
-	const porteur = demande.muet === null && entree.prompt !== undefined;
+	// geste ➤ : le dernier message porteur de la session (celui qui porte la fiche s'il est porteur), avec son vecteur s'il a été calculé
+	const vecteur = rang === null || servi.calcul.vecteur === undefined ? null : { rang, vecteur: servi.calcul.vecteur };
 	for (const f of injectees.filter((f) => demandees.has(f.chemin))) {
-		await noterGeste(dep, pil.etat, {
-			geste: 'injectee_main',
-			session: session.id,
-			fiche: f.chemin,
-			empreinte: f.empreinte,
-			horodatageMs: entree.horodatageMs,
-			...(porteur ? { message: entree.prompt!.slice(0, DEMANDE_MAX), vecteur: servi.calcul.vecteur ?? null } : {}),
-		});
+		await noterGeste(dep, pil.etat, { geste: 'injectee_main', session: session.id, fiche: f.chemin, empreinte: f.empreinte, horodatageMs: entree.horodatageMs, vecteur });
 	}
 }
 
@@ -384,13 +382,18 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 	const debut = reglages.debutMs ?? Date.now();
 	const fin = reglages.echeance === undefined ? Date.now() + BUDGET_HOOK_MS : Math.min(Date.now() + BUDGET_HOOK_MS, reglages.echeance - MARGE_SORTIE_MS);
 	const demandees = session === null ? [] : (reglages.demandees?.prendre(session.id) ?? []);
-	// un message porteur est compté d'abord : les injections à la main vieillissent d'un message avant d'être lues
-	if (session !== null && raisonDeMutisme(entree.prompt ?? '') === null) await pil.etat.noterMessagePorteur(session.id).catch(() => {});
+	// un message porteur est compté d'abord (les injections à la main vieillissent d'un message avant d'être lues) et gardé comme
+	// dernier message porteur, même si rien n'est injecté ensuite ; rang null : message muet ou état en panne
+	const rang =
+		session !== null && raisonDeMutisme(entree.prompt ?? '') === null
+			? await pil.etat.noterMessagePorteur(session.id, (entree.prompt ?? '').slice(0, DEMANDE_MAX)).catch(() => null)
+			: null;
 	const lue = await demandeDe(dep, pil, session, entree, reglages, fin);
 	const demande = demandees.length === 0 ? lue : { ...lue, demandees };
 	const servi = await servir(dep, demande);
+	if (session !== null && rang !== null) reglages.porteurs?.noter(session.id, { rang, position: demande.position, vecteur: servi.calcul.vecteur ?? null });
 	const injecte = servi.texte !== '' && aTemps(reglages);
-	if (session !== null && injecte) await noterInjection(dep, pil, session, entree, demande, servi, debut);
+	if (session !== null && injecte) await noterInjection(dep, pil, session, entree, demande, servi, debut, rang);
 	// le hook n'attend plus : les fiches demandées partiront au message suivant
 	if (session !== null && !injecte && demandees.length > 0) reglages.demandees?.remettre(session.id, demandees);
 	return injecte ? { contexte: servi.texte } : {};

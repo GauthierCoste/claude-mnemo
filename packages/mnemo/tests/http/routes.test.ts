@@ -265,6 +265,7 @@ describe('routes : écartés', () => {
 	const ecartes = (id: string) => `${chemin(ROUTES.ecartes, UUID)}${id === '' ? '' : `?id=${encodeURIComponent(id)}`}`;
 	async function avecClassement(c: ContexteService) {
 		await c.etat.creer(sessionFixe(UUID, { dossier: 'code/alpha' }));
+		await c.etat.noterMessagePorteur(UUID, 'Où en est Alpha ?');
 		const classement = [
 			{ id: 'projets/alpha/alpha.md', titre: 'Alpha', note: 0.87, servi: true, rang: 1 },
 			{ id: 'projets/beta/beta.md#^f-0001', titre: 'Beta', note: 0.2, servi: false, rang: 2 },
@@ -284,9 +285,27 @@ describe('routes : écartés', () => {
 		expect(d.corps).toEqual({ ecartes: [] });
 		// gestes : la fiche de l'élément, avec le dernier message porteur
 		expect(await c.etat.gestes({ limite: null })).toMatchObject([
-			{ geste: 'retablie', origine: 'manuelle', fiche: 'projets/beta/beta.md', dossier: 'code/alpha', message: 'Où en est Alpha ?' },
-			{ geste: 'ecartee_ici', origine: 'manuelle', fiche: 'projets/beta/beta.md', dossier: 'code/alpha', message: 'Où en est Alpha ?' },
+			{ geste: 'retablie', origine: 'utilisateur', fiche: 'projets/beta/beta.md', dossier: 'code/alpha', message: 'Où en est Alpha ?', rangMessage: 1 },
+			{ geste: 'ecartee_ici', origine: 'utilisateur', fiche: 'projets/beta/beta.md', dossier: 'code/alpha', message: 'Où en est Alpha ?', rangMessage: 1 },
 		]);
+	});
+
+	it('un geste par vrai changement : écarter deux fois n’en note qu’un ; rétablir un élément non écarté n’en note aucun', async () => {
+		const c = await serviceFaux();
+		await avecClassement(c);
+		expect((await api(c).supprimer(ecartes('projets/alpha/alpha.md'))).statut).toBe(200);
+		expect(await c.etat.gestes({ limite: null })).toEqual([]);
+		expect((await api(c).post(chemin(ROUTES.ecartes, UUID), { id: 'projets/alpha/alpha.md' })).statut).toBe(200);
+		expect((await api(c).post(chemin(ROUTES.ecartes, UUID), { id: 'projets/alpha/alpha.md' })).statut).toBe(200);
+		expect((await c.etat.gestes({ limite: null })).map((g) => g.geste)).toEqual(['ecartee_ici']);
+	});
+
+	it('écart : le message est celui de l’entrée où la carte a été trouvée, même si un message porteur l’a suivie', async () => {
+		const c = await serviceFaux();
+		await avecClassement(c);
+		await c.etat.noterMessagePorteur(UUID, 'Et Beta ?');
+		await api(c).post(chemin(ROUTES.ecartes, UUID), { id: 'projets/alpha/alpha.md' });
+		expect(await c.etat.gestes({ limite: null })).toMatchObject([{ geste: 'ecartee_ici', message: 'Où en est Alpha ?', rangMessage: 1 }]);
 	});
 
 	it('POST écarte une carte d’une nouvelle entrée (classement vide) : titre repris, trace notée', async () => {
@@ -298,7 +317,7 @@ describe('routes : écartés', () => {
 		expect(r.corps).toEqual({ ecartes: [{ id: 'projets/alpha/Plan.md', titre: 'Plan', horodatageMs: expect.any(Number) }] });
 		expect((await c.etat.ecartes(UUID)).map((e) => e.id)).toEqual(['projets/alpha/Plan.md']);
 		// la note de la carte au moment du geste
-		expect(await c.etat.gestes({ limite: null })).toMatchObject([{ geste: 'ecartee_ici', fiche: 'projets/alpha/Plan.md', note: 0.64, message: 'Où en est Plan ?', rangMessage: 0 }]);
+		expect(await c.etat.gestes({ limite: null })).toMatchObject([{ geste: 'ecartee_ici', fiche: 'projets/alpha/Plan.md', note: { note: 0.64 }, message: 'Où en est Plan ?', rangMessage: 0 }]);
 	});
 
 	it('refus : id absent des classements récents (404), corps invalide (400), session inconnue (404) ou terminée (409)', async () => {

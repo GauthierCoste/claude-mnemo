@@ -24,9 +24,11 @@ async function ouvrir(): Promise<{ etat: EtatSessions; chemin: string; dossier: 
 	return { etat, chemin, dossier };
 }
 
-/** Retire ce que la version 13 a ajouté (journal durable des gestes). */
+/** Retire ce que la version 13 a ajouté (journal durable des gestes, dernier message porteur, rang du message des entrées servies). */
 function sansVersion13(base: DatabaseSync): void {
 	base.exec('DROP TABLE gestes');
+	base.exec('ALTER TABLE sessions DROP COLUMN dernier_message');
+	base.exec('ALTER TABLE servis DROP COLUMN rang_message');
 }
 
 /** Retire ce que la version 12 a ajouté (niveau des modèles d'une session). */
@@ -178,7 +180,8 @@ describe('etat.sqlite', () => {
 		await etat.journaliser({ session: 's2', moment: 'debut', horodatageMs: 1, ids: [], texte: 'x', ms: 1, sens: false, demande: null, classement: [], muet: null, cartes: [], position: null });
 		const tous = await etat.servis('s1', 1000);
 		expect(tous).toHaveLength(200);
-		expect(tous[0]).toEqual({ session: 's1', moment: 'message', horodatageMs: 249, ids: ['a', 'b'], texte: 't249', ms: 249, sens: false, demande: null, classement: [], muet: null, cartes: [], position: null });
+		// une entrée de message non muette reçoit le rang du dernier message porteur de la session (0 : aucun)
+		expect(tous[0]).toEqual({ session: 's1', moment: 'message', horodatageMs: 249, ids: ['a', 'b'], texte: 't249', ms: 249, sens: false, demande: null, classement: [], muet: null, cartes: [], position: null, rangMessage: 0 });
 		expect(tous[199]?.horodatageMs).toBe(50);
 		expect(await etat.servis('s1', 3)).toHaveLength(3);
 		expect(await etat.servis('s2', 10)).toHaveLength(1);
@@ -203,15 +206,16 @@ describe('etat.sqlite', () => {
 		await etat.creer(session('s1'));
 		await etat.creer(session('s2'));
 		const trace = { dossier: 'code/x', demande: 'la demande', horodatageMs: 100 };
-		await etat.ecarter('s1', { id: 'a.md', titre: 'A' }, trace);
-		await etat.ecarter('s1', { id: 'a.md', titre: 'A' }, { ...trace, horodatageMs: 101 });
+		expect(await etat.ecarter('s1', { id: 'a.md', titre: 'A' }, trace)).toBe('ecarte');
+		expect(await etat.ecarter('s1', { id: 'a.md', titre: 'A' }, { ...trace, horodatageMs: 101 })).toBe('deja_ecarte');
 		await etat.ecarter('s1', { id: 'b.md#^f-0001', titre: 'B' }, trace);
 		await etat.ecarter('s2', { id: 'c.md', titre: 'C' }, trace);
 		expect(await etat.ecartes('s1')).toEqual([
 			{ id: 'a.md', titre: 'A', horodatageMs: 100 },
 			{ id: 'b.md#^f-0001', titre: 'B', horodatageMs: 100 },
 		]);
-		expect(await etat.retablir('s1', 'a.md')).toBe(true);
+		expect(await etat.retablir('s1', 'a.md')).toBe('retabli');
+		expect(await etat.retablir('s1', 'a.md')).toBe('non_ecarte');
 		expect((await etat.ecartes('s1')).map((e) => e.id)).toEqual(['b.md#^f-0001']);
 		await etat.appliquer('s1', 'fin', 5);
 		await etat.modifier('s1', { etat: 'terminee' });
@@ -231,14 +235,14 @@ describe('etat.sqlite', () => {
 		]);
 	});
 
-	it('écarter ou rétablir sur une session terminée ou inconnue : refusé (false), rien noté', async () => {
+	it('écarter ou rétablir sur une session terminée ou inconnue : refusé, rien noté', async () => {
 		const { etat } = await ouvrir();
 		await etat.creer(session('s1', { etat: 'terminee' }));
-		expect(await etat.ecarter('s1', { id: 'a.md', titre: 'A' }, { dossier: '', demande: null, horodatageMs: 1 })).toBe(false);
-		expect(await etat.ecarter('inconnue', { id: 'a.md', titre: 'A' }, { dossier: '', demande: null, horodatageMs: 1 })).toBe(false);
+		expect(await etat.ecarter('s1', { id: 'a.md', titre: 'A' }, { dossier: '', demande: null, horodatageMs: 1 })).toBe('terminee');
+		expect(await etat.ecarter('inconnue', { id: 'a.md', titre: 'A' }, { dossier: '', demande: null, horodatageMs: 1 })).toBe('terminee');
 		expect(await etat.ecartes('s1')).toEqual([]);
-		expect(await etat.retablir('s1', 'a.md')).toBe(false);
-		expect(await etat.retablir('inconnue', 'a.md')).toBe(false);
+		expect(await etat.retablir('s1', 'a.md')).toBe('terminee');
+		expect(await etat.retablir('inconnue', 'a.md')).toBe('terminee');
 	});
 
 	it('supprimer : une session terminée et tout ce qui la concerne (servis, écartés, traces) ; refusé sinon', async () => {
@@ -397,7 +401,7 @@ describe('etat.sqlite', () => {
 		ouverts.push(rouvert);
 		expect(await rouvert.servis('s1', 5)).toEqual([{ session: 's1', moment: 'debut', horodatageMs: 7, ids: ['a.md'], texte: 'ctx', ms: 3, sens: true, demande: null, classement: [], muet: null, cartes: [], position: null }]);
 		expect(await rouvert.ecartes('s1')).toEqual([]);
-		expect(await rouvert.ecarter('s1', { id: 'a.md', titre: 'A' }, { dossier: '', demande: null, horodatageMs: 1 })).toBe(true);
+		expect(await rouvert.ecarter('s1', { id: 'a.md', titre: 'A' }, { dossier: '', demande: null, horodatageMs: 1 })).toBe('ecarte');
 		const verif = new DatabaseSync(chemin);
 		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
 		verif.close();
@@ -572,13 +576,13 @@ describe('etat.sqlite', () => {
 		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('s1'));
 		await etat.creer(session('s2'));
-		await etat.noterMessagePorteur('s1');
+		await etat.noterMessagePorteur('s1', 'un message');
 		await etat.noterInjectionManuelle('s1', 'a.md');
 		expect(await etat.injectionsManuelles('s1')).toEqual([{ chemin: 'a.md', messages: 0 }]);
-		await etat.noterMessagePorteur('s1');
+		await etat.noterMessagePorteur('s1', 'un message');
 		await etat.noterInjectionManuelle('s1', 'b.md');
-		await etat.noterMessagePorteur('s1');
-		await etat.noterMessagePorteur('s2');
+		await etat.noterMessagePorteur('s1', 'un message');
+		await etat.noterMessagePorteur('s2', 'un message');
 		expect(await etat.injectionsManuelles('s1')).toEqual([
 			{ chemin: 'a.md', messages: 2 },
 			{ chemin: 'b.md', messages: 1 },
@@ -622,9 +626,9 @@ describe('etat.sqlite', () => {
 		expect(await rouvert.lire('s1')).toMatchObject({ pid: 4 });
 		expect(await rouvert.fichesServiesLuesOuEcrites('s1')).toMatchObject([{ chemin: 'a.md', empreinteInjectee: 'i1' }]);
 		expect(await rouvert.injectionsManuelles('s1')).toEqual([]);
-		await rouvert.noterMessagePorteur('s1');
+		await rouvert.noterMessagePorteur('s1', 'un message');
 		await rouvert.noterInjectionManuelle('s1', 'a.md');
-		await rouvert.noterMessagePorteur('s1');
+		await rouvert.noterMessagePorteur('s1', 'un message');
 		expect(await rouvert.injectionsManuelles('s1')).toEqual([{ chemin: 'a.md', messages: 1 }]);
 		const verif = new DatabaseSync(chemin);
 		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
@@ -747,10 +751,10 @@ describe('etat.sqlite', () => {
 		expect((await etat.modifier('b', { bilanLuMs: null, bilanDemandeMs: 200 }))?.bilanLuMs).toBeNull();
 	});
 
-	it('migration depuis la version 12 : sessions, journal servi et injections gardés, journal des gestes vide puis écrit', async () => {
+	it('migration depuis la version 12 : sessions, journal servi et injections gardés ; gestes vides, dernier message et rang inconnus', async () => {
 		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('s1', { pid: 4, niveauModeles: 'sens' }));
-		await etat.noterMessagePorteur('s1');
+		await etat.noterMessagePorteur('s1', 'quoi ?');
 		await etat.noterInjectionManuelle('s1', 'a.md');
 		await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: 10, ids: ['a.md'], texte: 't', ms: 1, sens: false, demande: 'quoi ?', classement: [], muet: null, cartes: [], position: 'a/b' });
 		etat.fermer();
@@ -764,30 +768,46 @@ describe('etat.sqlite', () => {
 		expect(await rouvert.lire('s1')).toMatchObject({ pid: 4, niveauModeles: 'sens' });
 		expect(await rouvert.injectionsManuelles('s1')).toEqual([{ chemin: 'a.md', messages: 0 }]);
 		expect(await rouvert.servis('s1', 10)).toMatchObject([{ demande: 'quoi ?' }]);
+		expect((await rouvert.servis('s1', 10))[0]).not.toHaveProperty('rangMessage');
 		expect(await rouvert.gestes({ limite: null })).toEqual([]);
+		// le texte du dernier message porteur n'était pas gardé : rang connu, texte inconnu
 		await rouvert.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche: 'a.md', empreinte: 'e1', horodatageMs: 20 });
-		expect(await rouvert.gestes({ limite: null })).toMatchObject([{ geste: 'ecartee_ici', message: 'quoi ?', rangMessage: 1 }]);
+		expect(await rouvert.gestes({ limite: null })).toMatchObject([{ geste: 'ecartee_ici', message: null, rangMessage: 1 }]);
+		expect(await rouvert.noterMessagePorteur('s1', 'la suite')).toBe(2);
 		const verif = new DatabaseSync(chemin);
 		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
 		expect(VERSION_ETAT).toBe(13);
 		verif.close();
 	});
 
-	it('journal des gestes : contexte lu dans la session, dernier message porteur, note de la carte, vecteur gardé', async () => {
+	it('dernier message porteur : texte et rang gardés ensemble ; rang écrit dans les entrées de message non muettes seulement', async () => {
 		const { etat } = await ouvrir();
+		await etat.creer(session('s1'));
+		expect(await etat.noterMessagePorteur('inconnue', 'x')).toBeNull();
+		expect(await etat.noterMessagePorteur('s1', 'premier')).toBe(1);
+		await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: 10, ids: [], texte: 't', ms: 1, sens: false, demande: 'premier', classement: [], muet: null, cartes: [], position: null });
+		await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: 11, ids: [], texte: 't', ms: 1, sens: false, demande: '<x>chut</x>', classement: [], muet: 'balise', cartes: [], position: null });
+		await etat.journaliser({ session: 's1', moment: 'contexte', horodatageMs: 12, ids: [], texte: 't', ms: 1, sens: false, demande: 'une question', classement: [], muet: null, cartes: [], position: null });
+		expect((await etat.servis('s1', 10)).map((e) => e.rangMessage ?? null)).toEqual([null, null, 1]);
+		// un message porteur sans rien de servi (pas de journal) devient quand même le dernier
+		expect(await etat.noterMessagePorteur('s1', 'second')).toBe(2);
+		await etat.noterGeste({ geste: 'retablie', session: 's1', fiche: 'a.md', empreinte: null, horodatageMs: 20 });
+		expect(await etat.gestes({ limite: null })).toMatchObject([{ message: 'second', rangMessage: 2 }]);
+	});
+
+	it('journal des gestes : contexte lu dans la session, note de la carte (JSON), vecteur du même message seulement, origines', async () => {
+		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('s1', { dossier: 'projets/alpha', position: 'projets/alpha' }));
-		await etat.noterMessagePorteur('s1');
-		await etat.noterMessagePorteur('s1');
+		await etat.noterMessagePorteur('s1', 'un ancien');
+		await etat.noterMessagePorteur('s1', 'le porteur');
 		const cartes = [{ chemin: 'b.md', raison: 'perimetre' as const, note: 0.72 }, { chemin: 'c.md', raison: 'perimetre' as const }];
 		await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: 10, ids: [], texte: 't', ms: 1, sens: true, demande: 'le porteur', classement: [], muet: null, cartes, position: null });
-		// ni un message muet, ni un appel de l'outil `contexte` ne sont le message porteur
-		await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: 11, ids: [], texte: 't', ms: 1, sens: false, demande: '[muet] chut', classement: [], muet: 'balise', cartes: [], position: null });
-		await etat.journaliser({ session: 's1', moment: 'contexte', horodatageMs: 12, ids: [], texte: 't', ms: 1, sens: false, demande: 'une question', classement: [], muet: null, cartes: [], position: null });
-		await etat.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche: 'b.md', empreinte: 'e1', horodatageMs: 20 });
-		await etat.noterGeste({ geste: 'lue_apres_carte', session: 's1', fiche: 'c.md', empreinte: null, horodatageMs: 21 });
+		await etat.noterCarteProposee('s1', { chemin: 'c.md', empreinte: 'ec', horodatageMs: 10 });
 		const vecteur = { modele: 'bge-m3@abc', valeurs: new Float32Array([0.25, -0.5, 1]) };
-		await etat.noterGeste({ geste: 'injectee_main', session: 's1', fiche: 'd.md', empreinte: 'e2', horodatageMs: 22, message: 'explicite', note: 0.9, vecteur });
-		await etat.noterGeste({ geste: 'injectee_auto', session: 's1', fiche: 'e.md', empreinte: null, horodatageMs: 23 });
+		await etat.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche: 'b.md', empreinte: 'e1', horodatageMs: 20 });
+		await etat.noterGeste({ geste: 'lue_apres_carte', session: 's1', fiche: 'c.md', empreinte: null, horodatageMs: 21, vecteur: { rang: 1, vecteur } });
+		await etat.noterGeste({ geste: 'injectee_main', session: 's1', fiche: 'd.md', empreinte: 'e2', horodatageMs: 22, note: { note: 0.9 }, vecteur: { rang: 2, vecteur } });
+		await etat.noterGeste({ geste: 'injectee_auto', session: 's1', fiche: 'e.md', empreinte: null, horodatageMs: 23, porteur: { texte: 'explicite', rang: 1 } });
 		// session inconnue : rien
 		await etat.noterGeste({ geste: 'ecartee_ici', session: 'inconnue', fiche: 'b.md', empreinte: null, horodatageMs: 24 });
 		const gestes = await etat.gestes({ limite: null });
@@ -796,7 +816,7 @@ describe('etat.sqlite', () => {
 			rang: expect.any(Number),
 			horodatageMs: 20,
 			geste: 'ecartee_ici',
-			origine: 'manuelle',
+			origine: 'utilisateur',
 			session: 's1',
 			dossier: 'projets/alpha',
 			position: 'projets/alpha',
@@ -804,19 +824,55 @@ describe('etat.sqlite', () => {
 			empreinte: 'e1',
 			message: 'le porteur',
 			rangMessage: 2,
-			note: 0.72,
+			note: { note: 0.72 },
 			vecteur: null,
 		});
-		// une carte sans note : note inconnue
-		expect(gestes[2]).toMatchObject({ fiche: 'c.md', note: null, message: 'le porteur' });
-		expect(gestes[1]).toMatchObject({ message: 'explicite', note: 0.9, origine: 'manuelle' });
+		// une carte sans note : note inconnue ; un vecteur d'un autre message que le porteur du geste n'est pas gardé
+		expect(gestes[2]).toMatchObject({ fiche: 'c.md', note: null, message: 'le porteur', origine: 'claude', vecteur: null });
+		expect(gestes[1]).toMatchObject({ message: 'le porteur', note: { note: 0.9 }, origine: 'utilisateur' });
 		expect(gestes[1]!.vecteur?.modele).toBe('bge-m3@abc');
 		expect([...gestes[1]!.vecteur!.valeurs]).toEqual([0.25, -0.5, 1]);
-		expect(gestes[0]).toMatchObject({ origine: 'auto', vecteur: null });
-		// filtres : par fiche, depuis un instant, limite
+		expect(gestes[0]).toMatchObject({ origine: 'auto', message: 'explicite', rangMessage: 1, vecteur: null });
+		// note en JSON, vecteur en Float32 petit-boutiste, quelle que soit la machine
+		const base = new DatabaseSync(chemin);
+		const brut = base.prepare("SELECT note, vecteur FROM gestes WHERE geste = 'injectee_main'").get() as { note: string; vecteur: Uint8Array };
+		base.close();
+		expect(brut.note).toBe('{"note":0.9}');
+		expect(new DataView(brut.vecteur.buffer, brut.vecteur.byteOffset).getFloat32(4, true)).toBe(-0.5);
+		// filtres : par fiche, depuis un instant, limite ; comptes par sorte et par fiche
 		expect((await etat.gestes({ fiche: 'b.md', limite: null })).map((g) => g.horodatageMs)).toEqual([20]);
 		expect((await etat.gestes({ depuisMs: 22, limite: null })).map((g) => g.horodatageMs)).toEqual([23, 22]);
 		expect((await etat.gestes({ limite: 1 })).map((g) => g.horodatageMs)).toEqual([23]);
+		await etat.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche: 'b.md', empreinte: 'e1', horodatageMs: 25 });
+		const comptes = await etat.comptesGestes();
+		expect([...comptes].sort((a, b) => a.fiche.localeCompare(b.fiche) || a.geste.localeCompare(b.geste))).toEqual([
+			{ geste: 'ecartee_ici', fiche: 'b.md', nombre: 2 },
+			{ geste: 'lue_apres_carte', fiche: 'c.md', nombre: 1 },
+			{ geste: 'injectee_main', fiche: 'd.md', nombre: 1 },
+			{ geste: 'injectee_auto', fiche: 'e.md', nombre: 1 },
+		]);
+	});
+
+	it('lue après carte : seulement après une proposition, une fois par proposition, même après /clear ; une nouvelle proposition recompte', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('s1'));
+		await etat.creer(session('s2'));
+		const lue = (session: string, ms: number) => etat.noterGeste({ geste: 'lue_apres_carte', session, fiche: 'a.md', empreinte: null, horodatageMs: ms });
+		await lue('s1', 5);
+		await etat.noterCarteProposee('s1', { chemin: 'a.md', empreinte: 'e', horodatageMs: 10 });
+		await lue('s1', 11);
+		await lue('s1', 12);
+		// une autre session : sa propre proposition
+		await lue('s2', 13);
+		await etat.oublierInjections('s1');
+		await lue('s1', 14);
+		await etat.noterCarteProposee('s1', { chemin: 'a.md', empreinte: 'e', horodatageMs: 20 });
+		await lue('s1', 21);
+		await lue('s1', 22);
+		expect((await etat.gestes({ limite: null })).map((g) => [g.session, g.horodatageMs])).toEqual([
+			['s1', 21],
+			['s1', 11],
+		]);
 	});
 
 	it('journal des gestes : sans message porteur, message nul ; sans limite de 200 ; gardé après /clear', async () => {
@@ -829,21 +885,34 @@ describe('etat.sqlite', () => {
 		expect(gestes[0]).toMatchObject({ message: null, rangMessage: 0, position: 'a/b' });
 	});
 
-	it('supprimer une session garde ses gestes sans le texte de ses messages ; ceux des autres sessions sont intacts', async () => {
-		const { etat } = await ouvrir();
+	it('supprimer une session garde ses gestes sans le texte ni le vecteur de ses messages ; ceux des autres sessions sont intacts', async () => {
+		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('s1'));
 		await etat.creer(session('s2'));
 		const vecteur = { modele: 'bge-m3@abc', valeurs: new Float32Array([1, 0]) };
-		await etat.noterGeste({ geste: 'injectee_main', session: 's1', fiche: 'a.md', empreinte: 'e', horodatageMs: 1, message: 'secret', vecteur });
-		await etat.noterGeste({ geste: 'injectee_main', session: 's2', fiche: 'a.md', empreinte: 'e', horodatageMs: 2, message: 'autre' });
+		// d'autres gestes de s1, entre ceux de s2, avant le dernier : leurs textes effacés laissent des trous au milieu des pages
+		for (let i = 0; i < 5; i++) {
+			await etat.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche: `f${i}.md`, empreinte: null, horodatageMs: 0, porteur: { texte: `texte-confidentiel-du-message ${i} ${'x'.repeat(300)}`, rang: 1 } });
+			await etat.noterGeste({ geste: 'ecartee_ici', session: 's2', fiche: `f${i}.md`, empreinte: null, horodatageMs: 0, porteur: { texte: `un autre message ${i}`, rang: 1 } });
+		}
+		await etat.noterGeste({ geste: 'injectee_main', session: 's1', fiche: 'a.md', empreinte: 'e', horodatageMs: 1, porteur: { texte: 'texte-confidentiel-du-message', rang: 1 }, vecteur: { rang: 1, vecteur } });
+		await etat.noterGeste({ geste: 'injectee_main', session: 's2', fiche: 'a.md', empreinte: 'e', horodatageMs: 2, porteur: { texte: 'autre', rang: 1 }, vecteur: { rang: 1, vecteur } });
 		await etat.modifier('s1', { etat: 'terminee' });
 		expect(await etat.supprimer('s1')).toBe('supprimee');
-		const gestes = await etat.gestes({ limite: null });
+		const gestes = await etat.gestes({ depuisMs: 1, limite: null });
 		expect(gestes).toMatchObject([
 			{ session: 's2', message: 'autre' },
-			{ session: 's1', message: null, fiche: 'a.md', empreinte: 'e', geste: 'injectee_main' },
+			{ session: 's1', message: null, vecteur: null, fiche: 'a.md', empreinte: 'e', geste: 'injectee_main', rangMessage: 1 },
 		]);
-		expect(gestes[1]!.vecteur?.modele).toBe('bge-m3@abc');
+		expect(gestes[0]!.vecteur?.modele).toBe('bge-m3@abc');
+		const base = new DatabaseSync(chemin);
+		expect(base.prepare("SELECT modele_vecteur, vecteur FROM gestes WHERE session = 's1'").get()).toEqual({ modele_vecteur: null, vecteur: null });
+		base.close();
+		// effacé du fichier lui-même (secure_delete), pas seulement libéré
+		etat.fermer();
+		ouverts.pop();
+		const contenu = [chemin, `${chemin}-wal`].filter((f) => existsSync(f)).map((f) => readFileSync(f));
+		expect(contenu.some((c) => c.includes(Buffer.from('texte-confidentiel-du-message')))).toBe(false);
 	});
 
 	it('refuse une version de schéma inconnue sans rien effacer', async () => {

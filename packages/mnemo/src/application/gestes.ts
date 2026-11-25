@@ -5,7 +5,8 @@ export type GesteDemande = Omit<GesteANoter, 'empreinte'> & { empreinte?: string
 
 /**
  * Note un geste au journal durable, avec l'empreinte de la fiche (celle de l'index si elle n'est pas donnée ; null si la fiche
- * n'y est pas). Toute panne est avalée, comme pour le journal servi : un geste perdu ne bloque jamais un hook ni une route.
+ * n'y est pas). Toute panne est avalée, comme pour le journal servi : un geste perdu ne bloque jamais un hook ni une route
+ * (l'état la signale une fois par processus).
  */
 export async function noterGeste(dep: Pick<Dependances, 'index'>, etat: Pick<EtatSessions, 'noterGeste'>, g: GesteDemande): Promise<void> {
 	try {

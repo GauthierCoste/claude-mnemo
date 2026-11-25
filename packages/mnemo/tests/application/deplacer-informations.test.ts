@@ -266,6 +266,6 @@ describe('deplacer_informations : outil', () => {
 	});
 
 	it('ficheTouchee : la fiche qui reçoit les informations', () => {
-		expect(ficheTouchee({ nom: 'mcp__mnemo__entretenir', entree: { action: 'deplacer_informations', id: 'notes/a.md', ancres: ['f-0001'], dans: 'notes/b.md' } })).toEqual({ chemin: 'notes/b.md', action: 'ecrite' });
+		expect(ficheTouchee({ nom: 'mcp__mnemo__entretenir', entree: { action: 'deplacer_informations', id: 'notes/a.md', ancres: ['f-0001'], dans: 'notes/b.md' } })).toEqual({ chemin: 'notes/b.md', action: 'ecrite', outil: 'entretenir' });
 	});
 });

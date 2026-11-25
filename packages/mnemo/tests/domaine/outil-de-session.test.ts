@@ -3,20 +3,21 @@ import { ficheTouchee } from '../../src/domaine/outil-de-session.ts';
 
 describe('ficheTouchee', () => {
 	it('lire et voisins : la fiche lue, sans ancre ; proposer : la fiche écrite', () => {
-		expect(ficheTouchee({ nom: 'mcp__mnemo__lire', entree: { id: 'projets/p/avoirs.md#^f-0001' } })).toEqual({ chemin: 'projets/p/avoirs.md', action: 'lue' });
-		expect(ficheTouchee({ nom: 'mcp__mnemo__voisins', entree: { id: 'projets/p/avoirs.md' } })).toEqual({ chemin: 'projets/p/avoirs.md', action: 'lue' });
-		expect(ficheTouchee({ nom: 'mcp__mnemo__proposer', entree: { demande: { genre: 'fait', fiche: 'projets/p/avoirs.md' } } })).toEqual({ chemin: 'projets/p/avoirs.md', action: 'ecrite' });
-		expect(ficheTouchee({ nom: 'mcp__mnemo__proposer', entree: { demande: { genre: 'fiche', chemin: 'projets/p/neuve.md' } } })).toEqual({ chemin: 'projets/p/neuve.md', action: 'ecrite' });
+		expect(ficheTouchee({ nom: 'mcp__mnemo__lire', entree: { id: 'projets/p/avoirs.md#^f-0001' } })).toEqual({ chemin: 'projets/p/avoirs.md', action: 'lue', outil: 'lire' });
+		expect(ficheTouchee({ nom: 'mcp__mnemo__voisins', entree: { id: 'projets/p/avoirs.md' } })).toEqual({ chemin: 'projets/p/avoirs.md', action: 'lue', outil: 'voisins' });
+		expect(ficheTouchee({ nom: 'mcp__mnemo__proposer', entree: { demande: { genre: 'fait', fiche: 'projets/p/avoirs.md' } } })).toEqual({ chemin: 'projets/p/avoirs.md', action: 'ecrite', outil: 'proposer' });
+		expect(ficheTouchee({ nom: 'mcp__mnemo__proposer', entree: { demande: { genre: 'fiche', chemin: 'projets/p/neuve.md' } } })).toEqual({ chemin: 'projets/p/neuve.md', action: 'ecrite', outil: 'proposer' });
 	});
 
 	it('entretenir : la fiche qui reste écrite (fusion reçue, lien corrigé, redirection) ; rien pour une suppression sans redirection', () => {
 		const entretenir = (entree: Record<string, unknown>) => ficheTouchee({ nom: 'mcp__mnemo__entretenir', entree });
-		expect(entretenir({ action: 'fusionner', id: 'notes/a.md', dans: 'notes/b.md' })).toEqual({ chemin: 'notes/b.md', action: 'ecrite' });
-		expect(entretenir({ action: 'corriger_lien', id: 'sources/doc.md', ancien: 'x' })).toEqual({ chemin: 'sources/doc.md', action: 'ecrite' });
-		expect(entretenir({ action: 'supprimer', id: 'notes/a.md', redirection: 'notes/b.md' })).toEqual({ chemin: 'notes/b.md', action: 'ecrite' });
+		const ecrite = (chemin: string) => ({ chemin, action: 'ecrite', outil: 'entretenir' });
+		expect(entretenir({ action: 'fusionner', id: 'notes/a.md', dans: 'notes/b.md' })).toEqual(ecrite('notes/b.md'));
+		expect(entretenir({ action: 'corriger_lien', id: 'sources/doc.md', ancien: 'x' })).toEqual(ecrite('sources/doc.md'));
+		expect(entretenir({ action: 'supprimer', id: 'notes/a.md', redirection: 'notes/b.md' })).toEqual(ecrite('notes/b.md'));
 		expect(entretenir({ action: 'supprimer', id: 'notes/a.md' })).toBeNull();
-		expect(entretenir({ action: 'corroborer', id: 'notes/a.md', ancre: 'f-0001', source: { ref: 'utilisateur', type: 'utilisateur' } })).toEqual({ chemin: 'notes/a.md', action: 'ecrite' });
-		expect(entretenir({ action: 'retoucher_information', id: 'notes/a.md', ancre: 'f-0001', texte: 'x' })).toEqual({ chemin: 'notes/a.md', action: 'ecrite' });
+		expect(entretenir({ action: 'corroborer', id: 'notes/a.md', ancre: 'f-0001', source: { ref: 'utilisateur', type: 'utilisateur' } })).toEqual(ecrite('notes/a.md'));
+		expect(entretenir({ action: 'retoucher_information', id: 'notes/a.md', ancre: 'f-0001', texte: 'x' })).toEqual(ecrite('notes/a.md'));
 	});
 
 	it('rien pour un autre outil, un identifiant absent ou hors de la mémoire', () => {

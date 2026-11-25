@@ -11,15 +11,22 @@
 export const GESTES = ['injectee_main', 'ecartee_ici', 'ecartee_toujours', 'retablie', 'lue_apres_carte', 'injectee_auto'] as const;
 export type Geste = (typeof GESTES)[number];
 
-/** Qui a fait le geste : l'utilisateur (`manuelle`) ou Mnemo (`auto`). */
-export type OrigineGeste = 'manuelle' | 'auto';
+/** Qui a fait le geste : l'utilisateur (➤, ✗, rétablir), Claude (lecture après une carte) ou Mnemo seul (`auto`). */
+export type OrigineGeste = 'utilisateur' | 'claude' | 'auto';
 
 export function origineDe(geste: Geste): OrigineGeste {
-	return geste === 'injectee_auto' ? 'auto' : 'manuelle';
+	if (geste === 'injectee_auto') return 'auto';
+	return geste === 'lue_apres_carte' ? 'claude' : 'utilisateur';
 }
 
-/** Un geste du journal, sans le vecteur ni le texte du message : ce qu'un décompte lit. */
-export type GesteCompte = { geste: Geste; fiche: string };
+/**
+ * Ce que Mnemo savait de la fiche au moment du geste (JSON) : pour l'instant `note`, celle de sa carte dans le journal servi ;
+ * d'autres champs viendront (probabilité, signaux bruts).
+ */
+export type NoteDuGeste = { note?: number } & Record<string, unknown>;
+
+/** Nombre de gestes d'une sorte sur une fiche : ce que le décompte du journal rend. */
+export type GesteCompte = { geste: Geste; fiche: string; nombre: number };
 
 /** Nombre de gestes de chaque sorte, en tout et par fiche (fiches par nombre total décroissant, puis par chemin). */
 export type ComptesDesGestes = {
@@ -28,29 +35,21 @@ export type ComptesDesGestes = {
 	parFiche: { fiche: string; total: number; parGeste: Partial<Record<Geste, number>> }[];
 };
 
-export function compterGestes(gestes: readonly GesteCompte[]): ComptesDesGestes {
+export function compterGestes(comptes: readonly GesteCompte[]): ComptesDesGestes {
 	const parGeste = Object.fromEntries(GESTES.map((g) => [g, 0])) as Record<Geste, number>;
 	const parFiche = new Map<string, { fiche: string; total: number; parGeste: Partial<Record<Geste, number>> }>();
-	for (const { geste, fiche } of gestes) {
-		parGeste[geste] += 1;
+	let total = 0;
+	for (const { geste, fiche, nombre } of comptes) {
+		total += nombre;
+		parGeste[geste] += nombre;
 		const f = parFiche.get(fiche) ?? { fiche, total: 0, parGeste: {} };
-		f.total += 1;
-		f.parGeste[geste] = (f.parGeste[geste] ?? 0) + 1;
+		f.total += nombre;
+		f.parGeste[geste] = (f.parGeste[geste] ?? 0) + nombre;
 		parFiche.set(fiche, f);
 	}
 	return {
-		total: gestes.length,
+		total,
 		parGeste,
 		parFiche: [...parFiche.values()].sort((a, b) => b.total - a.total || a.fiche.localeCompare(b.fiche)),
 	};
-}
-
-/**
- * Instant de la dernière carte qui a proposé `chemin` dans la session (même avant un /clear), ou null s'il n'a jamais été
- * proposé. `actions` : journal des actions de la session.
- */
-export function derniereProposition(actions: readonly { chemin: string; action: string; horodatageMs: number }[], chemin: string): number | null {
-	let ms: number | null = null;
-	for (const a of actions) if (a.chemin === chemin && a.action === 'proposee' && (ms === null || a.horodatageMs > ms)) ms = a.horodatageMs;
-	return ms;
 }

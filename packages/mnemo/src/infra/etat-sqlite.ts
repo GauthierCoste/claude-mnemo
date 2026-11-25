@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { estNiveauModeles } from '@mnemo/commun';
 import type { ActionSurFiche, Classe, EntreeServie, EtatSessions, GesteNote, Lots, VecteurDuMessage } from '../application/ports.ts';
 import { origineDe } from '../domaine/gestes.ts';
-import type { Geste, OrigineGeste } from '../domaine/gestes.ts';
+import type { Geste, NoteDuGeste, OrigineGeste } from '../domaine/gestes.ts';
 import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
 import type { RaisonMuet } from '../domaine/message-muet.ts';
 import { etatApres } from '../domaine/session.ts';
@@ -111,9 +111,9 @@ CREATE INDEX IF NOT EXISTS lots_decide ON lots (decide_ms);
 `;
 
 /**
- * Journal durable des gestes de l'utilisateur sur les fiches (sans limite, gardé après la session) ; ajouté en version 13.
- * `vecteur` : vecteur du message (Float32 dans l'ordre d'octets de la machine), du modèle `modele_vecteur` ; null s'il n'a
- * pas été calculé.
+ * Journal durable des gestes sur les fiches (sans limite, gardé après la session) ; ajouté en version 13, avec le dernier
+ * message porteur de chaque session et le rang du message des entrées servies. `note` : JSON (`{"note":0.72}`) ; `vecteur` :
+ * vecteur du message (Float32 petit-boutiste), du modèle `modele_vecteur` ; null s'il n'a pas été calculé.
  */
 const SCHEMA_GESTES = `
 CREATE TABLE IF NOT EXISTS gestes (
@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS gestes (
 	empreinte TEXT,
 	message TEXT,
 	rang_message INTEGER NOT NULL,
-	note REAL,
+	note TEXT,
 	modele_vecteur TEXT,
 	vecteur BLOB
 );
@@ -163,7 +163,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 	dossier_non_rattache INTEGER NOT NULL DEFAULT 0,
 	perimetre_propose_ms INTEGER,
 	messages_porteurs INTEGER NOT NULL DEFAULT 0,
-	niveau_modeles TEXT
+	niveau_modeles TEXT,
+	dernier_message TEXT
 );
 CREATE TABLE IF NOT EXISTS servis (
 	rang INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -178,7 +179,8 @@ CREATE TABLE IF NOT EXISTS servis (
 	classement TEXT NOT NULL DEFAULT '[]',
 	muet TEXT,
 	cartes TEXT NOT NULL DEFAULT '[]',
-	position TEXT
+	position TEXT,
+	rang_message INTEGER
 );
 CREATE INDEX IF NOT EXISTS servis_session ON servis (session, rang);
 ${SCHEMA_ECARTES}${SCHEMA_RATTACHEMENT}${SCHEMA_FICHES_SERVIES_LUES_ECRITES}${SCHEMA_CARTES}${SCHEMA_INJECTIONS_MANUELLES}${SCHEMA_LOTS}${SCHEMA_GESTES}`;
@@ -271,15 +273,40 @@ function ligneVersEntree(l: Ligne): EntreeServie {
 		muet: (l.muet as RaisonMuet | null) ?? null,
 		cartes: JSON.parse(l.cartes as string) as EntreeServie['cartes'],
 		position: (l.position as string | null) ?? null,
+		// absent des entrées sans rang (muettes, outil `contexte`, anciennes) : elles restent égales à ce qui a été journalisé
+		...(l.rang_message === null || l.rang_message === undefined ? {} : { rangMessage: Number(l.rang_message) }),
 	};
 }
 
-/** Float32Array → octets (sans copie) ; octets → Float32Array (copiés : l'alignement du tampon lu n'est pas garanti). */
+/** Float32Array ↔ octets, en petit-boutiste quelle que soit la machine. */
 function vecteurEnOctets(v: Float32Array): Uint8Array {
-	return new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+	const octets = new Uint8Array(v.length * 4);
+	const vue = new DataView(octets.buffer);
+	v.forEach((x, i) => vue.setFloat32(i * 4, x, true));
+	return octets;
 }
 function octetsEnVecteur(o: Uint8Array): Float32Array {
-	return new Float32Array(Uint8Array.from(o).buffer);
+	const vue = new DataView(o.buffer, o.byteOffset, o.byteLength);
+	return Float32Array.from({ length: o.byteLength / 4 }, (_, i) => vue.getFloat32(i * 4, true));
+}
+
+/** La note d'un geste (JSON) : un objet, sinon null. */
+function noteLue(brut: unknown): NoteDuGeste | null {
+	if (typeof brut !== 'string') return null;
+	try {
+		const v: unknown = JSON.parse(brut);
+		return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as NoteDuGeste) : null;
+	} catch {
+		return null;
+	}
+}
+
+/** Une panne d'écriture d'un geste est signalée une fois par processus : elle est avalée ensuite (un geste ne bloque rien). */
+let panneDeGesteSignalee = false;
+function signalerPanneDeGeste(erreur: unknown): void {
+	if (panneDeGesteSignalee) return;
+	panneDeGesteSignalee = true;
+	process.stderr.write(`mnemo : journal des gestes : geste perdu (${erreur instanceof Error ? erreur.message : String(erreur)}) ; signalé une seule fois.\n`);
 }
 
 function ligneVersGeste(l: Ligne): GesteNote {
@@ -297,7 +324,7 @@ function ligneVersGeste(l: Ligne): GesteNote {
 		empreinte: (l.empreinte as string | null) ?? null,
 		message: (l.message as string | null) ?? null,
 		rangMessage: Number(l.rang_message),
-		note: (l.note as number | null) ?? null,
+		note: noteLue(l.note),
 		vecteur: octets === null || modele === null || octets.byteLength % 4 !== 0 ? null : ({ modele, valeurs: octetsEnVecteur(octets) } satisfies VecteurDuMessage),
 	};
 }
@@ -325,6 +352,8 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 	const base = new DatabaseSync(chemin);
 	try {
 		base.exec(`PRAGMA busy_timeout = ${attente.bornee ? 0 : ATTENTE_VERROU_MS}`);
+		// ce qui est effacé (session supprimée : textes et vecteurs des messages) est écrasé dans le fichier, pas seulement libéré
+		base.exec('PRAGMA secure_delete = ON');
 		reessayerSiOccupe(base, attente, () => {
 			const mode = Object.values(base.prepare('PRAGMA journal_mode').get() as Ligne)[0];
 			if (String(mode).toLowerCase() !== 'wal') base.exec('PRAGMA journal_mode = WAL');
@@ -377,7 +406,11 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				// 11 → 12 : le niveau des modèles propre à une session (absent : elle suit celui de la machine)
 				const colonnesSessions = (base.prepare('PRAGMA table_info(sessions)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesSessions.includes('niveau_modeles')) base.exec('ALTER TABLE sessions ADD COLUMN niveau_modeles TEXT');
+				// 12 → 13 : le journal durable des gestes, le dernier message porteur des sessions, le rang du message des entrées servies
 				base.exec(SCHEMA_GESTES);
+				if (!colonnesSessions.includes('dernier_message')) base.exec('ALTER TABLE sessions ADD COLUMN dernier_message TEXT');
+				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
+				if (!colonnesServis.includes('rang_message')) base.exec('ALTER TABLE servis ADD COLUMN rang_message INTEGER');
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
 			} else if (version !== VERSION_ETAT) {
 				throw new ErreurEtat(
@@ -615,7 +648,11 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 		async journaliser(entree) {
 			ecrire(() => {
 				base
-					.prepare('INSERT INTO servis (session, moment, horodatage_ms, ids, texte, ms, sens, demande, classement, muet, cartes, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+					// le rang du message : celui du dernier message porteur, pour une entrée de message non muette
+					.prepare(
+						`INSERT INTO servis (session, moment, horodatage_ms, ids, texte, ms, sens, demande, classement, muet, cartes, position, rang_message)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? THEN (SELECT messages_porteurs FROM sessions WHERE id = ?) END)`,
+					)
 					.run(
 						entree.session,
 						entree.moment,
@@ -629,6 +666,8 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 						entree.muet,
 						JSON.stringify(entree.cartes),
 						entree.position,
+						entree.moment === 'message' && entree.muet === null ? 1 : 0,
+						entree.session,
 					);
 				base
 					.prepare('DELETE FROM servis WHERE session = ? AND rang <= (SELECT rang FROM servis WHERE session = ? ORDER BY rang DESC LIMIT 1 OFFSET ?)')
@@ -651,23 +690,23 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 		async ecarter(session, ecarte, trace) {
 			return ecrire(() => {
 				const s = lire(session);
-				if (s === null || s.etat === 'terminee') return false;
-				base.prepare('INSERT OR IGNORE INTO ecartes (session, id, titre, horodatage_ms) VALUES (?, ?, ?, ?)').run(session, ecarte.id, ecarte.titre, trace.horodatageMs);
+				if (s === null || s.etat === 'terminee') return 'terminee' as const;
+				const { changes } = base.prepare('INSERT OR IGNORE INTO ecartes (session, id, titre, horodatage_ms) VALUES (?, ?, ?, ?)').run(session, ecarte.id, ecarte.titre, trace.horodatageMs);
 				base
 					.prepare('INSERT INTO traces_ecartes (session, dossier, demande, fiche, horodatage_ms) VALUES (?, ?, ?, ?, ?)')
 					.run(session, trace.dossier, trace.demande, ecarte.id, trace.horodatageMs);
 				ecriture(session);
-				return true;
+				return changes > 0 ? ('ecarte' as const) : ('deja_ecarte' as const);
 			});
 		},
 
 		async retablir(session, id) {
 			return ecrire(() => {
 				const s = lire(session);
-				if (s === null || s.etat === 'terminee') return false;
-				base.prepare('DELETE FROM ecartes WHERE session = ? AND id = ?').run(session, id);
+				if (s === null || s.etat === 'terminee') return 'terminee' as const;
+				const { changes } = base.prepare('DELETE FROM ecartes WHERE session = ? AND id = ?').run(session, id);
 				ecriture(session);
-				return true;
+				return changes > 0 ? ('retabli' as const) : ('non_ecarte' as const);
 			});
 		},
 
@@ -722,9 +761,10 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 			});
 		},
 
-		async noterMessagePorteur(session) {
-			ecrire(() => {
-				base.prepare('UPDATE sessions SET messages_porteurs = messages_porteurs + 1 WHERE id = ?').run(session);
+		async noterMessagePorteur(session, texte) {
+			return ecrire(() => {
+				const l = base.prepare('UPDATE sessions SET messages_porteurs = messages_porteurs + 1, dernier_message = ? WHERE id = ? RETURNING messages_porteurs').get(texte, session) as Ligne | undefined;
+				return l === undefined ? null : Number(l.messages_porteurs);
 			});
 		},
 
@@ -816,46 +856,35 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 				if (s === null) return 'inconnue';
 				if (s.etat !== 'terminee') return 'non_terminee';
 				for (const table of ['servis', 'ecartes', 'traces_ecartes', 'fiches_servies_lues_ecrites', 'cartes_proposees', 'actions_fiches', 'injections_manuelles']) base.prepare(`DELETE FROM ${table} WHERE session = ?`).run(id);
-				// les gestes restent (données d'apprentissage) ; le texte de l'utilisateur part avec la session
-				base.prepare('UPDATE gestes SET message = NULL WHERE session = ?').run(id);
+				// les gestes restent (données d'apprentissage) ; le texte de l'utilisateur et son vecteur partent avec la session
+				base.prepare('UPDATE gestes SET message = NULL, vecteur = NULL, modele_vecteur = NULL WHERE session = ?').run(id);
 				base.prepare('DELETE FROM sessions WHERE id = ?').run(id);
 				return 'supprimee';
 			});
 		},
 
 		async noterGeste(g) {
-			ecrire(() => {
-				const s = base.prepare('SELECT dossier, position, messages_porteurs FROM sessions WHERE id = ?').get(g.session) as Ligne | undefined;
-				if (s === undefined) return;
-				// le dernier message porteur : une entrée de message non muette (les appels de l'outil `contexte` n'en sont pas)
-				const message =
-					g.message !== undefined
-						? g.message
-						: ((
-								base
-									.prepare("SELECT demande FROM servis WHERE session = ? AND moment = 'message' AND muet IS NULL AND demande IS NOT NULL ORDER BY rang DESC LIMIT 1")
-									.get(g.session) as Ligne | undefined
-							)?.demande as string | undefined) ?? null;
-				// la note de la dernière carte notée de la fiche dans le journal servi de la session
-				const note =
-					g.note !== undefined
-						? g.note
-						: ((
-								base
-									.prepare(
-										`SELECT json_extract(c.value, '$.note') AS note FROM servis s, json_each(s.cartes) c
-										WHERE s.session = ? AND json_extract(c.value, '$.chemin') = ? AND json_type(c.value, '$.note') IN ('real', 'integer')
-										ORDER BY s.rang DESC LIMIT 1`,
-									)
-									.get(g.session, g.fiche) as Ligne | undefined
-							)?.note as number | undefined) ?? null;
-				const vecteur = g.vecteur ?? null;
-				base
-					.prepare(
-						`INSERT INTO gestes (horodatage_ms, geste, origine, session, dossier, position, fiche, empreinte, message, rang_message, note, modele_vecteur, vecteur)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-					)
-					.run(
+			try {
+				ecrire(() => {
+					const s = base.prepare('SELECT dossier, position, messages_porteurs, dernier_message FROM sessions WHERE id = ?').get(g.session) as Ligne | undefined;
+					if (s === undefined) return;
+					// texte et rang du message viennent ensemble : du geste, sinon du dernier message porteur de la session
+					const porteur = g.porteur ?? { texte: (s.dernier_message as string | null) ?? null, rang: Number(s.messages_porteurs) };
+					// la note de la dernière carte notée de la fiche dans le journal servi de la session
+					const noteDuJournal = (): NoteDuGeste | null => {
+						const l = base
+							.prepare(
+								`SELECT json_extract(c.value, '$.note') AS note FROM servis s, json_each(s.cartes) c
+								WHERE s.session = ? AND json_extract(c.value, '$.chemin') = ? AND json_type(c.value, '$.note') IN ('real', 'integer')
+								ORDER BY s.rang DESC LIMIT 1`,
+							)
+							.get(g.session, g.fiche) as Ligne | undefined;
+						return l === undefined ? null : { note: Number(l.note) };
+					};
+					const note = g.note !== undefined ? g.note : noteDuJournal();
+					// le vecteur n'est gardé que s'il est celui du message porteur du geste
+					const vecteur = g.vecteur !== undefined && g.vecteur !== null && g.vecteur.rang === porteur.rang ? g.vecteur.vecteur : null;
+					const valeurs = [
 						g.horodatageMs,
 						g.geste,
 						origineDe(g.geste),
@@ -864,13 +893,46 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 						(s.position as string | null) ?? null,
 						g.fiche,
 						g.empreinte,
-						message,
-						Number(s.messages_porteurs),
-						note,
+						porteur.texte,
+						porteur.rang,
+						note === null ? null : JSON.stringify(note),
 						vecteur?.modele ?? null,
 						vecteur === null ? null : vecteurEnOctets(vecteur.valeurs),
-					);
-			});
+					];
+					const colonnes = 'horodatage_ms, geste, origine, session, dossier, position, fiche, empreinte, message, rang_message, note, modele_vecteur, vecteur';
+					if (g.geste !== 'lue_apres_carte') {
+						base.prepare(`INSERT INTO gestes (${colonnes}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(...valeurs);
+						return;
+					}
+					// lue après une carte : une carte l'a proposée (même avant un /clear) et la session ne l'a pas lue depuis ; une seule
+					// écriture, dans la transaction : deux lectures simultanées n'en comptent qu'une
+					base
+						.prepare(
+							`WITH proposee AS (
+								SELECT MAX(horodatage_ms) AS ms FROM actions_fiches WHERE session = ? AND chemin = ? AND action = 'proposee' AND horodatage_ms <= ?
+							)
+							INSERT INTO gestes (${colonnes})
+							SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM proposee
+							WHERE proposee.ms IS NOT NULL AND NOT EXISTS (
+								SELECT 1 FROM gestes WHERE session = ? AND fiche = ? AND geste = 'lue_apres_carte' AND horodatage_ms >= proposee.ms
+							)`,
+						)
+						.run(g.session, g.fiche, g.horodatageMs, ...valeurs, g.session, g.fiche);
+				});
+			} catch (erreur) {
+				signalerPanneDeGeste(erreur);
+				throw erreur;
+			}
+		},
+
+		async comptesGestes() {
+			return reessayer(() =>
+				(base.prepare('SELECT geste, fiche, COUNT(*) AS nombre FROM gestes GROUP BY geste, fiche').all() as Ligne[]).map((l) => ({
+					geste: l.geste as Geste,
+					fiche: l.fiche as string,
+					nombre: Number(l.nombre),
+				})),
+			);
 		},
 
 		async gestes(filtre) {

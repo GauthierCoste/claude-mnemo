@@ -1,9 +1,9 @@
-/** Ce qu'un appel d'outil de la session dit pour le contexte servi : la fiche lue ou écrite. */
+/** Ce qu'un appel d'outil de la session dit pour le contexte servi : la fiche lue ou écrite, et l'outil Mnemo (sans préfixe). */
 import { cheminValide } from './chemin.ts';
 import { estObjet } from './valeurs.ts';
 
 export type AppelOutil = { nom: string; entree: Record<string, unknown> };
-export type FicheTouchee = { chemin: string; action: 'lue' | 'ecrite' };
+export type FicheTouchee = { chemin: string; action: 'lue' | 'ecrite'; outil: 'lire' | 'voisins' | 'proposer' | 'entretenir' };
 
 const PREFIXE_MNEMO = 'mcp__mnemo__';
 
@@ -20,12 +20,12 @@ export function ficheTouchee(appel: AppelOutil): FicheTouchee | null {
 	const outil = appel.nom.slice(PREFIXE_MNEMO.length);
 	if (outil === 'lire' || outil === 'voisins') {
 		const chemin = cheminDeFiche(texte(appel.entree.id));
-		return chemin === null ? null : { chemin, action: 'lue' };
+		return chemin === null ? null : { chemin, action: 'lue', outil };
 	}
 	if (outil === 'proposer' && estObjet(appel.entree.demande)) {
 		const demande = appel.entree.demande;
 		const chemin = cheminDeFiche(texte(demande.fiche) ?? texte(demande.chemin));
-		return chemin === null ? null : { chemin, action: 'ecrite' };
+		return chemin === null ? null : { chemin, action: 'ecrite', outil };
 	}
 	if (outil === 'entretenir') {
 		// la fiche qui reste écrite : celle qui reçoit la fusion ou les informations déplacées, celle dont un lien ou une information est corrigé, la redirection d'une suppression
@@ -33,7 +33,7 @@ export function ficheTouchee(appel: AppelOutil): FicheTouchee | null {
 		const enPlace = e.action === 'corriger_lien' || e.action === 'corroborer' || e.action === 'retoucher_information';
 		const brut = e.action === 'fusionner' || e.action === 'deplacer_informations' ? texte(e.dans) : enPlace ? texte(e.id) : e.action === 'supprimer' ? texte(e.redirection) : null;
 		const chemin = cheminDeFiche(brut);
-		return chemin === null ? null : { chemin, action: 'ecrite' };
+		return chemin === null ? null : { chemin, action: 'ecrite', outil };
 	}
 	return null;
 }

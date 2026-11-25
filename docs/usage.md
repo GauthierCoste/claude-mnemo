@@ -363,10 +363,11 @@ instructions, the action check is declared so that Claude Code refuses the actio
 `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` and the `CLAUDE_CODE_USE_*` provider selectors are removed from its
 environment. `MNEMO_CLAUDE` names another `claude` binary.
 
-Mnemo keeps a log of your gestures on the notes it proposes (a note injected by hand, set aside with ✗, restored, or read
-with `lire` after a lead proposed it), with the message that carried it, in `.mnemo/etat.sqlite` only (never in the
-versioned memory), across `/clear`, `/compact` and the end of the session. Deleting a session keeps its gestures but
-erases the text of its messages.
+Mnemo keeps a log of the gestures made on the notes it proposes: a note you inject by hand, set aside with ✗ or restore,
+and a note Claude reads with `lire` after a lead proposed it. Each gesture keeps the text of your last meaningful message
+and, when the meaning model has already computed it, that message's vector. The log lives in `.mnemo/etat.sqlite` only
+(never in the versioned memory), survives `/clear`, `/compact` and the end of the session, and is never purged on its
+own. Deleting a session keeps its gestures but erases the text and the vectors of its messages from the file.
 
 ### Injected context
 

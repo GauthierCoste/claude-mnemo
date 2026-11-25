@@ -6,6 +6,9 @@ import type { EtatSessions, Pilotage } from '../../src/application/ports.ts';
 import { dossiersNonRattaches } from '../../src/application/dossiers-non-rattaches.ts';
 import { fichesDemandees } from '../../src/application/fiches-demandees.ts';
 import { proposer } from '../../src/application/proposer.ts';
+import { porteursRecents } from '../../src/application/porteurs-recents.ts';
+import { vectoriser } from '../../src/application/vectoriser.ts';
+import type { Sens } from '../../src/application/ports.ts';
 import { servirQuestion } from '../aides/servir.ts';
 import { texteDossierNonRattache } from '../../src/domaine/rattachement.ts';
 import type { EvenementHook, Session } from '../../src/domaine/session.ts';
@@ -286,8 +289,39 @@ describe('traiterEvenement : après un outil', () => {
 		await traiterEvenement(dep, pil, entree('apres_outil', 14, lire('projets/vela/vela.md')), local);
 		const empreinte = (await dep.index.fiches()).find((f) => f.chemin === AVOIRS)!.empreinte;
 		expect(await etat.gestes({ limite: null })).toMatchObject([
-			{ geste: 'lue_apres_carte', origine: 'manuelle', fiche: AVOIRS, empreinte, horodatageMs: 12, message: 'catalogue références', rangMessage: 1, position: 'projets/vela', vecteur: null },
+			{ geste: 'lue_apres_carte', origine: 'claude', fiche: AVOIRS, empreinte, horodatageMs: 12, message: 'catalogue références', rangMessage: 1, position: 'projets/vela', vecteur: null },
 		]);
+	});
+
+	it('lue après une carte, après /clear : comptée une fois ; une nouvelle proposition la fait compter de nouveau', async () => {
+		const { dep, etat, pil } = await contexte();
+		const AVOIRS = 'projets/vela/avoirs.md';
+		await dep.coffre.ecrire(AVOIRS, `${entete()}# Avoirs\n\nUn avoir annule une facture.\n`);
+		await traiterEvenement(dep, pil, entree('message', 10, { prompt: 'catalogue références' }), local);
+		await traiterEvenement(dep, pil, entree('debut', 11, { source: 'clear' }), local);
+		expect((await etat.cartesProposees(ID)).has(AVOIRS)).toBe(false);
+		await traiterEvenement(dep, pil, entree('apres_outil', 12, lire(AVOIRS)), local);
+		await traiterEvenement(dep, pil, entree('apres_outil', 13, lire(AVOIRS)), local);
+		// la fiche change (la lecture ne la tient plus pour vue) ; le périmètre est de nouveau proposé après /clear
+		await dep.coffre.ecrire(AVOIRS, `${entete()}# Avoirs\n\nUn avoir annule une facture, en tout ou partie.\n`);
+		await traiterEvenement(dep, pil, entree('message', 14, { prompt: 'avoirs références' }), local);
+		expect((await etat.cartesProposees(ID)).has(AVOIRS)).toBe(true);
+		await traiterEvenement(dep, pil, entree('apres_outil', 15, lire(AVOIRS)), local);
+		expect((await etat.gestes({ limite: null })).map((g) => [g.horodatageMs, g.message, g.rangMessage])).toEqual([
+			[15, 'avoirs références', 2],
+			[12, 'catalogue références', 1],
+		]);
+	});
+
+	it('message porteur qui dépasse l’échéance : rien d’injecté, mais il devient le message des gestes suivants, texte et rang ensemble', async () => {
+		const { dep, etat, pil } = await contexte();
+		const AVOIRS = 'projets/vela/avoirs.md';
+		await dep.coffre.ecrire(AVOIRS, `${entete()}# Avoirs\n\nUn avoir annule une facture.\n`);
+		await traiterEvenement(dep, pil, entree('message', 10, { prompt: 'catalogue références' }), local);
+		expect(await traiterEvenement(dep, pil, entree('message', 11, { prompt: 'factures impayées' }), { ...local, echeance: Date.now() - 1 })).toEqual({});
+		expect(await etat.servis(ID, 5)).toHaveLength(1);
+		await traiterEvenement(dep, pil, entree('apres_outil', 12, lire(AVOIRS)), local);
+		expect(await etat.gestes({ limite: null })).toMatchObject([{ geste: 'lue_apres_carte', message: 'factures impayées', rangMessage: 2 }]);
 	});
 
 	it('apres_outil : un outil sans lien avec une fiche ne note rien et rend {}', async () => {
@@ -324,6 +358,33 @@ describe('traiterEvenement : fiches demandées par l’utilisateur (➤)', () =>
 		expect(await etat.gestes({ limite: null })).toMatchObject([{ geste: 'injectee_main', fiche: AVOIRS, empreinte: avoirs!.empreinteInjectee, message: null, rangMessage: 0, position: 'projets/vela' }]);
 	});
 
+	it('avec le sens : l’injection à la main garde le vecteur de son message ; le service le garde pour la lecture d’une carte qui suit', async () => {
+		const { dep, etat, pil, demandees } = await avecDemande();
+		// sens fictif : un axe par mot, plus un terme constant (jamais de vecteur nul)
+		const sens: Sens = {
+			modele: () => 'mots@1',
+			vecteurs: async (textes) => textes.map((t) => Float32Array.from([...['catalogue', 'avoir', 'facture'].map((m) => t.toLowerCase().split(m).length - 1), 0.01])),
+		};
+		dep.sens = sens;
+		const porteurs = porteursRecents();
+		const reglages = { ...local, demandees, porteurs };
+		await dep.coffre.ecrire('projets/vela/factures.md', `${entete()}# Factures\n\nUne facture se paie.\n`);
+		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
+		await traiterEvenement(dep, pil, entree('message', 11, { prompt: 'catalogue des avoirs' }), reglages);
+		expect(porteurs.lire(ID)).toMatchObject({ rang: 1, position: 'projets/vela' });
+		expect(porteurs.lire(ID)?.vecteur?.modele).toBe('mots@1');
+		const [injection] = await etat.gestes({ limite: null });
+		expect(injection).toMatchObject({ geste: 'injectee_main', message: 'catalogue des avoirs', rangMessage: 1 });
+		expect(injection!.vecteur?.modele).toBe('mots@1');
+		expect(injection!.vecteur?.valeurs.length).toBe(4);
+		// une carte proposée à ce message, lue ensuite : même message, même vecteur (repris du service)
+		const carte = (await etat.cartesProposees(ID)).keys().next().value!;
+		await traiterEvenement(dep, pil, entree('apres_outil', 12, { outil: { nom: 'mcp__mnemo__lire', entree: { id: carte } } }), reglages);
+		const [lecture] = await etat.gestes({ limite: null });
+		expect(lecture).toMatchObject({ geste: 'lue_apres_carte', origine: 'claude', fiche: carte, rangMessage: 1 });
+		expect([...lecture!.vecteur!.valeurs]).toEqual([...injection!.vecteur!.valeurs]);
+	});
+
 	it('injection à la main : notée avec le message porteur qui la porte et son rang ; portée par un message muet : le dernier porteur', async () => {
 		const { dep, etat, pil, demandees } = await avecDemande();
 		const reglages = { ...local, demandees };
@@ -333,7 +394,7 @@ describe('traiterEvenement : fiches demandées par l’utilisateur (➤)', () =>
 		await traiterEvenement(dep, pil, entree('message', 13, { prompt: 'ok' }), reglages);
 		expect(await etat.gestes({ limite: null })).toMatchObject([
 			{ geste: 'injectee_main', fiche: AVOIRS, horodatageMs: 13, message: 'références produits', rangMessage: 2 },
-			{ geste: 'injectee_main', fiche: AVOIRS, horodatageMs: 11, message: 'catalogue des avoirs', rangMessage: 1, origine: 'manuelle' },
+			{ geste: 'injectee_main', fiche: AVOIRS, horodatageMs: 11, message: 'catalogue des avoirs', rangMessage: 1, origine: 'utilisateur' },
 		]);
 	});
 

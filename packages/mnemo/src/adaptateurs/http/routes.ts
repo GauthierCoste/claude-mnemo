@@ -17,6 +17,7 @@ import { noterGeste } from '../../application/gestes.ts';
 import { traiterEvenement } from '../../application/evenements.ts';
 import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
+import { porteursRecents, vecteurDuPorteur } from '../../application/porteurs-recents.ts';
 import { fenetreDeTranscription } from '../../infra/fenetre-transcription.ts';
 import type { EntreeHook } from '../../application/evenements.ts';
 import { filDuJour } from '../../application/fil.ts';
@@ -342,6 +343,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		return ok(vueModeles(await ctx.modeles.etat()));
 	};
 	const demandees = fichesDemandees();
+	/** Dernier message porteur de chaque session (vecteur compris) : les gestes de l'interface le reprennent. */
+	const porteurs = porteursRecents();
 	/** Fiches à injecter au prochain message de la session, rendues et diffusées après un changement. */
 	const aServirDiffuses = (id: string, chemins: string[]): Reponse => {
 		ctx.diffuser({ type: 'aServir', session: id, chemins });
@@ -508,10 +511,14 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const { id } = champs(await r.json(), { id: { requis: true, max: 4096 } });
 				const s = await session(r.id);
 				const titres = await titresDeLIndex();
-				const resultat = await ecarterDuClassement(pil.etat, s, id!, undefined, (chemin) => titreDeFiche(chemin, titres));
+				const { resultat, porteur } = await ecarterDuClassement(pil.etat, s, id!, undefined, (chemin) => titreDeFiche(chemin, titres));
 				if (resultat === 'introuvable') throw new ErreurHttp(404, 'Élément absent des derniers classements de la session.');
 				if (resultat === 'terminee') throw new ErreurHttp(409, 'Session terminée : plus rien à écarter.');
-				await noterGeste(dep, pil.etat, { geste: 'ecartee_ici', session: s.id, fiche: id!.split('#')[0]!, horodatageMs: Date.now() });
+				// un geste seulement si l'élément n'était pas déjà écarté ; le message est celui de l'entrée où il a été trouvé
+				if (resultat === 'ecarte') {
+					const vecteur = vecteurDuPorteur(porteurs.lire(s.id));
+					await noterGeste(dep, pil.etat, { geste: 'ecartee_ici', session: s.id, fiche: id!.split('#')[0]!, horodatageMs: Date.now(), vecteur, ...(porteur === undefined ? {} : { porteur }) });
+				}
 				return ecartesDiffuses(s.id);
 			},
 		},
@@ -522,8 +529,11 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const id = r.params.get('id');
 				if (id === null || id === '') throw new ErreurHttp(400, 'Paramètre « id » : obligatoire.');
 				const s = await session(r.id);
-				if (!(await pil.etat.retablir(s.id, id))) throw new ErreurHttp(409, 'Session terminée : plus rien à rétablir.');
-				await noterGeste(dep, pil.etat, { geste: 'retablie', session: s.id, fiche: id.split('#')[0]!, horodatageMs: Date.now() });
+				const resultat = await pil.etat.retablir(s.id, id);
+				if (resultat === 'terminee') throw new ErreurHttp(409, 'Session terminée : plus rien à rétablir.');
+				if (resultat === 'retabli') {
+					await noterGeste(dep, pil.etat, { geste: 'retablie', session: s.id, fiche: id.split('#')[0]!, horodatageMs: Date.now(), vecteur: vecteurDuPorteur(porteurs.lire(s.id)) });
+				}
 				return ecartesDiffuses(s.id);
 			},
 		},
@@ -596,7 +606,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const transcription = transcriptionDuHook(brut);
 				// les modèles de la session bornés par son niveau (relu à chaque appel)
 				const depDuHook = entree.session === '' ? dep : dependancesDeSession(dep, pil.etat, entree.session);
-				const reponse = await traiterEvenement(depDuHook, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, rattachee: (id) => pilote.reecrirePlugin(id) });
+				const reponse = await traiterEvenement(depDuHook, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, porteurs, rattachee: (id) => pilote.reecrirePlugin(id) });
 				if (entree.session !== '' && transcription !== undefined && (entree.evenement === 'message' || entree.evenement === 'apres_outil' || entree.evenement === 'arret' || entree.evenement === 'debut')) {
 					// hors du chemin du hook : sa réponse n'attend pas la lecture
 					void relireFenetre(entree.session, transcription, entree.cwd).catch(() => {});

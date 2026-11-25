@@ -104,7 +104,7 @@ export async function commandeContexte(args: string[]): Promise<void> {
 		if (racine === null) throw new ErreurCli(AUCUNE_MEMOIRE);
 		const etat = etatParesseux(racine);
 		try {
-			const comptes = compterGestes(await etat.gestes({ limite: null }));
+			const comptes = compterGestes(await etat.comptesGestes());
 			console.log(json ? JSON.stringify(comptes, null, 2) : gestesEnTexte(comptes));
 		} finally {
 			etat.fermer();

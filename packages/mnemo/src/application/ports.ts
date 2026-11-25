@@ -8,7 +8,7 @@ import type { Reglages } from '../domaine/reglages.ts';
 import type { InjectionManuelle } from '../domaine/signal-injection.ts';
 import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
 import type { EtatIndicateur } from '../domaine/refus-outil.ts';
-import type { Geste, OrigineGeste } from '../domaine/gestes.ts';
+import type { Geste, GesteCompte, NoteDuGeste, OrigineGeste } from '../domaine/gestes.ts';
 import type { TypeSource } from '../domaine/regles.ts';
 import type { FichierPlugin } from './plugin.ts';
 import type { AppelPlugin } from './plugin.ts';
@@ -577,6 +577,8 @@ export type EntreeServie = {
 	cartes: CarteJournalisee[];
 	/** Position de la session (relative à `_mnemo/`) à ce moment ; null si inconnue. */
 	position: string | null;
+	/** Rang du message dans la session, écrit par `journaliser` pour un message porteur ; absent sinon (et dans les entrées anciennes). */
+	rangMessage?: number | null;
 };
 export type { RaisonCarte };
 /** Une carte du journal : `depuis` (raison `liee`) : chemin de la fiche injectée à la main d'où vient le poids ; absent sinon (et des entrées anciennes). */
@@ -606,12 +608,19 @@ export type FicheServieLueOuEcrite = {
 /** Vecteur d'un message par le modèle de sens (`modele` : son identité, `bge-m3@…`). */
 export type VecteurDuMessage = { modele: string; valeurs: Float32Array };
 
+/** Le message porteur d'un geste : son texte (coupé à `DEMANDE_MAX` ; null s'il n'est pas connu) et son rang dans la session (`messages_porteurs` à ce message ; 0 : aucun). */
+export type MessagePorteur = { texte: string | null; rang: number };
+
+/** Le vecteur du message porteur de rang `rang` : gardé avec un geste seulement si le geste porte ce même message. */
+export type VecteurDuPorteur = { rang: number; vecteur: VecteurDuMessage };
+
 /**
  * Un geste à noter au journal durable des gestes. Le reste du contexte est lu dans la session au moment de l'écriture :
- * dossier, position, rang du message (`messages_porteurs`). `message` : texte (déjà coupé à `DEMANDE_MAX`) du message
- * porteur qui porte le geste ; absent : le dernier message porteur du journal servi. `note` : note de la fiche au moment du
- * geste ; absente : celle de sa dernière carte notée dans le journal servi de la session. `vecteur` : celui du message,
- * s'il a déjà été calculé (jamais calculé pour le geste).
+ * dossier et position. `porteur` : le message qui porte le geste ; absent : le dernier message porteur de la session (texte
+ * et rang gardés ensemble par `noterMessagePorteur`). `note` : ce que Mnemo savait de la fiche ; absente : la note de sa
+ * dernière carte notée dans le journal servi de la session. `vecteur` : celui d'un message déjà calculé (jamais calculé pour
+ * le geste), écrit seulement s'il est du message porteur du geste. `lue_apres_carte` n'est écrit que si une carte a proposé
+ * la fiche dans la session (même avant un /clear) et que la session ne l'a pas déjà lue depuis cette proposition.
  */
 export type GesteANoter = {
 	geste: Geste;
@@ -619,12 +628,15 @@ export type GesteANoter = {
 	fiche: string;
 	empreinte: string | null;
 	horodatageMs: number;
-	message?: string | null;
-	note?: number | null;
-	vecteur?: VecteurDuMessage | null;
+	porteur?: MessagePorteur;
+	note?: NoteDuGeste | null;
+	vecteur?: VecteurDuPorteur | null;
 };
 
-/** Un geste du journal durable (`rang` : ordre d'écriture). `message` : null s'il n'y en avait pas, ou si la session a été supprimée. */
+/**
+ * Un geste du journal durable (`rang` : ordre d'écriture). `message` et `vecteur` : null s'il n'y en avait pas, ou si la
+ * session a été supprimée ; `rangMessage` : rang du message porteur dans la session.
+ */
 export type GesteNote = {
 	rang: number;
 	horodatageMs: number;
@@ -637,7 +649,7 @@ export type GesteNote = {
 	empreinte: string | null;
 	message: string | null;
 	rangMessage: number;
-	note: number | null;
+	note: NoteDuGeste | null;
 	vecteur: VecteurDuMessage | null;
 };
 
@@ -678,11 +690,12 @@ export interface EtatSessions {
 	servis(session: string, limite: number, moment?: EntreeServie['moment']): Promise<EntreeServie[]>;
 	/**
 	 * Écarte un élément des prochains calculs de `servir` pour la session (sans effet s'il l'est déjà) et note la trace du
-	 * geste (dossier, extrait de la demande, élément, date), gardée après la session. False : session inconnue ou terminée.
+	 * geste (dossier, extrait de la demande, élément, date), gardée après la session, même s'il l'était déjà. `deja_ecarte` :
+	 * rien n'a changé ; `terminee` : session inconnue ou terminée.
 	 */
-	ecarter(session: string, ecarte: { id: string; titre: string }, trace: { dossier: string; demande: string | null; horodatageMs: number }): Promise<boolean>;
-	/** Rétablit un écarté ; false : session inconnue ou terminée (rien à rétablir). */
-	retablir(session: string, id: string): Promise<boolean>;
+	ecarter(session: string, ecarte: { id: string; titre: string }, trace: { dossier: string; demande: string | null; horodatageMs: number }): Promise<'ecarte' | 'deja_ecarte' | 'terminee'>;
+	/** Rétablit un écarté ; `non_ecarte` : il ne l'était pas ; `terminee` : session inconnue ou terminée (rien à rétablir). */
+	retablir(session: string, id: string): Promise<'retabli' | 'non_ecarte' | 'terminee'>;
 	/** Écartés de la session, dans l'ordre où ils l'ont été ; effacés quand elle se termine. */
 	ecartes(session: string): Promise<Ecarte[]>;
 	/** Note une fiche servie, lue ou écrite par la session ; sans effet pour une session inconnue. `empreinte` : celle de la fiche à l'injection (`servie`) ou à la lecture (`lue`) ; ignorée pour `ecrite`. */
@@ -694,8 +707,11 @@ export interface EtatSessions {
 	 * ne pèsent plus sur leurs voisines.
 	 */
 	oublierInjections(session: string): Promise<void>;
-	/** Un message porteur (non muet) de la session : les fiches injectées à la main vieillissent d'un message ; sans effet pour une session inconnue. */
-	noterMessagePorteur(session: string): Promise<void>;
+	/**
+	 * Un message porteur (non muet) de la session : les fiches injectées à la main vieillissent d'un message ; son texte (coupé à
+	 * `DEMANDE_MAX`) et son rang sont gardés comme dernier message porteur (gestes). Rend son rang ; null pour une session inconnue.
+	 */
+	noterMessagePorteur(session: string, texte: string): Promise<number | null>;
 	/** Note une fiche injectée à la main au message courant de la session (âge 0 ; réinjectée : son âge repart de 0) ; sans effet pour une session inconnue. */
 	noterInjectionManuelle(session: string, chemin: string): Promise<void>;
 	/** Fiches injectées à la main depuis le dernier /clear ou /compact, avec leur âge en messages porteurs (0 : injectée au message courant). */
@@ -716,14 +732,16 @@ export interface EtatSessions {
 	sessionsAyantServi(chemin: string, limite: number | null): Promise<{ sessions: { session: Session; horodatageMs: number }[]; total: number }>;
 	/**
 	 * Retire de l'historique une session terminée : elle, ses entrées servies, ses écartés et leurs traces, en une transaction ;
-	 * ses gestes restent au journal durable, sans le texte de leur message. `non_terminee` : rien n'est supprimé.
+	 * ses gestes restent au journal durable, sans le texte ni le vecteur de leur message. `non_terminee` : rien n'est supprimé.
 	 */
 	supprimer(id: string): Promise<'supprimee' | 'inconnue' | 'non_terminee'>;
 	/**
 	 * Note un geste au journal durable des gestes (sans limite de nombre, gardé après /clear, /compact et la fin de la
-	 * session ; `supprimer` n'en efface que le texte du message) ; sans effet pour une session inconnue.
+	 * session ; `supprimer` n'en efface que le texte et le vecteur du message) ; sans effet pour une session inconnue.
 	 */
 	noterGeste(geste: GesteANoter): Promise<void>;
+	/** Nombre de gestes par sorte et par fiche, sans lire messages ni vecteurs. */
+	comptesGestes(): Promise<GesteCompte[]>;
 	/** Gestes du journal durable, les plus récents d'abord : ceux de `fiche`, depuis `depuisMs` (inclus), `limite` au plus (null : tous). */
 	gestes(filtre: { fiche?: string; depuisMs?: number; limite: number | null }): Promise<GesteNote[]>;
 	/** Instant de la dernière écriture, toutes sessions confondues (0 si aucune). */
