@@ -32,7 +32,12 @@ export function ModelesSession(p: { session: string; niveau: NiveauModeles | nul
 	if (e?.installes !== true) {
 		// modèles inconnus ou non installés : pas de menu, mais l'état du classement reste dit
 		const ordre = p.classement?.ordreSeul ?? null;
-		if (p.classement?.affinage === true) return <span className={s.etatSeul} title={TITRE_AFFINAGE}>affinage…</span>;
+		if (p.classement?.affinage === true)
+			return (
+				<span className={s.etatSeul} title={TITRE_AFFINAGE}>
+					<span className={s.reflet}>affinage…</span>
+				</span>
+			);
 		return ordre === null ? null : (
 			<span className={cx(s.etatSeul, s.ordreSeul)} title={ordre}>
 				ordre seul
@@ -59,11 +64,12 @@ export function ModelesSession(p: { session: string; niveau: NiveauModeles | nul
 			alignement="droite"
 			contenuBouton={
 				<>
+					{/* le texte à gauche de l'icône : il s'étend vers la gauche, l'icône ne bouge pas ; un reflet tant que c'est en cours */}
+					{texte !== '' && <span className={cx(s.texte, enCours !== null && s.reflet)}>{texte}</span>}
 					<span className={s.icone}>
 						<IconeModeles coupes={effectif === 'coupes'} taille={13} />
 						{enCours !== null && <span className={cx(s.point, s.actif)} aria-hidden="true" />}
 					</span>
-					{texte !== '' && <span className={s.texte}>{texte}</span>}
 				</>
 			}
 			entete={

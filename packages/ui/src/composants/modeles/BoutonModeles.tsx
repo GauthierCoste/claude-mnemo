@@ -47,7 +47,8 @@ export function BoutonModeles(): ReactNode {
 						<IconeModeles coupes={coupes} />
 						{point !== null && <span className={cx(s.point, s[point])} aria-hidden="true" />}
 					</span>
-					<span className={s.texte}>{texte}</span>
+					{/* une activité ou un chargement en cours : le même reflet que le bouton des modèles d'une session */}
+					<span className={cx(s.texte, point === 'actif' && s.reflet)}>{texte}</span>
 				</>
 			}
 			entete={<EtatPieces e={e} sessionAffichee={sessionPremierPlan} />}

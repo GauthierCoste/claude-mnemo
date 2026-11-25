@@ -618,7 +618,9 @@ On hover, a line offers ➤ and ✗; a note that was only read has ➤ alone, si
 A mute message shows its reason under the list. Clicking a title opens the note. The list scrolls on its own and stays
 anchored where the injected notes and the ranking meet. The models button of the session, at the right of the panel
 title, also says « affinage… » during refinement and « ordre seul » when no score is calibrated (the reason in its
-tooltip).
+tooltip), in text at the left of its icon, which stays in place. While something is under way (refinement, an
+activity, models loading in the title bar button too), a slow highlight passes over the letters; with reduced motion,
+the text stays dimmed.
 
 Above the list: the avatar of the profile, the state and the objective of the session, then its engine and model (the
 **Moteur** line), its folder, start, duration, branch and, once known, the **Contexte** line: how full the agent's

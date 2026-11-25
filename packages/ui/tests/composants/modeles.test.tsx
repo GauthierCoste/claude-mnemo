@@ -63,6 +63,20 @@ describe('bouton global des modèles', () => {
 		expect(bouton.textContent).toBe(texte);
 	});
 
+	it('reflet sur le texte pendant un chargement ou une activité, jamais sur un état stable', async () => {
+		const reflet = (b: HTMLElement) => [...b.querySelectorAll('span')].some((x) => /reflet/u.test(x.className));
+		for (const [e, attendu] of [
+			[{ gardien: 'demarrage', sens: 'arrete', reranker: 'arrete' }, true],
+			[{ activites: [activite('recherche')] }, true],
+			[{}, false],
+			[{ gardien: 'arrete', sens: 'arrete', reranker: 'arrete' }, false],
+		] as [Partial<EtatModelesVue>, boolean][]) {
+			monter(<BoutonModeles />, vueModeles(e));
+			expect(reflet(await boutonGlobal())).toBe(attendu);
+			cleanup();
+		}
+	});
+
 	it('absent tant que les modèles ne sont pas installés', async () => {
 		const faux = monter(<BoutonModeles />, vueModeles({ installes: false, sens: 'absent', reranker: 'absent', pieces: { sens: null, reranker: null, moteur: null } }));
 		await act(async () => {});
@@ -220,6 +234,23 @@ describe('bouton de session', () => {
 			expect(bouton.textContent).toBe(texte);
 			cleanup();
 		}
+	});
+
+	it('texte à gauche de l’icône (l’icône ne bouge pas) ; reflet pendant l’affinage ou une activité, pas sur « ordre seul »', async () => {
+		const reflet = (b: HTMLElement) => /reflet/u.test(b.firstElementChild!.className);
+		monter(<ModelesSession session="s1" niveau={null} classement={{ affinage: true, ordreSeul: null }} />, vueModeles());
+		let bouton = await boutonSession();
+		expect(bouton.firstElementChild!.textContent).toBe('affinage…');
+		expect(bouton.lastElementChild!.querySelector('svg')).not.toBeNull();
+		expect(reflet(bouton)).toBe(true);
+		cleanup();
+		monter(<ModelesSession session="s1" niveau={null} classement={{ affinage: false, ordreSeul: 'Ordre seul : raison' }} />, vueModeles());
+		bouton = await boutonSession();
+		expect(bouton.firstElementChild!.textContent).toBe('ordre seul');
+		expect(reflet(bouton)).toBe(false);
+		cleanup();
+		monter(<ModelesSession session="s1" niveau={null} />, vueModeles({ activites: [activite('injection', { session: 's1' })] }));
+		expect(reflet(await boutonSession())).toBe(true);
 	});
 
 	it('menu : un niveau plus large que celui de partout est désactivé, son motif visible ; un choix appelle la route de la session', async () => {
