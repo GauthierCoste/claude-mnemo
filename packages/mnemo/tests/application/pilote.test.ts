@@ -1,8 +1,10 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { enregistrerProfil } from '../../src/application/gerer-profils.ts';
 import { creerPilote, ErreurMoteurIndisponible, ErreurRepriseImpossible, ErreurSessionNonCommencee, ligneManuelle } from '../../src/application/pilote.ts';
 import type { Pilote } from '../../src/application/pilote.ts';
+import { profilsDisponibles } from '../../src/application/profil.ts';
 import type { CommandeMoteur, EtatSessions, FichierPlugin, Pilotage } from '../../src/application/ports.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
@@ -608,6 +610,23 @@ describe('Pilote : sessions Codex', () => {
 		expect(c.plugins.get(s.id)!.map((f) => f.chemin)).toEqual(['consigne.md']);
 		// hooks installés et approuvés : aucun avertissement dans le terminal
 		expect(c.pilote.abonner(s.id, () => {})!.relecture).toBe('');
+	});
+
+	it('deux profils enregistrés, Claude Code en vert et Codex en ambre : chacun garde sa couleur et lance son propre moteur', async () => {
+		const c = await contexte();
+		const maison = await avecCodex(c);
+		await hooksCodex(maison, true);
+		const commun = { consigne: null, lancement: 'projet', skillsMemoire: 'tous', plugins: [], modele: '' } as const;
+		const hooks = () => ['debut', 'message', 'arret', 'fin'] as ('debut' | 'message' | 'arret' | 'fin')[];
+		const premier = await enregistrerProfil(c.dep, 'travail', { ...commun, plugins: [], hooks: hooks(), avatar: { forme: 'robot', couleur: 'vert' }, moteur: 'claude-code' }, null);
+		const second = await enregistrerProfil(c.dep, 'revue', { ...commun, plugins: [], hooks: hooks(), avatar: { forme: 'renard', couleur: 'ambre' }, moteur: 'codex' }, null);
+		expect([premier.ok, second.ok]).toEqual([true, true]);
+		const { profils } = await profilsDisponibles(c.dep);
+		expect(profils.find((x) => x.nom === 'travail')).toMatchObject({ avatar: { couleur: 'vert' }, moteur: 'claude-code' });
+		expect(profils.find((x) => x.nom === 'revue')).toMatchObject({ avatar: { couleur: 'ambre' }, moteur: 'codex' });
+		expect(await lancee(c, { profil: 'revue', dossier: 'alpha' })).toMatchObject({ profil: 'revue', moteur: 'codex' });
+		expect(await lancee(c, { profil: 'travail', dossier: 'alpha' })).toMatchObject({ profil: 'travail', moteur: 'claude-code' });
+		expect(c.terminaux.lances.map((t) => t.options.args[0])).toEqual([CODEX.avant[0], CLAUDE.avant[0]]);
 	});
 
 	it('hooks absents ou non approuvés : la session se lance quand même, une ligne le dit en tête du terminal', async () => {

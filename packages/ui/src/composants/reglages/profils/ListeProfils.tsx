@@ -15,22 +15,32 @@ export function ListeProfils(p: {
 	profils: ProfilVue[];
 	choisi: string | null;
 	surChoix(nom: string): void;
+	/** Saisie du nom d'un nouveau profil ouverte (aucun profil choisi pendant ce temps). */
+	creation: boolean;
+	/** Demande d'ouvrir la saisie (retenue par la page si le profil ouvert a des modifications non enregistrées). */
+	surOuvrirNouveau(): void;
+	surAnnulerNouveau(): void;
 	/** Crée un profil `nom` aux valeurs par défaut de `travail` ; rend le motif d'un refus, null si créé. */
 	surNouveau(nom: string): Promise<string | null>;
 }): ReactNode {
-	const [nouveau, setNouveau] = useState<string | null>(null);
+	const [saisie, setSaisie] = useState('');
 	const [refus, setRefus] = useState<string | null>(null);
 	const [envoi, setEnvoi] = useState(false);
 	const memoire = p.profils.filter((x) => x.nom === PROFIL_ARCHIVISTE);
 	// travail (le profil par défaut) d'abord, puis les autres par nom
 	const travail = p.profils.filter((x) => x.nom !== PROFIL_ARCHIVISTE).sort((a, b) => Number(b.nom === PROFIL_TRAVAIL) - Number(a.nom === PROFIL_TRAVAIL));
+	const nouveau = p.creation ? saisie : null;
+	const fermer = () => {
+		setSaisie('');
+		setRefus(null);
+	};
 	const creer = async () => {
 		if (nouveau === null || nouveau.trim() === '') return;
 		setEnvoi(true);
 		const motif = await p.surNouveau(nouveau.trim());
 		setEnvoi(false);
 		setRefus(motif);
-		if (motif === null) setNouveau(null);
+		if (motif === null) setSaisie('');
 	};
 	return (
 		<nav className={s.liste} aria-label="Profils">
@@ -83,7 +93,14 @@ export function ListeProfils(p: {
 				))}
 				</ul>
 			{nouveau === null ? (
-				<Bouton onClick={() => setNouveau('')}>Nouveau profil de travail</Bouton>
+				<Bouton
+					onClick={() => {
+						fermer();
+						p.surOuvrirNouveau();
+					}}
+				>
+					Nouveau profil de travail
+				</Bouton>
 			) : (
 				<form
 					className={s.nouveau}
@@ -102,7 +119,7 @@ export function ListeProfils(p: {
 						spellCheck={false}
 						placeholder="minuscules, chiffres, tirets"
 						value={nouveau}
-						onChange={(e) => setNouveau(e.target.value)}
+						onChange={(e) => setSaisie(e.target.value)}
 					/>
 					{refus !== null && (
 						<p className={s.erreur} role="alert">
@@ -116,8 +133,8 @@ export function ListeProfils(p: {
 						<Bouton
 							disabled={envoi}
 							onClick={() => {
-								setNouveau(null);
-								setRefus(null);
+								fermer();
+								p.surAnnulerNouveau();
 							}}
 						>
 							Annuler

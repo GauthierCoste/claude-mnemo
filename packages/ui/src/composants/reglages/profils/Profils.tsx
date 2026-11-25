@@ -1,6 +1,8 @@
 /**
  * Onglet Profils de la vue Réglages : la liste des profils à gauche, l'éditeur du profil choisi à droite (avec l'aperçu de
- * ce que reçoit une session). Changer de profil avec des modifications non enregistrées est retenu dans la page.
+ * ce que reçoit une session). Changer de profil, ou en créer un, avec des modifications non enregistrées est retenu dans la
+ * page. Pendant la saisie du nom d'un nouveau profil, aucun éditeur n'est ouvert : les réglages faits à droite iraient au
+ * profil d'avant, pas au nouveau.
  */
 import { ROUTES } from '@mnemo/contrat';
 import type { ProfilEditableVue, ReponseEcritureProfil } from '@mnemo/contrat';
@@ -26,11 +28,15 @@ const NOUVEAU_PROFIL: ProfilEditableVue = {
 	modele: '',
 };
 
+/** Où aller une fois les modifications en cours abandonnées : un autre profil, ou la création d'un profil. */
+type Demande = { vers: 'profil'; nom: string } | { vers: 'nouveau' };
+
 export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
 	const { api } = useClient();
 	const profils = useProfils();
 	const [choisi, setChoisi] = useState<string>(PROFIL_TRAVAIL);
-	const [demande, setDemande] = useState<string | null>(null);
+	const [creation, setCreation] = useState(false);
+	const [demande, setDemande] = useState<Demande | null>(null);
 	const detail = useProfil(choisi);
 	const modifie = useRef(false);
 	const { surModifie: prevenir } = p;
@@ -42,16 +48,28 @@ export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
 		[prevenir],
 	);
 
-	const ouvrir = (nom: string) => {
+	const abandonner = () => {
 		modifie.current = false;
 		prevenir(false);
 		setDemande(null);
+	};
+	const ouvrir = (nom: string) => {
+		abandonner();
+		setCreation(false);
 		setChoisi(nom);
 	};
+	const nouveau = () => {
+		abandonner();
+		setCreation(true);
+	};
 	const choisir = (nom: string) => {
-		if (nom === choisi) return;
-		if (modifie.current) setDemande(nom);
+		if (nom === choisi && !creation) return;
+		if (modifie.current) setDemande({ vers: 'profil', nom });
 		else ouvrir(nom);
+	};
+	const demanderNouveau = () => {
+		if (modifie.current) setDemande({ vers: 'nouveau' });
+		else nouveau();
 	};
 
 	const creer = async (nom: string): Promise<string | null> => {
@@ -72,7 +90,15 @@ export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
 	const ignores = profils.donnees.ignores;
 	return (
 		<div className={s.page}>
-			<ListeProfils profils={profils.donnees.profils} choisi={choisi} surChoix={choisir} surNouveau={creer} />
+			<ListeProfils
+				profils={profils.donnees.profils}
+				choisi={creation ? null : choisi}
+				creation={creation}
+				surChoix={choisir}
+				surOuvrirNouveau={demanderNouveau}
+				surAnnulerNouveau={() => setCreation(false)}
+				surNouveau={creer}
+			/>
 			<div className={s.droite}>
 				{ignores.length > 0 && (
 					<ul className={s.avertissements} aria-label="Dossiers de profils ignorés">
@@ -87,14 +113,16 @@ export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
 					<div className={s.avis} role="alert">
 						<p>Modifications du profil « {choisi} » non enregistrées : les abandonner ?</p>
 						<div className={s.actions}>
-							<Bouton onClick={() => ouvrir(demande)}>Abandonner</Bouton>
+							<Bouton onClick={() => (demande.vers === 'nouveau' ? nouveau() : ouvrir(demande.nom))}>Abandonner</Bouton>
 							<Bouton genre="primaire" onClick={() => setDemande(null)}>
 								Rester
 							</Bouton>
 						</div>
 					</div>
 				)}
-				{detail.donnees === undefined || detail.donnees.nom !== choisi ? (
+				{creation ? (
+					<p className={s.discret}>Nouveau profil : choisis son nom à gauche, puis Créer. Son avatar, son moteur et le reste se règlent ici une fois le profil créé.</p>
+				) : detail.donnees === undefined || detail.donnees.nom !== choisi ? (
 					<p className={s.discret}>{detail.erreur ?? 'Chargement du profil…'}</p>
 				) : (
 					<EditeurProfil
