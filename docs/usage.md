@@ -101,7 +101,14 @@ UTF-8, UTF-16 only with a byte order mark, otherwise Windows-1252) is referenced
 its passages, which `cherche` and `chercher` find with the document title, the heading path and the page. The path is
 relative to the root of the Mnemo folder (outside `_mnemo/` and `.mnemo/`; a hidden folder or file is a document like
 any other); recognised secrets are masked before indexing. A near copy of an existing source is not written, unless
-`--apres-proches` is given; `--version-de sources/<note>.md` links a new version to the previous one.
+`--apres-proches` is given; `--version-de sources/<note>.md` links a new version to the previous one. The answer also
+names the existing notes whose title or alias the document mentions (people, organisations, projects, notions): the
+places where its information is likely to belong, beyond the project it is about.
+
+Once a source is processed, `proposer` genre `modification` with `traitee: true` on its note (with or without the
+"à traiter" marker) lists the notes that cite it. A source of at least 8 passages cited by one note, or none, is
+flagged: a meeting or a thread usually teaches something about the client's trade, its organisation, the people, the
+product or the practices too.
 
 A file dropped in the drop zone of the interface (Mémoire › Archiviste) is written into the folder and gets a `source`
 note marked "à traiter" (to process) for the archivist, whatever its format. A scanned PDF (pages without text), an

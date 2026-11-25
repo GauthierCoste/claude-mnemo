@@ -5,7 +5,7 @@ import { tronquerTexte } from '../domaine/texte.ts';
 import type { Trouve, Voisins } from './chercher.ts';
 import { avertissementsDe, ligneAvertissement } from '@mnemo/commun';
 import type { AvecAvertissements } from '@mnemo/commun';
-import type { Resultat } from './commun.ts';
+import type { BilanDeRepartition, Resultat } from './commun.ts';
 import type { ResultatSource } from './extraire-source.ts';
 import type { Lu } from './lire.ts';
 import type { ResultatLotPropose } from './lots.ts';
@@ -187,11 +187,13 @@ function texteDuResultat(resultat: Resultat): string {
 			const tete = `Écrit : ${resultat.fiche}${resultat.ancre === undefined ? '' : `#^${resultat.ancre}`}${resultat.aConfirmer ? ' (à confirmer)' : ''} — commit ${resultat.commit}.`;
 			const changements = resultat.changements ?? [];
 			const suite = changements.length === 0 ? '' : ` ${resultat.aConfirmer ? 'Proposé, en attente de l\'utilisateur' : 'Changé'} : ${changements.join(' ; ')}.`;
-			return borne(neutraliser(`${tete}${suite}`));
+			return borne(neutraliser(`${tete}${suite}${texteDuBilan(resultat.repartition)}`));
 		}
 		case 'doublon':
 			// une information déjà là (son ancre) : la même dite par une autre source la corrobore
-			return neutraliser(`Doublon : déjà présent dans ${resultat.fiche}${resultat.ancre === undefined ? '' : `#^${resultat.ancre}`} ; rien n'est écrit.${resultat.ancre === undefined ? '' : ' Autre source : `corroborer`.'}`);
+			return neutraliser(
+				`Doublon : déjà présent dans ${resultat.fiche}${resultat.ancre === undefined ? '' : `#^${resultat.ancre}`} ; rien n'est écrit.${resultat.ancre === undefined ? '' : ' Autre source : `corroborer`.'}${texteDuBilan(resultat.repartition)}`,
+			);
 		case 'repetition': {
 			const niveau = resultat.niveauPropose === null ? '' : ` Niveau proposé : ${resultat.niveauPropose}.`;
 			return neutraliser(`Répétition notée dans ${resultat.fiche} (${resultat.repetitions} fois) — commit ${resultat.commit}.${niveau}`);
@@ -213,6 +215,15 @@ function texteDuResultat(resultat: Resultat): string {
 
 const borne = (texte: string): string => tronquerTexte(texte, LIMITE_SORTIE, 'utf16');
 
+/** Bilan d'une source marquée traitée : les fiches qui la citent ; une source riche qui en touche une seule, ou aucune, est signalée. */
+function texteDuBilan(bilan: BilanDeRepartition | undefined): string {
+	if (bilan === undefined) return '';
+	const n = bilan.citeePar.length;
+	const liste = n === 0 ? '\nAucune fiche ne cite cette source.' : `\nFiches qui citent cette source (${n}) : ${bilan.citeePar.join(', ')}.`;
+	if (!bilan.riche || n > 1) return liste;
+	return `${liste} Une source de ${bilan.passages} passages qui ${n === 0 ? 'ne touche aucune fiche' : 'ne touche qu\'une fiche'} est suspecte : relis-la pour le métier du client, l'organisation, les personnes, le produit et les pratiques.`;
+}
+
 /**
  * Bilan de `extraire_source`, en français : une ligne par statut ; les noms tirés d'un document sont neutralisés ou encadrés.
  * `syntaxe` : comment rappeler après des proches (`apres_proches: true` pour l'outil MCP, `--apres-proches` en ligne de commande).
@@ -223,7 +234,9 @@ export function presenterSource(resultat: ResultatSource, options: { syntaxe?: '
 			const details = [`${resultat.passages} passage${resultat.passages > 1 ? 's' : ''} indexé${resultat.passages > 1 ? 's' : ''}`];
 			if (resultat.secrets > 0) details.push(`${resultat.secrets} secret${resultat.secrets > 1 ? 's' : ''} masqué${resultat.secrets > 1 ? 's' : ''}`);
 			if (resultat.filles.length > 0) details.push(`filles : ${resultat.filles.join(', ')}`);
-			return texteAvecAvertissements(neutraliser(`Source écrite : ${resultat.fiche} (${details.join(' ; ')}) — commit ${resultat.commit}.`), resultat);
+			const mentionnees = resultat.mentionnees ?? [];
+			const suite = mentionnees.length === 0 ? '' : `\nFiches que le document nomme, où ranger aussi ses informations : ${mentionnees.join(', ')}.`;
+			return texteAvecAvertissements(neutraliser(`Source écrite : ${resultat.fiche} (${details.join(' ; ')}) — commit ${resultat.commit}.${suite}`), resultat);
 		}
 		case 'deja': {
 			const ajoutes = resultat.ajoutes ?? 0;

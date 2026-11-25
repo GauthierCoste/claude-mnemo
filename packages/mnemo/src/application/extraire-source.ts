@@ -32,15 +32,17 @@ import type { Contenu, Dependances, DocumentOuvert, FichierDecoupe, PartieDecoup
 import { avertissementsPassages, SANS_EXTRACTION, synchroniser, synchroniserApresEcriture } from './synchroniser.ts';
 import { LONGUEUR_MAX_TITRE } from '../domaine/titre.ts';
 import { estFichierEntier, sourcesDuCoffre } from './sources.ts';
+import { fichesMentionnees } from './repartition.ts';
 
 export type DemandeSource = { chemin: string; type?: TypeSource; version_de?: string; apresProches?: boolean };
 export type ResultatSource =
 	/**
 	 * `passages` : passages indexés pour la fiche et ses filles (fils, pièces jointes) ; `filles` : leurs fiches.
 	 * `avertissements` : fiche écrite mais passages non indexés (rattrapés à une recherche), index en échec, extraction
-	 * incomplète (texte coupé à `TEXTE_MAX_DOCUMENT`, message trop gros écarté…).
+	 * incomplète (texte coupé à `TEXTE_MAX_DOCUMENT`, message trop gros écarté…). `mentionnees` : fiches existantes que le
+	 * document nomme (`fichesMentionnees`), destinations probables de ses informations ; absent s'il n'en nomme aucune.
 	 */
-	| ({ statut: 'ecrit'; fiche: string; passages: number; secrets: number; filles: string[]; commit: string } & AvecAvertissements)
+	| ({ statut: 'ecrit'; fiche: string; passages: number; secrets: number; filles: string[]; commit: string; mentionnees?: string[] } & AvecAvertissements)
 	/**
 	 * Le document a déjà sa fiche : même chemin, ou même empreinte exacte. `deplacee` : le fichier de cette fiche avait disparu
 	 * et le document est le même, ailleurs : son `chemin` (et celui de ses fils) a été mis à jour, dans `commit`. `ajoutes` :
@@ -597,5 +599,15 @@ export async function extraireSource(dep: Dependances, demande: DemandeSource): 
 	// une pièce jointe dit son nom ; le fichier lui-même, non
 	const incompletes = decoupe.parties.flatMap((p) => (p.avertissements ?? []).map((a) => (p.piece === null ? a : `${p.piece} : ${a}`)));
 	if (incompletes.length > 0) avertissements.push(`extraction incomplète : ${incompletes.join(' ; ')}`);
-	return { statut: 'ecrit', fiche: ecrites[0]!.chemin, passages, secrets, filles: ecrites.slice(1).map((e) => e.chemin), commit, ...avecAvertissements(avertissements) };
+	const mentionnees = await fichesMentionnees(dep, decoupe.parties.flatMap((p) => p.passages.map((x) => x.texte)).join('\n'));
+	return {
+		statut: 'ecrit',
+		fiche: ecrites[0]!.chemin,
+		passages,
+		secrets,
+		filles: ecrites.slice(1).map((e) => e.chemin),
+		commit,
+		...(mentionnees.length > 0 ? { mentionnees } : {}),
+		...avecAvertissements(avertissements),
+	};
 }

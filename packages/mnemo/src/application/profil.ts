@@ -42,30 +42,44 @@ const skill = (nom: string, description: string, corps: string[]): SkillParDefau
 	texte: `---\nname: ${nom}\ndescription: ${description}\n---\n\n${corps.join('\n')}\n`,
 });
 
+const FIN_DE_SOURCE =
+	'Pour finir : `proposer` genre `modification` avec `traitee: true` sur la fiche source. La réponse liste les fiches qui la citent ; une source riche qui n\'en touche qu\'une est suspecte : reprends la répartition.';
+const CONDENSE =
+	'un seul condensé : un document Markdown écrit à côté de l\'original, référencé par `extraire_source`, qui garde la liste complète des points à suivre ; les fiches y renvoient au lieu de la recopier.';
+
 /**
- * Skills déposées au premier lancement d'un profil si elles manquent, jamais réécrites ensuite : l'utilisateur et les
- * agents les modifient comme toute fiche. Pour l'archiviste : une par type de source, et le ménage de la mémoire.
+ * Skills déposées au premier lancement d'un profil si elles manquent ; ensuite, réécrites seulement tant qu'elles restent
+ * une version par défaut passée (`ANCIENNES_SKILLS`) : l'utilisateur et les agents les modifient comme toute fiche, et une
+ * skill modifiée n'est plus touchée. Pour l'archiviste : une par type de source, et le ménage de la mémoire.
  */
 export const SKILLS_PAR_DEFAUT: Record<string, readonly SkillParDefaut[]> = {
 	archiviste: [
 		skill('emails', 'Ranger un email ou un fil d\'emails (.eml, .mbox) dans la mémoire Mnemo.', [
-			'1. `extraire_source` sur le fichier, avec `type` `email`. Un `.mbox` donne une fiche par fil.',
+			'1. `extraire_source` sur le fichier, avec `type` `email`. Un `.mbox` donne une fiche par fil. La réponse nomme les fiches existantes que les messages citent.',
 			'2. Lis chaque fil : qui écrit, à qui, quand, à propos de quel projet ou client.',
 			'3. Ne garde que ce qui dure : décisions, engagements, montants, échéances, coordonnées, rôles. Laisse les politesses et le texte cité.',
-			'4. Pour chaque information, `chercher` d\'abord, puis `proposer` avec la citation exacte et la source du fil.',
-			'5. Une pièce jointe utile a sa propre fiche source : traite-la avec la skill de son type.',
+			'4. Répartis par destination, pas seulement dans le projet : projet (décisions, demandes), métier du client (vocabulaire, processus), organisation (qui fait quoi, circuits de validation), personnes (rôle, contraintes, préférences, coordonnées ; crée la fiche d\'un interlocuteur qui revient), produit (pistes réutilisables), pratiques (leçons générales).',
+			'5. Pour chaque information, `chercher` d\'abord, puis `proposer` avec la citation exacte et la source du fil.',
+			`6. Un long fil qui porte des points à suivre : ${CONDENSE}`,
+			'7. Une pièce jointe utile a sa propre fiche source : traite-la avec la skill de son type.',
+			`8. ${FIN_DE_SOURCE}`,
 		]),
 		skill('specs', 'Ranger une spécification, un cahier des charges ou un document de conception dans la mémoire Mnemo.', [
-			'1. `extraire_source` sur le document ; `type` `spec_validee` seulement si l\'utilisateur confirme qu\'elle est validée.',
+			'1. `extraire_source` sur le document ; `type` `spec_validee` seulement si l\'utilisateur confirme qu\'elle est validée. La réponse nomme les fiches existantes que le document cite.',
 			'2. Repère le projet et le module concernés ; range la fiche du projet dans l\'arbre s\'il le faut.',
 			'3. Extrais le périmètre, les exigences, les choix techniques et les échéances, une information par ligne, chacune avec sa citation.',
-			'4. Une nouvelle version d\'une spec : passe la fiche source de la précédente dans `version_de`, et signale ce qui change.',
+			'4. Puis ce que le document apprend hors du projet : vocabulaire et processus du métier du client (une fiche de métier s\'il n\'y en a pas), organisation et rôles, personnes citées (crée la fiche de celles qui comptent), pistes produit réutilisables, pratiques.',
+			'5. Une nouvelle version d\'une spec : passe la fiche source de la précédente dans `version_de`, et signale ce qui change.',
+			`6. ${FIN_DE_SOURCE}`,
 		]),
-		skill('comptes-rendus', 'Ranger un compte rendu de réunion dans la mémoire Mnemo.', [
-			'1. `extraire_source` sur le compte rendu, avec `type` `compte_rendu`.',
-			'2. Note la date, les participants (fiches de personnes, alias compris) et les projets abordés.',
-			'3. Extrais les décisions, les actions (qui, quoi, pour quand) et les points ouverts, chacun avec sa citation.',
-			'4. Une décision qui en contredit une plus ancienne : propose-la avec `remplace` et signale la contradiction.',
+		skill('comptes-rendus', 'Ranger un compte rendu de réunion ou une transcription dans la mémoire Mnemo.', [
+			'1. `extraire_source` sur le compte rendu ou la transcription, avec `type` `compte_rendu`. La réponse nomme les fiches existantes que la réunion cite.',
+			'2. Note la date, les participants (fiches de personnes, alias compris ; crée celle d\'un participant qui compte) et les projets abordés.',
+			'3. Projet : les décisions, les actions (qui, quoi, pour quand) et les points ouverts, chacun avec sa citation.',
+			'4. Puis une passe par autre destination. Métier du client : termes, étapes d\'un processus (une fiche de métier s\'il n\'y en a pas). Organisation : qui fait quoi, comment ils travaillent. Personnes : rôle, contraintes, préférences exprimées. Produit : pistes réutilisables ailleurs. Pratiques : leçons de méthode. Demande-toi ce que la réunion apprend hors de son sujet.',
+			`5. Une transcription ou une longue réunion : ${CONDENSE}`,
+			'6. Une décision qui en contredit une plus ancienne : propose-la avec `remplace` et signale la contradiction.',
+			`7. ${FIN_DE_SOURCE}`,
 		]),
 		skill('menage', 'Faire le ménage dans la mémoire Mnemo : doublons, fiches inutiles, liens cassés ou faux, fiches mal nommées.', [
 			'1. Si la mémoire a une fiche de ménage (« Ménage de la mémoire »), lis-la d\'abord pour t\'en aider : elle dit ce que l\'utilisateur veut garder, fusionner ou retirer.',
@@ -81,27 +95,86 @@ export const SKILLS_PAR_DEFAUT: Record<string, readonly SkillParDefaut[]> = {
 	],
 };
 
+/**
+ * Skills par défaut des versions passées, par profil : une skill dont le texte est l'une d'elles n'a jamais été modifiée, et
+ * `deposerSkillsParDefaut` la remplace par la version actuelle. Quand une skill par défaut change, l'ancienne s'ajoute ici
+ * (le test d'empreinte de `plugin.test.ts` le rappelle).
+ */
+export const ANCIENNES_SKILLS: Record<string, readonly SkillParDefaut[]> = {
+	archiviste: [
+		// « fait » avant « information » (e1fa7ed)
+		skill('emails', 'Ranger un email ou un fil d\'emails (.eml, .mbox) dans la mémoire Mnemo.', [
+			'1. `extraire_source` sur le fichier, avec `type` `email`. Un `.mbox` donne une fiche par fil.',
+			'2. Lis chaque fil : qui écrit, à qui, quand, à propos de quel projet ou client.',
+			'3. Ne garde que ce qui dure : décisions, engagements, montants, échéances, coordonnées, rôles. Laisse les politesses et le texte cité.',
+			'4. Pour chaque fait, `chercher` d\'abord, puis `proposer` avec la citation exacte et la source du fil.',
+			'5. Une pièce jointe utile a sa propre fiche source : traite-la avec la skill de son type.',
+		]),
+		skill('specs', 'Ranger une spécification, un cahier des charges ou un document de conception dans la mémoire Mnemo.', [
+			'1. `extraire_source` sur le document ; `type` `spec_validee` seulement si l\'utilisateur confirme qu\'elle est validée.',
+			'2. Repère le projet et le module concernés ; range la fiche du projet dans l\'arbre s\'il le faut.',
+			'3. Extrais le périmètre, les exigences, les choix techniques et les échéances, un fait par ligne, chacun avec sa citation.',
+			'4. Une nouvelle version d\'une spec : passe la fiche source de la précédente dans `version_de`, et signale ce qui change.',
+		]),
+		// avant `diagnostiquer` et `proposer_lot` (chantier « entretien des informations »)
+		skill('menage', 'Faire le ménage dans la mémoire Mnemo : doublons, fiches inutiles, liens cassés ou faux, fiches mal nommées.', [
+			'1. Si la mémoire a une fiche de ménage (« Ménage de la mémoire »), lis-la d\'abord pour t\'en aider : elle dit ce que l\'utilisateur veut garder, fusionner ou retirer.',
+			'2. Repère les doublons et ce qui cite une fiche : `chercher` signale les copies, `voisins` montre les liens entrants.',
+			'3. Deux fiches qui décrivent la même chose : `entretenir`, action `fusionner`, la moins complète `dans` l\'autre. Informations, sections, relations et alias sont versés, les liens réécrits, la fiche absorbée supprimée.',
+			'4. Une fiche inutile : `entretenir`, action `supprimer`. Si d\'autres fiches la citent, le refus les liste : donne une `redirection` vers la fiche qui la remplace, ou corrige ces liens d\'abord. Une note importée de Claude Code (propriété `origine` en `claude-code/…`) supprimée sans `redirection` revient au prochain import tant qu\'elle existe dans Claude Code : donne une `redirection` (ou fusionne-la) ; l\'import la tient alors pour connue tant qu\'elle ne change pas.',
+			'5. Un lien cassé ou faux (dans une source aussi) : `entretenir`, action `corriger_lien`, `ancien` → `nouveau` ; sans `nouveau`, le lien perd ses crochets.',
+			'6. Une fiche mal nommée ou mal rangée : `deplacer` (`nom` pour renommer) ; les liens suivent.',
+			'7. Les informations barrées restent : elles gardent l\'historique.',
+			'8. Dis à l\'utilisateur ce que tu as fusionné ou supprimé : chaque action est un commit, que git peut défaire.',
+		]),
+		// avant la répartition d'une source par destination (chantier « écriture de la mémoire »)
+			skill('emails', 'Ranger un email ou un fil d\'emails (.eml, .mbox) dans la mémoire Mnemo.', [
+				'1. `extraire_source` sur le fichier, avec `type` `email`. Un `.mbox` donne une fiche par fil.',
+				'2. Lis chaque fil : qui écrit, à qui, quand, à propos de quel projet ou client.',
+				'3. Ne garde que ce qui dure : décisions, engagements, montants, échéances, coordonnées, rôles. Laisse les politesses et le texte cité.',
+				'4. Pour chaque information, `chercher` d\'abord, puis `proposer` avec la citation exacte et la source du fil.',
+				'5. Une pièce jointe utile a sa propre fiche source : traite-la avec la skill de son type.',
+			]),
+			skill('specs', 'Ranger une spécification, un cahier des charges ou un document de conception dans la mémoire Mnemo.', [
+				'1. `extraire_source` sur le document ; `type` `spec_validee` seulement si l\'utilisateur confirme qu\'elle est validée.',
+				'2. Repère le projet et le module concernés ; range la fiche du projet dans l\'arbre s\'il le faut.',
+				'3. Extrais le périmètre, les exigences, les choix techniques et les échéances, une information par ligne, chacune avec sa citation.',
+				'4. Une nouvelle version d\'une spec : passe la fiche source de la précédente dans `version_de`, et signale ce qui change.',
+			]),
+			skill('comptes-rendus', 'Ranger un compte rendu de réunion dans la mémoire Mnemo.', [
+				'1. `extraire_source` sur le compte rendu, avec `type` `compte_rendu`.',
+				'2. Note la date, les participants (fiches de personnes, alias compris) et les projets abordés.',
+				'3. Extrais les décisions, les actions (qui, quoi, pour quand) et les points ouverts, chacun avec sa citation.',
+				'4. Une décision qui en contredit une plus ancienne : propose-la avec `remplace` et signale la contradiction.',
+			]),
+	],
+};
+
 /** Dossier des skills d'un profil, relatif à la mémoire. */
 export const dossierSkillsDuProfil = (nom: string): string => `${DOSSIERS_FIXES.profils}/${nomDeProfil(nom)}/${DOSSIERS_FIXES.skills}`;
 
 /**
- * Dépose les skills par défaut du profil `nom` qui manquent (un commit, sous verrou) ; rend le commit, ou null si rien
- * n'a été écrit. Une skill présente, même modifiée, n'est jamais réécrite.
+ * Dépose les skills par défaut du profil `nom` qui manquent, et remplace celles restées une version par défaut passée (un
+ * commit, sous verrou) ; rend le commit, ou null si rien n'a été écrit. Une skill modifiée n'est jamais réécrite.
  */
 export async function deposerSkillsParDefaut(dep: Dependances, nom: string): Promise<string | null> {
 	const skills = SKILLS_PAR_DEFAUT[nom] ?? [];
+	const anciennes = ANCIENNES_SKILLS[nom] ?? [];
 	const chemin = (s: SkillParDefaut) => `${dossierSkillsDuProfil(nom)}/${s.nom}/SKILL.md`;
-	const manquantes = async () => {
+	const aEcrire = async () => {
 		const resultat: SkillParDefaut[] = [];
-		for (const s of skills) if ((await dep.coffre.lire(chemin(s))) === null) resultat.push(s);
+		for (const s of skills) {
+			const actuel = await dep.coffre.lire(chemin(s));
+			if (actuel === null || (actuel !== s.texte && anciennes.some((a) => a.nom === s.nom && a.texte === actuel))) resultat.push(s);
+		}
 		return resultat;
 	};
-	if ((await manquantes()).length === 0) return null;
+	if ((await aEcrire()).length === 0) return null;
 	return sousVerrou(dep, async () => {
-		const aEcrire = await manquantes();
-		if (aEcrire.length === 0) return null;
-		for (const s of aEcrire) await dep.coffre.ecrire(chemin(s), s.texte);
-		return commiter(dep, `mnemo: skills par défaut ${dossierSkillsDuProfil(nom)}`, aEcrire.map(chemin));
+		const liste = await aEcrire();
+		if (liste.length === 0) return null;
+		for (const s of liste) await dep.coffre.ecrire(chemin(s), s.texte);
+		return commiter(dep, `mnemo: skills par défaut ${dossierSkillsDuProfil(nom)}`, liste.map(chemin));
 	});
 }
 

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { argumentsClaude, assemblerPlugin, enabledPluginsDe, environnementClaude } from '../../src/application/plugin.ts';
 import type { PluginInstalle } from '../../src/application/ports.ts';
 import type { FichierPlugin } from '../../src/application/plugin.ts';
-import { chargerProfil, cheminDeProfil, CONSIGNE_ARCHIVISTE_PAR_DEFAUT, CONSIGNE_TRAVAIL_PAR_DEFAUT, SKILLS_PAR_DEFAUT } from '../../src/application/profil.ts';
+import { empreinte } from '../../src/domaine/empreinte.ts';
+import { ANCIENNES_SKILLS, chargerProfil, cheminDeProfil, CONSIGNE_ARCHIVISTE_PAR_DEFAUT, CONSIGNE_TRAVAIL_PAR_DEFAUT, SKILLS_PAR_DEFAUT } from '../../src/application/profil.ts';
 import { PROFILS_PAR_DEFAUT } from '../../src/domaine/profil.ts';
 import type { Profil } from '../../src/domaine/profil.ts';
 import type { EtatIndicateur } from '../../src/domaine/refus-outil.ts';
@@ -141,7 +142,7 @@ describe('assemblerPlugin', () => {
 		expect(dep.commits).toHaveLength(0);
 	});
 
-	it("archiviste : dépose ses skills par défaut au premier lancement (un commit), ne les réécrit jamais, et les copie", async () => {
+	it("archiviste : dépose ses skills par défaut au premier lancement (un commit), ne réécrit jamais une skill modifiée, et les copie", async () => {
 		const dep = fauxPorts();
 		const fichiers = await assemblerPlugin(dep, session({ profil: 'archiviste' }), ARCHIVISTE, APPEL);
 		const noms = SKILLS_PAR_DEFAUT.archiviste!.map((s) => s.nom).sort();
@@ -158,6 +159,32 @@ describe('assemblerPlugin', () => {
 		// les skills du projet ne sont pas copiées pour l'archiviste
 		dep.fichiers.set('skills/revue/SKILL.md', 'Relis.\n');
 		expect((await assemblerPlugin(dep, session({ profil: 'archiviste' }), ARCHIVISTE, APPEL)).some((f) => f.chemin === 'skills/revue/SKILL.md')).toBe(false);
+	});
+
+	it('archiviste : une skill restée une version par défaut passée est remplacée par l\'actuelle (un commit) ; une skill modifiée reste', async () => {
+		const dep = fauxPorts();
+		const ancienne = (nom: string) => ANCIENNES_SKILLS.archiviste!.find((s) => s.nom === nom)!.texte;
+		dep.fichiers.set('profils/archiviste/skills/comptes-rendus/SKILL.md', ancienne('comptes-rendus'));
+		dep.fichiers.set('profils/archiviste/skills/menage/SKILL.md', ancienne('menage'));
+		dep.fichiers.set('profils/archiviste/skills/emails/SKILL.md', `${ancienne('emails')}6. Ma propre étape.\n`);
+		const fichiers = await assemblerPlugin(dep, session({ profil: 'archiviste' }), ARCHIVISTE, APPEL);
+		const actuelle = (nom: string) => SKILLS_PAR_DEFAUT.archiviste!.find((s) => s.nom === nom)!.texte;
+		expect(fichier(fichiers, 'skills/comptes-rendus/SKILL.md')).toBe(actuelle('comptes-rendus'));
+		expect(fichier(fichiers, 'skills/menage/SKILL.md')).toBe(actuelle('menage'));
+		expect(fichier(fichiers, 'skills/emails/SKILL.md')).toContain('Ma propre étape.');
+		expect(dep.commits).toEqual([
+			{
+				message: 'mnemo: skills par défaut profils/archiviste/skills',
+				chemins: ['specs', 'comptes-rendus', 'menage'].map((n) => `profils/archiviste/skills/${n}/SKILL.md`),
+			},
+		]);
+		await assemblerPlugin(dep, session({ profil: 'archiviste' }), ARCHIVISTE, APPEL);
+		expect(dep.commits).toHaveLength(1);
+	});
+
+	it('rappel : une skill par défaut modifiée doit rejoindre ANCIENNES_SKILLS', () => {
+		const message = 'skill par défaut modifiée : ajoutez l\'ancienne à ANCIENNES_SKILLS puis mettez à jour cette empreinte';
+		expect(empreinte(SKILLS_PAR_DEFAUT.archiviste!.map((s) => s.texte).join('\n')), message).toBe('c6c0eaef5f6ea8cc');
 	});
 
 	it('enabledPlugins : vrai pour les plugins du profil installés, faux pour tous les autres installés', async () => {

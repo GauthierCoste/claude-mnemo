@@ -14,10 +14,19 @@ import { CHEMIN_SCHEMA } from './regles-du-coffre.ts';
 import { motifTitre } from '../domaine/titre.ts';
 
 export type SourceProposee = { ref: string; type: TypeSource };
+/**
+ * Bilan d'une source marquée traitée (`traitee: true`) : les fiches qui la citent, son nombre de passages, et `riche` quand
+ * ce nombre laisse attendre plus d'une destination.
+ */
+export type BilanDeRepartition = { citeePar: string[]; passages: number; riche: boolean };
+
 export type Resultat =
-	/** `changements` (modification d'une fiche) : ce qui a changé, ou changerait une fois confirmé, en résumé court. */
-	| ({ statut: 'ecrit'; fiche: string; ancre?: string; aConfirmer: boolean; commit: string; changements?: string[] } & AvecAvertissements)
-	| { statut: 'doublon'; fiche: string; ancre?: string }
+	/**
+	 * `changements` (modification d'une fiche) : ce qui a changé, ou changerait une fois confirmé, en résumé court.
+	 * `repartition` : bilan d'une source marquée traitée.
+	 */
+	| ({ statut: 'ecrit'; fiche: string; ancre?: string; aConfirmer: boolean; commit: string; changements?: string[]; repartition?: BilanDeRepartition } & AvecAvertissements)
+	| { statut: 'doublon'; fiche: string; ancre?: string; repartition?: BilanDeRepartition }
 	| ({ statut: 'repetition'; fiche: string; repetitions: number; niveauPropose: Niveau | null; commit: string } & AvecAvertissements)
 	/** Rien n'est écrit : des éléments très proches (quasi-doublons) existent ; rappeler avec `apresProches` (ajout) ou, pour un fait, `remplace`. */
 	| { statut: 'proches'; genre: 'fait' | 'consigne'; proches: Trouve[] }

@@ -27,6 +27,7 @@ import { prochesDeConsigne, prochesDeFait } from './proposer/proches.ts';
 import { sousVerrou } from './commun.ts';
 import { masquerSecrets } from '../domaine/secrets.ts';
 import { reindexerApresEcriture } from './synchroniser.ts';
+import { bilanDeRepartition } from './repartition.ts';
 import type { Resultat, SourceProposee } from './commun.ts';
 
 export { chargerRegles };
@@ -135,8 +136,15 @@ export async function proposer(dep: Dependances, demandeBrute: Demande, reglages
 		}
 	});
 	// un dossier retiré peut avoir emporté sa fiche de dossier : l'index la perd aussi
-	if (resultat.statut === 'ecrit' || resultat.statut === 'repetition' || resultat.statut === 'retire') return { ...resultat, ...(await reindexerApresEcriture(dep)) };
-	return resultat;
+	const apres = resultat.statut === 'ecrit' || resultat.statut === 'repetition' || resultat.statut === 'retire' ? { ...resultat, ...(await reindexerApresEcriture(dep)) } : resultat;
+	return demande.genre === 'modification' && demande.traitee === true ? avecBilan(dep, apres) : apres;
+}
+
+/** Une source marquée traitée (écrite, ou déjà sans marqueur) : le résultat dit quelles fiches la citent. */
+async function avecBilan(dep: Dependances, resultat: Resultat): Promise<Resultat> {
+	if (resultat.statut !== 'ecrit' && resultat.statut !== 'doublon') return resultat;
+	const repartition = await bilanDeRepartition(dep, resultat.fiche);
+	return repartition === null ? resultat : { ...resultat, repartition };
 }
 
 /**
