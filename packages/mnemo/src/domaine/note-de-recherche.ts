@@ -24,7 +24,7 @@ export type NoteRecherche = { base: number; apports: ApportRecherche[]; total: n
 
 export type PoidsRecherche = { position: number; confiance: number; memoire: number; fraicheur: number };
 
-export const POIDS_RECHERCHE_PAR_DEFAUT: PoidsRecherche = { position: 0.1, confiance: 0.1, memoire: 0.05, fraicheur: 0.05 };
+export const POIDS_RECHERCHE_PAR_DEFAUT: PoidsRecherche = { position: 0.1, confiance: 0.05, memoire: 0.05, fraicheur: 0.05 };
 
 /** Ce que l'on sait d'un résultat, hors sa base. */
 export type Faits = {

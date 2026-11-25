@@ -149,7 +149,7 @@ falls back to its default with a warning, never a crash.
 | First search results whose links are followed (one hop), 0 to 20 (`recherche.graphe`) | 5 | immediately |
 | First candidates re-ranked by the reranker, 5 to 100 (`recherche.reranker`) | 40 | immediately |
 | Weight added to a search result in the neighbourhood of the current project, 0 to 0.5 (`recherche.poidsPosition`) | 0.1 | immediately |
-| Weight taken from a search result for what its confidence lacks, 0 to 0.5 (`recherche.poidsConfiance`) | 0.1 | immediately |
+| Weight taken from a search result for what its confidence lacks, 0 to 0.5 (`recherche.poidsConfiance`) | 0.05 | immediately |
 | Weight added to a search result that belongs to the memory rather than an imported source, 0 to 0.5 (`recherche.poidsMemoire`) | 0.05 | immediately |
 | Weight added to a recent search result, halved after a year, 0 to 0.5 (`recherche.poidsFraicheur`) | 0.05 | immediately |
 | Model shutdown after inactivity when the service is not running, 1 to 240 (`modeles.inactiviteMinutes`) | 15 minutes | next start of the models |

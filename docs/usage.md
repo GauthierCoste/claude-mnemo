@@ -171,7 +171,7 @@ cards (see "Injected context").
   matches, a fact that carries the precise words ranks above one that only shares the words of its note's title.
 - Four **weights** add to or subtract from it, each a setting from 0 to 0.5 (`recherche.poidsPosition`,
   `poidsConfiance`, `poidsMemoire`, `poidsFraicheur`; see [installation.md](installation.md#settings)): the result is
-  in the neighbourhood of the current project (+ 0.10), its confidence (− 0.10 × (1 − confidence)), it belongs to the
+  in the neighbourhood of the current project (+ 0.10), its confidence (− 0.05 × (1 − confidence)), it belongs to the
   memory rather than being an imported source (+ 0.05), its date (+ 0.05, halved after a year).
 - The **recall threshold** (`seuil_rappel`, 0.4) applies to the relevance of the match, never to the score: a weight
   moves a result up or down, it never lets one in.

@@ -155,10 +155,10 @@ describe('corpus du banc', () => {
 		for (const s of sources) expect(s.passages, s.fiche).toBeGreaterThan(0);
 	});
 
-	it('questions.yaml : une cinquantaine de questions (dont les cas de saturation et de doublons), au moins 15 paraphrases, des questions de graphe et de position, des attendus qui existent', async () => {
+	it('questions.yaml : une cinquantaine de questions (dont les cas de saturation, de doublons et de confiance), au moins 15 paraphrases, des questions de graphe et de position, des attendus qui existent', async () => {
 		const questions = lireQuestions(readFileSync(QUESTIONS_DU_BANC, 'utf8'));
 		expect(questions.length).toBeGreaterThanOrEqual(35);
-		expect(questions.length).toBeLessThanOrEqual(55);
+		expect(questions.length).toBeLessThanOrEqual(60);
 		const genre = (g: string) => questions.filter((q) => q.genre === g).length;
 		expect(genre('paraphrase')).toBeGreaterThanOrEqual(15);
 		expect(genre('mots')).toBeGreaterThanOrEqual(8);

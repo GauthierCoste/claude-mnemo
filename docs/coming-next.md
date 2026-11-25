@@ -1,13 +1,13 @@
 # Coming next
 
-> **Next work item: tune the weights of the search score on the bench with the real models.** The rest of the work item
-> decided on 24/11/2026 (fix the ranking of `chercher` at its root, deduplicate the memory, give the archivist the tools to
-> keep it clean) is built. The detailed design is kept outside git; the decisions and their reasons are in
-> [decisions.md](decisions.md) (« note unique de la recherche »).
+> **Next work item: open Mnemo to other coding agents.** Each agent profile chooses its engine (Claude Code, Codex…) and
+> its model; a session launched with that profile takes its engine. Codex comes first: memory over MCP, context and
+> reminders through its hooks, then sessions launched from the interface. The work item of 24/11/2026 (one search score,
+> deduplication, archivist tools) is built and its weights are tuned on the bench.
 
 ## Done
 
-- **One score for search**: `score = base + Σ weights` (position + 0.10, confidence − 0.10 × (1 − c), memory + 0.05,
+- **One score for search**: `score = base + Σ weights` (position + 0.10, confidence − 0.05 × (1 − c), memory + 0.05,
   freshness + 0.05 × 2^(−age/365); settings `recherche.poids…`, 0 to 0.5). The base spreads results (bm25 gap kept); the
   recall threshold (`seuil_rappel`, 0.4) applies to the relevance, so a weight never lets a result in. Each result shows
   its base and what sets it apart (current project, confidence, « récent » under a year); « servi » is shown as « actif ». See [usage.md](usage.md#how-a-result-is-ranked).
@@ -27,10 +27,12 @@
 
 ## Left to do
 
-- **Tune the four weights with the models.** The values above are starting values. The bench with models runs only on the
-  author's machine (the CI has no models, and parallel test suites froze the machine twice): run `mnemo banc` on main for a
-  reference, once after the work item, then sweep the weights, alone, with no other suite running. The 42 earlier questions
-  were last measured with the old score (30 of 42 present in the top 5 with the default chain).
+- **Keep the reranker's gap in the base.** Weights tuned on 25/11/2026 with the real models (confidence 0.10 → 0.05,
+  the others unchanged; default chain 45 of 56 in the top 5, MRR 0.718). No confidence weight passes both the
+  `saturation` case (a relevant fact at 51 % must beat sure facts off topic) and the `confiance` case (a sure fact must
+  beat an inferred one as relevant): the reranker sets the order of the top results, but their base keeps the nearly
+  equal relevances from before it, so a tiny confidence gap reverses them. Give the base the reranker's margin, then
+  sweep the confidence weight again.
 - **Clean the real memory** with the new tools (duplicate copies, broken links, unreadable names, struck-through facts):
   the tools are delivered, the cleanup is done afterwards by the archivist or a session, under the user's control.
 - **Show copies and reasons in the interface.** The search of the interface does not show the copies of an entry, its base

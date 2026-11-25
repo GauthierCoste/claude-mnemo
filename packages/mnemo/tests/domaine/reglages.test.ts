@@ -14,7 +14,7 @@ describe('réglages : valeurs par défaut', () => {
 			},
 			// les réglages de la mémoire sont les règles de SCHEMA.md, jamais dans ce fichier : groupe vide
 			memoire: {},
-			recherche: { resultats: 10, chronologie: 30, graphe: 5, reranker: 40, poidsPosition: 0.1, poidsConfiance: 0.1, poidsMemoire: 0.05, poidsFraicheur: 0.05 },
+			recherche: { resultats: 10, chronologie: 30, graphe: 5, reranker: 40, poidsPosition: 0.1, poidsConfiance: 0.05, poidsMemoire: 0.05, poidsFraicheur: 0.05 },
 			modeles: { inactiviteMinutes: 15 },
 			archiviste: { typesAConfirmer: [] },
 			service: { port: 4747, navigateur: 'auto' },
@@ -113,7 +113,7 @@ describe('réglages retirés du contexte', () => {
 
 describe('poids de la recherche', () => {
 	it('quatre poids décimaux de 0 à 0,5, aux défauts de la note unique, refusés au-delà des bornes', () => {
-		const attendus = { poidsPosition: 0.1, poidsConfiance: 0.1, poidsMemoire: 0.05, poidsFraicheur: 0.05 };
+		const attendus = { poidsPosition: 0.1, poidsConfiance: 0.05, poidsMemoire: 0.05, poidsFraicheur: 0.05 };
 		for (const [nom, defaut] of Object.entries(attendus)) {
 			const champ = CHAMPS_REGLAGES.find((c) => c.cle === `recherche.${nom}`)!;
 			expect(champ).toMatchObject({ groupe: 'recherche', genre: 'decimal', defaut, min: 0, max: 0.5, effet: 'immediat' });

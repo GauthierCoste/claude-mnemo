@@ -7,13 +7,13 @@ const sansFraicheur: PoidsRecherche = { ...POIDS_RECHERCHE_PAR_DEFAUT, fraicheur
 
 describe('noterRecherche', () => {
 	it('défauts : 0,10 position, 0,10 confiance, 0,05 mémoire, 0,05 fraîcheur', () => {
-		expect(POIDS_RECHERCHE_PAR_DEFAUT).toEqual({ position: 0.1, confiance: 0.1, memoire: 0.05, fraicheur: 0.05 });
+		expect(POIDS_RECHERCHE_PAR_DEFAUT).toEqual({ position: 0.1, confiance: 0.05, memoire: 0.05, fraicheur: 0.05 });
 	});
 
 	it('total = base + somme des apports', () => {
 		const n = noterRecherche(0.5, faits({ dansVoisinage: true, deLaMemoire: true, confiance: 0.5, date: '2026-11-24' }), POIDS_RECHERCHE_PAR_DEFAUT);
 		expect(n.apports.map((a) => a.poids)).toEqual(['position', 'confiance', 'memoire', 'fraicheur']);
-		expect(n.total).toBeCloseTo(0.5 + 0.1 - 0.05 + 0.05 + 0.05, 10);
+		expect(n.total).toBeCloseTo(0.5 + 0.1 - 0.025 + 0.05 + 0.05, 10);
 		expect(n.total).toBeCloseTo(n.apports.reduce((s, a) => s + a.valeur, n.base), 10);
 	});
 
@@ -23,11 +23,11 @@ describe('noterRecherche', () => {
 		expect(n.total).toBeCloseTo(0.45, 10);
 	});
 
-	it('confiance 0,51 : apport de −0,049', () => {
+	it('confiance 0,51 : apport de −0,0245', () => {
 		const n = noterRecherche(0.5, faits({ confiance: 0.51 }), sansFraicheur);
 		expect(n.apports).toHaveLength(1);
 		expect(n.apports[0]!.poids).toBe('confiance');
-		expect(n.apports[0]!.valeur).toBeCloseTo(-0.049, 10);
+		expect(n.apports[0]!.valeur).toBeCloseTo(-0.0245, 10);
 	});
 
 	it('un an : fraîcheur de 0,025 (la moitié du poids)', () => {

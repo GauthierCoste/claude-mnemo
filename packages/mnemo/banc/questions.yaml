@@ -209,6 +209,14 @@ recherche:
       - sources/claude-code/boutique/regle-pose.md
       - sources/claude-code/tournees/regle-pose.md
 
+  # --- Confiance : deux faits contradictoires aussi pertinents, le sûr (100 %) doit passer devant l'inféré (35 %) ---
+  - question: À quelle température la grisaille se cuit-elle ?
+    genre: confiance
+    attendus: [pratiques/cuisson-grisailles.md#^f-0002]
+  - question: Combien de degrés pour cuire la grisaille vingt minutes ?
+    genre: confiance
+    attendus: [pratiques/cuisson-grisailles.md#^f-0002]
+
 # --- Bancs de l'archiviste (corpus fictif banc/corpus-archiviste/, écrit pour le banc) ---
 #
 # Section `extraction` : documents de corpus-archiviste/extraction/documents/, copiés dans documents/ d'une mémoire neuve.

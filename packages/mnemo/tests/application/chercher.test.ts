@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { chercher, chronologie, voisins } from '../../src/application/chercher.ts';
 import { estEncadre } from '../../src/domaine/contexte.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
+import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 
 const entete = (type = 'sujet', extra = '') => `---\nid: 01ABC\ntype: ${type}\n${extra}updated: 2026-11-01\n---\n`;
 const ligne = (texte: string, ancre: string, extra = '', appris = '2026-11-20') =>
@@ -188,7 +189,7 @@ describe('chercher : note unique (base + poids)', () => {
 		for (const position of [undefined, 'projets/vitrail/vitrail.md']) {
 			const trouves = await chercher(dep, { texte, ...(position === undefined ? {} : { position }) });
 			expect(trouves[0]!.id, position).toBe('projets/vitrail/vitrail.md#^f-0004');
-			expect(trouves[0]!.apports.find((a) => a.poids === 'confiance')!.valeur).toBeCloseTo(-0.049, 10);
+			expect(trouves[0]!.apports.find((a) => a.poids === 'confiance')!.valeur).toBeCloseTo(-0.0245, 10);
 			// pas d'égalité en tête
 			expect(trouves[1]!.score).toBeLessThan(trouves[0]!.score);
 		}
@@ -216,7 +217,7 @@ describe('chercher : note unique (base + poids)', () => {
 		expect(t!.id).toBe('sources/n.md');
 		const confiance = t!.apports.find((a) => a.poids === 'confiance')!;
 		expect(confiance.confiance).toBe(0.6);
-		expect(confiance.valeur).toBeCloseTo(-0.04, 10);
+		expect(confiance.valeur).toBeCloseTo(-0.02, 10);
 		expect(t!.apports.map((a) => a.poids)).not.toContain('memoire');
 	});
 
@@ -272,6 +273,8 @@ describe('chercher : note unique (base + poids)', () => {
 describe('chercher : entrée dédoublonnée', () => {
 	it('deux faits identiques : la copie du voisinage est montrée, avec sa propre base et ses propres poids ; la place reste celle du groupe', async () => {
 		const dep = fauxPorts();
+		// poids de confiance fixé à 0,1 : la copie lointaine doit l'emporter malgré le poids du projet courant de la proche
+		dep.reglages = () => ({ ...REGLAGES_PAR_DEFAUT, recherche: { ...REGLAGES_PAR_DEFAUT.recherche, poidsConfiance: 0.1 } });
 		await dep.coffre.ecrire('projets/p/p.md', `${entete()}# P\n\n## Relations\n- concerne [[aaa/proche]]\n`);
 		// la copie lointaine est récente et sûre (mieux notée même sans le projet courant) ; la proche, ancienne et peu sûre
 		await dep.coffre.ecrire('zzz/loin.md', `${entete()}# Loin\n\n## Faits\n${ligne('Le vernis sèche en six heures', 'f-0001', '', '2026-11-20')}\n`);

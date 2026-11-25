@@ -134,6 +134,22 @@ describe('banc : doublons (cas B)', () => {
 	});
 });
 
+describe('banc : confiance (cas C)', () => {
+	it('deux faits contradictoires de même texte au nombre près : le déclaré à 100 % passe devant l\'inféré à 35 %', async () => {
+		const c = duGenre('confiance');
+		expect(c).toHaveLength(2);
+		const { dep } = await corpusIndexe();
+		for (const q of c) {
+			for (const [nom, variante] of VARIANTES) {
+				const trouves = await poserQuestion(dep, q, variante, SANS_MODELE);
+				const lecture = trouves.map((t) => `${t.id} ${t.score.toFixed(3)}`).join(' | ');
+				expect(trouves.length, `${nom} : ${q.question}`).toBeGreaterThan(0);
+				expect(q.attendus.some((a) => correspond(a, trouves[0]!)), `${nom}, ${q.question} : ${lecture}`).toBe(true);
+			}
+		}
+	});
+});
+
 describe('banc : mesures sur les cas A et B', () => {
 	it('doublons comptés sur les résultats bruts (le dédoublonnage les retire) ; aucune copie en trop ni égalité en tête', async () => {
 		const { dep } = await corpusIndexe();

@@ -76,7 +76,7 @@ describe('commande mnemo banc', () => {
 		for (const v of sortie.resultats) {
 			expect(Object.keys(v)).toEqual(CLES);
 			expect(v['total']).toBe(sortie.questions);
-			expect(Object.keys(v['parGenre'] as object)).toEqual(['contexte', 'doublons', 'flexion', 'graphe', 'long-texte', 'mots', 'paraphrase', 'saturation', 'texte-libre']);
+			expect(Object.keys(v['parGenre'] as object)).toEqual(['confiance', 'contexte', 'doublons', 'flexion', 'graphe', 'long-texte', 'mots', 'paraphrase', 'saturation', 'texte-libre']);
 		}
 		// aucun modèle dans les tests : les variantes à modèles le disent
 		expect(sortie.resultats[1]!['modelesAbsents']).toEqual(['sens']);
