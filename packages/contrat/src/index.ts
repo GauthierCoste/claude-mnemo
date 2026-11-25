@@ -313,8 +313,8 @@ export type MessageClient =
  *   session terminée) écarte cet élément des prochains calculs de la session ; DELETE `?id=` le rétablit (409 session
  *   terminée) ; les deux rendent `{ ecartes }` et diffusent `ecartes` (aussi diffusé vide quand la session se termine) ;
  * - `ecarteesToujours` GET → `ReponseEcarteesToujours` ; POST `{ chemin, session? }` (une fiche indexée : 404 sinon ; `session` :
- *   celle du geste, 404 inconnue, 409 terminée) écarte la fiche toujours : hors des candidates partout, geste `ecartee_toujours`
- *   noté dans la session ; DELETE `?chemin=` la rétablit (404 si elle ne l'était pas ; geste `retablie` noté dans la session
+ *   celle du geste, 404 inconnue ; une session terminée est acceptée : c'est un réglage de la fiche) écarte la fiche toujours :
+ *   hors des candidates partout, geste `ecartee_toujours` noté dans la session ; DELETE `?chemin=` la rétablit (404 si elle ne l'était pas ; geste `retablie` noté dans la session
  *   de l'écart) ; les deux rendent `ReponseEcarteesToujours` ;
  * - `aServir` GET → `ReponseAServir` ; POST `{ chemin }` (une fiche indexée : 404 sinon ; 409 session terminée) → `ReponseAServir` ; DELETE `?chemin=` → `ReponseAServir` : fiches injectées entières au prochain message de la session (message `aServir` diffusé) ;
  * - `fenetres` GET → `ReponseFenetres` : la fenêtre de contexte connue de chaque session (message `fenetre` à chaque changement) ;

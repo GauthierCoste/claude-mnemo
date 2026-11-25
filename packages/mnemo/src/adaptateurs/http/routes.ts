@@ -317,17 +317,28 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	const recherchesEnCours = new Map<string, AbortController>();
 	const vue = (s: Session) => vueSession(s, pilote.enCours(s.id), apriori.suggestions(s.id));
 	/**
-	 * Après un geste : l'a priori relit les gestes nouveaux (et les écartées toujours si `ecartees`), puis la vue de la session
-	 * (suggestions « écartée toujours ») est rediffusée si elle a changé. Une panne de lecture n'empêche pas le geste d'être fait.
+	 * Après un geste : l'a priori relit les gestes nouveaux (et les écartées toujours si `ecartees`), puis la vue de chaque
+	 * session dont les suggestions « écartée toujours » ont changé est rediffusée. Une panne de lecture n'empêche pas le geste
+	 * d'être fait.
 	 */
-	const apresGeste = async (s: Session | null, ecartees = false): Promise<void> => {
-		await apriori.actualiser({ ecartees }).catch((erreur: unknown) => ctx.journal(`a priori des gestes : relecture impossible (${messageDErreur(erreur)}).`));
-		if (s !== null) ctx.signaler(s);
+	const apresGeste = async (ecartees = false): Promise<void> => {
+		let changees: Set<string>;
+		try {
+			changees = await apriori.actualiser({ ecartees });
+		} catch (erreur) {
+			ctx.journal(`a priori des gestes : relecture impossible (${messageDErreur(erreur)}).`);
+			return;
+		}
+		for (const id of changees) {
+			const s = await pil.etat.lire(id).catch(() => null);
+			if (s !== null) ctx.signaler(s);
+		}
 	};
-	/** Les fiches écartées toujours, avec leur titre. */
+	/** Les fiches écartées toujours (pas celles rétablies), avec leur titre. */
 	const ecarteesToujours = async (): Promise<Reponse> => {
 		const titres = await titresDeLIndex();
-		return ok({ ecarteesToujours: (await pil.etat.ecarteesToujours()).map((e) => vueEcarteeToujours(e, titres)) } satisfies ReponseEcarteesToujours);
+		const actives = (await pil.etat.ecarteesToujours()).filter((e) => e.retablieMs === null);
+		return ok({ ecarteesToujours: actives.map((e) => vueEcarteeToujours(e, titres)) } satisfies ReponseEcarteesToujours);
 	};
 	const session = async (id: string): Promise<Session> => {
 		const s = estUuid(id) ? await pil.etat.lire(id) : null;
@@ -535,7 +546,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				if (resultat === 'ecarte') {
 					const vecteur = vecteurDuPorteur(porteurs.lire(s.id));
 					await noterGeste(dep, pil.etat, { geste: 'ecartee_ici', session: s.id, fiche: id!.split('#')[0]!, horodatageMs: Date.now(), vecteur, ...(porteur === undefined ? {} : { porteur }) });
-					await apresGeste(s);
+					await apresGeste();
 				}
 				return ecartesDiffuses(s.id);
 			},
@@ -551,7 +562,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				if (resultat === 'terminee') throw new ErreurHttp(409, 'Session terminée : plus rien à rétablir.');
 				if (resultat === 'retabli') {
 					await noterGeste(dep, pil.etat, { geste: 'retablie', session: s.id, fiche: id.split('#')[0]!, horodatageMs: Date.now(), vecteur: vecteurDuPorteur(porteurs.lire(s.id)) });
-					await apresGeste(s);
+					await apresGeste();
 				}
 				return ecartesDiffuses(s.id);
 			},
@@ -565,15 +576,15 @@ export function routes(ctx: ContexteRoutes): Route[] {
 			action: async (r) => {
 				const d = champs(await r.json(), { chemin: { requis: true, max: 4096 }, session: { requis: false, max: 100 } });
 				const chemin = d.chemin!;
+				// un réglage de la fiche, pas de la session : accepté aussi depuis une session terminée (le geste y est noté)
 				const s = d.session === undefined ? null : await session(d.session);
-				if (s !== null && s.etat === 'terminee') throw new ErreurHttp(409, 'Session terminée : le geste se fait depuis une session en cours, ou sans session.');
 				if (!(await dep.index.fiches()).some((f) => f.chemin === chemin)) throw new ErreurHttp(404, `Fiche inconnue : « ${chemin} ».`);
 				const horodatageMs = Date.now();
 				const resultat = await pil.etat.ecarterToujours({ fiche: chemin, session: s?.id ?? null, horodatageMs });
 				if (resultat === 'ecartee' && s !== null) {
 					await noterGeste(dep, pil.etat, { geste: 'ecartee_toujours', session: s.id, fiche: chemin, horodatageMs, vecteur: vecteurDuPorteur(porteurs.lire(s.id)) });
 				}
-				await apresGeste(s, true);
+				await apresGeste(true);
 				return ecarteesToujours();
 			},
 		},
@@ -583,12 +594,12 @@ export function routes(ctx: ContexteRoutes): Route[] {
 			action: async (r) => {
 				const chemin = r.params.get('chemin');
 				if (chemin === null || chemin === '') throw new ErreurHttp(400, 'Paramètre « chemin » : obligatoire.');
-				const retiree = await pil.etat.retablirToujours(chemin);
+				const retiree = await pil.etat.retablirToujours(chemin, Date.now());
 				if (retiree === null) throw new ErreurHttp(404, `Fiche non écartée toujours : « ${chemin} ».`);
 				// le rétablissement annule l'écart dans la session où il a été fait (son vote négatif ne compte plus)
 				const s = retiree.session === null ? null : await pil.etat.lire(retiree.session);
 				if (s !== null) await noterGeste(dep, pil.etat, { geste: 'retablie', session: s.id, fiche: chemin, horodatageMs: Date.now(), vecteur: vecteurDuPorteur(porteurs.lire(s.id)) });
-				await apresGeste(s, true);
+				await apresGeste(true);
 				return ecarteesToujours();
 			},
 		},
@@ -669,7 +680,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				if (entree.session !== '') {
 					const s = await pil.etat.lire(entree.session).catch(() => null);
 					// un message (injection à la main) ou une lecture après une carte a pu noter un geste : l'a priori le relit, hors du chemin du hook
-					if (entree.evenement === 'message' || entree.evenement === 'apres_outil') ctx.enFond(apresGeste(s));
+					if (entree.evenement === 'message' || entree.evenement === 'apres_outil') ctx.enFond(apresGeste());
 					if (s !== null) {
 						ctx.signaler(s);
 						// les fiches demandées partent au message (jamais après un outil) : l'interface voit tout de suite ➤ s'éteindre et ◆ paraître

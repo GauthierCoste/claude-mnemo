@@ -300,7 +300,7 @@ export async function demarrerService(options: {
 
 	const modeles = options.modeles ?? modelesLocaux(racine);
 	// a priori des gestes entre sessions : lu une fois en arrière-plan, puis seulement les gestes nouveaux
-	const apriori = aprioriDesGestes(pil.etat);
+	const apriori = aprioriDesGestes(pil.etat, { chemins: async () => (await dep.index.titres()).map((t) => t.chemin), journal });
 	enFond(apriori.actualiser({ ecartees: true }));
 	const hub = creerHub({
 		suggestions: (session) => apriori.suggestions(session),

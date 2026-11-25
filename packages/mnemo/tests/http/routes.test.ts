@@ -360,25 +360,32 @@ describe('routes : écartées toujours', () => {
 			['retablie', UUID],
 			['ecartee_toujours', UUID],
 		]);
-		expect(await c.etat.ecarteesToujours()).toEqual([]);
+		expect(await c.etat.ecarteesToujours()).toEqual([{ fiche: ALPHA, session: UUID, horodatageMs: expect.any(Number), retablieMs: expect.any(Number) }]);
+	});
+
+	it('depuis une session terminée : accepté (réglage de la fiche), geste noté dans la session', async () => {
+		const c = await serviceFaux();
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		await c.etat.creer(sessionFixe(UUID, { etat: 'terminee' }));
+		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: ALPHA, session: UUID })).statut).toBe(200);
+		expect((await c.etat.gestes({ limite: null })).map((g) => [g.geste, g.session])).toEqual([['ecartee_toujours', UUID]]);
 	});
 
 	it('sans session : écartée et rétablie, sans geste', async () => {
 		const c = await serviceFaux();
 		await synchroniser(c.dep, SANS_EXTRACTION);
 		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: ALPHA })).statut).toBe(200);
-		expect(await c.etat.ecarteesToujours()).toEqual([{ fiche: ALPHA, session: null, horodatageMs: expect.any(Number) }]);
+		expect(await c.etat.ecarteesToujours()).toEqual([{ fiche: ALPHA, session: null, horodatageMs: expect.any(Number), retablieMs: null }]);
 		expect((await api(c).supprimer(retablir(ALPHA))).statut).toBe(200);
 		expect(await c.etat.gestes({ limite: null })).toEqual([]);
 	});
 
-	it('refus : fiche inconnue (404), session inconnue (404) ou terminée (409), corps invalide (400), rétablir une fiche non écartée (404)', async () => {
+	it('refus : fiche inconnue (404), session inconnue (404), corps invalide (400), rétablir une fiche non écartée (404)', async () => {
 		const c = await serviceFaux();
 		await synchroniser(c.dep, SANS_EXTRACTION);
 		await c.etat.creer(sessionFixe(UUID, { etat: 'terminee' }));
 		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: 'inconnue.md' })).statut).toBe(404);
 		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: ALPHA, session: UUID2 })).statut).toBe(404);
-		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: ALPHA, session: UUID })).statut).toBe(409);
 		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: 3 })).statut).toBe(400);
 		expect((await api(c).post(ROUTES.ecarteesToujours, { chemin: ALPHA, pirate: 1 })).statut).toBe(400);
 		expect((await api(c).supprimer(retablir(ALPHA))).statut).toBe(404);
@@ -405,6 +412,10 @@ describe('routes : écartées toujours', () => {
 		expect(await c.etat.ecarteesToujours()).toEqual([]);
 		await api(c).post(ROUTES.ecarteesToujours, { chemin: ALPHA, session: UUID });
 		expect((await vueDe(UUID)).suggestionsEcarteeToujours).toBeUndefined();
+		// rétablie : les écarts d'avant le rétablissement ne la font pas suggérer de nouveau
+		expect((await api(c).supprimer(`${ROUTES.ecarteesToujours}?chemin=${encodeURIComponent(ALPHA)}`)).statut).toBe(200);
+		expect((await vueDe(UUID)).suggestionsEcarteeToujours).toBeUndefined();
+		expect((await vueDe(UUID2)).suggestionsEcarteeToujours).toBeUndefined();
 	});
 });
 

@@ -112,13 +112,15 @@ CREATE INDEX IF NOT EXISTS lots_decide ON lots (decide_ms);
 
 /**
  * Fiches écartées toujours (« Ne plus jamais suggérer ») : sorties des candidates partout jusqu'à leur rétablissement ;
- * `session` : celle du geste (null : fait hors session). Ajoutée avec le journal des gestes (version 13).
+ * `session` : celle du geste (null : fait hors session) ; `retablie_ms` : instant du dernier rétablissement (null : écartée),
+ * gardé pour que les écarts d'avant ne comptent plus. Ajoutée avec le journal des gestes (version 13).
  */
 const SCHEMA_ECARTEES_TOUJOURS = `
 CREATE TABLE IF NOT EXISTS ecartees_toujours (
 	fiche TEXT PRIMARY KEY,
 	session TEXT,
-	horodatage_ms INTEGER NOT NULL
+	horodatage_ms INTEGER NOT NULL,
+	retablie_ms INTEGER
 );
 `;
 
@@ -342,7 +344,8 @@ function ligneVersGeste(l: Ligne): GesteNote {
 }
 
 function ligneVersEcarteeToujours(l: Ligne): EcarteeToujours {
-	return { fiche: l.fiche as string, session: (l.session as string | null) ?? null, horodatageMs: Number(l.horodatage_ms) };
+	const retablie = l.retablie_ms as number | bigint | null;
+	return { fiche: l.fiche as string, session: (l.session as string | null) ?? null, horodatageMs: Number(l.horodatage_ms), retablieMs: retablie === null ? null : Number(retablie) };
 }
 
 /** Une transaction courte, prise en écriture d'emblée : les écritures concurrentes de plusieurs processus se suivent. */
@@ -428,10 +431,7 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesServis.includes('rang_message')) base.exec('ALTER TABLE servis ADD COLUMN rang_message INTEGER');
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
-			} else if (version === VERSION_ETAT) {
-				// une base passée en 13 par une version de développement d'avant les écartées toujours : la table s'ajoute
-				base.exec(SCHEMA_ECARTEES_TOUJOURS);
-			} else {
+			} else if (version !== VERSION_ETAT) {
 				throw new ErreurEtat(
 					`L'état des sessions (${chemin}) est en version de schéma ${version}, ce Mnemo lit la version ${VERSION_ETAT} : rien n'est effacé, mettre Mnemo à jour.`,
 				);
@@ -978,22 +978,28 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 
 		async ecarterToujours(e) {
 			return ecrire(() => {
-				const r = base.prepare('INSERT OR IGNORE INTO ecartees_toujours (fiche, session, horodatage_ms) VALUES (?, ?, ?)').run(e.fiche, e.session, e.horodatageMs);
+				// une fiche rétablie puis écartée à nouveau : la ligne repart (session et instant du nouvel écart)
+				const r = base
+					.prepare(
+						`INSERT INTO ecartees_toujours (fiche, session, horodatage_ms, retablie_ms) VALUES (?, ?, ?, NULL)
+						ON CONFLICT (fiche) DO UPDATE SET session = excluded.session, horodatage_ms = excluded.horodatage_ms, retablie_ms = NULL WHERE retablie_ms IS NOT NULL`,
+					)
+					.run(e.fiche, e.session, e.horodatageMs);
 				return Number(r.changes) > 0 ? 'ecartee' : 'deja_ecartee';
 			});
 		},
 
-		async retablirToujours(fiche) {
+		async retablirToujours(fiche, horodatageMs) {
 			return ecrire(() => {
-				const l = base.prepare('SELECT fiche, session, horodatage_ms FROM ecartees_toujours WHERE fiche = ?').get(fiche) as Ligne | undefined;
+				const l = base.prepare('SELECT * FROM ecartees_toujours WHERE fiche = ? AND retablie_ms IS NULL').get(fiche) as Ligne | undefined;
 				if (l === undefined) return null;
-				base.prepare('DELETE FROM ecartees_toujours WHERE fiche = ?').run(fiche);
-				return ligneVersEcarteeToujours(l);
+				base.prepare('UPDATE ecartees_toujours SET retablie_ms = ? WHERE fiche = ?').run(horodatageMs, fiche);
+				return { ...ligneVersEcarteeToujours(l), retablieMs: horodatageMs };
 			});
 		},
 
 		async ecarteesToujours() {
-			return reessayer(() => (base.prepare('SELECT fiche, session, horodatage_ms FROM ecartees_toujours ORDER BY horodatage_ms, fiche').all() as Ligne[]).map(ligneVersEcarteeToujours));
+			return reessayer(() => (base.prepare('SELECT * FROM ecartees_toujours ORDER BY horodatage_ms, fiche').all() as Ligne[]).map(ligneVersEcarteeToujours));
 		},
 
 		async derniereModificationMs() {

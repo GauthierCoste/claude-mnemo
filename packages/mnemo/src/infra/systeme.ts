@@ -147,7 +147,7 @@ export function etatParesseux(racineDossier: string): EtatSessions {
 		gestes: (filtre) => etat().gestes(filtre),
 		comptesGestes: () => etat().comptesGestes(),
 		ecarterToujours: (e) => etat().ecarterToujours(e),
-		retablirToujours: (fiche) => etat().retablirToujours(fiche),
+		retablirToujours: (fiche, horodatageMs) => etat().retablirToujours(fiche, horodatageMs),
 		ecarteesToujours: () => etat().ecarteesToujours(),
 		derniereModificationMs: () => etat().derniereModificationMs(),
 		noterRattachement: (dossier, rattache, vuMs) => etat().noterRattachement(dossier, rattache, vuMs),

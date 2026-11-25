@@ -781,26 +781,20 @@ describe('etat.sqlite', () => {
 		verif.close();
 	});
 
-	it('écartées toujours : une fois chacune, gardées, rétablies ; une base en 13 sans leur table la reçoit à l’ouverture', async () => {
-		const { etat, chemin } = await ouvrir();
+	it('écartées toujours : une fois chacune, rétablies (instant gardé), écartées à nouveau', async () => {
+		const { etat } = await ouvrir();
 		expect(await etat.ecarterToujours({ fiche: 'b.md', session: 's1', horodatageMs: 20 })).toBe('ecartee');
 		expect(await etat.ecarterToujours({ fiche: 'a.md', session: null, horodatageMs: 10 })).toBe('ecartee');
 		expect(await etat.ecarterToujours({ fiche: 'a.md', session: 's2', horodatageMs: 30 })).toBe('deja_ecartee');
 		expect(await etat.ecarteesToujours()).toEqual([
-			{ fiche: 'a.md', session: null, horodatageMs: 10 },
-			{ fiche: 'b.md', session: 's1', horodatageMs: 20 },
+			{ fiche: 'a.md', session: null, horodatageMs: 10, retablieMs: null },
+			{ fiche: 'b.md', session: 's1', horodatageMs: 20, retablieMs: null },
 		]);
-		expect(await etat.retablirToujours('b.md')).toEqual({ fiche: 'b.md', session: 's1', horodatageMs: 20 });
-		expect(await etat.retablirToujours('b.md')).toBeNull();
-		etat.fermer();
-		ouverts.pop();
-		const base = new DatabaseSync(chemin);
-		base.exec('DROP TABLE ecartees_toujours');
-		base.close();
-		const rouvert = ouvrirEtat(chemin);
-		ouverts.push(rouvert);
-		expect(await rouvert.ecarteesToujours()).toEqual([]);
-		expect(await rouvert.ecarterToujours({ fiche: 'a.md', session: null, horodatageMs: 40 })).toBe('ecartee');
+		expect(await etat.retablirToujours('b.md', 40)).toEqual({ fiche: 'b.md', session: 's1', horodatageMs: 20, retablieMs: 40 });
+		expect(await etat.retablirToujours('b.md', 50)).toBeNull();
+		expect((await etat.ecarteesToujours()).find((e) => e.fiche === 'b.md')).toEqual({ fiche: 'b.md', session: 's1', horodatageMs: 20, retablieMs: 40 });
+		expect(await etat.ecarterToujours({ fiche: 'b.md', session: 's3', horodatageMs: 60 })).toBe('ecartee');
+		expect((await etat.ecarteesToujours()).find((e) => e.fiche === 'b.md')).toEqual({ fiche: 'b.md', session: 's3', horodatageMs: 60, retablieMs: null });
 	});
 
 	it('gestes depuis un rang : ceux écrits ensuite seulement', async () => {
