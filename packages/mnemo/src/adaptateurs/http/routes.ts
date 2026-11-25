@@ -1,6 +1,6 @@
 import { ENTETE_REMPLACEMENT, ROUTES } from '@mnemo/contrat';
 import type { BilanAmorceVue, ReponseEcarteesToujours, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseArretModeles, ReponseNiveauModeles, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
-import { avertissementsDe, CARACTERES_INVISIBLES, CHEMINS_LOT_MAX, demandeTout, estNiveauModeles, NIVEAUX_MODELES, nomAffichable, OBJECTIF_MAX, PROFIL_TRAVAIL, SAUF_MAX } from '@mnemo/commun';
+import { avertissementsDe, CARACTERES_INVISIBLES, CHEMINS_LOT_MAX, demandeTout, estNiveauModeles, modelesPermis, NIVEAUX_MODELES, nomAffichable, OBJECTIF_MAX, PROFIL_TRAVAIL, SAUF_MAX } from '@mnemo/commun';
 import type { AvecAvertissements, NiveauModeles } from '@mnemo/commun';
 import { amorcer, marquerTraitees } from '../../application/amorcer.ts';
 import { journaliserAvertissements } from '../../application/commun.ts';
@@ -16,6 +16,8 @@ import { ecarterDuClassement } from '../../application/ecarter.ts';
 import { noterGeste } from '../../application/gestes.ts';
 import type { AprioriDesGestes } from '../../application/apriori.ts';
 import type { DureeDuReranker } from '../../application/duree-reranker.ts';
+import { affiner } from '../../application/affiner.ts';
+import type { DemandeAffinage } from '../../application/affiner.ts';
 import { traiterEvenement } from '../../application/evenements.ts';
 import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
@@ -709,6 +711,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				// le reranker compté et mesuré par le service ; les modèles de la session bornés par son niveau (relu à chaque appel)
 				const depMesure = avecRerankerMesure(dep);
 				const depDuHook = entree.session === '' ? depMesure : dependancesDeSession(depMesure, pil.etat, entree.session);
+				// le classement du message, à affiner après la réponse (noté par le hook, lancé après la diffusion de son entrée)
+				const aAffiner: { demande: DemandeAffinage | null } = { demande: null };
 				const reponse = await traiterEvenement(depDuHook, pil, entree, {
 					froid: 'permis',
 					...(echeance === undefined ? {} : { echeance }),
@@ -722,6 +726,9 @@ export function routes(ctx: ContexteRoutes): Route[] {
 					apriori,
 					...(ctx.dureeReranker === undefined ? {} : { dureeReranker: ctx.dureeReranker }),
 					rattachee: (id) => pilote.reecrirePlugin(id),
+					affiner: (d) => {
+						aAffiner.demande = d;
+					},
 				});
 				if (entree.session !== '' && transcription !== undefined && (entree.evenement === 'message' || entree.evenement === 'apres_outil' || entree.evenement === 'arret' || entree.evenement === 'debut')) {
 					// hors du chemin du hook : sa réponse n'attend pas la lecture
@@ -747,10 +754,19 @@ export function routes(ctx: ContexteRoutes): Route[] {
 						// un message porteur est journalisé même sans contexte rendu (son classement) : diffusé aussi (le WebSocket ne rediffuse pas une entrée déjà connue)
 						if (entree.evenement === 'message' || (reponse.contexte !== undefined && entree.evenement === 'debut')) {
 							// après la réponse : le hook n'attend ni la relecture du journal ni les titres de l'index
+							const demandeAffinage = aAffiner.demande;
 							ctx.enFond(
 								(async () => {
 									const [dernier] = await pil.etat.servis(s.id, 1);
 									if (dernier !== undefined) ctx.diffuser({ type: 'servi', entree: vueServie(dernier, await titresDeLIndex()) });
+									// puis l'affinage (spec § 3.6) : seulement si le reranker est en marche et permis à la session (niveau Complets)
+									if (demandeAffinage === null || !modelesPermis(s.niveauModeles ?? 'complets').reranker) return;
+									if ((await ctx.modeles.etat()).reranker !== 'pret') return;
+									await affiner(depDuHook, pil.etat, demandeAffinage, async () => {
+										// même horodatage : l'entrée du message, complétée
+										const [affinee] = await pil.etat.servis(s.id, 1);
+										if (affinee !== undefined && affinee.horodatageMs === demandeAffinage.horodatageMs) ctx.diffuser({ type: 'servi', entree: vueServie(affinee, await titresDeLIndex()) });
+									});
 								})().catch(() => {}),
 							);
 						}

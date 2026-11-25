@@ -13,6 +13,7 @@ import { ficheTouchee } from '../domaine/outil-de-session.ts';
 import { BUDGET_HOOK_MS } from './chercher.ts';
 import type { FichesDemandees } from './fiches-demandees.ts';
 import { cartesDuJournal, dejaLuesDe } from './cartes.ts';
+import type { DemandeAffinage } from './affiner.ts';
 import { classementDuJournal } from './classement-du-message.ts';
 import { servir } from './servir.ts';
 import type { DemandeServir, Servi } from './servir.ts';
@@ -97,6 +98,11 @@ export type ReglagesEvenement = {
 	varianteRequete?: VarianteDeRequete;
 	/** Le service : l'instant où il a reçu l'appel du hook ; le journal en tire `msService`, à côté de `ms` (depuis `debutMs`). */
 	appelMs?: number;
+	/**
+	 * Le service : l'affinage du classement d'un message porteur journalisé, à lancer après la réponse (`affiner`, spec § 3.6) ;
+	 * il mesure aussi le reranker (les appels de mesure à part ne sont alors pas faits). Sans lui : pas d'affinage.
+	 */
+	affiner?: (demande: DemandeAffinage) => void;
 };
 
 /** Budget de l'appel de mesure du reranker lancé après la réponse du hook. */
@@ -476,9 +482,22 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 	}
 	// le hook n'attend plus : les fiches demandées partiront au message suivant
 	if (session !== null && !injecte && demandees.length > 0) reglages.demandees?.remettre(session.id, demandees);
-	// pas d'estimation fiable de la durée du reranker : il est mesuré après la réponse, sans rien décider ni écrire
-	const aMesurer = servi.calcul.aMesurer;
-	if (aMesurer !== undefined && reglages.enFond !== undefined) reglages.enFond(mesurerLeReranker(dep, aMesurer));
+	// le classement journalisé est affiné après la réponse (le reranker y est aussi mesuré) ; sans affinage, pas d'estimation
+	// fiable de la durée du reranker : il est mesuré après la réponse, sans rien décider ni écrire
+	const journalise = session !== null && rang !== null && aTempsPourNoter;
+	if (journalise && reglages.affiner !== undefined) {
+		reglages.affiner({
+			session: session.id,
+			horodatageMs: entree.horodatageMs,
+			requete: demande.requete ?? demande.message,
+			classement: servi.calcul.classement,
+			sens: servi.calcul.mesure !== 'aucune',
+			mesurer: reglages.dureeReranker?.fiable() === false,
+		});
+	} else {
+		const aMesurer = servi.calcul.aMesurer;
+		if (aMesurer !== undefined && reglages.enFond !== undefined) reglages.enFond(mesurerLeReranker(dep, aMesurer));
+	}
 	return injecte ? { contexte: servi.texte } : {};
 }
 

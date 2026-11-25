@@ -8,6 +8,7 @@ import { fichesDemandees } from '../../src/application/fiches-demandees.ts';
 import { proposer } from '../../src/application/proposer.ts';
 import { porteursRecents } from '../../src/application/porteurs-recents.ts';
 import { aprioriDesGestes } from '../../src/application/apriori.ts';
+import type { DemandeAffinage } from '../../src/application/affiner.ts';
 import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
 import type { Reranker, Sens } from '../../src/application/ports.ts';
@@ -554,6 +555,25 @@ describe('traiterEvenement : contexte sobre au message', () => {
 		expect((await etat.servis(ID, 1))[0]!.classement.some((c) => c.signaux?.logit === 0.5)).toBe(true);
 		// estimation fiable : plus d'appel de mesure
 		expect(taches).toHaveLength(0);
+	});
+
+	it('service avec affinage : la demande d’affinage du message journalisé (requête, classement, à mesurer) ; pas d’appel de mesure à part', async () => {
+		const { dep, pil } = await memoire();
+		const appels: number[] = [];
+		const duree = dureeDuReranker();
+		dep.reranker = duree.envelopper({ noter: async (_r, textes) => (appels.push(textes.length), textes.map(() => 0.5)) });
+		const taches: Promise<unknown>[] = [];
+		const demandes: DemandeAffinage[] = [];
+		const service = { ...local, dureeReranker: duree, enFond: (t: Promise<unknown>) => void taches.push(t), affiner: (d: DemandeAffinage) => void demandes.push(d) };
+		await traiterEvenement(dep, pil, message(10, 'catalogue références'), service);
+		await Promise.all(taches);
+		expect(appels).toEqual([]);
+		expect(demandes).toHaveLength(1);
+		expect(demandes[0]).toMatchObject({ session: ID, horodatageMs: 10, requete: 'catalogue références', mesurer: true });
+		expect(demandes[0]!.classement.length).toBeGreaterThan(0);
+		// un message muet n'est pas journalisé : rien à affiner
+		await traiterEvenement(dep, pil, message(11, 'ok merci'), service);
+		expect(demandes).toHaveLength(1);
 	});
 
 	it('reranker coupé par son échéance, puis base lente : la fiche de position et la fiche demandée partent quand même', async () => {

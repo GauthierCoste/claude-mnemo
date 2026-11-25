@@ -430,6 +430,46 @@ describe('routes : hook', () => {
 		expect(s).toMatchObject({ etat: 'travaille', objectif: 'Où en est Alpha ?' });
 	});
 
+	it('POST hook message : le classement est affiné après la réponse (reranker en marche) ; jamais pour apres_outil, ni reranker arrêté', async () => {
+		const c = await serviceFaux();
+		for (const nom of ['tarifs', 'remises', 'devis']) {
+			await c.dep.coffre.ecrire(`projets/alpha/${nom}.md`, `---\nid: 01${nom.toUpperCase()}\ntype: note\nupdated: 2026-11-01\n---\n# Catalogue ${nom}\n\nLes ${nom} du catalogue Alpha.\n`);
+		}
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		await c.etat.creer(sessionFixe(UUID, { objectif: null }));
+		const appels: { textes: number; operation: string | undefined; demarrer: boolean }[] = [];
+		let liberer = (): void => {};
+		const bloque = new Promise<void>((r) => (liberer = r));
+		c.dep.reranker = {
+			noter: async (_requete, textes, o) => {
+				appels.push({ textes: textes.length, operation: o.activite?.operation, demarrer: o.demarrer });
+				await bloque;
+				return textes.map((_t, i) => (i === textes.length - 1 ? 5 : -1));
+			},
+		};
+		const entree = { session: UUID, cwd: join(c.racine, 'alpha') };
+		// reranker arrêté : pas d'affinage
+		await api(c).post(ROUTES.hook, { ...entree, evenement: 'message', horodatageMs: Date.now(), prompt: 'Où en est le catalogue Alpha ?' });
+		await new Promise((r) => setTimeout(r, 100));
+		expect((await c.etat.servis(UUID, 1))[0]!.affinage).toBeUndefined();
+		c.modeles.vue = { ...c.modeles.vue, reranker: 'pret' };
+		const h = Date.now();
+		// la réponse part pendant que le reranker de l'affinage attend
+		expect((await api(c).post(ROUTES.hook, { ...entree, evenement: 'message', horodatageMs: h, prompt: 'Où en est le catalogue Alpha ?' })).statut).toBe(200);
+		expect(await jusqua(async () => (await c.etat.servis(UUID, 1))[0]!.affinage === 'en_cours', 2000)).toBe(true);
+		const avant = appels.length;
+		expect(appels.at(-1)).toMatchObject({ operation: 'injection', demarrer: false });
+		liberer();
+		expect(await jusqua(async () => (await c.etat.servis(UUID, 1))[0]!.affinage === 'fait', 2000)).toBe(true);
+		const [affinee] = await c.etat.servis(UUID, 1);
+		expect(affinee!.horodatageMs).toBe(h);
+		expect(affinee!.classement[0]!.signaux).toMatchObject({ logit: 5 });
+		// après un outil : rien d'affiné
+		await api(c).post(ROUTES.hook, { ...entree, evenement: 'apres_outil', horodatageMs: Date.now(), outil: { nom: 'Read', entree: {} } });
+		await new Promise((r) => setTimeout(r, 100));
+		expect(appels.length).toBe(avant);
+	});
+
 	it('POST hook message : la durée du hook au journal, depuis le démarrage de son processus (l’horodatage) ; un horodatage trop ancien : depuis l’appel ; `msService` depuis l’appel', async () => {
 		const c = await serviceFaux();
 		await c.etat.creer(sessionFixe(UUID, { objectif: null }));

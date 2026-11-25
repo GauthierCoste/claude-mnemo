@@ -4,6 +4,7 @@ import { WebSocket } from 'ws';
 import { CODE_FERMETURE_LENT, ENTREE_MAX_OCTETS, MESSAGE_CLIENT_MAX_OCTETS, ROUTES } from '@mnemo/contrat';
 import type { MessageClient, MessageServeur, SessionVue } from '@mnemo/contrat';
 import type { Session } from '../../src/domaine/session.ts';
+import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import { signalerGroupe } from '../../src/infra/processus.ts';
 import { terminauxPty } from '../../src/infra/terminaux-pty.ts';
 import { appeler, jusqua, serviceFaux } from '../aides/service-faux.ts';
@@ -183,6 +184,25 @@ describe('WebSocket : messages', () => {
 		expect(await jusqua(() => client.recus.filter((m) => m.type === 'servi').length === 2, 3000)).toBe(true);
 		await new Promise((r) => setTimeout(r, 600));
 		expect(client.recus.filter((m) => m.type === 'servi')).toHaveLength(2);
+	});
+
+	it('affinage : l’entrée du message rediffusée, complétée, avec le même horodatage', { timeout: 20_000 }, async () => {
+		const c = await serviceFaux({}, { avant: async (etat) => etat.creer(sessionFixe(UUID)) });
+		await c.dep.coffre.ecrire('projets/alpha/tarifs.md', `---\nid: 01TARIFS\ntype: note\nupdated: 2026-11-01\n---\n# Tarifs\n\nLes tarifs du catalogue Alpha.\n`);
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		c.modeles.vue = { ...c.modeles.vue, reranker: 'pret' };
+		c.dep.reranker = { noter: async (_r, textes) => textes.map(() => 3) };
+		const client = await connecter(c);
+		await jusqua(() => client.recus.length > 0, 2000);
+		const h = Date.now();
+		await appeler(c.service.port, 'POST', ROUTES.hook, { jeton: c.service.jeton, corps: { evenement: 'message', prompt: 'Les tarifs du catalogue Alpha ?', session: UUID, horodatageMs: h, cwd: join(c.racine, 'alpha') } });
+		const servis = () => client.recus.flatMap((m) => (m.type === 'servi' ? [m.entree] : []));
+		expect(await jusqua(() => servis().some((e) => e.affinage === 'fait'), 3000)).toBe(true);
+		// le sondage peut aussi avoir vu l'état en cours entre les deux : toutes de la même entrée, la complétée en dernier
+		await new Promise((r) => setTimeout(r, 300));
+		expect(servis().map((e) => e.horodatageMs)).toEqual(servis().map(() => h));
+		expect(servis()[0]!.affinage).not.toBe('fait');
+		expect(servis().at(-1)).toMatchObject({ horodatageMs: h, affinage: 'fait' });
 	});
 
 	it('sondage : une carte journalisée hors service porte le titre de l\'index (pas le nom du fichier)', { timeout: 20_000 }, async () => {
