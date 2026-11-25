@@ -11,7 +11,9 @@ import { MODELES_INTEGRES_MISTRAL_VIBE } from '../../src/domaine/moteurs/mistral
 import { executeurReel } from '../../src/infra/executeur.ts';
 import { MOTEUR_MISTRAL_VIBE } from '../../src/infra/moteurs/mistral-vibe.ts';
 import { DECLARATION_MCP_MISTRAL_VIBE } from '../../src/infra/moteurs/mistral-vibe/declaration-mcp.ts';
-import { HOOKS_DU_POSTE_MISTRAL_VIBE } from '../../src/infra/moteurs/mistral-vibe/hooks-toml.ts';
+import { hooksDuPosteMistralVibe } from '../../src/infra/moteurs/mistral-vibe/hooks-toml.ts';
+
+const HOOKS_DU_POSTE_MISTRAL_VIBE = hooksDuPosteMistralVibe(process.platform);
 import { modelesMistralVibe } from '../../src/infra/moteurs/mistral-vibe/modeles.ts';
 import { lectureTranscriptionMistralVibe } from '../../src/infra/moteurs/mistral-vibe/transcription.ts';
 import { trouverVibe } from '../../src/infra/moteurs/mistral-vibe/trouver-vibe.ts';
@@ -86,6 +88,12 @@ describe('déclaration MCP dans config.toml de Mistral Vibe', () => {
 		const refus = await DECLARATION_MCP_MISTRAL_VIBE.remplacer(appelDeclaration(home));
 		expect(refus).toEqual({ echec: expect.stringMatching(/réglages personnels \(env\).*command = '.*' et args = /u) });
 
+		// retirer celle de ce Mnemo qui porte des réglages personnels : refus motivé, fichier intact
+		const avecEnv = `${blocDeDeclaration(NODE, MAIN)}\n[mcp_servers.env]\nA = "1"\n`;
+		await writeFile(join(home, 'config.toml'), avecEnv);
+		expect(await DECLARATION_MCP_MISTRAL_VIBE.retirer(appelDeclaration(home))).toEqual({ echec: expect.stringMatching(/réglages personnels \(env\) : Mnemo ne la retire pas ; retirez-la à la main/u) });
+		expect(await readFile(join(home, 'config.toml'), 'utf8')).toBe(avecEnv);
+
 		await writeFile(join(home, 'config.toml'), `${blocDeDeclaration(NODE, MAIN)}disabled = true\n`);
 		expect(await DECLARATION_MCP_MISTRAL_VIBE.lire(appelDeclaration(home))).toBe('desactive');
 		expect(await DECLARATION_MCP_MISTRAL_VIBE.declarer(appelDeclaration(home))).toBe('desactive');
@@ -126,6 +134,21 @@ describe('hooks de Mnemo dans hooks.toml de Mistral Vibe', () => {
 		expect(await readFile(join(home, 'hooks.toml'), 'utf8')).toBe(miens);
 		expect(await HOOKS_DU_POSTE_MISTRAL_VIBE.retirer(appelHooks(home))).toBe('absent');
 		expect(await HOOKS_DU_POSTE_MISTRAL_VIBE.remplacer(appelHooks(home))).toBe('absent');
+	});
+
+	it('plateforme donnée (Windows : commandes cmd) ; fichier en CRLF : blocs en CRLF, retirés sans trace', async () => {
+		const home = await dossierTemporaire();
+		const miens = '[[hooks]]\r\nname = "a-moi"\r\ntype = "session_start"\r\ncommand = "true"\r\n';
+		await writeFile(join(home, 'hooks.toml'), miens);
+		const windows = hooksDuPosteMistralVibe('win32');
+		expect(await windows.installer(appelHooks(home))).toBe('installe');
+		const texte = await readFile(join(home, 'hooks.toml'), 'utf8');
+		expect(texte).toContain('%MNEMO_MOTEUR%');
+		expect(texte.replace(/\r\n/gu, '')).not.toContain('\n');
+		expect(await windows.lire(appelHooks(home))).toMatchObject({ etat: 'a_jour' });
+		expect(await HOOKS_DU_POSTE_MISTRAL_VIBE.lire(appelHooks(home))).toMatchObject({ etat: process.platform === 'win32' ? 'a_jour' : 'perime' });
+		expect(await windows.retirer(appelHooks(home))).toBe('retire');
+		expect(await readFile(join(home, 'hooks.toml'), 'utf8')).toBe(miens);
 	});
 
 	it('hooks.toml illisible : échec à chaque action, fichier intact', async () => {
@@ -227,7 +250,7 @@ describe('Mistral Vibe : modèles, version, registres', () => {
 	it('registres : le même moteur pour les sessions et le poste ; marque de session dans --agent ; sans commande : refus', () => {
 		expect(MOTEURS.find((m) => m.id === 'mistral-vibe')).toBe(MOTEURS_DU_POSTE['mistral-vibe']);
 		expect(MOTEUR_MISTRAL_VIBE.declarationMcp).toBe(DECLARATION_MCP_MISTRAL_VIBE);
-		expect(MOTEUR_MISTRAL_VIBE.hooksDuPoste).toBe(HOOKS_DU_POSTE_MISTRAL_VIBE);
+		expect(MOTEUR_MISTRAL_VIBE.hooksDuPoste?.chemin({ VIBE_HOME: '/h' })).toBe(join('/h', 'hooks.toml'));
 		expect(MOTEUR_MISTRAL_VIBE.sansCommande).toBe('refus');
 		expect(MOTEUR_MISTRAL_VIBE.marqueDeSession('0f1e2d3c-4b5a-4968-8776-655443322110')).toBe('mnemo-0f1e2d3c-4b5a-4968-8776-655443322110');
 	});

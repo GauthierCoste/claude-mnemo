@@ -10,7 +10,8 @@ import { DECLARATION_MCP_CODEX } from '../../src/infra/moteurs/codex/declaration
 import { trouverCodex } from '../../src/infra/moteurs/codex/trouver-codex.ts';
 import { DELAI_MODELES_MS, modelesCodex } from '../../src/infra/moteurs/codex/modeles.ts';
 import { reglagesMcpCodex } from '../../src/infra/moteurs/codex/reglages-mcp.ts';
-import { DELAI_VERSION_MS, versionCodex } from '../../src/infra/moteurs/codex/version.ts';
+import { versionCodex } from '../../src/infra/moteurs/codex/version.ts';
+import { DELAI_VERSION_MS } from '../../src/infra/moteurs/version-par-commande.ts';
 import { executeurReel } from '../../src/infra/executeur.ts';
 import { MOTEURS, MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';

@@ -6,6 +6,7 @@ import { telemetrieDeCodex } from '../../../domaine/moteurs/codex/telemetrie.ts'
 import { cheminReelPermis, racinesReelles } from '../../chemin-permis.ts';
 import { lignesDeLaFin } from '../../fin-de-fichier.ts';
 import { dossierCodex } from './dossier-codex.ts';
+import { RE_FIL_SUR } from '../../../domaine/moteurs/fil.ts';
 
 /**
  * Lecture de la transcription Codex d'une session (rollout `sessions/AAAA/MM/JJ/rollout-<date>-<fil>.jsonl`) pour la jauge de
@@ -16,8 +17,6 @@ import { dossierCodex } from './dossier-codex.ts';
 export const OCTETS_LUS_CODEX = 512 * 1024;
 /** Jours parcourus, du lendemain (fuseau) en remontant, pour retrouver une transcription par son `fil`. */
 export const JOURS_CHERCHES = 7;
-/** Un `fil` de Codex (uuid) : rien qui puisse sortir d'un nom de fichier. */
-const FIL = /^[A-Za-z0-9-]{1,200}$/u;
 
 export type ReglagesTranscriptionCodex = {
 	/** Environnement du service, relu à chaque lecture (`CODEX_HOME`). */
@@ -48,7 +47,7 @@ export function lectureTranscriptionCodex(r: ReglagesTranscriptionCodex = {}): L
 
 	/** La transcription du `fil`, la plus récente des jours parcourus ; null si introuvable. */
 	async function parFil(fil: string, permises: readonly string[]): Promise<string | null> {
-		if (!FIL.test(fil)) return null;
+		if (!RE_FIL_SUR.test(fil)) return null;
 		const fin = `-${fil}.jsonl`;
 		for (let jour = -1; jour < JOURS_CHERCHES; jour += 1) {
 			const date = new Date(maintenant() - jour * 86_400_000);

@@ -73,7 +73,10 @@ async function remplacer(a: AppelDeclaration): Promise<ResultatRedeclaration> {
 	return echec ?? 'remplace';
 }
 
-/** Retire la déclaration seulement si elle lance ce Node et ce `main.ts` ; le reste de `config.toml` tel quel. */
+/**
+ * Retire la déclaration seulement si elle lance ce Node et ce `main.ts` et ne porte que ce que Mnemo écrit (des réglages
+ * personnels : un échec qui dit quoi faire, rien n'est perdu) ; le reste de `config.toml` tel quel.
+ */
 async function retirer(a: AppelDeclaration): Promise<ResultatRetraitMcp> {
 	if (a.commande === null) return { echec: INTROUVABLE };
 	const e = await lireDeclaration(a.env);
@@ -81,6 +84,9 @@ async function retirer(a: AppelDeclaration): Promise<ResultatRetraitMcp> {
 	const d = e.declaration;
 	if (d === null) return 'absent';
 	if (!deCeMnemo(d, nodeDurable(a.plateforme as NodeJS.Platform), a.main)) return 'autre';
+	if (d.reglages.length > 0) {
+		return { echec: `la déclaration MCP « mnemo » de Mistral Vibe porte des réglages personnels (${d.reglages.join(', ')}) : Mnemo ne la retire pas ; retirez-la à la main de ${e.chemin} (bloc [[mcp_servers]] name = "mnemo" et ses sous-tables).` };
+	}
 	const echec = await ecrireConfiguration(e.chemin, e.lu, texteSansDeclaration(e.lu.texte!, d.plages));
 	return echec ?? 'retire';
 }

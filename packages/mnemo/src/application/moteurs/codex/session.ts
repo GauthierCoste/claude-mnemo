@@ -39,15 +39,10 @@ export const longueurSurLaLigne = (args: readonly string[]): number => args.redu
 /** Fichier de session qui garde la consigne passée à Codex (`developer_instructions`), pour qu'on puisse la relire. */
 const CONSIGNE = 'consigne.md';
 
-/**
- * Consigne d'une session Codex (`developer_instructions`) : celle du profil, puis la liste des skills de la session
- * (`consigneAvecSkills`) ; Codex ne lit de skills que dans le dépôt et chez l'utilisateur.
- */
-export const consigneCodex = consigneAvecSkills;
 
 /** Fichiers de session de Codex : sa consigne seulement (avec la liste des skills), relue par `preparerCodex`. */
 export async function fichiersDeSessionCodex(dep: Dependances, session: Session, profil: Profil, _appel: AppelPlugin): Promise<FichierPlugin[]> {
-	return [{ chemin: CONSIGNE, texte: consigneCodex(profil, await skillsDeSession(dep, session, profil)) }];
+	return [{ chemin: CONSIGNE, texte: consigneAvecSkills(profil, await skillsDeSession(dep, session, profil)) }];
 }
 
 /** Pourquoi la session Codex ne peut pas être reprise : son `fil` (identifiant chez Codex) n'est pas connu ; null sinon. */

@@ -7,6 +7,7 @@ import { fenetreDansEtatDuMoteur, fenetreMistralVibe, generationCourante, tokens
 import { cheminReelPermis, racinesReelles } from '../../chemin-permis.ts';
 import { lignesDeLaFin } from '../../fin-de-fichier.ts';
 import { dossierVibe } from './dossier-vibe.ts';
+import { RE_FIL_SUR } from '../../../domaine/moteurs/fil.ts';
 
 /**
  * Lecture du dossier de session de Mistral Vibe (`logs/session/unified/<id>/`) pour la jauge de la fenêtre de contexte : la fin
@@ -18,8 +19,6 @@ import { dossierVibe } from './dossier-vibe.ts';
 export const OCTETS_LUS_MISTRAL_VIBE = 512 * 1024;
 /** Un fichier d'état (`CURRENT`, `projection-state.json`, `runtime-state.json`) : quelques Kio ; au-delà, il n'est pas lu. */
 const ETAT_MAX_OCTETS = 4 * 1024 * 1024;
-/** Un `fil` de Vibe (forme d'uuid) : rien qui puisse sortir d'un nom de dossier. */
-const FIL = /^[A-Za-z0-9-]{1,200}$/u;
 
 export type ReglagesTranscriptionMistralVibe = {
 	/** Environnement du service, relu à chaque lecture (`VIBE_HOME`). */
@@ -78,7 +77,7 @@ export function lectureTranscriptionMistralVibe(r: ReglagesTranscriptionMistralV
 		async lire({ chemin, fil }) {
 			const permises = await racinesReelles([sessions(dossierVibe(env())), sessions(join(accueil, '.vibe'))]);
 			if (permises.length === 0) return null;
-			const candidats = [...(chemin === undefined ? [] : [chemin]), ...(fil !== undefined && FIL.test(fil) ? permises.map((p) => join(p, fil)) : [])];
+			const candidats = [...(chemin === undefined ? [] : [chemin]), ...(fil !== undefined && RE_FIL_SUR.test(fil) ? permises.map((p) => join(p, fil)) : [])];
 			for (const candidat of candidats) {
 				const reel = await cheminReelPermis(candidat, permises);
 				const lu = reel === null ? null : await fenetreDuDossier(reel, octetsLus);

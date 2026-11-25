@@ -1063,7 +1063,7 @@ export type HooksDuMoteur = {
 	lireArguments(args: string[]): { evenement: EvenementHook; options: Set<string> } | null;
 	/**
 	 * Vrai : le hook ne fait rien dans cet environnement — entrée lue puis écartée, sortie vide, code 0, aucun appel au
-	 * service, aucun effet (Codex : hooks installés pour tout le poste, hors d'une session Mnemo).
+	 * service, aucun effet (Codex, Mistral Vibe : hooks installés pour tout le poste, hors d'une session Mnemo).
 	 */
 	inerte(env: Record<string, string | undefined>): boolean;
 	/** Entrée traduite (et le chemin de la transcription, hors de l'entrée) ; null si elle est à ignorer. */
@@ -1160,7 +1160,7 @@ export type Moteur = MoteurDuPoste & {
 	 * `[mcp_servers.mnemo]` dans `config.toml`, lu seulement) ; absent : le moteur n'en garde pas qui comptent pour une session.
 	 */
 	reglagesMcp?(env: Record<string, string | undefined>): Promise<string[]>;
-	/** Pourquoi la session ne peut pas être reprise par ce moteur (Codex : son `fil` encore inconnu) ; null : elle le peut. */
+	/** Pourquoi la session ne peut pas être reprise par ce moteur (Codex, Mistral Vibe : son `fil` encore inconnu) ; null : elle le peut. */
 	motifSansReprise(session: Session): string | null;
 	fichiersDeSession(dep: Dependances, session: Session, profil: Profil, appel: AppelPlugin): Promise<FichierPlugin[]>;
 	/** Lève si la session ne peut pas être lancée ainsi (identifiant, modèle ou `fil` refusés). */

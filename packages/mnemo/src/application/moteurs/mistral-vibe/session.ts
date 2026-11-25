@@ -1,11 +1,11 @@
 import { estModele } from '@mnemo/commun';
-import { motifSansFil } from '../../../domaine/moteurs/fil.ts';
+import { motifSansFil, RE_FIL_SUR } from '../../../domaine/moteurs/fil.ts';
 import { OUTILS_MNEMO_PERMIS } from '../../../domaine/moteurs/outils-permis.ts';
 import { valeurToml } from '../../../domaine/moteurs/toml.ts';
 import type { Profil } from '../../../domaine/profil.ts';
 import { estUuid } from '../../../domaine/session.ts';
 import type { Session } from '../../../domaine/session.ts';
-import { estObjet } from '../../../domaine/valeurs.ts';
+import { definies, estObjet } from '../../../domaine/valeurs.ts';
 import type { AppelPlugin, ContextePreparation, Dependances, FichierPlugin, Lancement } from '../../ports.ts';
 import { consigneAvecSkills } from '../consigne-avec-skills.ts';
 import { environnementAvec, VARIABLES_DU_SERVEUR_MCP, variablesDeSession } from '../environnement-de-session.ts';
@@ -46,7 +46,8 @@ export type AppelArgumentsMistralVibe = { session: Session; profil: Pick<Profil,
 /**
  * Arguments de `vibe` (interface interactive) : l'agent de la session (`--agent mnemo-<uuid>` : la consigne, et la marque),
  * le modèle (`--model`, nouvelle session seulement, comme Vibe l'exige), la racine du dossier Mnemo (`--add-dir`, `lancement:
- * memoire`), et le premier message après `--` (jamais lu comme une option ni une sous-commande). Reprise : `--resume <fil>`.
+ * memoire`), et le premier message après `--` (jamais lu comme une option ni une sous-commande). Reprise : `--resume=<fil>`,
+ * le `fil` vérifié (`RE_FIL_SUR`).
  */
 export function argumentsMistralVibe(a: AppelArgumentsMistralVibe): string[] {
 	const { session } = a;
@@ -55,7 +56,9 @@ export function argumentsMistralVibe(a: AppelArgumentsMistralVibe): string[] {
 	if (!estModele(modele)) throw new Error(`Modèle de session refusé : « ${modele} ».`);
 	const motif = a.mode === 'reprise' ? motifSansRepriseMistralVibe(session) : null;
 	if (motif !== null) throw new Error(`Reprise impossible : ${motif}.`);
-	const args = a.mode === 'reprise' ? ['--resume', session.fil!] : [];
+	if (a.mode === 'reprise' && !RE_FIL_SUR.test(session.fil!)) throw new Error(`Identifiant de session Mistral Vibe refusé : « ${session.fil} ».`);
+	// `--resume=<fil>` : la valeur collée à l'option n'est jamais lue comme une autre option (mesuré, Vibe 3.1.5)
+	const args = a.mode === 'reprise' ? [`--resume=${session.fil!}`] : [];
 	args.push('--agent', agentDeSession(session.id));
 	if (a.mode === 'nouvelle' && modele !== '') args.push('--model', modele);
 	if (a.profil.lancement === 'memoire') args.push('--add-dir', a.racine);
@@ -76,14 +79,14 @@ function json(texte: string | undefined): unknown {
 /**
  * Variables de Vibe pour la session (une couche de sa configuration, au-dessus de celle de l'utilisateur ; lu et mesuré),
  * ajoutées à celles que l'utilisateur pose déjà :
- * - `VIBE_MCP_SERVERS` : le serveur `mnemo` de ce Node et ce `main.ts`, avec les variables de la session dans son `env` (Vibe
+ * - `VIBE_MCP_SERVERS` : le serveur `mnemo` de ce Node et ce `main.ts`, avec les variables de la session (`deSession`, de
+ *   `variablesDeSession`) que lit le serveur MCP dans son `env` (Vibe
  *   ne transmet à un serveur MCP que quelques variables), à la place d'un serveur `mnemo` déclaré (fusion par `name`) ;
  * - `VIBE_TOOLS` : les outils de Mnemo permis d'avance (`mnemo_<outil>`, permission `always`) ;
  * - `VIBE_AGENT_PATHS` : le dossier de session de Mnemo, où est le profil d'agent.
  * Rien n'est écrit dans la configuration de l'utilisateur.
  */
-export function variablesDeVibe(env: Record<string, string | undefined>, session: Session, racine: string, appel: Pick<AppelPlugin, 'node' | 'main'>, dossierFichiers: string): Record<string, string> {
-	const deSession = variablesDeSession('mistral-vibe', session, { hooks: [] }, racine);
+export function variablesDeVibe(env: Record<string, string | undefined>, deSession: Readonly<Record<(typeof VARIABLES_DU_SERVEUR_MCP)[number], string>>, appel: Pick<AppelPlugin, 'node' | 'main'>, dossierFichiers: string): Record<string, string> {
 	const serveur = {
 		name: 'mnemo',
 		transport: 'stdio',
@@ -109,10 +112,9 @@ export function variablesDeVibe(env: Record<string, string | undefined>, session
  * celles de l'utilisateur sans tenir compte de la casse.
  */
 export function environnementMistralVibe(env: Record<string, string | undefined>, c: Pick<ContextePreparation, 'session' | 'profil' | 'racine' | 'appel' | 'dossierFichiers'>): Record<string, string> {
-	return { ...variablesDeSession('mistral-vibe', c.session, c.profil, c.racine), ...variablesDeVibe(env, c.session, c.racine, c.appel, c.dossierFichiers) };
+	const deSession = variablesDeSession('mistral-vibe', c.session, c.profil, c.racine);
+	return { ...deSession, ...variablesDeVibe(env, deSession, c.appel, c.dossierFichiers) };
 }
-
-const definies = (env: Record<string, string | undefined>): Record<string, string> => Object.fromEntries(Object.entries(env).filter((e): e is [string, string] => e[1] !== undefined));
 
 /** Lancement de `vibe` : arguments (`argumentsMistralVibe`), environnement ; pour la ligne à coller, les variables de la session. */
 export function preparerMistralVibe(c: ContextePreparation): Lancement {

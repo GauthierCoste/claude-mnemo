@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HOOKS_CODEX } from '../../src/application/moteurs/codex/hooks.ts';
-import { argumentsCodex, CONSIGNE_MAX, consigneCodex, LIGNE_ARGUMENTS_MAX, longueurSurLaLigne, environnementCodex, fichiersDeSessionCodex, motifSansRepriseCodex, preparerCodex } from '../../src/application/moteurs/codex/session.ts';
+import { consigneAvecSkills } from '../../src/application/moteurs/consigne-avec-skills.ts';
+import { argumentsCodex, CONSIGNE_MAX, LIGNE_ARGUMENTS_MAX, longueurSurLaLigne, environnementCodex, fichiersDeSessionCodex, motifSansRepriseCodex, preparerCodex } from '../../src/application/moteurs/codex/session.ts';
 import type { AppelHook, ContextePreparation } from '../../src/application/ports.ts';
 import { CONSIGNE_TRAVAIL_PAR_DEFAUT, SKILLS_PAR_DEFAUT } from '../../src/application/profil.ts';
 import { PROFILS_PAR_DEFAUT } from '../../src/domaine/profil.ts';
@@ -110,12 +111,12 @@ describe('consigne et fichiers de session de Codex', () => {
 			{ nom: 'revue', dossier: 'skills/revue', texte: '---\ndescription: |\n  Relire\n  un texte\n---\nRelis.\n' },
 			{ nom: 'brute', dossier: 'profils/redaction/skills/brute', texte: 'Sans frontmatter.\n' },
 		];
-		const consigne = consigneCodex({ consigne: '  Rédige.\n' }, skills);
+		const consigne = consigneAvecSkills({ consigne: '  Rédige.\n' }, skills);
 		expect(consigne.startsWith('Rédige.\n\n## Skills de Mnemo\n')).toBe(true);
 		expect(consigne).toContain('avec l\'outil `lire` de Mnemo');
 		expect(consigne).toContain('- revue : Relire un texte (`skills/revue/SKILL.md`)\n');
 		expect(consigne).toContain('- brute (`profils/redaction/skills/brute/SKILL.md`)\n');
-		expect(consigneCodex({ consigne: 'Rédige.' }, [])).toBe('Rédige.\n');
+		expect(consigneAvecSkills({ consigne: 'Rédige.' }, [])).toBe('Rédige.\n');
 	});
 
 	it('fichiers de session : la consigne seule ; skills du profil (par défaut déposées), puis celles de la mémoire retenues pour le projet', async () => {

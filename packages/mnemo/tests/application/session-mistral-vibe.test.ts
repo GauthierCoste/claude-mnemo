@@ -50,8 +50,11 @@ describe('arguments de vibe', () => {
 		expect(agentDeSession(ID)).toBe(`mnemo-${ID}`);
 	});
 
-	it('reprise : --resume <fil>, sans --model ; sans fil : refusée, avec la raison ; uuid ou modèle invalides : refusés', () => {
-		expect(argumentsMistralVibe({ session: session({ fil: FIL, modele: 'local' }), profil: { lancement: 'projet' }, mode: 'reprise', racine: RACINE })).toEqual(['--resume', FIL, '--agent', `mnemo-${ID}`]);
+	it('reprise : --resume=<fil>, sans --model ; sans fil : refusée, avec la raison ; fil, uuid ou modèle invalides : refusés', () => {
+		expect(argumentsMistralVibe({ session: session({ fil: FIL, modele: 'local' }), profil: { lancement: 'projet' }, mode: 'reprise', racine: RACINE })).toEqual([`--resume=${FIL}`, '--agent', `mnemo-${ID}`]);
+		for (const fil of ['--help', '-x', 'a b', 'a/../b']) {
+			expect(() => argumentsMistralVibe({ session: session({ fil }), profil: { lancement: 'projet' }, mode: 'reprise', racine: RACINE }), fil).toThrow(/Identifiant de session Mistral Vibe refusé/u);
+		}
 		expect(() => argumentsMistralVibe({ session: session(), profil: { lancement: 'projet' }, mode: 'reprise', racine: RACINE })).toThrow(/Reprise impossible : session Mistral Vibe/u);
 		expect(motifSansRepriseMistralVibe({ fil: FIL })).toBeNull();
 		expect(() => argumentsMistralVibe({ session: session({ id: 'x' }), profil: { lancement: 'projet' }, mode: 'nouvelle', racine: RACINE })).toThrow(/uuid/u);

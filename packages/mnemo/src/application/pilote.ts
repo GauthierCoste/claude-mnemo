@@ -89,7 +89,7 @@ export class ErreurMoteurIndisponible extends Error {
 	}
 }
 
-/** Une session que son moteur ne sait pas reprendre (Codex : son identifiant chez Codex encore inconnu) : rien n'est lancé. */
+/** Une session que son moteur ne sait pas reprendre (Codex, Mistral Vibe : son identifiant chez le moteur encore inconnu) : rien n'est lancé. */
 export class ErreurRepriseImpossible extends Error {
 	constructor(message: string) {
 		super(message);
@@ -409,7 +409,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	};
 
 	/**
-	 * Avertissements à écrire en tête du terminal d'une session : hooks de Mnemo installés pour tout le poste (Codex) qu'elle
+	 * Avertissements à écrire en tête du terminal d'une session : hooks de Mnemo installés pour tout le poste (Codex, Mistral Vibe) qu'elle
 	 * n'exécutera pas (absents, d'une autre installation, non approuvés) ; réglages de la déclaration MCP de l'utilisateur qui
 	 * s'appliquent aussi à elle. Lus sans bloquer : au-delà de `DELAI_AVERTISSEMENTS_MS`, rien n'est dit.
 	 */
@@ -576,7 +576,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		const refus = refusDuMoteur(profil);
 		if (refus !== null) return { refus: `Le profil « ${profil.nom} » ne peut pas être lancé : ${refus.motif}.` };
 		// le moteur du profil doit être implémenté ici ; introuvable sur le poste, la ligne à coller est rendue (mode dégradé),
-		// sauf pour un moteur dont la ligne ne lancerait rien (Codex) : refusé
+		// sauf pour un moteur dont la ligne ne lancerait rien (`sansCommande: 'refus'` : Codex, Mistral Vibe) : refusé
 		const duService = moteurDe(profil);
 		if (duService === null) return { refus: `Le profil « ${profil.nom} » utilise le moteur « ${profil.moteur} », pas encore pris en charge par ce service.` };
 		const { moteur: duProfil, commande } = duService;

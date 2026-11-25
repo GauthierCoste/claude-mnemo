@@ -12,3 +12,6 @@ export function objetJson(texte: string): Record<string, unknown> | null {
 		return null;
 	}
 }
+
+/** L'environnement sans ses variables non définies. */
+export const definies = (env: Record<string, string | undefined>): Record<string, string> => Object.fromEntries(Object.entries(env).filter((e): e is [string, string] => e[1] !== undefined));

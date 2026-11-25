@@ -15,7 +15,7 @@ export const VARIABLES_DU_SERVEUR_MCP = ['MNEMO_SESSION', 'MNEMO_MOTEUR', 'MNEMO
  * les hooks que le profil demande (`MNEMO_HOOKS` : ces hooks, communs à toutes les sessions, en tirent ce que le plugin d'une
  * session Claude Code déclare).
  */
-export function variablesDeSession(moteur: IdMoteur, session: Pick<Session, 'id' | 'projet'>, profil: Pick<Profil, 'hooks'>, racine: string): Record<string, string> {
+export function variablesDeSession(moteur: IdMoteur, session: Pick<Session, 'id' | 'projet'>, profil: Pick<Profil, 'hooks'>, racine: string): Record<(typeof VARIABLES_DU_SERVEUR_MCP)[number] | 'MNEMO_HOOKS', string> {
 	return { MNEMO_SESSION: session.id, MNEMO_MOTEUR: moteur, MNEMO_PROJET: session.projet, MNEMO_RACINE: racine, MNEMO_HOOKS: texteDesHooks(profil.hooks) };
 }
 

@@ -276,7 +276,8 @@ type Appel = { moteur: IdMoteur; hooks: HooksDuMoteur; evenement: EvenementHook;
 
 /**
  * `mnemo hook <événement> [--notification | --sans-contexte] [--moteur <id>]` : appelé par le moteur de la session (plugin
- * d'une session Mnemo pour Claude Code ; `~/.codex/hooks.json` pour Codex, inerte hors d'une session Mnemo), entrée JSON sur stdin. Le service d'abord (`POST /api/hook`), sinon le calcul ici.
+ * d'une session Mnemo pour Claude Code ; hooks installés pour tout le poste ailleurs, `~/.codex/hooks.json` de Codex,
+ * `~/.vibe/hooks.toml` de Mistral Vibe, inertes hors d'une session Mnemo), entrée JSON sur stdin. Le service d'abord (`POST /api/hook`), sinon le calcul ici.
  * Code 0 ; sur stdout, seulement la réponse JSON attendue par le moteur (`sortie` de ses hooks) ; un refus d'`outil` et un
  * accord non vérifié sont écrits sur stderr, gardés par le moteur dans son journal.
  */
