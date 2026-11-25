@@ -8,7 +8,7 @@ import { dirname, join, resolve } from 'node:path';
  */
 
 /** Variables qui désignent une mémoire, une session, un projet ou la configuration de Codex : vidées avant tout test. */
-export const VARIABLES_NEUTRALISEES = ['MNEMO_RACINE', 'MNEMO_SESSION', 'MNEMO_PROJET', 'CLAUDE_PROJECT_DIR', 'CODEX_HOME'] as const;
+export const VARIABLES_NEUTRALISEES = ['MNEMO_RACINE', 'MNEMO_SESSION', 'MNEMO_PROJET', 'CLAUDE_PROJECT_DIR', 'CODEX_HOME', 'VIBE_HOME'] as const;
 
 /** Le premier dossier, en remontant depuis `dossier` (compris), qui contient `_mnemo/SCHEMA.md` ; null s'il n'y en a pas. */
 export function memoireAuDessus(dossier: string): string | null {

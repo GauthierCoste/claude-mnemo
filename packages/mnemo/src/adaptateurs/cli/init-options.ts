@@ -1,6 +1,8 @@
+import { MOTEURS_FACULTATIFS } from '../moteurs-du-poste.ts';
+import type { MoteurFacultatif } from '../moteurs-du-poste.ts';
 import { ErreurCli } from './erreurs.ts';
 
-export const USAGE_INIT = `Usage : mnemo init [dossier] [--oui] [--json] [--mcp | --sans-mcp] [--codex] [--modeles | --sans-modeles]
+export const USAGE_INIT = `Usage : mnemo init [dossier] [--oui] [--json] [--mcp | --sans-mcp] [--codex] [--mistral] [--modeles | --sans-modeles]
                   [--commande | --sans-commande] [--lanceur | --sans-lanceur]`;
 
 /** Une étape hors mémoire : `true` ou `false` si l'option est donnée (elle l'emporte sur le défaut et sur la question), sinon null. */
@@ -11,8 +13,8 @@ export type OptionsLuesInit = {
 	oui: boolean;
 	json: boolean;
 	mcp: ChoixExplicite;
-	/** `--codex` : déclarer aussi le serveur MCP chez Codex et y installer les hooks de Mnemo (jamais sans). */
-	codex: boolean;
+	/** Moteurs facultatifs où déclarer aussi le serveur MCP et installer les hooks de Mnemo (`--codex`, `--mistral` ; jamais sans). */
+	moteurs: MoteurFacultatif['id'][];
 	modeles: ChoixExplicite;
 	commande: ChoixExplicite;
 	lanceur: ChoixExplicite;
@@ -27,7 +29,7 @@ const PAIRES = [
 
 /** Arguments de `mnemo init` ; option inconnue, deux dossiers ou options contradictoires : erreur d'usage (code 2). */
 export function lireOptionsInit(args: string[]): OptionsLuesInit {
-	const connues = new Set<string>(['--oui', '--json', '--codex', ...PAIRES.flatMap(([, avec, sans]) => [avec, sans])]);
+	const connues = new Set<string>(['--oui', '--json', ...MOTEURS_FACULTATIFS.map((f) => f.option), ...PAIRES.flatMap(([, avec, sans]) => [avec, sans])]);
 	const inconnue = args.find((a) => a.startsWith('-') && !connues.has(a));
 	if (inconnue !== undefined) throw new ErreurCli(`Option inconnue : « ${inconnue} ».\n${USAGE_INIT}`, 2);
 	const positionnels = args.filter((a) => !a.startsWith('-'));
@@ -37,7 +39,7 @@ export function lireOptionsInit(args: string[]): OptionsLuesInit {
 		oui: args.includes('--oui'),
 		json: args.includes('--json'),
 		mcp: null,
-		codex: args.includes('--codex'),
+		moteurs: MOTEURS_FACULTATIFS.filter((f) => args.includes(f.option)).map((f) => f.id),
 		modeles: null,
 		commande: null,
 		lanceur: null,

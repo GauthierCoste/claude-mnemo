@@ -1,6 +1,6 @@
-/** Agent de code qui fait tourner une session : Claude Code ou Codex. */
-export type IdMoteur = 'claude-code' | 'codex';
-export const IDS_MOTEURS: readonly IdMoteur[] = ['claude-code', 'codex'];
+/** Agent de code qui fait tourner une session : Claude Code, Codex ou Mistral Vibe. */
+export type IdMoteur = 'claude-code' | 'codex' | 'mistral-vibe';
+export const IDS_MOTEURS: readonly IdMoteur[] = ['claude-code', 'codex', 'mistral-vibe'];
 /** Moteur d'une session ou d'un profil qui n'en dit rien (état, profils et hooks d'avant les moteurs). */
 export const MOTEUR_PAR_DEFAUT: IdMoteur = 'claude-code';
 

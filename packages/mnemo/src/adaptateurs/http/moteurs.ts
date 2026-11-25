@@ -7,6 +7,7 @@
 import { ROUTES } from '@mnemo/contrat';
 import type { MoteurVue, PointMoteurVue, ReponseMoteurs } from '@mnemo/contrat';
 import type { CommandeMoteur, Executer, Moteur, MoteurDuService, Pilotage } from '../../application/ports.ts';
+import { REMEDES } from '../moteurs-du-poste.ts';
 import type { Route } from './routes.ts';
 
 /** Délai de chaque commande du moteur lue pour le poste (`claude mcp get`, `codex mcp get`), comme `verifier-poste`. */
@@ -25,19 +26,12 @@ export type PosteDesMoteurs = {
 type Remede = NonNullable<PointMoteurVue['remede']>;
 const terminal = (texte: string): Remede => ({ texte, dans: 'terminal' });
 
-/** Commandes qui déclarent (ou refont) le serveur MCP et les hooks de Mnemo chez chaque moteur. */
-const COMMANDES: Record<MoteurVue['id'], { declarer: string; remplacer: string; introuvable: string }> = {
-	'claude-code': {
-		declarer: 'mnemo init --mcp',
-		remplacer: 'mnemo declarer --remplacer',
-		introuvable: 'commande claude absente du PATH, ou MNEMO_CLAUDE invalide : les sessions se lancent par une ligne à coller',
-	},
-	codex: {
-		declarer: 'mnemo init --codex',
-		remplacer: 'mnemo declarer --moteur codex --remplacer',
-		introuvable: 'commande codex absente du PATH et de ChatGPT.app, ou MNEMO_CODEX invalide : ses sessions sont refusées',
-	},
-};
+/** Commandes qui déclarent (ou refont) le serveur MCP et les hooks de Mnemo chez chaque moteur, et ce que dit son absence. */
+function commandesDe(moteur: Moteur): { declarer: string; remplacer: string; introuvable: string; desactivation: string } {
+	const r = REMEDES[moteur.id];
+	const sessions = moteur.sansCommande === 'manuel' ? 'les sessions se lancent par une ligne à coller' : 'ses sessions sont refusées';
+	return { ...r, introuvable: `${r.recherche} : ${sessions}` };
+}
 
 /** Version lue (en cache, sauf `relire`) ; null : le moteur ne la donne pas, ou elle est illisible. */
 async function versionDe(moteur: Moteur, commande: CommandeMoteur | null, p: PosteDesMoteurs, relire: boolean): Promise<string | null> {
@@ -56,7 +50,7 @@ const memeCommande = (a: CommandeMoteur | null, b: CommandeMoteur | null): boole
  */
 function pointCommande(moteur: Moteur, commande: CommandeMoteur | null, trouvee: CommandeMoteur | null): PointMoteurVue {
 	const c = { cle: 'commande', libelle: 'Commande' } as const;
-	const introuvable = COMMANDES[moteur.id].introuvable;
+	const introuvable = commandesDe(moteur).introuvable;
 	if (memeCommande(commande, trouvee)) return commande === null ? { ...c, ok: false, etat: 'introuvable', detail: introuvable } : { ...c, ok: true, etat: 'trouvée', detail: chemin(commande) };
 	if (commande === null) {
 		return { ...c, ok: false, etat: 'trouvée depuis le démarrage', detail: `${chemin(trouvee!)} : le service, démarré sans ${moteur.nom}, ne la prend qu'en redémarrant.`, remede: REDEMARRER };
@@ -68,7 +62,7 @@ function pointCommande(moteur: Moteur, commande: CommandeMoteur | null, trouvee:
 /** Points de la déclaration MCP, des hooks du poste et de leur approbation. */
 async function pointsDuPoste(duService: MoteurDuService, p: PosteDesMoteurs): Promise<PointMoteurVue[]> {
 	const { moteur, commande } = duService;
-	const commandes = COMMANDES[moteur.id];
+	const commandes = commandesDe(moteur);
 	const points: PointMoteurVue[] = [];
 	const lu = await moteur.declarationMcp.lire({ executer: p.executer, main: p.main, commande, plateforme: p.plateforme, env: p.env, delaiMs: DELAI_POSTE_MS }).catch((e: unknown) => ({ echec: e instanceof Error ? e.message : String(e) }));
 	const mcp = { cle: 'mcp', libelle: 'Serveur MCP mnemo' } as const;
@@ -76,7 +70,7 @@ async function pointsDuPoste(duService: MoteurDuService, p: PosteDesMoteurs): Pr
 	else if (lu === 'deja') points.push({ ...mcp, ok: true, etat: 'déclaré' });
 	else if (lu === 'absent') points.push({ ...mcp, ok: false, etat: 'non déclaré', detail: `Les sessions de ${moteur.nom} lancées hors de Mnemo ne lisent pas la mémoire.`, remede: terminal(commandes.declarer) });
 	else if (lu === 'perime') points.push({ ...mcp, ok: false, etat: 'périmé', detail: 'Déclaré pour un autre Node ou une autre installation de Mnemo.', remede: terminal(commandes.remplacer) });
-	else if (lu === 'desactive') points.push({ ...mcp, ok: false, etat: 'désactivé', detail: `Désactivé dans ${moteur.nom} (enabled = false) : Mnemo ne le réactive pas ; réactive-le dans sa configuration.` });
+	else if (lu === 'desactive') points.push({ ...mcp, ok: false, etat: 'désactivé', detail: `Désactivé dans ${moteur.nom} (${commandes.desactivation}) : Mnemo ne le réactive pas ; réactive-le dans sa configuration.` });
 	else points.push({ ...mcp, ok: false, etat: 'autre serveur', detail: 'Une déclaration « mnemo » existe mais ne lance pas Mnemo : laissée telle quelle.' });
 
 	if (moteur.hooksDuPoste === undefined) return points;
@@ -108,7 +102,7 @@ async function vueMoteur(duService: MoteurDuService, p: PosteDesMoteurs, poste: 
 		moteur.modeles({ executer: p.executer, commande, env: p.env }).catch((): readonly string[] => []),
 	]);
 	const tropAncien = moteur.refusDeVersion?.(version) ?? null;
-	const indisponible = commande === null ? `${moteur.nom} introuvable sur ce poste (${COMMANDES[moteur.id].introuvable}).` : tropAncien === null ? null : `${tropAncien}.`;
+	const indisponible = commande === null ? `${moteur.nom} introuvable sur ce poste (${commandesDe(moteur).introuvable}).` : tropAncien === null ? null : `${tropAncien}.`;
 	const vue: MoteurVue = { id: moteur.id, nom: moteur.nom, indisponible, manuel: commande === null && moteur.sansCommande === 'manuel', version, modeles: [...modeles] };
 	if (!poste) return vue;
 	const points: PointMoteurVue[] = [pointCommande(moteur, commande, moteur.trouver(p.env, p.plateforme))];

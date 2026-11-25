@@ -1,4 +1,4 @@
-/** `mnemo verifier-poste` : git, Claude Code, Codex et Node, sans lancer ni le vrai `git`, ni le vrai `claude`, ni le vrai `codex`. */
+/** `mnemo verifier-poste` : git, Claude Code, Codex, Mistral Vibe et Node, sans lancer ni le vrai `git`, ni le vrai `claude`, ni le vrai `codex`, ni le vrai `vibe`. */
 import type { PosteVerifie } from '@mnemo/contrat';
 import { describe, expect, it } from 'vitest';
 import type { Executer } from '../../src/application/ports.ts';
@@ -16,8 +16,9 @@ const gitRepond = (code: number, sortie: string, erreur = ''): Executer => async
 const gitAbsent: Executer = async () => Promise.reject(Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' }));
 const claude = () => ({ commande: '/opt/outils/claude', avant: [] });
 /** Sans Codex : rien d'autre n'est lancé que `git`. */
-const sansCodex = { codex: () => null, main: '/chemin/absolu/main.ts', plateforme: 'darwin', env: {} };
+const sansCodex = { codex: () => null, vibe: () => null, main: '/chemin/absolu/main.ts', plateforme: 'darwin', env: {} };
 const CODEX_ABSENT = { ok: false, motif: expect.stringMatching(/^Codex introuvable/u) };
+const MISTRAL_ABSENT = { ok: false, motif: expect.stringMatching(/^Mistral Vibe introuvable/u) };
 
 describe('verifierPoste', () => {
 	it('tout est là : versions et chemin', async () => {
@@ -25,6 +26,7 @@ describe('verifierPoste', () => {
 			git: { ok: true, version: '2.50.1' },
 			claude: { ok: true, chemin: '/opt/outils/claude' },
 			codex: CODEX_ABSENT,
+			mistral: MISTRAL_ABSENT,
 			node: { version: '26.13.1' },
 		});
 	});
@@ -52,7 +54,7 @@ describe('mnemo verifier-poste', () => {
 		const lignes: string[] = [];
 		await commandeVerifierPoste(['--json'], { executer: gitAbsent, claude, versionNode: '26.13.1', ...sansCodex }, (l) => lignes.push(l));
 		expect(lignes).toHaveLength(1);
-		expect(JSON.parse(lignes[0]!) as PosteVerifie).toEqual({ git: { ok: false, motif: 'git introuvable dans le PATH.' }, claude: { ok: true, chemin: '/opt/outils/claude' }, codex: CODEX_ABSENT, node: { version: '26.13.1' } });
+		expect(JSON.parse(lignes[0]!) as PosteVerifie).toEqual({ git: { ok: false, motif: 'git introuvable dans le PATH.' }, claude: { ok: true, chemin: '/opt/outils/claude' }, codex: CODEX_ABSENT, mistral: MISTRAL_ABSENT, node: { version: '26.13.1' } });
 	});
 
 	it('texte : une ligne par élément ; il manque claude : code 1', async () => {
@@ -61,7 +63,8 @@ describe('mnemo verifier-poste', () => {
 		expect(lignes[0]).toBe('git : 2.50.1');
 		expect(lignes[1]).toMatch(/^Claude Code : absent — /u);
 		expect(lignes[2]).toMatch(/^Codex : absent \(facultatif\) — /u);
-		expect(lignes[3]).toBe('Node : 26.13.1');
+		expect(lignes[3]).toMatch(/^Mistral Vibe : absent \(facultatif\) — /u);
+		expect(lignes[4]).toBe('Node : 26.13.1');
 	});
 
 	it('option inconnue : erreur d’usage', async () => {
@@ -89,7 +92,7 @@ describe('verifier-poste : Codex', () => {
 	const declaration = (command: string, args: string[]) => ({ code: 0, sortie: JSON.stringify({ name: 'mnemo', enabled: true, transport: { type: 'stdio', command, args } }), erreur: '' });
 	/** `CODEX_HOME` jetable, jamais le vrai `~/.codex` ; vide par défaut : aucun hook. */
 	const MAISON = join('/nulle-part', 'codex-home-absent');
-	const deps = (executer: Executer, maison = MAISON) => ({ executer, claude, codex: () => CODEX, versionNode: '26.13.1', main: MAIN, plateforme: 'darwin', env: { CODEX_HOME: maison, CODEX_API_KEY: 'sk-secret' } });
+	const deps = (executer: Executer, maison = MAISON) => ({ executer, claude, codex: () => CODEX, vibe: () => null, versionNode: '26.13.1', main: MAIN, plateforme: 'darwin', env: { CODEX_HOME: maison, CODEX_API_KEY: 'sk-secret' } });
 
 	it('trouvé : son chemin et l’état de sa déclaration MCP, lue sans rien changer', async () => {
 		const cas: [{ code: number; sortie: string; erreur: string }, string][] = [

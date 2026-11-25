@@ -80,4 +80,4 @@ async function retirer(a: AppelHooksDuPoste): Promise<ResultatRetraitHooks> {
 }
 
 /** Codex : `~/.codex/hooks.json` (ou `$CODEX_HOME`), approbation lue dans `config.toml`, jamais écrit par Mnemo. */
-export const HOOKS_DU_POSTE_CODEX: HooksDuPoste = { lire, installer, remplacer, retirer };
+export const HOOKS_DU_POSTE_CODEX: HooksDuPoste = { chemin: cheminHooksJson, lire, installer, remplacer, retirer };

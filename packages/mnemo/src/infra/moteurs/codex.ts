@@ -8,7 +8,7 @@ import { HOOKS_DU_POSTE_CODEX } from './codex/hooks-json.ts';
 import { modelesCodex } from './codex/modeles.ts';
 import { reglagesMcpCodex } from './codex/reglages-mcp.ts';
 import { versionCodex } from './codex/version.ts';
-import { refusDeVersionCodex } from '../../domaine/moteurs/codex/version.ts';
+import { refusDeVersionCodex, VERSION_MIN_CODEX } from '../../domaine/moteurs/codex/version.ts';
 import { lectureTranscriptionCodex } from './codex/transcription.ts';
 import { trouverCodex } from './codex/trouver-codex.ts';
 
@@ -34,6 +34,7 @@ export const MOTEUR_CODEX: Moteur = {
 	reglagesMcp: reglagesMcpCodex,
 	version: versionCodex(),
 	refusDeVersion: refusDeVersionCodex,
+	versionMinimale: VERSION_MIN_CODEX,
 	marqueDeSession: marqueCodex,
 	motifSansReprise: motifSansRepriseCodex,
 	fichiersDeSession: fichiersDeSessionCodex,

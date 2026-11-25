@@ -934,11 +934,13 @@ export type ReponseRejetLot = { id: string };
  * laissé tel quel à dessein, sans échec ni code 1 — étape `codex`, déclaration désactivée dans Codex) ; une étape laissée de
  * côté ne donne qu'une ligne `saute`. `lanceur` : macOS seulement. `codex` et `codex_hooks` : seulement avec `--codex`
  * (déclaration MCP chez Codex ; hooks de Mnemo dans `~/.codex/hooks.json`, à approuver une fois dans Codex), aucune ligne
- * sans. `motif` (étapes `mcp`, `codex` et `codex_hooks`, `echec` seulement) : `perime`, une déclaration (ou des hooks) de
- * Mnemo de portée utilisateur existe déjà et lance un autre Node ou un autre `main.ts` (autre installation de Mnemo), que
- * `mnemo declarer --remplacer` (`--moteur codex` pour Codex) reprend. Absent : tout autre échec.
+ * sans ; de même `mistral` et `mistral_hooks` avec `--mistral` (déclaration MCP dans `~/.vibe/config.toml`, hooks dans
+ * `~/.vibe/hooks.toml`). `motif` (étapes `mcp`, `codex`, `codex_hooks`, `mistral` et `mistral_hooks`, `echec` seulement) :
+ * `perime`, une déclaration (ou des hooks) de Mnemo de portée utilisateur existe déjà et lance un autre Node ou un autre
+ * `main.ts` (autre installation de Mnemo), que `mnemo declarer --remplacer` (`--moteur codex` ou `--moteur mistral-vibe`)
+ * reprend. Absent : tout autre échec.
  */
-export type EtapeInit = 'memoire' | 'mcp' | 'codex' | 'codex_hooks' | 'modeles' | 'commande' | 'lanceur';
+export type EtapeInit = 'memoire' | 'mcp' | 'codex' | 'codex_hooks' | 'mistral' | 'mistral_hooks' | 'modeles' | 'commande' | 'lanceur';
 export type MotifEchecInit = 'perime';
 export type EvenementInit = { etape: EtapeInit; etat: 'debut' | 'fait' | 'saute' | 'echec' | 'laisse'; message: string; motif?: MotifEchecInit };
 /**
@@ -969,25 +971,33 @@ export type EtatMcpVerifie = { etat: 'deja' | 'absent' | 'perime' | 'autre' | 'd
 export type EtatHooksVerifie = { etat: 'a_jour' | 'perime' | 'absent' | 'echec'; motif?: string; approbation?: { etat: 'approuves' | 'a_approuver' | 'inconnu'; motif: string } };
 
 /**
+ * Un moteur facultatif sur le poste : `chemin`, la commande trouvée (son absence n'est pas un manque) ; `version`, celle que
+ * donne `<moteur> --version` (absente : illisible) ; `mcp`, sa déclaration MCP, lue quand il est trouvé ; `hooks`, ses hooks
+ * de Mnemo ; `motif` : pourquoi ce n'est pas utilisable.
+ */
+export type MoteurVerifie = { ok: boolean; chemin?: string; version?: string; motif?: string; mcp?: EtatMcpVerifie; hooks?: EtatHooksVerifie };
+
+/**
  * `mnemo verifier-poste --json` : ce dont Mnemo a besoin sur le poste, un bloc par moteur. `git.version` : « 2.50.1 » ;
- * `claude.chemin` : le `claude` que lanceront les sessions ; `codex.chemin` : le `codex` trouvé (facultatif : son absence
- * n'est pas un manque), `codex.version` : celle que donne `codex --version` (absente : illisible), `codex.mcp` : sa déclaration MCP, lue quand il est trouvé, `codex.hooks` : ses hooks de Mnemo (`codex` toujours écrit depuis la 1.6, absent d'un Mnemo plus ancien) ; `motif` : pourquoi ce n'est pas
- * utilisable ; `node.version` : celle qui exécute Mnemo.
+ * `claude.chemin` : le `claude` que lanceront les sessions ; `codex` (Codex, toujours écrit depuis la 1.6) et `mistral`
+ * (Mistral Vibe, toujours écrit depuis la 1.7) : facultatifs, absents d'un Mnemo plus ancien ; `motif` : pourquoi ce n'est
+ * pas utilisable ; `node.version` : celle qui exécute Mnemo.
  */
 export type PosteVerifie = {
 	git: { ok: boolean; version?: string; motif?: string };
 	claude: { ok: boolean; chemin?: string; motif?: string };
-	codex?: { ok: boolean; chemin?: string; version?: string; motif?: string; mcp?: EtatMcpVerifie; hooks?: EtatHooksVerifie };
+	codex?: MoteurVerifie;
+	mistral?: MoteurVerifie;
 	node: { version: string };
 };
 
 /**
- * `mnemo declarer (--remplacer | --retirer) [--moteur claude-code | codex] --json` : une ligne.
+ * `mnemo declarer (--remplacer | --retirer) [--moteur claude-code | codex | mistral-vibe] --json` : une ligne.
  * `absent` : aucune déclaration `mnemo` ; `deja` : elle lance déjà ce Node et ce Mnemo ; `remplace` : refaite sur eux ;
  * `retire` : retirée ; `autre` : laissée (elle ne lance pas ce Mnemo, ou n'est pas de portée utilisateur) ; `echec` : code
- * de sortie 1, `message` dit pourquoi. `hooks` (Codex seulement) : les hooks de Mnemo de `~/.codex/hooks.json`, traités de
- * même après la déclaration MCP (`--remplacer` ne refait que des hooks de Mnemo existants ; `--retirer` ne retire que ceux
- * de ce Node et ce Mnemo) ; leur échec donne aussi le code 1.
+ * de sortie 1, `message` dit pourquoi. `hooks` (Codex et Mistral Vibe) : les hooks de Mnemo de `~/.codex/hooks.json` ou de
+ * `~/.vibe/hooks.toml`, traités de même après la déclaration MCP (`--remplacer` ne refait que des hooks de Mnemo existants ;
+ * `--retirer` ne retire que ceux de ce Node et ce Mnemo) ; leur échec donne aussi le code 1.
  */
 export type SortieDeclarer = { resultat: ResultatDeclarer; message: string; hooks?: { resultat: ResultatDeclarer; message: string } };
 export type ResultatDeclarer = 'absent' | 'deja' | 'remplace' | 'autre' | 'retire' | 'echec';

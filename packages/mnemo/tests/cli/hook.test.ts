@@ -652,6 +652,58 @@ describe('mnemo hook --moteur codex', () => {
 	});
 });
 
+describe('mnemo hook --moteur mistral-vibe', () => {
+	const FIL = '51c9e649-852b-5600-3455-d7bdd6bed1e3';
+	const vibe = (racine: string, champs: Record<string, unknown>) => JSON.stringify({ session_id: FIL, transcript_path: '/v/logs/session/unified/x', cwd: racine, agent_name: `mnemo-${ID}`, ...champs });
+
+	it('session Mnemo : contexte et refus au format de Vibe, fil = session_id, approbation = dialogue ouvert, turn_completed ignoré', async () => {
+		const racine = await dossierVerifie({ moteur: 'mistral-vibe' });
+		await writeFile(join(racine, '_mnemo', 'consignes', 'env.md'), `${entete('consigne', 'portee: globale\nniveau: verifiee\nregle: { type: chemins_interdits, motifs: ["**/.env"] }\n')}# E\n\nJamais de .env.\n`);
+		await attendu(racine, '');
+		const env = { MNEMO_RACINE: racine, MNEMO_SESSION: ID, MNEMO_MOTEUR: 'mistral-vibe' };
+		const r = await hook(racine, 'outil --moteur mistral-vibe', vibe(racine, { hook_event_name: 'pre_tool', tool_name: 'file_system.bash', tool_input: { command: 'git push --force', timeout: 120 } }), env);
+		expect(r.code).toBe(0);
+		expect(r.out).toBe(`${JSON.stringify({ decision: 'deny', reason: REFUS_PUSH })}\n`);
+		const ecrit = await hook(racine, 'outil --moteur mistral-vibe', vibe(racine, { hook_event_name: 'pre_tool', tool_name: 'file_system.write_file', tool_input: { file_path: join(racine, '.env'), content: 'A=1' } }), env);
+		expect(JSON.parse(ecrit.out)).toEqual({ decision: 'deny', reason: expect.stringContaining('Jamais de .env.') });
+		expect((await hook(racine, 'outil --moteur mistral-vibe', vibe(racine, { tool_name: 'file_system.read_file', tool_input: { file_path: join(racine, '.env') } }), env)).out).toBe('');
+
+		const { requetes } = await fauxService(racine, (_req, corps) => (JSON.parse(corps).evenement === 'message' ? { contexte: 'Contexte du service.' } : {}));
+		const m = await hook(racine, 'message --moteur mistral-vibe', vibe(racine, { hook_event_name: 'pre_agent', prompt: 'Bonjour' }), env);
+		expect(m.out).toBe(`${JSON.stringify({ hook_specific_output: { additional_context: 'Contexte du service.' } })}\n`);
+		await hook(racine, 'arret --notification --moteur mistral-vibe', vibe(racine, { hook_event_name: 'notification', notification_type: 'approval_requested', tool_name: 'file_system.bash' }), env);
+		await hook(racine, 'arret --notification --moteur mistral-vibe', vibe(racine, { hook_event_name: 'notification', notification_type: 'turn_completed' }), env);
+		await hook(racine, 'arret --moteur mistral-vibe', vibe(racine, { hook_event_name: 'post_agent' }), env);
+		expect(requetes.map((q) => JSON.parse(q.corps) as Record<string, unknown>)).toEqual([
+			expect.objectContaining({ evenement: 'message', session: ID, fil: FIL, moteur: 'mistral-vibe', prompt: 'Bonjour', transcription: '/v/logs/session/unified/x' }),
+			expect.objectContaining({ evenement: 'arret', arret: 'notification', moteur: 'mistral-vibe' }),
+			expect.objectContaining({ evenement: 'arret', arret: 'stop', moteur: 'mistral-vibe' }),
+		]);
+	});
+
+	it('hors d’une session Mistral Vibe de Mnemo : sortie vide, aucun appel ; échéances sous le timeout de hooks.toml', async () => {
+		const racine = await dossierVerifie({ moteur: 'mistral-vibe' });
+		const { requetes } = await fauxService(racine, () => ({ refus: 'jamais' }));
+		for (const moteur of ['codex', '']) {
+			const r = await hook(racine, 'outil --moteur mistral-vibe', vibe(racine, { tool_name: 'file_system.bash', tool_input: { command: 'git push --force' } }), { MNEMO_RACINE: racine, MNEMO_SESSION: ID, MNEMO_MOTEUR: moteur });
+			expect(r).toMatchObject({ code: 0, out: '', err: '' });
+		}
+		expect(requetes).toHaveLength(0);
+		const { HOOKS_MISTRAL_VIBE_INSTALLES } = await import('../../src/domaine/moteurs/mistral-vibe/hooks-installes.ts');
+		const { hooksDuMoteur } = await import('../../src/application/moteurs/hooks.ts');
+		const hooks = hooksDuMoteur('mistral-vibe')!;
+		const vus = new Set<string>();
+		for (const { type, args, timeout } of HOOKS_MISTRAL_VIBE_INSTALLES) {
+			const lu = hooks.lireArguments([...args]);
+			expect(lu, type).not.toBeNull();
+			expect(hooks.lireArguments([type])?.evenement, type).toBe(lu!.evenement);
+			vus.add(lu!.evenement);
+			expect(hooks.echeancesMs[lu!.evenement], type).toBeLessThan(timeout * 1000);
+		}
+		expect([...vus].sort()).toEqual([...EVENEMENTS_HOOK].sort());
+	});
+});
+
 describe('mnemo hook fin : épisode minimal', () => {
 	/** Dossier Mnemo réel (mémoire git), projet `alpha/` sous git, session de ce projet. */
 	async function dossierAvecMemoire(): Promise<string> {

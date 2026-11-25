@@ -306,12 +306,15 @@ export function elementsDuTableau(entrees: readonly EntreeToml[], nom: string): 
 	return { elements, enLigne };
 }
 
-/** Le texte sans les plages données (triées ou non, sans chevauchement). */
+/**
+ * Le texte sans les plages données (triées ou non, sans chevauchement), ni les lignes vides juste avant chacune (celle qui
+ * séparait un bloc ajouté par `avecBlocALaFin`) : un bloc ajouté puis retiré rend le texte d'avant.
+ */
 export function sansPlages(texte: string, plages: readonly { debut: number; fin: number }[]): string {
 	let resultat = '';
 	let i = 0;
 	for (const p of [...plages].sort((a, b) => a.debut - b.debut)) {
-		resultat += texte.slice(i, p.debut);
+		resultat = `${resultat}${texte.slice(i, p.debut)}`.replace(/(^|\n)(?:[ \t]*\n)+$/u, '$1');
 		i = p.fin;
 	}
 	return resultat + texte.slice(i);

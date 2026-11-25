@@ -70,8 +70,9 @@ describe('mnemo init : options', () => {
 			expect(() => lireOptionsInit([avec!, sans!])).toThrow(expect.objectContaining({ code: 2, message: expect.stringContaining('contradictoires') }));
 		}
 		expect(() => lireOptionsInit(['--modele'])).toThrow(expect.objectContaining({ code: 2 }));
-		expect(lireOptionsInit(['d', '--json', '--mcp', '--sans-lanceur'])).toEqual({ dossier: 'd', oui: false, json: true, mcp: true, codex: false, modeles: null, commande: null, lanceur: false });
-		expect(lireOptionsInit(['--codex'])).toMatchObject({ codex: true, mcp: null });
+		expect(lireOptionsInit(['d', '--json', '--mcp', '--sans-lanceur'])).toEqual({ dossier: 'd', oui: false, json: true, mcp: true, moteurs: [], modeles: null, commande: null, lanceur: false });
+		expect(lireOptionsInit(['--codex'])).toMatchObject({ moteurs: ['codex'], mcp: null });
+		expect(lireOptionsInit(['--mistral', '--codex'])).toMatchObject({ moteurs: ['codex', 'mistral-vibe'] });
 	});
 
 	it('options contradictoires : rien n’est créé', async () => {
@@ -265,9 +266,9 @@ describe('mnemo init : échec en mode texte', () => {
 describe('mnemo init --codex', () => {
 	const avecCodex = (declaration: ResultatDeclaration, hooks: ResultatInstallationHooks = 'installe') => ({
 		...actions(),
-		declarerCodex: vi.fn(async () => declaration),
-		installerHooksCodex: vi.fn(async () => hooks),
-		cheminHooksCodex: vi.fn(() => '/h/codex-jetable/hooks.json'),
+		declarerAuMoteur: vi.fn(async () => declaration),
+		installerHooks: vi.fn(async () => hooks),
+		cheminHooks: vi.fn(() => '/h/codex-jetable/hooks.json'),
 	});
 
 	it('déclare chez Codex (étape « codex »), le reste inchangé ; sans --codex, Codex n’est jamais touché', async () => {
@@ -276,16 +277,16 @@ describe('mnemo init --codex', () => {
 		const a = avecCodex('declare');
 		const sortie = capture();
 		await commandeInit([racine, '--json', '--sans-mcp', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: a });
-		expect(a.declarerCodex).toHaveBeenCalledOnce();
-		expect(a.installerHooksCodex).toHaveBeenCalledOnce();
+		expect(a.declarerAuMoteur).toHaveBeenCalledOnce();
+		expect(a.installerHooks).toHaveBeenCalledOnce();
 		expect(a.declarerMcp).not.toHaveBeenCalled();
 		expect(evenements(lignesJson(sortie.texte()))).toEqual(['memoire:debut', 'memoire:fait', 'mcp:saute', 'codex:debut', 'codex:fait', 'codex_hooks:debut', 'codex_hooks:fait', 'modeles:saute', 'commande:saute', 'lanceur:saute']);
 		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'codex_hooks', etat: 'fait', message: expect.stringContaining('(/h/codex-jetable/hooks.json) ; approuvez-les une fois dans Codex (/hooks)') });
 		const sans = avecCodex('declare');
 		const sortieSans = capture();
 		await commandeInit([racine, '--json', '--mcp'], { sortie: sortieSans.flux, plateforme: 'linux', actions: sans });
-		expect(sans.declarerCodex).not.toHaveBeenCalled();
-		expect(sans.installerHooksCodex).not.toHaveBeenCalled();
+		expect(sans.declarerAuMoteur).not.toHaveBeenCalled();
+		expect(sans.installerHooks).not.toHaveBeenCalled();
 		expect(evenements(lignesJson(sortieSans.texte())).some((e) => e.startsWith('codex'))).toBe(false);
 	});
 
@@ -352,10 +353,45 @@ describe('mnemo init --codex', () => {
 		const a = avecCodex('declare');
 		const sortie = capture();
 		await commandeInit([racine, '--json', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: a });
-		expect(a.declarerCodex).not.toHaveBeenCalled();
-		expect(a.installerHooksCodex).not.toHaveBeenCalled();
+		expect(a.declarerAuMoteur).not.toHaveBeenCalled();
+		expect(a.installerHooks).not.toHaveBeenCalled();
 		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'codex', etat: 'saute', message: 'Serveur MCP non déclaré à Codex (MNEMO_SANS_MCP=1).' });
 		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'codex_hooks', etat: 'saute', message: 'Hooks non installés chez Codex (MNEMO_SANS_MCP=1).' });
+	});
+});
+
+describe('mnemo init --mistral', () => {
+	it('déclare et installe les hooks chez Mistral Vibe (étapes « mistral », « mistral_hooks »), sans approbation à demander ; avec --codex, Codex d’abord', async () => {
+		avecMcpFactice();
+		const racine = await dossierTemporaire();
+		const a = {
+			...actions(),
+			declarerAuMoteur: vi.fn(async (): Promise<ResultatDeclaration> => 'declare'),
+			installerHooks: vi.fn(async (): Promise<ResultatInstallationHooks> => 'installe'),
+			cheminHooks: vi.fn((id: string) => `/h/${id}/hooks`),
+		};
+		const sortie = capture();
+		await commandeInit([racine, '--json', '--sans-mcp', '--mistral', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: a });
+		expect(a.declarerAuMoteur.mock.calls).toEqual([['codex'], ['mistral-vibe']]);
+		expect(a.installerHooks.mock.calls).toEqual([['codex'], ['mistral-vibe']]);
+		const lignes = lignesJson(sortie.texte());
+		expect(evenements(lignes).filter((e) => e.startsWith('mistral'))).toEqual(['mistral:debut', 'mistral:fait', 'mistral_hooks:debut', 'mistral_hooks:fait']);
+		expect(lignes).toContainEqual({ etape: 'mistral', etat: 'fait', message: 'Serveur MCP déclaré pour toutes les sessions Mistral Vibe.' });
+		expect(lignes).toContainEqual({ etape: 'mistral_hooks', etat: 'fait', message: 'Hooks de Mnemo installés chez Mistral Vibe (/h/mistral-vibe/hooks).' });
+	});
+
+	it('déclaration d’un autre Mnemo : échec de motif « perime » qui donne la commande de Mistral Vibe ; désactivée : laissée', async () => {
+		avecMcpFactice();
+		const racine = await dossierTemporaire();
+		const perime = { ...actions(), declarerAuMoteur: vi.fn(async (): Promise<ResultatDeclaration> => ({ perime: true, manuel: 'vibe mcp add …', remplacable: true })), installerHooks: vi.fn(async (): Promise<ResultatInstallationHooks> => 'deja'), cheminHooks: vi.fn(() => '/h/hooks.toml') };
+		const sortie = capture();
+		await expect(commandeInit([racine, '--json', '--sans-mcp', '--mistral'], { sortie: sortie.flux, plateforme: 'linux', actions: perime })).rejects.toMatchObject({ code: 1 });
+		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'mistral', etat: 'echec', motif: 'perime', message: expect.stringContaining('mnemo declarer --moteur mistral-vibe --remplacer') });
+		const desactive = { ...perime, declarerAuMoteur: vi.fn(async (): Promise<ResultatDeclaration> => 'desactive') };
+		const texte = capture();
+		await commandeInit([racine, '--sans-mcp', '--mistral'], { sortie: texte.flux, interactif: false, plateforme: 'linux', actions: desactive });
+		expect(texte.texte()).toContain('Serveur MCP : déclaration désactivée dans Mistral Vibe (disabled = true), laissée telle quelle.');
+		expect(texte.texte()).toContain('Hooks de Mnemo déjà installés chez Mistral Vibe (/h/hooks.toml).');
 	});
 });
 

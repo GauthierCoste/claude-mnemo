@@ -1,23 +1,35 @@
 import { fileURLToPath } from 'node:url';
 import type { SortieDeclarer } from '@mnemo/contrat';
-import type { CommandeMoteur, Executer, HooksDuPoste } from '../../application/ports.ts';
+import { basename } from 'node:path';
+import type { CommandeMoteur, Executer, HooksDuPoste, MoteurDuPoste } from '../../application/ports.ts';
 import { estIdMoteur, IDS_MOTEURS, MOTEUR_PAR_DEFAUT } from '../../domaine/moteurs/moteur.ts';
 import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
 import { MOTEURS_DU_POSTE } from '../../infra/moteurs/moteurs.ts';
 import { nodeDurable } from '../../infra/node-durable.ts';
+import { REMEDES } from '../moteurs-du-poste.ts';
 import { ErreurCli } from './erreurs.ts';
 import { executeurReel } from '../../infra/executeur.ts';
 
 const USAGE = `Usage : mnemo declarer (--remplacer | --retirer) [--moteur <${IDS_MOTEURS.join(' | ')}>] [--json]
   --remplacer : remet la déclaration MCP de Mnemo au moteur (portée utilisateur) sur ce Node et ce Mnemo, si elle existe
-                (Codex : de même pour les hooks de Mnemo de ~/.codex/hooks.json)
-  --retirer   : la retire, si elle lance ce Node et ce Mnemo (Codex : les hooks aussi)
+                (Codex, Mistral Vibe : de même pour les hooks de Mnemo de ~/.codex/hooks.json, ~/.vibe/hooks.toml)
+  --retirer   : la retire, si elle lance ce Node et ce Mnemo (Codex, Mistral Vibe : les hooks aussi)
   --moteur    : ${MOTEUR_PAR_DEFAUT} par défaut`;
 
 const MAIN = fileURLToPath(new URL('./main.ts', import.meta.url));
 
-/** Ce que lit la commande ; remplaçable (tests : aucun vrai `claude` ni vrai `codex`). */
-export type DependancesDeclarer = { executer: Executer; claude: () => CommandeMoteur | null; codex: () => CommandeMoteur | null; main: string; env: Record<string, string | undefined> };
+/** Ce que lit la commande ; remplaçable (tests : aucun vrai `claude`, `codex` ni `vibe`). */
+export type DependancesDeclarer = {
+	executer: Executer;
+	claude: () => CommandeMoteur | null;
+	codex: () => CommandeMoteur | null;
+	vibe: () => CommandeMoteur | null;
+	main: string;
+	env: Record<string, string | undefined>;
+};
+
+/** La commande du moteur donnée par les dépendances, s'il y en a une. */
+const TROUVEURS: Record<IdMoteur, 'claude' | 'codex' | 'vibe'> = { 'claude-code': 'claude', codex: 'codex', 'mistral-vibe': 'vibe' };
 
 const MESSAGES: Record<Exclude<SortieDeclarer['resultat'], 'echec'>, string> = {
 	absent: 'Aucune déclaration MCP « mnemo » : rien à faire.',
@@ -27,20 +39,24 @@ const MESSAGES: Record<Exclude<SortieDeclarer['resultat'], 'echec'>, string> = {
 	retire: 'Déclaration MCP retirée.',
 };
 
-const MESSAGES_HOOKS: Record<'absent' | 'deja' | 'remplace' | 'autre' | 'retire', string> = {
-	absent: 'Aucun hook de Mnemo dans hooks.json : rien à faire.',
-	deja: 'Hooks de Mnemo déjà à jour.',
-	remplace: 'Hooks de Mnemo refaits avec ce Node et ce Mnemo ; approuvez-les de nouveau dans Codex (/hooks).',
-	autre: 'Aucun hook de ce Mnemo dans hooks.json ; ceux d’une autre installation de Mnemo (autre Node ou autre Mnemo) sont laissés.',
-	retire: 'Hooks de Mnemo retirés de hooks.json.',
-};
+/** Messages des hooks de Mnemo installés pour tout le poste chez ce moteur (`fichier` : leur fichier). */
+function messagesHooks(moteur: MoteurDuPoste, fichier: string): Record<'absent' | 'deja' | 'remplace' | 'autre' | 'retire', string> {
+	const approuver = REMEDES[moteur.id].approbation === null ? '' : ` ; approuvez-les de nouveau dans ${moteur.nom} (/hooks)`;
+	return {
+		absent: `Aucun hook de Mnemo dans ${fichier} : rien à faire.`,
+		deja: 'Hooks de Mnemo déjà à jour.',
+		remplace: `Hooks de Mnemo refaits avec ce Node et ce Mnemo${approuver}.`,
+		autre: `Aucun hook de ce Mnemo dans ${fichier} ; ceux d’une autre installation de Mnemo (autre Node ou autre Mnemo) sont laissés.`,
+		retire: `Hooks de Mnemo retirés de ${fichier}.`,
+	};
+}
 
-/** Les hooks de Mnemo installés pour tout le poste (Codex) : remis à jour ou retirés, comme la déclaration MCP. */
-async function entretenirHooks(hooks: HooksDuPoste, remplacer: boolean, appel: { node: string; main: string; env: Record<string, string | undefined> }): Promise<NonNullable<SortieDeclarer['hooks']>> {
+/** Les hooks de Mnemo installés pour tout le poste (Codex, Mistral Vibe) : remis à jour ou retirés, comme la déclaration MCP. */
+async function entretenirHooks(moteur: MoteurDuPoste, hooks: HooksDuPoste, remplacer: boolean, appel: { node: string; main: string; env: Record<string, string | undefined> }): Promise<NonNullable<SortieDeclarer['hooks']>> {
 	const r = remplacer ? await hooks.remplacer(appel) : await hooks.retirer(appel);
 	if (typeof r !== 'string') return { resultat: 'echec', message: `Échec des hooks : ${r.echec}` };
 	const resultat = r === 'mis_a_jour' ? 'remplace' : r;
-	return { resultat, message: MESSAGES_HOOKS[resultat] };
+	return { resultat, message: messagesHooks(moteur, basename(hooks.chemin(appel.env)))[resultat] };
 }
 
 /** `--moteur <id>` (une fois au plus), le reste des arguments ; erreur d'usage sinon. */
@@ -55,9 +71,10 @@ function lireMoteur(args: string[]): { moteur: IdMoteur; reste: string[] } {
 }
 
 /**
- * `mnemo declarer` : entretien de la déclaration MCP de Mnemo à un moteur (Claude Code par défaut, ou `--moteur codex`) : la
- * remettre sur ce Node et ce Mnemo, ou la retirer ; jamais de nouvelle déclaration (c'est `mnemo init --mcp` ou `--codex`).
- * Codex : ses hooks de Mnemo (`~/.codex/hooks.json`) suivent, une ligne de plus en texte, `hooks` en JSON.
+ * `mnemo declarer` : entretien de la déclaration MCP de Mnemo à un moteur (Claude Code par défaut, ou `--moteur <id>`) : la
+ * remettre sur ce Node et ce Mnemo, ou la retirer ; jamais de nouvelle déclaration (c'est `mnemo init --mcp`, `--codex` ou
+ * `--mistral`). Codex et Mistral Vibe : leurs hooks de Mnemo pour tout le poste suivent, une ligne de plus en texte, `hooks`
+ * en JSON.
  * `--json` : une ligne `SortieDeclarer` (`@mnemo/contrat`) ; code 1 sur un échec.
  */
 export async function commandeDeclarer(args: string[], partiel: Partial<DependancesDeclarer> = {}, ecrire: (ligne: string) => void = (ligne) => console.log(ligne)): Promise<void> {
@@ -67,7 +84,7 @@ export async function commandeDeclarer(args: string[], partiel: Partial<Dependan
 	const remplacer = reste.includes('--remplacer');
 	if (remplacer === reste.includes('--retirer')) throw new ErreurCli(USAGE, 2);
 	const moteur = MOTEURS_DU_POSTE[id];
-	const trouver = id === 'codex' ? partiel.codex : partiel.claude;
+	const trouver = partiel[TROUVEURS[id]];
 	const appel = {
 		executer: partiel.executer ?? executeurReel(),
 		main: partiel.main ?? MAIN,
@@ -79,7 +96,7 @@ export async function commandeDeclarer(args: string[], partiel: Partial<Dependan
 	const prefixe = id === MOTEUR_PAR_DEFAUT ? '' : `${moteur.nom} : `;
 	const sortie: SortieDeclarer = typeof r === 'string' ? { resultat: r, message: `${prefixe}${MESSAGES[r]}` } : { resultat: 'echec', message: `${prefixe}Échec : ${r.echec}` };
 	if (moteur.hooksDuPoste !== undefined) {
-		const hooks = await entretenirHooks(moteur.hooksDuPoste, remplacer, { node: nodeDurable(process.platform), main: appel.main, env: appel.env });
+		const hooks = await entretenirHooks(moteur, moteur.hooksDuPoste, remplacer, { node: nodeDurable(process.platform), main: appel.main, env: appel.env });
 		sortie.hooks = { resultat: hooks.resultat, message: `${prefixe}${hooks.message}` };
 	}
 	if (reste.includes('--json')) ecrire(JSON.stringify(sortie));

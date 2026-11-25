@@ -999,6 +999,8 @@ export type ResultatRetraitHooks = 'absent' | 'retire' | 'autre' | { echec: stri
  * de ce Node et ce `main.ts`.
  */
 export type HooksDuPoste = {
+	/** Le fichier des hooks visé, pour les messages (`hooks.json` de Codex, `hooks.toml` de Mistral Vibe). */
+	chemin(env: Record<string, string | undefined>): string;
 	lire(a: AppelHooksDuPoste): Promise<LectureHooksDuPoste>;
 	installer(a: AppelHooksDuPoste): Promise<ResultatInstallationHooks>;
 	remplacer(a: AppelHooksDuPoste): Promise<ResultatRemplacementHooks>;
@@ -1110,12 +1112,14 @@ export type MoteurDuPoste = {
 	commandeParDefaut: string;
 	trouver(env: Record<string, string | undefined>, plateforme: string): CommandeMoteur | null;
 	declarationMcp: DeclarationMcp;
-	/** Hooks installés pour tout le poste (Codex) ; absent : le moteur les prend des fichiers de chaque session (Claude Code). */
+	/** Hooks installés pour tout le poste (Codex, Mistral Vibe) ; absent : le moteur les prend des fichiers de chaque session (Claude Code). */
 	hooksDuPoste?: HooksDuPoste;
 	/** Version du moteur (`--version`, en cache ; `relire` : sans le cache) ; null : illisible. Absent : non lue. */
 	version?(commande: CommandeMoteur, env: Record<string, string | undefined>, executer?: Executer, options?: { relire?: boolean }): Promise<string | null>;
 	/** Motif de refus d'une version trop ancienne pour lancer des sessions ; null : elle convient, ou elle est illisible. */
 	refusDeVersion?(version: string | null): string | null;
+	/** Plus ancienne version mesurée avec Mnemo, celle sous laquelle `refusDeVersion` refuse (« 0.171.0 »). */
+	versionMinimale?: string;
 };
 
 /** Ce que reçoit la liste des modèles : l'exécuteur, la commande du moteur (null : introuvable) et l'environnement de l'utilisateur. */
