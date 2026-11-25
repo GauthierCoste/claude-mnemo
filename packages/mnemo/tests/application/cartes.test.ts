@@ -957,6 +957,11 @@ describe('calculerCartes : note de confiance (modèle accepté, refusé, aucun)'
 		expect(refuse.calibree).toBe(false);
 		expect(refuse.classement.map((l) => l.chemin)).toEqual(accepte.classement.map((l) => l.chemin));
 		expect(refuse.classement.every((l) => l.p === null && l.pSansApriori === undefined)).toBe(true);
+		// sa note est gardée à part, non calibrée : la même que celle du modèle accepté, à montrer en gris
+		const pAccepte = new Map(accepte.classement.map((l) => [l.chemin, l.p]));
+		expect(refuse.classement.filter((l) => l.pNonCalibree !== undefined).length).toBeGreaterThan(0);
+		expect(refuse.classement.every((l) => l.pNonCalibree === undefined || l.pNonCalibree === pAccepte.get(l.chemin))).toBe(true);
+		expect(accepte.classement.every((l) => l.pNonCalibree === undefined)).toBe(true);
 		expect(chemins(refuse)).toEqual(chemins(accepte));
 		expect(chemins(refuse).length).toBeGreaterThan(0);
 		expect(refuse.cartes.every((x) => x.note === null)).toBe(true);

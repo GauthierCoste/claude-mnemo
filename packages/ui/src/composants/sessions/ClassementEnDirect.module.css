@@ -95,6 +95,11 @@
 	color: var(--ac);
 }
 
+/* ordre seul : une note non calibrée, atténuée (jamais la couleur d'accent) */
+.note.nonCalibree {
+	color: var(--dim);
+}
+
 .note.injectee {
 	color: var(--ac);
 	font-size: 10px;

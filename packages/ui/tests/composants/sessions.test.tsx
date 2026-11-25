@@ -332,14 +332,15 @@ describe('vue Sessions', () => {
 		expect(screen.getByText('projets / erp-saas / Module stocks.md')).toBeTruthy();
 	});
 
-	it('panneau Contexte : journal ancien, les injectées en tête (◆ à la place de la note), puis le classement en ordre seul (◇, sans %) ; clic → la fiche', async () => {
+	it('panneau Contexte : journal ancien, les injectées en tête (◆ à la place de la note), puis le classement en ordre seul (note non calibrée en gris) ; clic → la fiche', async () => {
 		await monter();
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
 		const classement = await within(contexte).findByRole('list', { name: 'Injecté dans la session' });
 		const lignes = within(classement).getAllByRole('listitem');
 		expect(lignes.map((l) => l.getAttribute('data-id'))).toEqual(['projets/erp-saas/Module stocks.md', 'consignes/Tests.md', 'projets/erp-saas/Lots.md']);
 		expect(lignes[1]!.firstElementChild?.textContent).toBe('◆');
-		expect(lignes[2]!.firstElementChild?.textContent).toBe('◇');
+		// entrée ancienne : sa note, non calibrée, en gris
+		expect(lignes[2]!.firstElementChild?.textContent).toBe('40\u00a0%');
 		expect(within(contexte).getByText('ordre seul').getAttribute('title')).toMatch(/^Ordre seul : /u);
 		expect(within(lignes[1]!).getByRole('img', { name: 'Injectée dans la session' })).toBeTruthy();
 		expect(within(lignes[2]!).queryByRole('img', { name: 'Injectée dans la session' })).toBeNull();

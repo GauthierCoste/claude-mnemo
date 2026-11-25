@@ -87,12 +87,29 @@ function modeAffiche(m: ModeInjection | undefined, duDossier: boolean, seuil: nu
 	return { libelle: null, bulle: 'Injectée entière dans la session', auto: false };
 }
 
+/** Une note qui n'est pas un % calibré, montrée en gris en ordre seul : d'un modèle appris mais refusé, de la règle provisoire, ou d'une entrée ancienne. */
+type NoteNonCalibree = { valeur: number; origine: 'refusee' | 'provisoire' | 'ancienne' };
+
+const BULLES_NON_CALIBREES: Record<NoteNonCalibree['origine'], string> = {
+	refusee: "Note non calibrée : le modèle appris n'a pas passé les critères d'acceptation",
+	provisoire: 'Note non calibrée : la règle provisoire (sens et mots), aucun modèle de note appris',
+	ancienne: "Note non calibrée : celle d'une entrée d'avant le classement vivant",
+};
+
+/** La note non calibrée d'une ligne en ordre seul, si elle en a une (sinon ◇). */
+function noteNonCalibree(l: ClassementVue): { nonCalibree?: NoteNonCalibree } {
+	if (l.pNonCalibree !== undefined) return { nonCalibree: { valeur: l.pNonCalibree, origine: 'refusee' } };
+	if (l.noteProvisoire !== undefined) return { nonCalibree: { valeur: l.noteProvisoire, origine: 'provisoire' } };
+	if (l.signaux === undefined && l.note !== null) return { nonCalibree: { valeur: l.note, origine: 'ancienne' } };
+	return {};
+}
+
 /** Une ligne sous la jonction : du classement du message, ou plus tôt dans la session (piste ancienne, fiche lue). */
 type Ligne = {
 	id: string;
 	titre: string;
 	/** Classement : la note calibrée (null : ordre seul), son rang, et si elle a été envoyée en piste. */
-	classee?: { p: number | null; rang: number; piste: boolean };
+	classee?: { p: number | null; rang: number; piste: boolean; nonCalibree?: NoteNonCalibree };
 	raison?: RaisonCarteVue;
 	depuis?: string;
 	/** Plus tôt : piste d'un message précédent, ou fiche lue par la session. */
@@ -171,7 +188,7 @@ export function ClassementEnDirect(p: {
 			return {
 				id: l.id,
 				titre: l.titre,
-				classee: { p: calibre ? (l.p ?? l.note) : null, rang: i + 1, piste: pisteDuMessage(l) },
+				classee: { p: calibre ? (l.p ?? l.note) : null, rang: i + 1, piste: pisteDuMessage(l), ...(calibre ? {} : noteNonCalibree(l)) },
 				...(raison === undefined ? {} : { raison }),
 				...(carte?.depuis === undefined ? {} : { depuis: carte.depuis.titre }),
 				...(lueMs === undefined ? {} : { lueMs }),
@@ -418,6 +435,8 @@ export function ClassementEnDirect(p: {
 		const c = chemin(l.id);
 		const attend = aServir.chemins.includes(c);
 		const note = pourcentage(k.p);
+		// ordre seul : la note qui existe, non calibrée, en gris (jamais la couleur d'accent ni le seuil)
+		const grise = k.nonCalibree === undefined ? null : pourcentage(k.nonCalibree.valeur);
 		const auDessus = k.p !== null && k.p >= seuil;
 		const raison = l.raison === undefined ? null : libelleRaison(l.raison, l.depuis);
 		const pourquoiPasInjectee = !auDessus
@@ -426,12 +445,13 @@ export function ClassementEnDirect(p: {
 				? "\nAu-dessus du seuil, mais l'injection automatique est coupée : ➤ pour l'injecter."
 				: "\nAu-dessus du seuil sans être injectée (affinée après le message, plafond par message, ou déjà vue) : ➤ pour l'injecter.";
 		const bulle = `${raison ?? 'Classée pour ce message'}${k.piste ? ' – envoyée en piste dans la session (titre et résumé)' : ''}${l.lueMs === undefined ? '' : `, lue aussi à ${heure(l.lueMs)}`}${pourquoiPasInjectee}\n${c}`;
-		const noteBulle = note !== null ? `${note} : chance que la fiche soit utile à ce message (note apprise sur tes jugements)` : `Rang ${k.rang} : ordre seul, sans note calibrée`;
-		const resume = `${note ?? `rang ${k.rang}`}${raison === null ? '' : ` – ${raison}`}${k.piste ? ' – piste' : ''}`;
+		const noteBulle =
+			note !== null ? `${note} : chance que la fiche soit utile à ce message (note apprise sur tes jugements)` : k.nonCalibree !== undefined ? BULLES_NON_CALIBREES[k.nonCalibree.origine] : `Rang ${k.rang} : ordre seul, sans note calibrée`;
+		const resume = `${note ?? grise ?? `rang ${k.rang}`}${raison === null ? '' : ` – ${raison}`}${k.piste ? ' – piste' : ''}`;
 		return (
 			<li key={l.id} ref={refFiche(l.id, ancre)} className={s.ligne} data-id={l.id} data-servie="false" data-nouvelle={marques.nouvelles.has(l.id) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
-				<span className={`${s.note} ${auDessus ? s.haute : ''}`} title={noteBulle}>
-					{note ?? '◇'}
+				<span className={`${s.note} ${auDessus ? s.haute : ''} ${grise !== null ? s.nonCalibree : ''}`} title={noteBulle}>
+					{note ?? grise ?? '◇'}
 				</span>
 				<span className={s.corps}>
 					<button type="button" className={s.fiche} title={bulle} onClick={() => p.surOuvrirFiche(c)}>

@@ -27,6 +27,8 @@ export type LigneDeClassement = {
 	note: number | null;
 	p: number | null;
 	pSansApriori?: number;
+	/** La note d'un modèle appris mais refusé, quand `p` est null : montrée sans être un % calibré (jamais pour injecter). */
+	pNonCalibree?: number;
 	signaux: SignauxBruts;
 	logit: number | null;
 	deja: DejaDansLaSession | null;
@@ -181,6 +183,7 @@ export function classementDuJournal(classement: readonly LigneDeClassement[], ma
 		servi: l.deja === 'injectee',
 		rang: i + 1,
 		...(l.p === null ? {} : { p: arrondi(l.p), ...(l.pSansApriori === undefined ? {} : { pSansApriori: arrondi(l.pSansApriori) }) }),
+		...(l.p === null && l.pNonCalibree !== undefined ? { pNonCalibree: arrondi(l.pNonCalibree) } : {}),
 		signaux: {
 			cosinus: arrondi(l.signaux.cosinus),
 			cosinusRelatif: arrondi(l.signaux.cosinusRelatif),

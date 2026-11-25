@@ -340,6 +340,8 @@ function entreeVivante(
 		servi: id === auto,
 		rang: i + 1,
 		p: o.calibre ? p : null,
+		// ordre seul : la note du modèle appris mais refusé, montrée en gris
+		...(o.calibre ? {} : { pNonCalibree: p }),
 		signaux: signauxDemo(p, raison, o.affinage === 'fait'),
 		...(id === auto ? { auto: true as const } : {}),
 		...(m.pistes.includes(id) ? { piste: true as const } : {}),

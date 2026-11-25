@@ -153,7 +153,7 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(within(lignes()[0]!).queryByRole('button', { name: /^Écarter/u })).toBeNull();
 	});
 
-	it('pas de % sans calibration : ◇, et « ordre seul » dans le bouton des modèles (raison en info-bulle et dans le menu) ; une entrée ancienne aussi', async () => {
+	it('pas de % calibré sans calibration : ◇ sans aucune note, et « ordre seul » dans le bouton des modèles (raison en info-bulle et dans le menu) ; une entrée ancienne : sa note en gris', async () => {
 		monter({ entrees: [entree(1, [v('b.md', 'Bêta', 1, null), v('d.md', 'Delta', 2, null)], { calibree: false })] });
 		const bouton = await screen.findByRole('button', { name: /– ordre seul$/u });
 		expect(lignes().map(note)).toEqual(['◇', '◇']);
@@ -168,8 +168,27 @@ describe('ClassementEnDirect : classement vivant', () => {
 		// entrée d'avant le classement vivant : une note du reranker, sans `calibree`
 		monter({ entrees: [{ session: 's1', moment: 'message', horodatageMs: 1, ids: [], texte: '', ms: 1, sens: true, classement: [{ id: 'b.md', titre: 'Bêta', note: 0.8, servi: false, rang: 1 }], muet: null, cartes: [] }] });
 		await act(async () => {});
-		expect(lignes().map(note)).toEqual(['◇']);
+		expect(lignes().map(note)).toEqual(['80\u00a0%']);
+		expect(lignes()[0]!.firstElementChild!.getAttribute('title')).toBe("Note non calibrée : celle d'une entrée d'avant le classement vivant");
 		expect(await screen.findByRole('button', { name: /– ordre seul$/u })).toBeTruthy();
+	});
+
+	it('ordre seul, modèle appris mais refusé : ses % en gris (jamais l’accent, même ≥ 90), info-bulle dédiée ; ni seuil ni injection ; la règle provisoire aussi', async () => {
+		monter({
+			entrees: [
+				entree(1, [v('b.md', 'Bêta', 1, null, { pNonCalibree: 0.95 }), v('d.md', 'Delta', 2, null, { pNonCalibree: 0.4 }), v('e.md', 'Epsilon', 3, null, { noteProvisoire: 0.62 }), v('f.md', 'Phi', 4, null)], { calibree: false }),
+			],
+		});
+		expect(await screen.findByRole('button', { name: /– ordre seul$/u })).toBeTruthy();
+		const [beta, delta, epsilon, phi] = lignes() as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
+		expect([beta, delta, epsilon, phi].map(note)).toEqual(['95\u00a0%', '40\u00a0%', '62\u00a0%', '◇']);
+		const pct = beta.firstElementChild!;
+		expect(pct.getAttribute('title')).toBe("Note non calibrée : le modèle appris n'a pas passé les critères d'acceptation");
+		expect(pct.className).toMatch(/nonCalibree/u);
+		expect(pct.className).not.toMatch(/haute/u);
+		expect(epsilon.firstElementChild!.getAttribute('title')).toMatch(/^Note non calibrée : la règle provisoire/u);
+		expect(screen.queryByText(/seuil d’injection/u)).toBeNull();
+		expect(within(beta).getByRole('button', { name: 'Bêta' }).getAttribute('title')).not.toMatch(/Au-dessus du seuil/u);
 	});
 
 	it('session terminée en ordre seul : le mot à droite du titre, sans bouton, sa raison au survol', async () => {

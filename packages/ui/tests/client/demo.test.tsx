@@ -90,7 +90,7 @@ describe('mode démo', () => {
 		await vi.advanceTimersByTimeAsync(200);
 		const [ordre] = (await promesse).servis;
 		expect(ordre).toMatchObject({ calibree: false, mesure: 'ordre' });
-		expect(ordre!.classement.every((c) => c.p === null)).toBe(true);
+		expect(ordre!.classement.every((c) => c.p === null && typeof c.pNonCalibree === 'number')).toBe(true);
 	});
 
 	it('données du classement vivant cohérentes avec les règles du hook : ≥ 90 % ⇔ injectée (2 au plus), pistes nouvelles ≥ 30 % (3 au plus)', () => {

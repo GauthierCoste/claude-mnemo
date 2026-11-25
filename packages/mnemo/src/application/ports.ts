@@ -582,6 +582,8 @@ export type Classe = {
 	p?: number | null;
 	/** `p` sans le terme de l'a priori (garde de l'injection automatique) ; présent avec `p` seulement. */
 	pSansApriori?: number;
+	/** Note d'un modèle appris mais refusé (`p` absent ou null) : affichée en gris, jamais pour injecter ni apprendre. */
+	pNonCalibree?: number;
 	/**
 	 * `apriori` : absent des entrées écrites avant l'a priori des gestes (lu comme 0) ; `cosinusZ` : absent des entrées écrites
 	 * avant lui ; `logit` (brut, du reranker au hook) : présent seulement pour une candidate qu'il a notée.
