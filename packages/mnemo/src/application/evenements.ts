@@ -1,3 +1,4 @@
+import type { EtapeCalcul } from '@mnemo/commun';
 import type { CauseArret, EvenementHook, Session, SourceDeDebut } from '../domaine/session.ts';
 import { evenementEtranger, filApresClear, objectifDe } from '../domaine/session.ts';
 import { ecrireEpisodeMinimal } from './episode.ts';
@@ -129,6 +130,12 @@ export type ReglagesEvenement = {
 	 * il mesure aussi le reranker (les appels de mesure à part ne sont alors pas faits). Sans lui : pas d'affinage.
 	 */
 	affiner?: (demande: DemandeAffinage) => void;
+	/**
+	 * Le service : l'étape du calcul d'un message porteur qui commence (recherche, reranker, note, lecture des fiches), diffusée
+	 * au bouton des modèles de la session. Envoi seul : le hook n'attend rien, une erreur est ignorée. La fin (null) est dite par
+	 * le service une fois la réponse rendue, ou à la fin de l'affinage.
+	 */
+	etape?: (session: string, etape: EtapeCalcul) => void;
 };
 
 /** Budget de l'appel de mesure du reranker lancé après la réponse du hook. */
@@ -575,8 +582,21 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 			: null;
 	// les fiches injectées par Mnemo retirées faute de temps au message porteur précédent : prises par ce message porteur seul
 	const remises = session !== null && rang !== null ? (reglages.remises?.prendre(session.id) ?? []) : [];
+	// les étapes du calcul d'un message porteur, pour le bouton des modèles de la session (envoi seul, jamais attendu)
+	const signalEtape = reglages.etape;
+	const etape =
+		session !== null && rang !== null && signalEtape !== undefined
+			? (e: EtapeCalcul) => {
+					try {
+						signalEtape(session.id, e);
+					} catch {
+						// l'étape n'est qu'un affichage
+					}
+				}
+			: undefined;
+	etape?.({ nom: 'recherche' });
 	const lue = await demandeDe(dep, pil, session, entree, reglages, fin);
-	const demande = { ...(demandees.length === 0 ? lue : { ...lue, demandees }), ...(remises.length === 0 ? {} : { remises }) };
+	const demande = { ...(demandees.length === 0 ? lue : { ...lue, demandees }), ...(remises.length === 0 ? {} : { remises }), ...(etape === undefined ? {} : { etape }) };
 	/** Retirées faute de temps : remises au message porteur suivant (pas celles déjà remises à celui-ci : un seul message suivant). */
 	const remettre = (chemins: readonly string[]) => {
 		const aRemettre = chemins.filter((c) => !remises.includes(c));

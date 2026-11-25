@@ -452,6 +452,10 @@ export function routes(ctx: ContexteRoutes): Route[] {
 			const depAffinage = dependancesDeSession(duree === undefined ? dep : { ...dep, reranker: duree.envelopper(dep.reranker, { arrierePlan: true }) }, pil.etat, s.id);
 			const fait = await affiner(depAffinage, pil.etat, d, {
 				signal: controle.signal,
+				// les étapes de cet affinage, tant qu'il est le dernier de la session
+				etape: (e) => {
+					if (affinages.get(s.id) === controle) ctx.diffuser({ type: 'etape', session: s.id, etape: e });
+				},
 				reranker,
 				...(duree === undefined ? {} : { estimer: (documents: number) => duree.estimer(documents) }),
 				diffuser: async () => {
@@ -465,7 +469,11 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				porteurs.noter(s.id, { ...porteur, classement: notesDuClassement(fait.classement), vecteur: fait.vecteur ?? porteur.vecteur });
 			}
 		} finally {
-			if (affinages.get(s.id) === controle) affinages.delete(s.id);
+			if (affinages.get(s.id) === controle) {
+				affinages.delete(s.id);
+				// fini (ou rien à affiner) : plus d'étape en cours
+				ctx.diffuser({ type: 'etape', session: s.id, etape: null });
+			}
 		}
 	};
 	/** Fiches à injecter au prochain message de la session, rendues et diffusées après un changement. */
@@ -885,6 +893,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 					aLaReponse: (tache) => aLaReponse.push(tache),
 					...(ctx.dureeReranker === undefined ? {} : { dureeReranker: ctx.dureeReranker }),
 					rattachee: (id) => pilote.reecrirePlugin(id),
+					etape: (id, e) => ctx.diffuser({ type: 'etape', session: id, etape: e }),
 					affiner: (d) => {
 						aAffiner.demande = d;
 						// un message porteur plus récent : l'affinage du précédent est caduc, coupé avant son prochain morceau
@@ -894,6 +903,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 					},
 				});
 				if (etranger) return ok(reponse);
+				// la réponse est prête : l'étape du hook est finie (un affinage dira les siennes, l'interface ne clignote pas entre les deux)
+				if (entree.evenement === 'message' && entree.session !== '') ctx.diffuser({ type: 'etape', session: entree.session, etape: null });
 				// un après-outil que le profil ne demande pas (`sansContexte` : tenu pour l'état seul) : aucune fiche lue n'est notée
 				// (`traiterEvenement`), rien à relire ni à diffuser
 				const etatSeul = entree.evenement === 'apres_outil' && entree.sansContexte === true;

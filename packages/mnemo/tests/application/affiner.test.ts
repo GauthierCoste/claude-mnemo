@@ -1,3 +1,4 @@
+import type { EtapeCalcul } from '@mnemo/commun';
 import { describe, expect, it } from 'vitest';
 import { AFFINEES_MAX, affiner, BUDGET_AFFINAGE_MS, CANDIDATES_AFFINEES, candidatesAffinees, morceaux } from '../../src/application/affiner.ts';
 import type { DemandeAffinage } from '../../src/application/affiner.ts';
@@ -133,6 +134,30 @@ describe('affiner', () => {
 		expect(etat.ecritures[1]!.sens).toBe(false);
 		expect(diffusions).toBe(2);
 		expect(ecrits).toEqual([]);
+	});
+
+	it('étapes : affinage par paquets (fait sur total), puis la note ; le sens d’abord s’il manquait au hook ; une erreur d’envoi ne touche pas à l’affinage', async () => {
+		const { dep } = dependances({ logitDe: () => 0 });
+		const etapes: EtapeCalcul[] = [];
+		const r = await affiner(dep, etatFaux(100), demande(), { etape: (e) => etapes.push(e) });
+		expect(etapes).toEqual([
+			{ nom: 'affinage', fait: 0, total: 30 },
+			{ nom: 'affinage', fait: 10, total: 30 },
+			{ nom: 'affinage', fait: 20, total: 30 },
+			{ nom: 'note' },
+		]);
+		expect(r).not.toBeNull();
+		const lignes = Array.from({ length: 40 }, (_, i) => ligne(i, { note: null, signaux: { ...ligne(i).signaux, cosinus: null, cosinusRelatif: null, cosinusZ: null } }));
+		const sansSens = dependances({ reranker: false });
+		const vues: string[] = [];
+		const r2 = await affiner(sansSens.dep, etatFaux(100), demande({ sens: false, classement: lignes }), {
+			etape: (e) => {
+				vues.push(e.nom);
+				throw new Error('client parti');
+			},
+		});
+		expect(vues[0]).toBe('sens');
+		expect(r2).not.toBeNull();
 	});
 
 	it('les notes du hook sont gardées, jamais recalculées : seules les autres candidates sont soumises', async () => {

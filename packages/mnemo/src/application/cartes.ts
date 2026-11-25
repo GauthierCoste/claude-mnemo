@@ -14,6 +14,7 @@
  * message même et jamais en différé. Avec le sens, toute carte porte sa note, fiche nommée et fiche de position comprises, sans
  * que la note les reclasse.
  */
+import type { EtapeCalcul } from '@mnemo/commun';
 import { fichesNommees } from '../domaine/fiches-nommees.ts';
 import type { Nommable } from '../domaine/fiches-nommees.ts';
 import { apportPrincipal, baseDuReranker, classer, designees, noter, signalDominant } from '../domaine/note-des-pistes.ts';
@@ -69,6 +70,11 @@ export type FicheDePositionServie = { chemin: string; titre: string; texte: stri
 /** Une fiche injectée entière par Mnemo (spec classement vivant § 3.4) : sa note `p` et le niveau du modèle qui l'a notée. */
 export type FicheInjecteeParMnemo = FicheDePositionServie & { p: number; niveau: NiveauDeNote };
 export type DemandeCartes = {
+	/**
+	 * Le hook d'un message porteur : chaque étape du calcul qui commence (reranker, note, lecture des fiches), pour le bouton des
+	 * modèles de la session. Envoi seul : rien n'attend, une erreur est ignorée.
+	 */
+	etape?: (e: EtapeCalcul) => void;
 	/** Chemin de position de la session ('' = racine). */
 	position: string;
 	/** Le message de l'utilisateur seul (ou la question de l'outil) : les fiches nommées s'y cherchent. */
@@ -505,11 +511,13 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		const parSens = noterLeClassement(m.ordre.map(ligne), modeles, aprioriConnu);
 		const ordreDuHook = parSens.lignes.map((l) => l.chemin);
 		// reranker au hook sur les premières de cet ordre, si l'estimation de sa durée le permet
+		signaler(d, { nom: 'reranker' });
 		const logits = await logitsAuHook(dep, d.dureeReranker, requete, ordreDuHook, texteDuReranker, d.fin);
 		if (logits.size === 0 && d.dureeReranker !== undefined && !d.dureeReranker.fiable() && d.dureeReranker.enCours() === 0 && m.ordre.length > 0 && requete.trim() !== '') {
 			aMesurer = { requete: requeteDuReranker(requete), textes: ordreDuHook.slice(0, DOCUMENTS_A_MESURER).map(texteDuReranker) };
 		}
 		// note finale : Complets pour les candidates que le reranker a notées, Sens seul pour les autres
+		signaler(d, { nom: 'note' });
 		const note = noterLeClassement(
 			parSens.lignes.map((l) => ({ ...l, logit: logits.get(l.chemin) ?? null })),
 			modeles,
@@ -525,6 +533,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 				return deja === 'injectee' || deja === 'lue';
 			};
 			const auSeuil = injectables(note.lignes.map((l) => l.chemin), (c) => note.notes.get(c), reglages.seuilInjection, vue);
+			if (auSeuil.length > 0) signaler(d, { nom: 'lecture' });
 			// les fiches remises d'abord, puis les nouvelles
 			for (const chemin of [...auSeuil.filter((c) => remises.has(c)), ...auSeuil.filter((c) => !remises.has(c))]) {
 				if (injectees.length >= reglages.injectionsParMessage || Date.now() >= d.fin - RESERVE_APRES_INJECTION_MS) break;
@@ -599,4 +608,13 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 	if (position !== null) position = { ...position, encadree: encadrees.has(position.chemin) };
 	const injecteesEncadrees = injectees.map((f) => ({ ...f, encadree: encadrees.has(f.chemin) }));
 	return { position, positionFiche, injectees: injecteesEncadrees, cartes, mesure, ...(vecteurDuCalcul === null ? {} : { vecteur: vecteurDuCalcul }), classement, calibree, ...(aMesurer === undefined ? {} : { aMesurer }) };
+}
+
+/** Envoie l'étape du calcul, sans rien attendre ; une erreur de l'envoi ne touche pas au calcul. */
+function signaler(d: Pick<DemandeCartes, 'etape'>, e: EtapeCalcul): void {
+	try {
+		d.etape?.(e);
+	} catch {
+		// l'étape n'est qu'un affichage
+	}
 }

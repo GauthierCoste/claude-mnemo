@@ -3,7 +3,7 @@
  * l'importe pas ; seuls l'adaptateur HTTP du service et ses clients (interface web) s'y réfèrent, et, pour les sorties
  * `--json` de `mnemo init`, `mnemo verifier-poste` et `mnemo declarer`, la CLI et les programmes qui les lisent.
  */
-import type { AvancementModele, AvecAvertissements, Avatar, GroupeReglage, IdMoteur, LanceurDeProfil, NiveauModeles, OperationModele, RaisonCarte } from '@mnemo/commun';
+import type { AvancementModele, AvecAvertissements, Avatar, EtapeCalcul, GroupeReglage, IdMoteur, LanceurDeProfil, NiveauModeles, OperationModele, RaisonCarte } from '@mnemo/commun';
 
 export type EtatSessionVue = 'travaille' | 'attend' | 'a_relire' | 'en_pause' | 'terminee';
 
@@ -378,7 +378,9 @@ export type MessageServeur =
 	| { type: 'memoire'; modifieeMs: number }
 	/** Les lots d'informations ont changé (proposé par l'archiviste, validé, rejeté, écarté) : relire `GET lots`. */
 	| { type: 'lots'; version: string }
-	| { type: 'retard'; session: string };
+	| { type: 'retard'; session: string }
+	/** L'étape en cours du calcul qui suit un message porteur de la session (hook, puis affinage en fond) ; null : fini. */
+	| { type: 'etape'; session: string; etape: EtapeCalcul | null };
 
 /** Du client vers le service (WebSocket). */
 export type MessageClient =

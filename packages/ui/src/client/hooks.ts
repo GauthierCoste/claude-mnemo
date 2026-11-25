@@ -2,6 +2,8 @@
  * Un hook par ressource du service : seuls ces hooks appellent l'`Api`. Les sessions sont tenues par les messages
  * `sessions` / `session` du WebSocket (une seule lecture initiale, aucune requête périodique).
  */
+import type { EtapeCalcul } from '@mnemo/commun';
+import { AffichageEtape } from '../sessions/etapes.ts';
 import { PARAMETRES_TOUT } from '@mnemo/commun';
 import type { NiveauModeles } from '@mnemo/commun';
 import {
@@ -409,6 +411,27 @@ export function useFenetre(session: string): FenetreVue | null {
 		});
 	}, [connexion, session]);
 	return recue ?? base.donnees?.fenetres[session] ?? null;
+}
+
+/**
+ * L'étape en cours du calcul d'un message porteur de la session (messages `etape` du service), affichée sans clignotement
+ * (`AffichageEtape`) ; null : aucune.
+ */
+export function useEtapeSession(session: string): EtapeCalcul | null {
+	const { connexion } = useClient();
+	const [etape, setEtape] = useState<EtapeCalcul | null>(null);
+	useEffect(() => {
+		setEtape(null);
+		const affichage = new AffichageEtape(setEtape);
+		const fin = connexion.surMessage((m) => {
+			if (m.type === 'etape' && m.session === session) affichage.recevoir(m.etape);
+		});
+		return () => {
+			fin();
+			affichage.arreter();
+		};
+	}, [connexion, session]);
+	return etape;
 }
 
 /**

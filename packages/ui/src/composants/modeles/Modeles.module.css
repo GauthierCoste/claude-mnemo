@@ -22,10 +22,15 @@
 }
 
 .bouton:hover,
-.bouton[aria-expanded='true'],
+.bouton[aria-expanded='true'] {
+	border-color: var(--ac);
+}
+
+/* Le bouton d'une session : sans cadre ; au survol (ou menu ouvert), un fond discret et le texte plus clair. */
 .boutonSession:hover,
 .boutonSession[aria-expanded='true'] {
-	border-color: var(--ac);
+	background: var(--s3);
+	color: var(--tx);
 }
 
 .eteint {
@@ -162,15 +167,9 @@
 	cursor: help;
 }
 
-/* Classement en ordre seul (aucune note en %) : dit dans le bouton, encadré comme un état. */
-.ordreSeul {
-	border-color: var(--bd2);
-}
-
-/* Un niveau propre à la session se voit (il diffère de celui de partout). */
+/* Un niveau propre à la session se voit (il diffère de celui de partout) : le texte plus clair, sans cadre. */
 .propre {
 	color: var(--tx);
-	border-color: var(--bd2);
 }
 
 .menu {

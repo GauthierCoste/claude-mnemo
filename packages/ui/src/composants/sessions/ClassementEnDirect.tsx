@@ -539,7 +539,9 @@ export function ClassementEnDirect(p: {
 	// sans fiche injectée, rien à séparer : pas de séparateur (la coupure se dit quand même, à la même place)
 	const separateurVisible = ordreServies.length > 0;
 	const jonctionVisible = separateurVisible || coupures.length > 0;
-	const etatClassement = { affinage, ordreSeul: ordreSeul ? raisonOrdreSeul(coupes) : null };
+	// au repos, le bouton des modèles dit l'état du classement : coupé, calibré (un niveau accepté injecte), sinon ordre seul
+	const repos = coupures.length > 0 ? 'injection coupée' : calibre ? 'calibré' : 'ordre seul';
+	const etatClassement = { affinage, ordreSeul: ordreSeul ? raisonOrdreSeul(coupes) : null, repos };
 	const niveaux = [...new Set(coupures.map((x) => x.niveau))];
 	const libelleNiveau = (n: CoupureInjectionVue['niveau']) => (n === 'complets' ? 'modèles complets' : 'sens seul');
 

@@ -8,6 +8,7 @@ export * from './avertissements.ts';
 export * from './caracteres.ts';
 export * from './consignes.ts';
 export * from './encodage.ts';
+export * from './etapes-calcul.ts';
 export * from './formats.ts';
 export * from './limites.ts';
 export * from './memoire.ts';

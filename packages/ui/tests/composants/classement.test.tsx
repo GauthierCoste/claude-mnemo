@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import type { EtapeCalcul } from '@mnemo/commun';
 import type { ClassementVue, CoupureInjectionVue, EcarteVue, EcarteeToujoursVue, EntreeServieVue, EtatModelesVue, InjectionVue, LueVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
 import { act, cleanup, screen, within } from '@testing-library/react';
 import { useState } from 'react';
@@ -237,15 +238,66 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(separateurs().map((x) => [x.getAttribute('data-genre'), x.textContent])).toEqual([['filet', '']]);
 	});
 
-	it('pas de ligne qui rappelle le message ; « affinage… » dans le bouton des modèles pendant l’affinage, puis l’icône seule', async () => {
+	it('pas de ligne qui rappelle le message ; « affinage… » (avec reflet) dans le bouton des modèles pendant l’affinage, puis l’état au repos', async () => {
 		const { remplacer } = monter({ entrees: [{ ...CALIBRE, affinage: 'en_cours', texte: 'Le message classé' }] });
 		const bouton = await screen.findByRole('button', { name: /– affinage…$/u });
 		expect(bouton.textContent).toBe('affinage…');
 		expect(liste().textContent).not.toMatch(/Le message classé|affinage/u);
 		remplacer([{ ...CALIBRE, affinage: 'fait' }]);
 		const apres = screen.getByRole('button', { name: /^Modèles de cette session/u });
-		expect(apres.textContent).toBe('');
+		expect(apres.textContent).toBe('calibré');
+		expect(apres.firstElementChild!.className).not.toMatch(/reflet/u);
 		expect(apres.getAttribute('aria-label')).not.toMatch(/affinage|ordre seul/u);
+	});
+
+	it('bouton des modèles au repos : toujours un texte, atténué, sans reflet : « calibré », « ordre seul », « injection coupée »', async () => {
+		const texte = async () => {
+			const b = await screen.findByRole('button', { name: /^Modèles de cette session/u });
+			expect(b.firstElementChild!.className).not.toMatch(/reflet/u);
+			return b.textContent;
+		};
+		monter();
+		expect(await texte()).toBe('calibré');
+		cleanup();
+		monter({ entrees: [entree(1, [v('b.md', 'Bêta', 1, null)], { calibree: false })] });
+		expect(await texte()).toBe('ordre seul');
+		cleanup();
+		monter({ coupures: [{ niveau: 'complets', injections: 100, ecartees: 31, depuisMs: 1, motif: 'm' }] });
+		expect(await texte()).toBe('injection coupée');
+	});
+
+	it('étapes du calcul (messages `etape` de la session) : affichées avec le reflet si elles durent plus de 150 ms, au moins 400 ms ; l’activité de la session d’abord', async () => {
+		vi.useFakeTimers();
+		const { faux } = monter();
+		await act(async () => {});
+		const bouton = () => screen.getByRole('button', { name: /^Modèles de cette session/u });
+		const emettre = (etape: EtapeCalcul | null, session = 's1') => act(() => faux.connexion.emettre({ type: 'etape', session, etape }));
+		// trop brève : jamais affichée
+		await emettre({ nom: 'recherche' });
+		await act(async () => vi.advanceTimersByTime(100));
+		await emettre(null);
+		await act(async () => vi.advanceTimersByTime(1000));
+		expect(bouton().textContent).toBe('calibré');
+		// une autre session : rien
+		await emettre({ nom: 'reranker' }, 'autre');
+		await act(async () => vi.advanceTimersByTime(300));
+		expect(bouton().textContent).toBe('calibré');
+		await emettre({ nom: 'reranker' });
+		await act(async () => vi.advanceTimersByTime(200));
+		expect(bouton().textContent).toBe('reranker…');
+		expect(bouton().firstElementChild!.className).toMatch(/reflet/u);
+		// la fin juste après : l'étape reste ses 400 ms
+		await emettre(null);
+		await act(async () => vi.advanceTimersByTime(100));
+		expect(bouton().textContent).toBe('reranker…');
+		await act(async () => vi.advanceTimersByTime(400));
+		expect(bouton().textContent).toBe('calibré');
+		// l'affinage par paquets : sa progression suit
+		await emettre({ nom: 'affinage', fait: 0, total: 30 });
+		await act(async () => vi.advanceTimersByTime(200));
+		expect(bouton().textContent).toBe('affinage 0/30…');
+		await emettre({ nom: 'affinage', fait: 10, total: 30 });
+		expect(bouton().textContent).toBe('affinage 10/30…');
 	});
 
 	it('glissement à l’affinage : la même entrée rediffusée avec d’autres rangs réordonne la liste, ▲/▼ quelques secondes', async () => {

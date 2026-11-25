@@ -1,3 +1,4 @@
+import type { EtapeCalcul } from '@mnemo/commun';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
 import { DEMANDE_MAX, estEtranger, relatifALaRacine, traiterEvenement } from '../../src/application/evenements.ts';
@@ -789,6 +790,24 @@ describe('traiterEvenement : contexte sobre au message', () => {
 		const r = await traiterEvenement(dep, { etat, depot: DEPOT_ABSENT }, message(10, '<task-notification>fini</task-notification>'), local);
 		expect(r).toEqual({});
 		expect(await etat.servis(ID, 5)).toEqual([]);
+	});
+
+	it('étapes du calcul : un message porteur dit la recherche puis le reranker et la note, pour sa session ; un message muet, rien ; un envoi en échec ne change pas la réponse', async () => {
+		const { dep, pil } = await memoire();
+		const etapes: [string, string][] = [];
+		const avecEtapes = { ...local, etape: (session: string, e: EtapeCalcul) => void etapes.push([session, e.nom]) };
+		await traiterEvenement(dep, pil, message(10, 'ok merci'), avecEtapes);
+		expect(etapes).toEqual([]);
+		await traiterEvenement(dep, pil, message(11, 'catalogue références'), avecEtapes);
+		expect(etapes.map(([, n]) => n).slice(0, 3)).toEqual(['recherche', 'reranker', 'note']);
+		expect(new Set(etapes.map(([s]) => s))).toEqual(new Set([ID]));
+		const sans = await traiterEvenement(dep, pil, message(12, 'catalogue des avoirs'), {
+			...local,
+			etape: () => {
+				throw new Error('client parti');
+			},
+		});
+		expect(sans).toBeDefined();
 	});
 
 	it('premier message muet : fiche de position sans cartes ; le message porteur suivant reçoit les cartes du périmètre', async () => {

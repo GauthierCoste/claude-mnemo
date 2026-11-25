@@ -1,15 +1,15 @@
 /**
- * Niveau des modèles pour une session, aligné à droite de « Injecté dans la session » : icône et niveau effectif, ou ce qui
- * est en cours, en texte, comme le bouton Modèles de l'en-tête : l'activité de la session (« Recherche… »), l'affinage du
- * classement (« affinage… »), ou l'état du classement s'il sort de l'ordinaire (« ordre seul », sa raison en info-bulle et
- * dans le menu). Un clic ouvre le menu : comme partout, complets, sens seul, coupés ; un niveau plus
+ * Niveau des modèles pour une session, aligné à droite de « Injecté dans la session » : un texte nu à gauche de l'icône, sans
+ * cadre. Ce qui est en cours, avec un reflet : l'activité de la session (« Recherche… », prioritaire), l'étape du calcul du
+ * message (« reranker… », « affinage 10/30… »), l'affinage du classement. Au repos, atténué : l'état du classement
+ * (« ordre seul », sa raison en info-bulle et dans le menu ; « calibré » ; « injection coupée »). Un clic ouvre le menu : comme partout, complets, sens seul, coupés ; un niveau plus
  * large que celui de partout est désactivé, avec son motif. Rien tant que l'état des modèles n'est pas connu ou qu'ils ne sont pas
  * installés.
  */
-import { NIVEAUX_MODELES, niveauEffectif, plusLarge, type NiveauModeles } from '@mnemo/commun';
+import { libelleEtapeCalcul, NIVEAUX_MODELES, niveauEffectif, plusLarge, type NiveauModeles } from '@mnemo/commun';
 import type { ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
-import { useModeles, useNiveauModelesSession } from '../../client/hooks.ts';
+import { useEtapeSession, useModeles, useNiveauModelesSession } from '../../client/hooks.ts';
 import { cx } from '../commun/classes.ts';
 import { useToast } from '../Toast.tsx';
 import { IconeModeles } from './IconeModeles.tsx';
@@ -20,13 +20,17 @@ import s from './Modeles.module.css';
 /** Texte du bouton : rien pour le cas courant (complets), un mot sinon ; la place est comptée à côté du titre. */
 const TEXTES: Record<NiveauModeles, string> = { complets: '', sens: 'Sens', coupes: 'Coupés' };
 
-/** L'état du classement du dernier message, dit par le bouton : affinage en cours, ordre seul (sa raison ; null : notes calibrées). */
-export type EtatClassementSession = { affinage: boolean; ordreSeul: string | null };
+/**
+ * L'état du classement du dernier message, dit par le bouton : affinage en cours, ordre seul (sa raison ; null : notes
+ * calibrées) ; `repos` : le texte au repos (« ordre seul », « calibré », « injection coupée »).
+ */
+export type EtatClassementSession = { affinage: boolean; ordreSeul: string | null; repos?: string };
 
 const TITRE_AFFINAGE = "Le reranker affine le classement en arrière-plan ; les lignes glisseront à leur nouvelle place. Rien n'est injecté après coup.";
 
 export function ModelesSession(p: { session: string; niveau: NiveauModeles | null; classement?: EtatClassementSession }): ReactNode {
 	const { etat: e } = useModeles(true);
+	const etape = useEtapeSession(p.session);
 	const changer = useNiveauModelesSession();
 	const toast = useToast();
 	if (e?.installes !== true) {
@@ -39,7 +43,7 @@ export function ModelesSession(p: { session: string; niveau: NiveauModeles | nul
 				</span>
 			);
 		return ordre === null ? null : (
-			<span className={cx(s.etatSeul, s.ordreSeul)} title={ordre}>
+			<span className={s.etatSeul} title={ordre}>
 				ordre seul
 			</span>
 		);
@@ -50,8 +54,8 @@ export function ModelesSession(p: { session: string; niveau: NiveauModeles | nul
 	const affinage = p.classement?.affinage === true;
 	const ordreSeul = p.classement?.ordreSeul ?? null;
 	// ce qui est en cours d'abord (en texte, point animé), puis l'état du classement, puis le niveau
-	const enCours = activite !== undefined ? libelleActivite(activite) : affinage ? 'affinage…' : null;
-	const texte = enCours ?? (ordreSeul !== null ? 'ordre seul' : TEXTES[effectif]);
+	const enCours = activite !== undefined ? libelleActivite(activite) : etape !== null ? libelleEtapeCalcul(etape) : affinage ? 'affinage…' : null;
+	const texte = enCours ?? p.classement?.repos ?? (ordreSeul !== null ? 'ordre seul' : TEXTES[effectif]);
 	const niveauDit = propre === null ? `Modèles de cette session : comme partout (${NOMS_NIVEAUX[e.niveau]})` : `Modèles de cette session : ${NOMS_NIVEAUX[propre]}`;
 	const titre = [niveauDit, ...(activite === undefined && affinage ? [TITRE_AFFINAGE] : []), ...(ordreSeul !== null ? [ordreSeul] : [])].join('\n');
 	const choisir = (niveau: NiveauModeles | null) =>
@@ -60,7 +64,7 @@ export function ModelesSession(p: { session: string; niveau: NiveauModeles | nul
 		<MenuModeles
 			libelle={[niveauDit, ...(enCours !== null ? [enCours] : []), ...(ordreSeul !== null ? ['ordre seul'] : [])].join(' – ')}
 			titre={titre}
-			classeBouton={cx(s.boutonSession, effectif === 'coupes' && s.eteint, propre !== null && s.propre, ordreSeul !== null && enCours === null && s.ordreSeul)}
+			classeBouton={cx(s.boutonSession, effectif === 'coupes' && s.eteint, propre !== null && s.propre)}
 			alignement="droite"
 			contenuBouton={
 				<>
@@ -81,7 +85,7 @@ export function ModelesSession(p: { session: string; niveau: NiveauModeles | nul
 						<dt>Reclassement</dt>
 						<dd>{effectif === 'complets' ? 'utilisé' : 'non utilisé'}</dd>
 						<dt>En cours</dt>
-						<dd>{enCours === null ? 'rien' : activite !== undefined ? enCours : 'affinage du classement'}</dd>
+						<dd>{enCours === null ? 'rien' : activite !== undefined || etape !== null ? enCours : 'affinage du classement'}</dd>
 						{ordreSeul !== null && (
 							<>
 								<dt>Classement</dt>

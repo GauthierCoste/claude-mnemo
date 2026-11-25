@@ -2,6 +2,7 @@
  * Mode démo (`?demo`, en développement seulement, chargé par import dynamique) : une fausse `Api` et une fausse
  * `Connexion` sur les données de `demo-donnees.ts`, pour voir les vues sans service. Jamais dans la construction.
  */
+import type { EtapeCalcul } from '@mnemo/commun';
 import { ErreurApi, type Api } from './api.ts';
 import { lotsDemo } from './demo-lots.ts';
 import { creerModelesDemo } from './demo-modeles.ts';
@@ -618,7 +619,20 @@ function creerConnexionDemo(monde: Monde): FausseConnexion {
 	const premiere = SESSIONS_DEMO[0];
 	if (premiere) {
 		const [deuxieme, troisieme] = CLASSEMENT_VIVANT_DEMO.suivants;
+		const etape = (e: EtapeCalcul | null, apresMs: number) => setTimeout(() => diffuser({ type: 'etape', session: premiere.id, etape: e }), apresMs);
 		const classer = (m: MessageClasseDemo, apresMs: number) => {
+			// les étapes du hook avant l'entrée du message, celles de l'affinage pendant qu'il dure (comme le service)
+			const hook: [EtapeCalcul, number][] = [
+				[{ nom: 'recherche' }, -900],
+				[{ nom: 'reranker' }, -600],
+				[{ nom: 'note' }, -350],
+				...(m.auto ? ([[{ nom: 'lecture' }, -200]] as [EtapeCalcul, number][]) : []),
+			];
+			for (const [e, decalage] of hook) etape(e, apresMs + decalage);
+			etape(null, apresMs);
+			for (const [i, fait] of [0, 10, 20].entries()) etape({ nom: 'affinage', fait, total: 30 }, apresMs + 50 + i * 500);
+			etape({ nom: 'note' }, apresMs + 1550);
+			etape(null, apresMs + 1800);
 			setTimeout(() => {
 				const horodatageMs = Date.now();
 				const coupee = monde.coupures.length > 0;

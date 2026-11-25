@@ -9,6 +9,7 @@
  * Un message porteur plus récent de la session rend l'affinage caduc (sa demande coupe celle-ci, entre deux morceaux ; l'état
  * le vérifie à l'écriture) : rien n'est écrit, l'état d'affinage de l'entrée revient à null (une entrée d'après un outil, non).
  */
+import type { EtapeCalcul } from '@mnemo/commun';
 import { baseDuReranker } from '../domaine/note-des-pistes.ts';
 import { normaliser } from '../domaine/sens.ts';
 import { cosinusDesFiches, cosinusRelatif, cosinusZ } from '../domaine/signaux-de-note.ts';
@@ -63,6 +64,8 @@ export type OptionsAffinage = {
 	reranker?: boolean;
 	/** Durée estimée du reranker pour `documents` (null : pas encore fiable) ; un morceau qui ne tient pas dans le reste du budget n'est pas lancé. */
 	estimer?: (documents: number) => number | null;
+	/** L'étape qui commence (sens, affinage par paquets, note), pour le bouton des modèles de la session ; envoi seul. */
+	etape?: (e: EtapeCalcul) => void;
 };
 
 export type ResultatAffinage = { classement: Classe[]; vecteur: VecteurDuMessage | null };
@@ -136,6 +139,13 @@ export async function affiner(dep: Dependances, etat: Pick<EtatSessions, 'comple
 	const diffuser = async () => {
 		await o.diffuser?.().catch(() => {});
 	};
+	const etape = (e: EtapeCalcul) => {
+		try {
+			o.etape?.(e);
+		} catch {
+			// l'étape n'est qu'un affichage
+		}
+	};
 	const avant = classementDuJournal(d.classement);
 	const ecrire = (classement: Classe[], affinage: 'en_cours' | 'fait' | null, options?: { sens: boolean; calibree: boolean }) =>
 		etat.completerClassement(d.session, d.horodatageMs, classement, affinage, options === undefined ? undefined : { ...(options.sens ? { sens: true } : {}), calibree: options.calibree }).catch(() => false);
@@ -156,6 +166,7 @@ export async function affiner(dep: Dependances, etat: Pick<EtatSessions, 'comple
 	const modeles = d.modeles ?? modelesActifs(dep);
 	const aprioriConnu = { aprioriConnu: d.aprioriConnu === true };
 	if (!d.sens) {
+		etape({ nom: 'sens' });
 		const calcul = await avecLeSens(dep, d, fin).catch(() => null);
 		if (calcul !== null) {
 			({ lignes, vecteur } = calcul);
@@ -176,6 +187,7 @@ export async function affiner(dep: Dependances, etat: Pick<EtatSessions, 'comple
 		const requete = requeteDuReranker(d.requete);
 		for (const [debut, taille] of morceaux(soumises.length, d.mesurer === true)) {
 			if (coupe()) return sansAffinage();
+			etape({ nom: 'affinage', fait: debut, total: soumises.length });
 			const budgetMs = fin - Date.now();
 			const estimee = o.estimer?.(taille) ?? null;
 			// plus de temps pour ce morceau (ni pour les suivants) : l'affinage s'arrête là, sans appel voué à être coupé
@@ -188,6 +200,7 @@ export async function affiner(dep: Dependances, etat: Pick<EtatSessions, 'comple
 	}
 	if (coupe()) return sansAffinage();
 	if (logits.size === duHook && vecteur === null) return sansAffinage();
+	etape({ nom: 'note' });
 	const rangHook = new Map(d.classement.map((l, i) => [l.chemin, i + 1]));
 	// la note recalculée avec les logits (et le sens, s'il manquait au hook) ; sans note apprise, l'ordre provisoire
 	const note = noterLeClassement(
