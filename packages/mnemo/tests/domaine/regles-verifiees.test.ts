@@ -316,7 +316,7 @@ describe('outils de Codex', () => {
 	it('apply_patch : chemins des en-têtes Add, Update, Delete et Move to, relatifs au cwd ; les autres lignes ignorées', () => {
 		const action = patch('*** Add File: src/neuf.ts\n+x\n*** Update File: /home/u/dossier/a.ts\n@@\n-*** Add File: faux.ts\n*** Move to: vendor/b.ts\n*** Delete File: ../.env\n');
 		expect(cheminsTouches(action, OUTILS_CODEX, RACINE, '/home/u/dossier/projet')).toEqual(['projet/src/neuf.ts', 'a.ts', 'projet/vendor/b.ts', '.env']);
-		expect(cheminsTouches({ nom: 'apply_patch', entree: {} }, OUTILS_CODEX, RACINE, RACINE)).toEqual([]);
+		expect(cheminsTouches({ nom: 'apply_patch', entree: {} }, OUTILS_CODEX, RACINE, RACINE)).toBe('illisible');
 		expect(cheminsTouches({ nom: 'Write', entree: { file_path: '/home/u/dossier/.env' } }, OUTILS_CODEX, RACINE, RACINE)).toBeNull();
 	});
 
@@ -324,6 +324,40 @@ describe('outils de Codex', () => {
 		expect(commandesDe(bash('ls && git push --force'), OUTILS_CODEX)).toEqual(['ls', 'git push --force']);
 		expect(commandesDe(patch('*** Add File: a\n'), OUTILS_CODEX)).toBeNull();
 		expect(commandesDe({ nom: 'Bash', entree: { command: ['git', 'push', '--force'] } }, OUTILS_CODEX)).toEqual(['git push --force']);
+	});
+
+	it('liste d’arguments : un shell avec -c ou -lc rend sa ligne ; sinon chaque élément cité au besoin (jamais un « ; » nu)', () => {
+		const liste = (command: string[], nom = 'Bash'): ActionOutil => ({ nom, entree: { command } });
+		expect(commandesDe(liste(['bash', '-lc', 'ls && git push --force']), OUTILS_CODEX)).toEqual(['ls', 'git push --force']);
+		expect(commandesDe(liste(['/bin/zsh', '-c', 'git push --force']), OUTILS_CODEX)).toEqual(['git push --force']);
+		expect(commandesDe(liste(['echo', 'a; git push --force']), OUTILS_CODEX)).toEqual(["echo 'a; git push --force'"]);
+		expect(commandesDe(liste(['sh', 'script.sh']), OUTILS_CODEX)).toEqual(['sh script.sh']);
+	});
+
+	it('outils shell de Codex selon le mode : shell, exec_command, local_shell (command ou cmd)', () => {
+		for (const nom of ['shell', 'exec_command', 'local_shell']) {
+			expect(commandesDe({ nom, entree: { command: ['bash', '-lc', 'git push --force'] } }, OUTILS_CODEX), nom).toEqual(['git push --force']);
+			expect(commandesDe({ nom, entree: { cmd: 'git push --force' } }, OUTILS_CODEX), nom).toEqual(['git push --force']);
+		}
+		expect(commandesDe({ nom: 'view_image', entree: { path: 'x' } }, OUTILS_CODEX)).toBeNull();
+	});
+
+	it('apply_patch : en-têtes tolérants (casse, espaces) ; patch sous input ; patch introuvable ou sans en-tête lisible : illisible', () => {
+		const p = (entree: Record<string, unknown>) => cheminsTouches({ nom: 'apply_patch', entree }, OUTILS_CODEX, RACINE, RACINE);
+		expect(p({ command: '*** Begin Patch\n  ***  add file :  .env  \n***UPDATE FILE:a.ts\n*** End Patch' })).toEqual(['.env', 'a.ts']);
+		expect(p({ input: '*** Begin Patch\n*** Delete File: b.ts\n*** End Patch' })).toEqual(['b.ts']);
+		expect(p({ command: ['apply_patch', '*** Begin Patch\n*** Add File: c.ts\n*** End Patch'] })).toEqual(['c.ts']);
+		expect(p({})).toBe('illisible');
+		expect(p({ command: '*** Begin Patch\n*** Ajoute: .env\n+x\n*** End Patch' })).toBe('illisible');
+		expect(p({ command: '*** Begin Patch\n*** End Patch' })).toEqual([]);
+	});
+
+	it('commande shell qui passe un patch à apply_patch (heredoc) : chemins de ses en-têtes ; grep apply_patch : pas une écriture', () => {
+		const heredoc = "apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: config/.env\n+A=1\n*** End Patch\nEOF";
+		expect(cheminsTouches(bash(heredoc), OUTILS_CODEX, RACINE, RACINE)).toEqual(['config/.env']);
+		expect(cheminsTouches({ nom: 'shell', entree: { command: ['bash', '-lc', heredoc] } }, OUTILS_CODEX, RACINE, RACINE)).toEqual(['config/.env']);
+		expect(cheminsTouches(bash('grep -r apply_patch src'), OUTILS_CODEX, RACINE, RACINE)).toBeNull();
+		expect(cheminsTouches(bash("apply_patch <<'EOF'\n*** Begin Patch\n*** Ajoute: .env\nEOF"), OUTILS_CODEX, RACINE, RACINE)).toBe('illisible');
 	});
 
 	it('consignes vérifiées : un patch vers un chemin interdit et une commande interdite sont refusés', () => {
@@ -334,5 +368,9 @@ describe('outils de Codex', () => {
 		expect(verifier([{ texte: 'Pas de push forcé.', regle: commandes }], bash('git push --force origin'), ctx)).toMatchObject({ refus: true, motif: 'git push --force*' });
 		// les noms de Claude Code ne valent rien chez Codex
 		expect(verifier([{ texte: 'Pas de .env.', regle: chemins }], ecrire('/home/u/dossier/.env'), ctx)).toEqual({ refus: false });
+		// patch illisible : refusé là où des chemins sont interdits, permis sinon
+		expect(verifier([{ texte: 'Pas de .env.', regle: chemins }], { nom: 'apply_patch', entree: {} }, ctx)).toEqual({ refus: true, cause: 'entree_illisible', detail: null });
+		expect(verifier([{ texte: 'Pas de push forcé.', regle: commandes }], { nom: 'apply_patch', entree: {} }, ctx)).toEqual({ refus: false });
+		expect(verifier([{ texte: 'Pas de .env.', regle: chemins }], bash("apply_patch <<'EOF'\n*** Begin Patch\n*** Update File: .env\n*** End Patch\nEOF"), ctx)).toMatchObject({ refus: true, motif: '**/.env' });
 	});
 });

@@ -75,12 +75,13 @@ function relatif(chemin: { prefixe: string; segments: string[] }, racine: { pref
 
 /**
  * Chemins écrits par l'action (outils d'écriture du moteur, `cheminsEcrits`) : relatifs à la racine du dossier Mnemo, en
- * « / » ; un chemin hors de la racine est rendu absolu (« /etc/x », « D:/x »). null : outil non concerné. `sansCasse` :
+ * « / » ; un chemin hors de la racine est rendu absolu (« /etc/x », « D:/x »). null : outil non concerné ; `illisible` : il
+ * écrit, mais ses chemins ne se lisent pas. `sansCasse` :
  * la racine se reconnaît à la casse près (macOS ; un disque à lettre l'est toujours).
  */
-export function cheminsTouches(action: ActionOutil, outils: OutilsDuMoteur, racine: string, cwd: string, sansCasse = false): string[] | null {
+export function cheminsTouches(action: ActionOutil, outils: OutilsDuMoteur, racine: string, cwd: string, sansCasse = false): string[] | null | 'illisible' {
 	const bruts = outils.cheminsEcrits(action);
-	if (bruts === null) return null;
+	if (bruts === null || bruts === 'illisible') return bruts;
 	const base = absolu(racine, '/');
 	const chemins: string[] = [];
 	for (const brut of bruts) {
@@ -399,6 +400,7 @@ type Correspondance = { motif: string } | { cause: CauseNonVerifiee } | null;
 function motifDeChemins(regle: Regle, action: ActionOutil, contexte: ContexteVerification, outils: OutilsDuMoteur): Correspondance {
 	const chemins = cheminsTouches(action, outils, contexte.racine, contexte.cwd, contexte.sansCasse);
 	if (chemins === null) return null;
+	if (chemins === 'illisible') return { cause: 'entree_illisible' };
 	const racine = absolu(contexte.racine, '/');
 	for (const chemin of chemins) {
 		const dedans = !RE_ABSOLU.test(chemin);

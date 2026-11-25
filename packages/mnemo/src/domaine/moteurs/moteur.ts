@@ -8,8 +8,11 @@ export type { IdMoteur } from '@mnemo/commun';
  * `commandes_interdites`) et le contexte servi (`apres_outil`, fiches lues ou écrites) en lisent.
  */
 export type OutilsDuMoteur = {
-	/** Chemins écrits par l'action, tels que l'outil les donne (relatifs ou absolus) ; null : l'outil n'écrit pas de fichier. */
-	cheminsEcrits(action: ActionOutil): string[] | null;
+	/**
+	 * Chemins écrits par l'action, tels que l'outil les donne (relatifs ou absolus) ; null : l'outil n'écrit pas de fichier ;
+	 * `illisible` : il en écrit, mais ses chemins ne se lisent pas (refus s'il y a des chemins interdits).
+	 */
+	cheminsEcrits(action: ActionOutil): string[] | null | 'illisible';
 	/** Ligne de commande de l'outil de commande (« » s'il n'en porte pas) ; null : un autre outil. */
 	commande(action: ActionOutil): string | null;
 	/** Préfixe des outils du serveur MCP `mnemo` chez ce moteur. */
