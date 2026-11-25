@@ -9,7 +9,7 @@ import type { FicheVue, ReponseProfils, SessionVue } from '@mnemo/contrat';
 import { PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
-import type { GesteANoter } from '../../src/application/ports.ts';
+import type { GesteANoter, Sens } from '../../src/application/ports.ts';
 import { echelleDesSignaux, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { texteDuRefus } from '../../src/domaine/refus-outil.ts';
@@ -373,6 +373,67 @@ describe('routes : injection automatique (suivi et réactivation)', () => {
 		expect((await api(c).post(ROUTES.injectionAutomatique, { pirate: 1 })).statut).toBe(400);
 		expect((await api(c).post(ROUTES.injectionAutomatique, { session: '22222222-2222-4333-8444-555555555555' })).statut).toBe(404);
 		expect((await api(c).get(ROUTES.injectionAutomatique)).corps).toEqual({ coupures: [COUPURE] });
+	});
+});
+
+describe('routes : hook, traces d’une injection automatique après la livraison de la réponse', () => {
+	const AVOIRS = 'projets/alpha/avoirs.md';
+	const PROMPT = 'montant exact des avoirs annulés en novembre';
+	const sensParMots: Sens = {
+		modele: () => 'mots@1',
+		vecteurs: async (textes) => textes.map((t) => Float32Array.from([...['avoir', 'remise', 'catalogue'].map((m) => t.toLowerCase().split(m).length - 1), 0.01])),
+	};
+	/** Un service dont le modèle Sens accepté injecte Avoirs au message ; `porte` retient la lecture d'Avoirs pour l'injection. */
+	async function service(porte?: Promise<void>) {
+		const c = await serviceFaux();
+		await c.etat.creer(sessionFixe(UUID));
+		await c.dep.coffre.ecrire(AVOIRS, `---\nid: 01ABD\ntype: sujet\nupdated: 2026-11-01\n---\n# Avoirs\n\nUn avoir annule une facture.\n`);
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		c.dep.sens = sensParMots;
+		await vectoriser(c.dep, { budgetMs: 60_000, demarrer: true });
+		const sens = { ...modeleNonAppris(), apprisLe: '2026-11-25T10:00:00.000Z', refus: [], accepte: true, echelle: echelleDesSignaux(c.dep.reglages().contexte), biais: -3, poids: { bm25Relatif: 6, cosinusRelatif: 0.5 } };
+		c.dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens }, installes: { sens: null, reranker: null } });
+		const lecture = { commencee: false };
+		if (porte !== undefined) {
+			const lire = c.dep.coffre.lire.bind(c.dep.coffre);
+			c.dep.coffre.lire = async (ch) => {
+				if (ch === AVOIRS) {
+					lecture.commencee = true;
+					await porte;
+				}
+				return lire(ch);
+			};
+		}
+		return { c, lecture };
+	}
+	const corps = (c: ContexteService) => ({ evenement: 'message', prompt: PROMPT, session: UUID, horodatageMs: Date.now(), cwd: join(c.racine, 'alpha') });
+	const servie = async (c: ContexteService) => (await c.etat.fichesServiesLuesOuEcrites(UUID)).some((f) => f.chemin === AVOIRS);
+
+	it('réponse livrée : la trace « servie » et le geste `injectee_auto` sont écrits après elle', async () => {
+		const { c } = await service();
+		const r = await api(c).post(ROUTES.hook, corps(c));
+		expect((r.corps as { contexte?: string }).contexte).toContain('Un avoir annule une facture.');
+		expect(await jusqua(async () => (await c.etat.gestes({ sortes: ['injectee_auto'], limite: null })).length === 1 && (await servie(c)), 2000)).toBe(true);
+	});
+
+	it('connexion abandonnée avant la réponse : ni trace « servie » ni geste ; la fiche reste injectable', async () => {
+		let ouvrir: () => void = () => {};
+		const { c, lecture } = await service(new Promise<void>((r) => (ouvrir = r)));
+		const { port, jeton } = c.service;
+		const texte = JSON.stringify(corps(c));
+		const req = request({ host: '127.0.0.1', port, path: ROUTES.hook, method: 'POST', agent: false, headers: { host: `127.0.0.1:${port}`, authorization: `Bearer ${jeton}`, 'content-type': 'application/json', 'content-length': Buffer.byteLength(texte) } });
+		req.on('error', () => {});
+		req.end(texte);
+		expect(await jusqua(() => lecture.commencee, 3000)).toBe(true);
+		req.destroy();
+		await new Promise((r) => setTimeout(r, 50));
+		ouvrir();
+		await new Promise((r) => setTimeout(r, 500));
+		expect(await c.etat.gestes({ sortes: ['injectee_auto'], limite: null })).toEqual([]);
+		expect(await servie(c)).toBe(false);
+		// le message suivant, livré : elle part
+		const r = await api(c).post(ROUTES.hook, corps(c));
+		expect((r.corps as { contexte?: string }).contexte).toContain('Un avoir annule une facture.');
 	});
 });
 

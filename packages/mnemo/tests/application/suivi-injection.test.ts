@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { join } from 'node:path';
-import { coupuresDesInjections, suiviDesInjections } from '../../src/application/suivi-injection.ts';
+import { coupuresDesInjections, MOTIF_SUIVI_ILLISIBLE, suiviDesInjections } from '../../src/application/suivi-injection.ts';
 import type { EtatSessions } from '../../src/application/ports.ts';
 import type { ModelesDeNote } from '../../src/domaine/note-de-confiance.ts';
 import { modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
@@ -66,7 +66,64 @@ describe('coupuresDesInjections : lecture bornée', () => {
 	});
 });
 
+describe('coupuresDesInjections : réactivations et bornes', () => {
+	const deuxNiveaux = (): ModelesDeNote => ({ complets: modeles().sens, sens: modeles().sens });
+
+	it('une réactivation sans niveau lève la coupure de chaque niveau', async () => {
+		const etat = await etatAvecSession();
+		await serie(etat, 17, 17);
+		expect((await coupuresDesInjections(etat, modeles())).sens).not.toBeNull();
+		await etat.noterGeste({ geste: 'injection_reactivee', session: '', fiche: '', empreinte: null, horodatageMs: T + 10_000, note: null });
+		expect((await coupuresDesInjections(etat, modeles())).sens).toBeNull();
+	});
+
+	it('par niveau, depuis sa propre borne : un niveau aux injections récentes ne perd pas les écarts de l’autre', async () => {
+		const etat = await etatAvecSession();
+		// Complets : 17 injections écartées tôt ; Sens : 100 injections justes, bien plus tard
+		for (let i = 0; i < 17; i++) {
+			await etat.noterGeste({ geste: 'injectee_auto', session: ID, fiche: `c${i}.md`, empreinte: null, horodatageMs: T + i * 10, note: { niveau: 'complets' } });
+			await etat.noterGeste({ geste: 'ecartee_ici', session: ID, fiche: `c${i}.md`, empreinte: null, horodatageMs: T + i * 10 + 5, note: null });
+		}
+		for (let i = 0; i < 100; i++) await etat.noterGeste({ geste: 'injectee_auto', session: ID, fiche: `s${i}.md`, empreinte: null, horodatageMs: T + 1_000_000 + i, note: { niveau: 'sens' } });
+		const c = await coupuresDesInjections(etat, deuxNiveaux());
+		expect(c.complets).toMatchObject({ injections: 17, ecartees: 17 });
+		expect(c.sens).toBeNull();
+	});
+
+	it('journal illisible : tous les niveaux acceptés coupés', async () => {
+		const enPanne: Pick<EtatSessions, 'gestes'> = { gestes: async () => Promise.reject(new Error('base occupée')) };
+		const c = await coupuresDesInjections(enPanne, modeles());
+		expect(c.complets).toBeNull();
+		expect(c.sens).toMatchObject({ niveau: 'sens', motif: MOTIF_SUIVI_ILLISIBLE });
+	});
+});
+
 describe('suiviDesInjections', () => {
+	it('lecture en échec : les coupures précédentes sont gardées ; la toute première, tous les niveaux coupés jusqu’à une lecture réussie', async () => {
+		const etat = await etatAvecSession();
+		let panne = true;
+		const fragile: Pick<EtatSessions, 'gestes'> = { gestes: async (f) => (panne ? Promise.reject(new Error('base occupée')) : etat.gestes(f)) };
+		const suivi = suiviDesInjections(fragile, () => modeles());
+		await suivi.actualiser();
+		expect(suivi.coupures(modeles())!.sens).toMatchObject({ motif: MOTIF_SUIVI_ILLISIBLE });
+		panne = false;
+		await suivi.actualiser();
+		expect(suivi.coupures(modeles())).toEqual({ complets: null, sens: null });
+		await serie(etat, 17, 17);
+		await suivi.actualiser();
+		const coupee = suivi.coupures(modeles())!.sens;
+		expect(coupee).toMatchObject({ ecartees: 17 });
+		// une panne ensuite : la coupure lue est gardée (et pas levée), même après un geste qui l'aurait levée
+		panne = true;
+		await etat.noterGeste({ geste: 'injection_reactivee', session: '', fiche: '', empreinte: null, horodatageMs: T + 10_000, note: { niveau: 'sens' } });
+		expect(await suivi.actualiser()).toBe(false);
+		expect(suivi.coupures(modeles())!.sens).toEqual(coupee);
+		expect(suivi.derniere().sens).toEqual(coupee);
+		panne = false;
+		await suivi.actualiser();
+		expect(suivi.coupures(modeles())!.sens).toBeNull();
+	});
+
 	it('tenu en mémoire pour les modèles lus ; périmé par un nouvel apprentissage ; prévient à la première lecture et à chaque changement', async () => {
 		const etat = await etatAvecSession();
 		let m = modeles();

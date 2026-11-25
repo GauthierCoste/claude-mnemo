@@ -891,7 +891,7 @@ describe('traiterEvenement : injection automatique', () => {
 		expect((await etat.gestes({ sortes: ['injectee_auto'], limite: null })).map((g) => g.fiche).filter((f) => f === AVOIRS)).toEqual([AVOIRS]);
 	});
 
-	it('service : le geste attend que la route ait écrit la réponse (`aLaReponse`) ; la trace « servie » est notée avec la réponse', async () => {
+	it('service : la trace « servie » et le geste attendent que la route ait livré la réponse (`aLaReponse`)', async () => {
 		const { dep, etat, pil } = await memoire();
 		const apres: (() => Promise<unknown>)[] = [];
 		const enFond: Promise<unknown>[] = [];
@@ -899,10 +899,42 @@ describe('traiterEvenement : injection automatique', () => {
 		expect(r.contexte).toContain('Fiches injectées par Mnemo');
 		await Promise.all(enFond);
 		expect(await etat.gestes({ limite: null })).toEqual([]);
-		expect((await etat.fichesServiesLuesOuEcrites(ID)).some((f) => f.chemin === AVOIRS)).toBe(true);
+		expect((await etat.fichesServiesLuesOuEcrites(ID)).some((f) => f.chemin === AVOIRS)).toBe(false);
 		expect(apres).toHaveLength(1);
 		await apres[0]!();
 		expect((await etat.gestes({ limite: null })).map((g) => g.geste)).toEqual(['injectee_auto']);
+		expect((await etat.fichesServiesLuesOuEcrites(ID)).some((f) => f.chemin === AVOIRS)).toBe(true);
+	});
+
+	describe('plus le temps de répondre après les écritures, avec une injection automatique décidée', () => {
+		afterEach(() => vi.restoreAllMocks());
+		for (const avecService of [false, true]) {
+			it(`${avecService ? 'service' : 'sans service'} : rien ne part ; les fiches demandées sont remises, la fiche auto n’est ni servie ni suivie`, async () => {
+				const { dep, etat, pil } = await memoire();
+				const demandees = fichesDemandees();
+				demandees.demander(ID, VOISINE);
+				const echeance = Date.now() + 10_000;
+				// le journal écrit, l'échéance est passée : le dernier contrôle échoue
+				const reel = Date.now.bind(Date);
+				let decalage = 0;
+				vi.spyOn(Date, 'now').mockImplementation(() => reel() + decalage);
+				const journaliser = etat.journaliser.bind(etat);
+				etat.journaliser = async (e) => {
+					await journaliser(e);
+					decalage = echeance + 1 - reel();
+				};
+				const apres: (() => Promise<unknown>)[] = [];
+				const service = avecService ? { enFond: () => {}, aLaReponse: (t: () => Promise<unknown>) => apres.push(t) } : {};
+				const r = await traiterEvenement(dep, pil, message(10, 'montant exact des avoirs annulés en novembre'), { ...local, echeance, demandees, ...service });
+				expect(r).toEqual({});
+				// l'injection automatique avait été décidée (le journal, écrit avant le dernier contrôle, la porte)
+				expect((await etat.servis(ID, 1))[0]!.classement.find((c) => c.id === AVOIRS)).toMatchObject({ auto: true });
+				expect(apres).toEqual([]);
+				expect(demandees.voir(ID)).toEqual([VOISINE]);
+				expect(await etat.gestes({ sortes: ['injectee_auto'], limite: null })).toEqual([]);
+				expect((await etat.fichesServiesLuesOuEcrites(ID)).some((f) => f.chemin === AVOIRS)).toBe(false);
+			});
+		}
 	});
 
 	describe('plus le temps d’écrire les traces d’une injection automatique', () => {

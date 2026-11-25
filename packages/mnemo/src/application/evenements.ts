@@ -444,7 +444,9 @@ async function noterInjection(
 ): Promise<void> {
 	const { position, cartes } = servi.calcul;
 	const injectees = [...(position === null ? [] : [position]), ...servi.demandees, ...servi.calcul.injectees];
-	for (const f of injectees) {
+	// les fiches injectées par Mnemo sont notées servies avec leur geste, une fois la réponse livrée (`noterInjectionsAuto`)
+	const auto = new Set(servi.calcul.injectees.map((f) => f.chemin));
+	for (const f of injectees.filter((f) => !auto.has(f.chemin))) {
 		await pil.etat.noterFicheServieLueOuEcrite(session.id, { chemin: f.chemin, action: 'servie', horodatageMs: entree.horodatageMs, empreinte: f.empreinte }).catch(() => {});
 	}
 	// une fiche demandée qui est aussi la fiche de position, injectée comme telle, compte pour un geste
@@ -485,7 +487,8 @@ async function noterInjection(
 }
 
 /**
- * Gestes `injectee_auto` des fiches injectées par Mnemo à ce message (spec § 9.1) : avec le message porteur, son vecteur s'il a
+ * Trace « servie » et geste `injectee_auto` des fiches injectées par Mnemo à ce message (spec § 9.1), une fois la réponse
+ * livrée : le geste avec le message porteur, son vecteur s'il a
  * été calculé, et la ligne de la fiche au classement de ce message plus le niveau du modèle qui l'a notée (le suivi des
  * injections le lit). Jamais `noterInjectionManuelle` : elle ne pèse sur aucune voisine et ne compte pas comme un geste positif.
  */
@@ -493,6 +496,7 @@ async function noterInjectionsAuto(dep: Dependances, pil: Pick<Pilotage, 'etat'>
 	const vecteur = rang === null || servi.calcul.vecteur === undefined ? null : { rang, vecteur: servi.calcul.vecteur };
 	const lignes = new Map(classement.map((c) => [c.id, c]));
 	for (const f of servi.calcul.injectees) {
+		await pil.etat.noterFicheServieLueOuEcrite(session.id, { chemin: f.chemin, action: 'servie', horodatageMs: entree.horodatageMs, empreinte: f.empreinte }).catch(() => {});
 		const ligne = lignes.get(f.chemin);
 		const note: NoteDuGeste = { ...(ligne === undefined ? {} : noteDeLigne(ligne)), niveau: f.niveau };
 		await noterGeste(dep, pil.etat, { geste: 'injectee_auto', session: session.id, fiche: f.chemin, empreinte: f.empreinte, horodatageMs: entree.horodatageMs, vecteur, note });
@@ -514,7 +518,7 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 	const calcule = await servir(dep, demande);
 	// les injections automatiques : décidées ici, avant toute écriture, avec le temps d'écrire leurs traces puis de répondre ;
 	// sinon elles ne partent pas (ni notées servies, ni journalisées, ni suivies) et restent injectables à un message suivant.
-	// Décidées, elles partent : aucun contrôle ne retient plus la réponse.
+	// Leur trace « servie » et leur geste ne s'écrivent que si la réponse part (dernier contrôle, puis livraison par la route).
 	const auto = session !== null && calcule.calcul.injectees.length > 0 && aTemps(reglages, MARGE_INJECTION_AUTO_MS);
 	const servi = auto ? calcule : sansInjectionsAutomatiques(calcule);
 	const classement = classementDuJournal(servi.calcul.classement);
@@ -529,15 +533,15 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 	// un message porteur est journalisé même sans texte injecté : son classement en est la trace (panneau, apprentissage)
 	if (session !== null && (injecte || (rang !== null && aTempsPourNoter))) {
 		await noterInjection(dep, pil, session, entree, demande, servi, debut, reglages.appelMs, rang, classement, (chemin) => noteDuPorteur(precedent, chemin));
-		if (auto) {
-			// la réponse part : le service écrit les gestes quand la route l'a écrite ; sans lui, juste avant de répondre
+		// après les écritures : le hook attend-il encore ? Sinon, la réponse ne lui parviendrait pas (les fiches demandées sont remises)
+		if (!aTemps(reglages)) injecte = false;
+		if (auto && injecte) {
+			// la trace « servie » et le geste des fiches injectées par Mnemo : le service les écrit une fois la réponse livrée par la
+			// route (jamais si elle ne l'est pas) ; sans lui, juste avant de répondre, après le dernier contrôle
 			const s = session;
-			const gestes = () => noterInjectionsAuto(dep, pil, s, entree, servi, rang, classement);
-			if (reglages.aLaReponse !== undefined) reglages.aLaReponse(gestes);
-			else await gestes();
-		} else if (!aTemps(reglages)) {
-			// après les écritures : le hook attend-il encore ? Sinon, la réponse ne lui parviendrait pas
-			injecte = false;
+			const traces = () => noterInjectionsAuto(dep, pil, s, entree, servi, rang, classement);
+			if (reglages.aLaReponse !== undefined) reglages.aLaReponse(traces);
+			else await traces();
 		}
 	}
 	// le hook n'attend plus : les fiches demandées partiront au message suivant

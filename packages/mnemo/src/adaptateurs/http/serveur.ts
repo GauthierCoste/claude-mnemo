@@ -463,6 +463,11 @@ export async function demarrerService(options: {
 		res.on('close', () => {
 			if (!res.writableFinished) abandon.abort();
 		});
+		// la réponse livrée (écrite en entier avant que la connexion se ferme) : vrai ; connexion fermée avant : faux
+		const livree = new Promise<boolean>((resoudre) => {
+			res.once('finish', () => resoudre(!abandon.signal.aborted));
+			res.once('close', () => resoudre(res.writableFinished && !abandon.signal.aborted));
+		});
 		/** Réponse d'une route en flux : le reste du corps non lu est jeté (borné) ; s'il en reste, la connexion est fermée. */
 		const repondreApresFlux = async (r: Reponse, fermer: boolean): Promise<void> => {
 			const complet = !enFlux || (await vider(req));
@@ -494,8 +499,9 @@ export async function demarrerService(options: {
 			// tout le corps doit avoir été accepté (taille), même par une route qui ne l'a pas lu
 			await corps;
 			await repondreApresFlux(r, false);
-			// la réponse est écrite : ce qui l'attendait (jamais avant)
-			r.apres?.();
+			// la réponse livrée : ce qui l'attendait (jamais avant ; jamais si le client a abandonné avant de la recevoir)
+			const apres = r.apres;
+			if (apres !== undefined) void livree.then((ok) => (ok ? apres() : undefined));
 		} catch (erreur) {
 			// personne n'attend plus la réponse
 			if (abandon.signal.aborted) return;

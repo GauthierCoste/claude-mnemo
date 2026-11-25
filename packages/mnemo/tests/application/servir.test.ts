@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as moduleCartes from '../../src/application/cartes.ts';
 import type { Carte, CartesCalculees } from '../../src/application/cartes.ts';
 import { rendreServi, servir, TITRE_INJECTEES_PAR_MNEMO } from '../../src/application/servir.ts';
 import type { DemandeServir, Servi } from '../../src/application/servir.ts';
@@ -14,6 +15,12 @@ import { AVERTISSEMENT } from '../../src/domaine/contexte.ts';
 import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
 import { servirQuestion } from '../aides/servir.ts';
+
+// `calculerCartes` observable (et détournable le temps d'un test) ; par défaut, le vrai
+vi.mock('../../src/application/cartes.ts', async (original) => {
+	const m = await original<typeof import('../../src/application/cartes.ts')>();
+	return { ...m, calculerCartes: vi.fn(m.calculerCartes) };
+});
 
 const entete = (type = 'sujet', extra = '') => `---\nid: 01ABC\ntype: ${type}\n${extra}updated: 2026-11-01\n---\n`;
 const consigne = (texte: string, portee: string, niveau: string) => `${entete('consigne', `portee: ${portee}\nniveau: ${niveau}\n`)}# C\n\n${texte}\n`;
@@ -411,19 +418,24 @@ describe('servir : injection automatique (note de confiance acceptée)', () => {
 		expect(injectees(await servir(dep, demande()))).toEqual([AVOIRS]);
 	});
 
-	it('message muet avec une fiche demandée : classé (geste), jamais d’injection automatique, même au seuil', async () => {
+	it('message muet avec une fiche demandée : le drapeau `injecter` faux empêche l’injection, même quand une note passerait le seuil', async () => {
 		const dep = await memoireNotee();
-		// toutes les candidates au-dessus du seuil
-		avecModeles(dep, { sens: modele({ biais: 3, poids: { cosinusRelatif: 0 } }) });
+		avecModeles(dep, { sens: modele() });
+		const calculer = vi.mocked(moduleCartes.calculerCartes);
+		const vrai = (await vi.importActual<typeof import('../../src/application/cartes.ts')>('../../src/application/cartes.ts')).calculerCartes;
+		// le calcul reçoit un message porteur (une note passe le seuil) mais garde le drapeau décidé par `servir`
+		const avecMessage = (forcer?: boolean) =>
+			calculer.mockImplementationOnce((d, demandeCartes) => vrai(d, { ...demandeCartes, message: 'un avoir', ...(forcer === undefined ? {} : { injecter: forcer }) }));
+		avecMessage();
 		const s = await servir(dep, demande({ message: 'ok', muet: 'sans_contenu', demandees: [REMISES] }));
-		expect(s.demandees.map((f) => f.chemin)).toEqual([REMISES]);
+		expect(calculer.mock.lastCall![1].injecter).toBe(false);
+		expect(s.calcul.classement.find((l) => l.chemin === AVOIRS)!.p).toBeGreaterThanOrEqual(REGLAGES_PAR_DEFAUT.contexte.seuilInjection / 100);
 		expect(injectees(s)).toEqual([]);
 		expect(s.texte).not.toContain(TITRE_INJECTEES_PAR_MNEMO);
-		// le message est classé (le geste vaut désignation), sans requête : aucune candidate n'est notée, et `injecter` est faux
-		expect(s.calcul.classement.length).toBeGreaterThan(0);
-		expect(s.calcul.classement.every((l) => l.p === null)).toBe(true);
-		// le même geste sur un message porteur : l'injection a lieu
-		expect(injectees(await servir(dep, demande({ demandees: [REMISES] }))).length).toBeGreaterThan(0);
+		expect(s.demandees.map((f) => f.chemin)).toEqual([REMISES]);
+		// le même calcul, drapeau levé : la fiche est injectée ; c'est donc le drapeau qui l'empêchait
+		avecMessage(true);
+		expect(injectees(await servir(dep, demande({ message: 'ok', muet: 'sans_contenu', demandees: [REMISES] })))).toEqual([AVOIRS]);
 	});
 
 	describe('réserve après injection', () => {

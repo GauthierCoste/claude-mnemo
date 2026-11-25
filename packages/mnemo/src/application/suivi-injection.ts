@@ -7,7 +7,7 @@
  * l'état en mémoire (`suiviDesInjections`) et le relit en fond, après les gestes et quand les modèles changent ; le hook ne le
  * relit pas. Sans service (ou avant la première lecture), le hook fait cette lecture bornée.
  */
-import { AUCUNE_COUPURE, avecLesCoupures, coupuresDesNiveaux, FENETRE_SUIVI, instantDApprentissage } from '../domaine/suivi-injection.ts';
+import { AUCUNE_COUPURE, avecLesCoupures, coupureDuNiveau, FENETRE_SUIVI, instantDApprentissage } from '../domaine/suivi-injection.ts';
 import type { CoupuresDInjection, GesteDuSuivi } from '../domaine/suivi-injection.ts';
 import type { ModelesDeNote } from '../domaine/note-de-confiance.ts';
 import type { NiveauDeNote } from '../domaine/modele-de-note.ts';
@@ -22,31 +22,49 @@ const niveauDe = (g: GesteNote): NiveauDeNote | null => {
 };
 const versSuivi = (g: GesteNote): GesteDuSuivi => ({ rang: g.rang, horodatageMs: g.horodatageMs, geste: g.geste, session: g.session, fiche: g.fiche, niveau: niveauDe(g) });
 
+/** Motif d'une coupure faute d'avoir pu lire le suivi. */
+export const MOTIF_SUIVI_ILLISIBLE = 'suivi des injections illisible : injection automatique suspendue jusqu’à la prochaine lecture';
+
+/** Tous les niveaux acceptés coupés : ce que vaut un suivi jamais lu dont la lecture échoue. */
+export function toutesCoupees(modeles: ModelesDeNote, maintenantMs = Date.now()): CoupuresDInjection {
+	const coupe = (niveau: NiveauDeNote) => (modeles[niveau].etat === 'accepte' ? { niveau, injections: 0, ecartees: 0, depuisMs: maintenantMs, motif: MOTIF_SUIVI_ILLISIBLE } : null);
+	return { complets: coupe('complets'), sens: coupe('sens') };
+}
+
 /**
  * Les coupures des niveaux dont le modèle est accepté, par une lecture bornée du journal des gestes (sans les vecteurs) ; aucune
- * lecture si aucun modèle n'est accepté. Journal illisible : aucune coupure (le suivi est un filet sur 100 injections ; un
- * message sans lui n'en change pas l'issue).
+ * lecture si aucun modèle n'est accepté. Les réactivations sont toutes lues (rares), avec ou sans niveau ; puis, par niveau,
+ * ses `FENETRE_SUIVI` dernières injections depuis sa référence, et les gestes d'après la plus ancienne d'entre elles. Lève si
+ * le journal est illisible.
  */
-export async function coupuresDesInjections(etat: Pick<EtatSessions, 'gestes'>, modeles: ModelesDeNote): Promise<CoupuresDInjection> {
+export async function lireCoupures(etat: Pick<EtatSessions, 'gestes'>, modeles: ModelesDeNote): Promise<CoupuresDInjection> {
 	const acceptes = NIVEAUX.filter((n) => modeles[n].etat === 'accepte');
 	if (acceptes.length === 0) return AUCUNE_COUPURE;
+	const reactivations = (await etat.gestes({ sortes: ['injection_reactivee'], sansVecteur: true, limite: null })).map(versSuivi);
+	const coupures: CoupuresDInjection = { ...AUCUNE_COUPURE };
+	for (const niveau of acceptes) {
+		const apprentissage = instantDApprentissage(modeles[niveau].modele.apprisLe);
+		let reference = apprentissage ?? -Infinity;
+		for (const r of reactivations) if ((r.niveau === null || r.niveau === niveau) && r.horodatageMs > reference) reference = r.horodatageMs;
+		const injections = await etat.gestes({ sortes: ['injectee_auto'], niveau, sansVecteur: true, limite: FENETRE_SUIVI, ...(Number.isFinite(reference) ? { depuisMs: reference } : {}) });
+		// aucune injection automatique depuis la référence : rien à couper
+		if (injections.length === 0) continue;
+		const borne = Math.min(...injections.map((g) => g.horodatageMs));
+		const lus = await etat.gestes({ sortes: ['injectee_auto', 'ecartee_ici', 'ecartee_toujours', 'retablie'], depuisMs: borne, sansVecteur: true, limite: null });
+		coupures[niveau] = coupureDuNiveau([...reactivations, ...lus.map(versSuivi)], niveau, apprentissage);
+	}
+	return coupures;
+}
+
+/**
+ * Les coupures, lues une fois (hook sans service, vue `GET`, réactivation) : journal illisible, tous les niveaux acceptés sont
+ * coupés (rien ne dit que le filet tient), jusqu'à une lecture réussie.
+ */
+export async function coupuresDesInjections(etat: Pick<EtatSessions, 'gestes'>, modeles: ModelesDeNote): Promise<CoupuresDInjection> {
 	try {
-		const lus: GesteNote[] = [];
-		let borne = Infinity;
-		for (const niveau of acceptes) {
-			const apprentissage = instantDApprentissage(modeles[niveau].modele.apprisLe);
-			const [reactivation] = await etat.gestes({ sortes: ['injection_reactivee'], niveau, sansVecteur: true, limite: 1 });
-			if (reactivation !== undefined) lus.push(reactivation);
-			const reference = Math.max(apprentissage ?? -Infinity, reactivation?.horodatageMs ?? -Infinity);
-			const injections = await etat.gestes({ sortes: ['injectee_auto'], niveau, sansVecteur: true, limite: FENETRE_SUIVI, ...(Number.isFinite(reference) ? { depuisMs: reference } : {}) });
-			for (const g of injections) borne = Math.min(borne, g.horodatageMs);
-		}
-		// aucune injection automatique depuis les références : rien à couper
-		if (!Number.isFinite(borne)) return AUCUNE_COUPURE;
-		lus.push(...(await etat.gestes({ sortes: ['injectee_auto', 'ecartee_ici', 'ecartee_toujours', 'retablie'], depuisMs: borne, sansVecteur: true, limite: null })));
-		return coupuresDesNiveaux(lus.map(versSuivi), modeles);
+		return await lireCoupures(etat, modeles);
 	} catch {
-		return AUCUNE_COUPURE;
+		return toutesCoupees(modeles);
 	}
 }
 
@@ -57,7 +75,8 @@ const signature = (m: ModelesDeNote): string => JSON.stringify(NIVEAUX.map((n) =
  * Le suivi tenu par le service. `coupures(modeles)` : l'état gardé s'il a été lu pour ces modèles (même état, même
  * apprentissage) ; null sinon (pas encore lu, ou nouvel apprentissage), une relecture est alors lancée. `actualiser` relit
  * (une relecture à la fois, plus une seule en attente pour toutes les demandes qui arrivent entre-temps) et rend vrai si les
- * coupures ont changé. `perime` : les modèles ont changé depuis la dernière lecture. `derniere` : les dernières lues (vue des
+ * coupures ont changé. Une lecture qui échoue garde les coupures précédentes (la toute première : tous les niveaux acceptés
+ * coupés), rendues par `coupures` jusqu'à une lecture réussie. `perime` : les modèles ont changé depuis la dernière lecture. `derniere` : les dernières lues (vue des
  * sessions). `quandChange` : appelé après la première lecture et après chaque lecture qui change les coupures (rediffusion).
  */
 export type SuiviDesInjections = {
@@ -72,16 +91,24 @@ export function suiviDesInjections(
 	modeles: () => ModelesDeNote,
 	quandChange: (coupures: CoupuresDInjection) => Promise<void> | void = () => {},
 ): SuiviDesInjections {
-	let lu: { signature: string; coupures: CoupuresDInjection } | null = null;
+	// `echec` : la dernière lecture a échoué ; les coupures gardées sont alors les précédentes (toutes coupées s'il n'y en a pas)
+	let lu: { signature: string; coupures: CoupuresDInjection; echec: boolean } | null = null;
 	let enCours: Promise<boolean> | null = null;
 	let suivante: Promise<boolean> | null = null;
 
 	const lire = async (): Promise<boolean> => {
 		const m = modeles();
-		const coupures = await coupuresDesInjections(etat, m);
+		let coupures: CoupuresDInjection;
+		let echec = false;
+		try {
+			coupures = await lireCoupures(etat, m);
+		} catch {
+			echec = true;
+			coupures = lu?.coupures ?? toutesCoupees(m);
+		}
 		const premiere = lu === null;
 		const change = JSON.stringify(coupures) !== JSON.stringify(lu?.coupures ?? AUCUNE_COUPURE);
-		lu = { signature: signature(m), coupures };
+		lu = { signature: signature(m), coupures, echec };
 		if (premiere || change) await Promise.resolve(quandChange(coupures)).catch(() => {});
 		return change;
 	};
@@ -102,12 +129,13 @@ export function suiviDesInjections(
 			});
 		return suivante;
 	};
-	const perime = (m: ModelesDeNote): boolean => lu === null || lu.signature !== signature(m);
+	const perime = (m: ModelesDeNote): boolean => lu === null || lu.echec || lu.signature !== signature(m);
 	return {
 		coupures(m) {
 			if (!perime(m)) return lu!.coupures;
 			void actualiser().catch(() => false);
-			return null;
+			// lecture en échec : les coupures gardées valent jusqu'à une lecture réussie
+			return lu?.echec === true ? lu.coupures : null;
 		},
 		actualiser,
 		perime,
