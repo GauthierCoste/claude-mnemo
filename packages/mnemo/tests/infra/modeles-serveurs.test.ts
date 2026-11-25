@@ -577,7 +577,7 @@ describe('identité stricte, arrêt sûr, orphelins', () => {
 		vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => {
 			lignes.push(a.join(' '));
 		});
-		const piece = { nom: 'reranker' as const, libelle: 'pièce neuve', adresse: 'https://exemple.invalid/x.gguf', sha256: '0'.repeat(64), archive: null, fichier: 'x.gguf' };
+		const piece = { nom: 'reranker' as const, libelle: 'pièce neuve', modele: 'x', editeur: 'essai', quantification: 'Q8_0', adresse: 'https://exemple.invalid/x.gguf', sha256: '0'.repeat(64), archive: null, fichier: 'x.gguf' };
 		await commandeModeles(['installer'], {
 			dossier: b.modeles,
 			racine: b.racine,

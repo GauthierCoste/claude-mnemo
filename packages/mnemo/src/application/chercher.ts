@@ -344,7 +344,7 @@ export async function chercherDetaille(dep: Dependances, requete: Requete, optio
 	} else if (modele !== null && options.sens !== null) {
 		options.signal?.throwIfAborted();
 		const budgetMs = Math.min(options.sensMaxMs ?? SENS_MAX_MS, options.fin - Date.now() - (avecReranker ? RESERVE_RERANKER_MS : 0));
-		const sens = budgetMs <= 0 ? null : await listeDuSens(dep, requete.texte, filtre, { budgetMs, demarrer: options.sens.demarrer }, options.sens.similariteMin);
+		const sens = budgetMs <= 0 ? null : await listeDuSens(dep, requete.texte, filtre, { budgetMs, demarrer: options.sens.demarrer, activite: { operation: 'recherche' } }, options.sens.similariteMin);
 		if (sens !== null) {
 			avecSens = true;
 			for (const e of sens) parLeSens.add(e.id);
@@ -370,7 +370,7 @@ export async function chercherDetaille(dep: Dependances, requete: Requete, optio
 	const resteMs = options.fin - Date.now();
 	if (avecReranker) options.signal?.throwIfAborted();
 	const pertinences =
-		avecReranker && resteMs >= RERANKER_MIN_MS ? await notesDuReranker(dep, requete.texte, fusion, { budgetMs: resteMs, demarrer: options.reranker!.demarrer }) : null;
+		avecReranker && resteMs >= RERANKER_MIN_MS ? await notesDuReranker(dep, requete.texte, fusion, { budgetMs: resteMs, demarrer: options.reranker!.demarrer, activite: { operation: 'recherche' } }) : null;
 	const classes = classer(fusion, {
 		listesComplementaires: complementaires,
 		...(pertinences === null ? {} : { pertinences }),

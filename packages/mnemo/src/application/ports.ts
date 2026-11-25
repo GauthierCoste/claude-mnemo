@@ -1,4 +1,4 @@
-import type { NiveauModeles, RaisonCarte } from '@mnemo/commun';
+import type { AvancementModele, NiveauModeles, OperationModele, RaisonCarte } from '@mnemo/commun';
 import type { RaisonMuet } from '../domaine/message-muet.ts';
 import type { CauseArret, EvenementHook, Session } from '../domaine/session.ts';
 import type { ElementIndexe, GenreElement, Lien, StatutElement } from '../domaine/elements.ts';
@@ -328,9 +328,14 @@ export interface ExtractionDifferee {
  * `budgetMs` : temps total accordé à l'appel (démarrage compris) ; au-delà, `null`. `demarrer` : sans serveur en marche,
  * en lancer un (en arrière-plan : un premier chargement plus long que le budget rend `null` maintenant, les appels suivants
  * le trouveront prêt) ; `false` (« si en marche » : hooks, recherche de l'interface) : rendre `null` aussitôt, en lançant
- * les modèles sans les attendre (l'appel suivant les trouvera prêts).
+ * les modèles sans les attendre (l'appel suivant les trouvera prêts). `activite` : ce que l'appel fait, pour l'afficher
+ * (jamais de texte) ; sans opération, elle est déduite (le sens sur plusieurs textes : vectorisation ; sinon : recherche) ;
+ * sans session, celle de l'enveloppe de session (`modelesDeSession`), sinon aucune ; `avancement` : celui de la passe de
+ * vectorisation entière.
  */
-export type OptionsModele = { budgetMs: number; demarrer: boolean };
+export type OptionsModele = { budgetMs: number; demarrer: boolean; activite?: ActiviteModele };
+
+export type ActiviteModele = { operation?: OperationModele; session?: string | null; avancement?: AvancementModele };
 
 export interface Sens {
 	/** Identité du modèle de sens installé (`bge-m3@<empreinte courte>`), ou null s'il n'est pas installé. Sans attente. */

@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { NiveauModeles } from '@mnemo/commun';
 import { dependancesDeSession, modelesDeSession } from '../../src/application/modeles-de-session.ts';
-import type { EtatSessions, Reranker, Sens } from '../../src/application/ports.ts';
+import type { EtatSessions, OptionsModele, Reranker, Sens } from '../../src/application/ports.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
@@ -78,6 +78,24 @@ describe('modèles d’une session bornés par son niveau', () => {
 		niveau = null;
 		expect(await e.sens.vecteurs(['a'], OPTIONS)).not.toBeNull();
 		expect(m.appels.sens).toBe(2);
+	});
+
+	it('activité : la session complétée quand l’appelant n’en nomme pas ; une session nommée (même null) gardée', async () => {
+		const vues: (OptionsModele['activite'] | undefined)[] = [];
+		const m = {
+			sens: { modele: () => 'bge-m3@essai', vecteurs: async (textes: string[], o: OptionsModele) => (vues.push(o.activite), textes.map(() => new Float32Array(4))) },
+			reranker: { noter: async (_q: string, textes: string[], o: OptionsModele) => (vues.push(o.activite), textes.map(() => 0.5)) },
+		};
+		const e = modelesDeSession(m, async () => null, 's1');
+		await e.sens.vecteurs(['a'], OPTIONS);
+		await e.sens.vecteurs(['a'], { ...OPTIONS, activite: { operation: 'recherche' } });
+		await e.reranker.noter('q', ['a'], { ...OPTIONS, activite: { operation: 'injection', session: null } });
+		await e.reranker.noter('q', ['a'], { ...OPTIONS, activite: { operation: 'injection', session: 's2' } });
+		expect(vues).toEqual([{ session: 's1' }, { operation: 'recherche', session: 's1' }, { operation: 'injection', session: null }, { operation: 'injection', session: 's2' }]);
+		// sans session : rien d'ajouté
+		vues.length = 0;
+		await modelesDeSession(m, async () => null).sens.vecteurs(['a'], OPTIONS);
+		expect(vues).toEqual([undefined]);
 	});
 
 	it('dependancesDeSession : le niveau lu dans l’état des sessions, à chaque appel ; le reste des dépendances inchangé', async () => {

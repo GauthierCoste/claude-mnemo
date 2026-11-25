@@ -100,7 +100,7 @@ afterAll(async () => {
 const telechargerLocal = (url: string, vers: string) => telechargerFichier(url, vers, { httpsSeulement: false });
 
 function pieceModele(adresse: string, empreinte = sha(MODELE)): Piece {
-	return { nom: 'sens', libelle: 'sens de test', adresse, sha256: empreinte, archive: null, fichier: 'modele.gguf' };
+	return { nom: 'sens', libelle: 'sens de test', modele: 'modele', editeur: 'essai', quantification: 'Q8_0', adresse, sha256: empreinte, archive: null, fichier: 'modele.gguf' };
 }
 
 async function contenuDe(dossier: string): Promise<string[]> {
@@ -323,7 +323,7 @@ describe('installerPiece', () => {
 
 describe('archives', () => {
 	function pieceArchive(adresse: string, corps: Buffer, archive: 'tar.gz' | 'zip', fichier = 'llama-server'): Piece {
-		return { nom: 'moteur', libelle: 'moteur de test', adresse, sha256: sha(corps), archive, fichier };
+		return { nom: 'moteur', libelle: 'moteur de test', version: 'b0', adresse, sha256: sha(corps), archive, fichier };
 	}
 
 	it('tar.gz : premier niveau retiré, liens relatifs internes gardés, binaire exécutable', async () => {
@@ -479,7 +479,7 @@ describe('installer depuis un dossier', () => {
 		const corps = archiveTar([{ chemin: 'llama-b1/llama-server', contenu: 'binaire' }]);
 		const source = await dossierTemporaire();
 		await writeFile(join(source, 'moteur.tar.gz'), corps);
-		const piece: Piece = { nom: 'moteur', libelle: 'moteur', adresse: 'https://exemple.invalid/moteur.tar.gz', sha256: sha(corps), archive: 'tar.gz', fichier: 'llama-server' };
+		const piece: Piece = { nom: 'moteur', libelle: 'moteur', version: 'b0', adresse: 'https://exemple.invalid/moteur.tar.gz', sha256: sha(corps), archive: 'tar.gz', fichier: 'llama-server' };
 		const dossier = await dossierTemporaire();
 		expect((await installerPiece(dossier, piece, { depuis: source })).statut).toBe('copie');
 		expect((await etatDesPieces(dossier, [piece]))[0]!.installee).toBe(true);

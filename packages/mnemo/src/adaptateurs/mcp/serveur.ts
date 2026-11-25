@@ -79,7 +79,7 @@ export async function creerServeur(options: {
 	if (etat !== null) dep.sessions = etat;
 	// ses modèles bornés par le niveau propre de la session, relu à chaque appel (changé en cours de session : vaut aussitôt)
 	if (origine !== null && dep.sessions !== undefined) {
-		const { sens, reranker } = modelesDeSession(dep, niveauPropreDe(dep.sessions, origine.session));
+		const { sens, reranker } = modelesDeSession(dep, niveauPropreDe(dep.sessions, origine.session), origine.session);
 		dep.sens = sens;
 		dep.reranker = reranker;
 	}

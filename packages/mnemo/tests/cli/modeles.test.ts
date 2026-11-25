@@ -26,8 +26,8 @@ const sha = (b: string) => createHash('sha256').update(b).digest('hex');
 
 function pieces(): Piece[] {
 	return [
-		{ nom: 'sens', libelle: 'sens de test', adresse: 'https://exemple.invalid/a/sens.gguf', sha256: sha('sens'), archive: null, fichier: 'sens.gguf' },
-		{ nom: 'reranker', libelle: 'reranker de test', adresse: 'https://exemple.invalid/b/reranker.gguf', sha256: sha('reranker'), archive: null, fichier: 'reranker.gguf' },
+		{ nom: 'sens', libelle: 'sens de test', modele: 'sens', editeur: 'essai', quantification: 'Q8_0', adresse: 'https://exemple.invalid/a/sens.gguf', sha256: sha('sens'), archive: null, fichier: 'sens.gguf' },
+		{ nom: 'reranker', libelle: 'reranker de test', modele: 'reranker', editeur: 'essai', quantification: 'Q8_0', adresse: 'https://exemple.invalid/b/reranker.gguf', sha256: sha('reranker'), archive: null, fichier: 'reranker.gguf' },
 	];
 }
 

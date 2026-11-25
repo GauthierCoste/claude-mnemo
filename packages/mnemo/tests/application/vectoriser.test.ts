@@ -82,7 +82,7 @@ describe('vectoriser', () => {
 		expect(sens.appels[0]!.options.demarrer).toBe(false);
 	});
 
-	it('compter: false : le reste n\'est jamais compté (ni au budget, ni en panne)', async () => {
+	it('compter: false : le reste n\'est jamais compté (ni au budget, ni en panne), le total de la passe une fois', async () => {
 		const { dep, sens } = await memoire(199);
 		const nombre = dep.index.nombreAVectoriser.bind(dep.index);
 		let comptes = 0;
@@ -91,13 +91,24 @@ describe('vectoriser', () => {
 		expect((await vectoriser(dep, { budgetMs: 100, demarrer: true, compter: false })).restants).toBeNull();
 		sens.panne = true;
 		expect(await vectoriser(dep, { budgetMs: 2000, demarrer: true, compter: false })).toEqual({ faits: 0, restants: null });
-		expect(comptes).toBe(0);
-		// la recherche d'un outil ne lit pas ce reste : jamais compté
+		// seul le total de chaque passe qui a à faire est compté, une fois, au premier lot (avancement affiché)
+		expect(comptes).toBe(2);
+		// la recherche d'un outil ne lit pas ce reste : seul le total de sa passe est compté
 		await chercherAvecAvis(dep, { texte: 'numéro' });
-		expect(comptes).toBe(0);
-		// par défaut, compté
+		expect(comptes).toBe(3);
+		// par défaut, le reste est compté aussi
 		expect((await vectoriser(dep, { budgetMs: 2000, demarrer: true })).restants).toBeGreaterThan(0);
-		expect(comptes).toBe(1);
+		expect(comptes).toBe(5);
+	});
+
+	it('activité : vectorisation, avec l’avancement de la passe entière (pas du lot)', async () => {
+		const { dep, sens } = await memoire(140);
+		await vectoriser(dep, { ...SANS_LIMITE, compter: false });
+		expect(sens.appels.map((a) => a.options.activite)).toEqual([
+			{ operation: 'vectorisation', avancement: { faits: 0, total: 141 } },
+			{ operation: 'vectorisation', avancement: { faits: 64, total: 141 } },
+			{ operation: 'vectorisation', avancement: { faits: 128, total: 141 } },
+		]);
 	});
 
 	it('progression : appelée après chaque lot avec le total', async () => {

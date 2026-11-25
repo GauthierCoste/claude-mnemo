@@ -3,8 +3,10 @@ import { utimes, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { modelesPermis } from '@mnemo/commun';
+import type { OperationModele } from '@mnemo/commun';
 import { messageDErreur } from '../../domaine/texte.ts';
 import type { Modeles, OptionsModele, Reranker, Sens } from '../../application/ports.ts';
+import { avecActivite } from './activite.ts';
 import { piecesPourPlateforme } from './catalogue.ts';
 import type { Piece } from './catalogue.ts';
 import { dossierModeles, dossierServeurs } from './dossier.ts';
@@ -68,11 +70,12 @@ function piecesDisponibles(options: OptionsClient): () => Disponibles {
  * environnement et l'inactivité tolérée par le dossier Mnemo `racine` (son réglage `modeles.inactiviteMinutes`). La racine ne
  * sert qu'à cela : l'état des serveurs ne dépend d'aucun dossier.
  */
-function lieuDesServeurs(racine: string, options: OptionsClient): { dossier: () => string; serveur: Pick<OptionsServeur, 'env' | 'inactiviteMs'> } {
+function lieuDesServeurs(racine: string, options: OptionsClient): { racine: string; dossier: () => string; serveur: Pick<OptionsServeur, 'env' | 'inactiviteMs'> } {
 	const env = options.env ?? process.env;
 	const plateforme = options.plateforme ?? process.platform;
 	const dossier = () => dossierServeurs(env, plateforme, homedir());
 	return {
+		racine,
 		dossier,
 		serveur: { env, inactiviteMs: () => inactiviteDuDossier(racine, env, (m) => void journaliser(dossier(), `réglages de ${racine} : ${m}`)) },
 	};
@@ -131,9 +134,11 @@ type Appel<T> = (serveur: EntreeServeur, finMs: number) => Promise<T | string>;
  * une valeur ou le motif de son échec. `demarrer` faux (hooks) : sans serveur prêt, le gardien est lancé sans être attendu,
  * l'appel rend null aussitôt et les suivants trouveront les modèles. Un modèle exclu par le niveau de la machine rend null
  * tout de suite, sans rien lancer ni appeler : le niveau est relu à chaque appel (un petit fichier, bien moins coûteux que
- * l'appel lui-même), si bien qu'un changement vaut dès l'appel suivant.
+ * l'appel lui-même), si bien qu'un changement vaut dès l'appel suivant. L'appel fait au serveur est affiché le temps qu'il
+ * dure (`avecActivite`) : son opération (`operation` faute d'en avoir une dans `options.activite`), sa session, son
+ * avancement ; un appel qui ne touche aucun serveur n'affiche rien.
  */
-async function appeler<T>(lieu: ReturnType<typeof lieuDesServeurs>, type: TypeServeur, options: OptionsModele, appel: Appel<T>): Promise<T | null> {
+async function appeler<T>(lieu: ReturnType<typeof lieuDesServeurs>, type: TypeServeur, operation: OperationModele, options: OptionsModele, appel: Appel<T>): Promise<T | null> {
 	const finMs = Date.now() + options.budgetMs;
 	const dossier = lieu.dossier();
 	if (!modelesPermis(await lireNiveau(dossier))[type]) return null;
@@ -141,7 +146,9 @@ async function appeler<T>(lieu: ReturnType<typeof lieuDesServeurs>, type: TypeSe
 		const serveur = await serveurPret(dossier, type, { finMs, demarrage: options.demarrer ? 'attendre' : 'sans-attendre', ...lieu.serveur });
 		if (serveur === null) return null;
 		await toucher(dossier);
-		const resultat = await appel(serveur, finMs);
+		const a = options.activite;
+		const description = { operation: a?.operation ?? operation, dossier: lieu.racine, session: a?.session ?? null, avancement: a?.avancement ?? null };
+		const resultat = await avecActivite(dossier, description, () => appel(serveur, finMs));
 		if (typeof resultat !== 'string') return resultat;
 		if (!resultat.startsWith('délai')) oublierServeur(serveur);
 		await journaliser(dossier, `${type} : ${resultat}`);
@@ -165,7 +172,7 @@ export function sensLlama(racine: string, options: OptionsClient = {}): Sens {
 			if (textes.length === 0) return [];
 			const d = disponibles();
 			if (!d.moteur || d.sens === null) return null;
-			return appeler(lieu, 'sens', opts, async (serveur, finMs) => {
+			return appeler(lieu, 'sens', textes.length > 1 ? 'vectorisation' : 'recherche', opts, async (serveur, finMs) => {
 				const sortie: Float32Array[] = [];
 				for (let i = 0; i < textes.length; i += LOT_SENS) {
 					const lot = textes.slice(i, i + LOT_SENS);
@@ -196,7 +203,7 @@ export function rerankerLlama(racine: string, options: OptionsClient = {}): Rera
 			if (textes.length === 0) return [];
 			const d = disponibles();
 			if (!d.moteur || d.reranker === null) return null;
-			return appeler(lieu, 'reranker', opts, async (serveur, finMs) => {
+			return appeler(lieu, 'reranker', 'recherche', opts, async (serveur, finMs) => {
 				const reponse = await requeteLocale(serveur.port, '/v1/rerank', { cle: serveur.cle, finMs, corps: { query: requete, documents: textes } });
 				const motif = motifReponse(reponse);
 				if (motif !== null) return motif;

@@ -391,7 +391,7 @@ describe('chercher : sens, reranker, graphe', () => {
 		const { trouves } = await chercherAvecAvis(dep, { texte: 'automobile' });
 		expect(trouves[0]!.id).toBe('a.md#^f-0001');
 		// la requête est vectorisée telle quelle, dans le budget des outils, démarrage permis
-		expect(sens.appels.at(-1)).toEqual({ budgetMs: expect.any(Number), demarrer: true });
+		expect(sens.appels.at(-1)).toEqual({ budgetMs: expect.any(Number), demarrer: true, activite: { operation: 'recherche' } });
 		expect(sens.appels.at(-1)!.budgetMs).toBeLessThanOrEqual(2000);
 		expect((await chercherAvecAvis(dep, { texte: 'automobile', variante: { ...VARIANTE_COMPLETE, sens: false } })).trouves).toEqual([]);
 		// sans option de modèle : les mots seuls

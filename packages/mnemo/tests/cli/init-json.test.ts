@@ -58,7 +58,10 @@ const actions = () => ({
 	declarerMcp: vi.fn(async () => 'declare' as const),
 });
 
-const piece = (nom: Piece['nom']): Piece => ({ nom, libelle: `pièce ${nom}`, adresse: `https://exemple.test/${nom}`, sha256: '0'.repeat(64), archive: null, fichier: nom });
+const piece = (nom: Piece['nom']): Piece => {
+	const commun = { libelle: `pièce ${nom}`, adresse: `https://exemple.test/${nom}`, sha256: '0'.repeat(64), archive: null, fichier: nom };
+	return nom === 'moteur' ? { nom, version: 'b0', ...commun } : { nom, modele: nom, editeur: 'essai', quantification: 'Q8_0', ...commun };
+};
 
 describe('mnemo init : options', () => {
 	it('options contradictoires ou inconnues : erreur d’usage', () => {

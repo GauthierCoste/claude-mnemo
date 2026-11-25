@@ -2,6 +2,7 @@
  * Définitions partagées par plusieurs paquets (service, contrat, interface) : types, constantes et fonctions pures, sans
  * aucune dépendance (ni `node:`, ni autre paquet).
  */
+export * from './activite-modeles.ts';
 export * from './avatars.ts';
 export * from './avertissements.ts';
 export * from './caracteres.ts';

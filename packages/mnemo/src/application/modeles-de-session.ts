@@ -1,6 +1,6 @@
 import { modelesPermis } from '@mnemo/commun';
 import type { NiveauModeles } from '@mnemo/commun';
-import type { Dependances, EtatSessions, Reranker, Sens } from './ports.ts';
+import type { Dependances, EtatSessions, OptionsModele, Reranker, Sens } from './ports.ts';
 
 /**
  * Le sens et le reranker vus d'une session : un modèle que le niveau propre de la session exclut n'est ni appelé ni démarré
@@ -8,23 +8,30 @@ import type { Dependances, EtatSessions, Reranker, Sens } from './ports.ts';
  * l'utilisateur peut le changer en cours de session ; null (lecture échouée, session inconnue, aucun niveau propre) : rien
  * n'est retiré ici. Choix : une lecture échouée suit le niveau de la machine (une panne de l'état ne coupe pas les modèles). Le niveau de la machine est appliqué par les modèles enveloppés eux-mêmes : la session a donc le plus
  * restrictif des deux (`niveauEffectif`). `modele()` (identité du modèle installé, pour le cache des vecteurs) reste tel quel.
+ * `session` : l'id de la session, donné à l'activité d'un appel qui n'en nomme pas (pour l'afficher).
  */
-export function modelesDeSession(modeles: { sens: Sens; reranker: Reranker }, niveauPropre: () => Promise<NiveauModeles | null>): { sens: Sens; reranker: Reranker } {
+export function modelesDeSession(
+	modeles: { sens: Sens; reranker: Reranker },
+	niveauPropre: () => Promise<NiveauModeles | null>,
+	session: string | null = null,
+): { sens: Sens; reranker: Reranker } {
 	// pris maintenant : l'appelant peut remplacer ensuite ses propres modèles par l'enveloppe (sans boucler sur elle)
 	const { sens, reranker } = modeles;
 	const permis = async () => modelesPermis((await niveauPropre().catch(() => null)) ?? 'complets');
+	const deLaSession = (options: OptionsModele): OptionsModele =>
+		session === null || options.activite?.session !== undefined ? options : { ...options, activite: { ...options.activite, session } };
 	return {
 		sens: {
 			modele: () => sens.modele(),
 			async vecteurs(textes, options) {
 				if (textes.length > 0 && !(await permis()).sens) return null;
-				return sens.vecteurs(textes, options);
+				return sens.vecteurs(textes, deLaSession(options));
 			},
 		},
 		reranker: {
 			async noter(requete, textes, options) {
 				if (textes.length > 0 && !(await permis()).reranker) return null;
-				return reranker.noter(requete, textes, options);
+				return reranker.noter(requete, textes, deLaSession(options));
 			},
 		},
 	};
@@ -37,5 +44,5 @@ export function niveauPropreDe(etat: Pick<EtatSessions, 'lire'>, id: string): ()
 
 /** Les dépendances d'une session : les mêmes, sens et reranker bornés par le niveau de la session `id` (`modelesDeSession`). */
 export function dependancesDeSession(dep: Dependances, etat: Pick<EtatSessions, 'lire'>, id: string): Dependances {
-	return { ...dep, ...modelesDeSession(dep, niveauPropreDe(etat, id)) };
+	return { ...dep, ...modelesDeSession(dep, niveauPropreDe(etat, id), id) };
 }

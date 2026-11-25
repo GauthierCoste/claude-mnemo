@@ -126,7 +126,7 @@ async function vecteurDuMessage(dep: Dependances, message: string, fin: number):
 	const budgetMs = fin - Date.now();
 	if (dep.sens.modele() === null || budgetMs <= 0 || message.trim() === '') return null;
 	try {
-		const vecteurs = await dep.sens.vecteurs([message], { budgetMs, demarrer: false });
+		const vecteurs = await dep.sens.vecteurs([message], { budgetMs, demarrer: false, activite: { operation: 'injection' } });
 		const v = vecteurs?.length === 1 ? vecteurs[0]! : null;
 		return v === null || v.length === 0 || !v.every(Number.isFinite) ? null : normaliser(v);
 	} catch {
@@ -148,7 +148,7 @@ async function notesDuReranker(dep: Dependances, question: string, textes: reado
 	const budgetMs = fin - Date.now();
 	if (budgetMs < BUDGET_RERANKER_MIN_MS || textes.length === 0) return null;
 	try {
-		const notes = await dep.reranker.noter(question, [...textes], { budgetMs, demarrer: false });
+		const notes = await dep.reranker.noter(question, [...textes], { budgetMs, demarrer: false, activite: { operation: 'injection' } });
 		return notes === null || notes.length !== textes.length ? null : notes;
 	} catch {
 		return null;
