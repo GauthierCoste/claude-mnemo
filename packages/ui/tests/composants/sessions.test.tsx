@@ -293,7 +293,7 @@ describe('vue Sessions', () => {
 		expect(lignes.map((l) => l.getAttribute('data-id'))).toEqual(['projets/erp-saas/Module stocks.md', 'consignes/Tests.md', 'projets/erp-saas/Lots.md']);
 		expect(lignes[1]!.firstElementChild?.textContent).toBe('◆');
 		expect(lignes[2]!.firstElementChild?.textContent).toBe('◇');
-		expect(within(contexte).getByText('ordre seul')).toBeTruthy();
+		expect(within(contexte).getByText('ordre seul').getAttribute('title')).toMatch(/^Ordre seul : /u);
 		expect(within(lignes[1]!).getByRole('img', { name: 'Injectée dans la session' })).toBeTruthy();
 		expect(within(lignes[2]!).queryByRole('img', { name: 'Injectée dans la session' })).toBeNull();
 		await act(async () => within(lignes[2]!).getByRole('button', { name: 'Lots et péremption' }).click());

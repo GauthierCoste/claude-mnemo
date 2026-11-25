@@ -2,9 +2,9 @@
  * « Injecté dans la session » (panneau Contexte), le classement vivant. Une seule liste :
  * - ◆ en haut, les fiches injectées entières, de la plus ancienne à la plus récente ; à droite, comment : « du dossier » (fiche
  *   de position), « à la main » (➤), ou « auto 94 % » (injectée par Mnemo, sa note au message ; l'info-bulle le dit) ;
- * - la jonction : un simple filet, avec à droite l'état du classement seulement s'il sort de l'ordinaire (« affinage… »,
- *   « ordre seul » et sa raison au survol) ; dessous, l'injection automatique coupée par le suivi, avec son motif et
- *   « Réactiver ». Le message classé n'est pas rappelé ;
+ * - la jonction : un espacement, sans trait (le repère du seuil est le seul trait du panneau) ; dessous, l'injection
+ *   automatique coupée par le suivi, avec son motif et « Réactiver ». L'état du classement qui sort de l'ordinaire (« affinage… », « ordre seul » et sa raison) est dit dans le bouton des
+ *   modèles de la session, à droite du titre. Le message classé n'est pas rappelé ;
  * - le classement du dernier message porteur : la note en % (calibrée), ou ◇ en ordre seul ; le titre et, dessous, la raison
  *   et « piste » (envoyée en piste dans la session) ; un repère au seuil d'injection automatique ;
  * - « Plus tôt dans la session » : les pistes plus anciennes et les fiches lues (◈) absentes du classement, plus récentes
@@ -30,6 +30,7 @@ import { ItemMenu, MenuModeles } from '../modeles/MenuModeles.tsx';
 import sm from '../modeles/Modeles.module.css';
 import { avisModeles } from '../modeles/avis-modeles.ts';
 import { ModelesSession } from '../modeles/ModelesSession.tsx';
+import { cx } from '../commun/classes.ts';
 import { useToast } from '../Toast.tsx';
 import s from './ClassementEnDirect.module.css';
 
@@ -144,7 +145,9 @@ export function ClassementEnDirect(p: {
 	// fiches demandées par ➤ vues dans cette fenêtre : injectées ensuite, elles sont « à la main » avant même le journal des gestes
 	const demandees = useRef(new Set<string>());
 	for (const c of aServir.chemins) demandees.current.add(c);
-	const modes = modesDInjection(p.injections ?? [], p.entrees);
+	// la note d'une injection par Mnemo : celle vue au hook, que l'affinage ne change pas
+	const notesDInjection = useRef(new Map<string, number>());
+	const modes = modesDInjection(p.injections ?? [], p.entrees, notesDInjection.current);
 
 	// ◆ de la plus ancienne à la plus récente
 	const parEntrees = [...p.entrees].sort((a, b) => a.horodatageMs - b.horodatageMs).flatMap((e) => e.ids.map(chemin));
@@ -506,8 +509,8 @@ export function ClassementEnDirect(p: {
 	});
 	if (calibre && indexSeuil === -1 && classees.length > 0) lignesClassees.push(repereSeuil);
 
-	const reperes = affinage || ordreSeul;
-	const jonctionVisible = (ordreServies.length > 0 && enLice.length > 0) || reperes || coupures.length > 0;
+	const jonctionVisible = (ordreServies.length > 0 && enLice.length > 0) || coupures.length > 0;
+	const etatClassement = { affinage, ordreSeul: ordreSeul ? raisonOrdreSeul(coupes) : null };
 	const niveaux = [...new Set(coupures.map((x) => x.niveau))];
 	const libelleNiveau = (n: CoupureInjectionVue['niveau']) => (n === 'complets' ? 'modèles complets' : 'sens seul');
 
@@ -517,10 +520,16 @@ export function ClassementEnDirect(p: {
 				<span className={s.lbl} id={`classement-${p.session}`} ref={titreSection} tabIndex={-1}>
 					Injecté dans la session
 				</span>
-				{p.modifiable && (
+				{p.modifiable ? (
 					<span className={s.aDroite}>
-						<ModelesSession session={p.session} niveau={niveauPropre} />
+						<ModelesSession session={p.session} niveau={niveauPropre} classement={etatClassement} />
 					</span>
+				) : (
+					ordreSeul && (
+						<span className={cx(s.aDroite, s.ordreSeulFixe)} title={raisonOrdreSeul(coupes)}>
+							ordre seul
+						</span>
+					)
 				)}
 			</div>
 			{ordreServies.length + enLice.length === 0 && !jonctionVisible ? (
@@ -529,22 +538,7 @@ export function ClassementEnDirect(p: {
 				<ol className={s.liste} aria-label="Injecté dans la session" ref={liste}>
 					{ordreServies.map(ligneInjectee)}
 					{jonctionVisible && (
-						<li key="jonction" ref={ordreServies.length > 0 ? jonction : undefined} className={s.jonction} data-filet={ordreServies.length > 0 ? 'true' : undefined} role="presentation">
-							{reperes && (
-								<div className={s.ligneJonction}>
-									{affinage && (
-										<span className={s.affinage} title="Le reranker affine le classement en arrière-plan ; les lignes glisseront à leur nouvelle place. Rien n'est injecté après coup.">
-											<span className={s.pouls} aria-hidden="true" />
-											affinage…
-										</span>
-									)}
-									{ordreSeul && (
-										<span className={s.ordreSeul} title={raisonOrdreSeul(coupes)}>
-											ordre seul
-										</span>
-									)}
-								</div>
-							)}
+						<li key="jonction" ref={ordreServies.length > 0 ? jonction : undefined} className={s.jonction} data-ecart={ordreServies.length > 0 ? 'true' : undefined} role="presentation">
 							{coupures.length > 0 && (
 								<div className={s.coupure} role="status">
 									<p>

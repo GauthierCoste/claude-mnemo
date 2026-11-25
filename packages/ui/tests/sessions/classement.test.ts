@@ -72,4 +72,11 @@ describe('classement', () => {
 		expect(modes.get('c.md')).toEqual({ mode: 'main', horodatageMs: 5 });
 		expect(modes.has('d.md')).toBe(false);
 	});
+	it('modesDInjection : la note d’une injection par Mnemo reste celle vue au hook, même après l’affinage du même message', () => {
+		const ligne = (p: number) => ({ id: 'a.md', titre: 'A', note: p, servi: true, rang: 1, p, auto: true as const });
+		const entree = (p: number) => ({ session: 's', moment: 'message' as const, horodatageMs: 10, ids: ['a.md'], texte: '', ms: 1, sens: true, classement: [ligne(p)], muet: null, cartes: [] });
+		const premieres = new Map<string, number>();
+		expect(modesDInjection([], [entree(0.95)], premieres).get('a.md')?.p).toBe(0.95);
+		expect(modesDInjection([], [entree(0.96)], premieres).get('a.md')?.p).toBe(0.95);
+	});
 });

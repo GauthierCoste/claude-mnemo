@@ -62,11 +62,22 @@ export type ModeInjection = { mode: 'main' | 'auto'; horodatageMs: number; p?: n
 
 /**
  * Le mode d'injection de chaque fiche (chemin → mode) : le journal des gestes rendu par le service (`injections`), complété par
- * les lignes `auto` des classements reçus depuis. La plus récente injection d'une fiche l'emporte.
+ * les lignes `auto` des classements reçus depuis. La plus récente injection d'une fiche l'emporte. `premieres` : la note d'une
+ * ligne `auto` vue en premier (au hook, celle qui l'a fait injecter), par message et fiche, gardée par l'appelant d'un rendu à
+ * l'autre : l'affinage qui change ensuite la note de la ligne ne change pas celle de l'injection.
  */
-export function modesDInjection(injections: readonly InjectionVue[], entrees: readonly EntreeServieVue[]): Map<string, ModeInjection> {
+export function modesDInjection(injections: readonly InjectionVue[], entrees: readonly EntreeServieVue[], premieres: Map<string, number> = new Map()): Map<string, ModeInjection> {
 	const toutes: (ModeInjection & { chemin: string })[] = [];
-	for (const e of entrees) for (const c of e.classement) if (c.auto === true) toutes.push({ chemin: c.id.split('#')[0]!, mode: 'auto', horodatageMs: e.horodatageMs, ...(typeof c.p === 'number' ? { p: c.p } : {}) });
+	for (const e of entrees) {
+		for (const c of e.classement) {
+			if (c.auto !== true) continue;
+			const chemin = c.id.split('#')[0]!;
+			const cle = `${e.horodatageMs}|${chemin}`;
+			if (!premieres.has(cle) && typeof c.p === 'number') premieres.set(cle, c.p);
+			const p = premieres.get(cle);
+			toutes.push({ chemin, mode: 'auto', horodatageMs: e.horodatageMs, ...(p === undefined ? {} : { p }) });
+		}
+	}
 	// au même message, le journal l'emporte : il garde la note du hook, que l'affinage a pu changer ensuite sur la ligne
 	toutes.push(...injections);
 	const modes = new Map<string, ModeInjection>();

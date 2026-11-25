@@ -153,19 +153,46 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(within(lignes()[0]!).queryByRole('button', { name: /^Écarter/u })).toBeNull();
 	});
 
-	it('pas de % sans calibration : ◇ et « ordre seul » (raison au survol) ; une entrée ancienne aussi', async () => {
+	it('pas de % sans calibration : ◇, et « ordre seul » dans le bouton des modèles (raison en info-bulle et dans le menu) ; une entrée ancienne aussi', async () => {
 		monter({ entrees: [entree(1, [v('b.md', 'Bêta', 1, null), v('d.md', 'Delta', 2, null)], { calibree: false })] });
-		await act(async () => {});
+		const bouton = await screen.findByRole('button', { name: /– ordre seul$/u });
 		expect(lignes().map(note)).toEqual(['◇', '◇']);
-		expect(liste().textContent).not.toMatch(/%/u);
-		expect(screen.getByText('ordre seul').getAttribute('title')).toMatch(/^Ordre seul : aucune note apprise et validée/u);
+		expect(liste().textContent).not.toMatch(/%|ordre seul/u);
+		expect(bouton.textContent).toBe('ordre seul');
+		expect(bouton.getAttribute('title')).toMatch(/\nOrdre seul : aucune note apprise et validée/u);
+		await act(async () => bouton.click());
+		expect(screen.getByText(/^Ordre seul : aucune note apprise et validée/u)).toBeTruthy();
+		// ni repère du seuil, ni trait : l'espacement seul
 		expect(screen.queryByText(/seuil d’injection/u)).toBeNull();
 		cleanup();
 		// entrée d'avant le classement vivant : une note du reranker, sans `calibree`
 		monter({ entrees: [{ session: 's1', moment: 'message', horodatageMs: 1, ids: [], texte: '', ms: 1, sens: true, classement: [{ id: 'b.md', titre: 'Bêta', note: 0.8, servi: false, rang: 1 }], muet: null, cartes: [] }] });
 		await act(async () => {});
 		expect(lignes().map(note)).toEqual(['◇']);
-		expect(screen.getByText('ordre seul')).toBeTruthy();
+		expect(await screen.findByRole('button', { name: /– ordre seul$/u })).toBeTruthy();
+	});
+
+	it('session terminée en ordre seul : le mot à droite du titre, sans bouton, sa raison au survol', async () => {
+		monter({ modifiable: false, entrees: [entree(1, [v('b.md', 'Bêta', 1, null)], { calibree: false })] });
+		await act(async () => {});
+		expect(screen.getByText('ordre seul').getAttribute('title')).toMatch(/^Ordre seul : /u);
+	});
+
+	it('repère du seuil : aucune fiche au-dessus, il ouvre le classement (juste après l’espacement des injectées)', async () => {
+		monter({ entrees: [entree(A(14, 34), [v('d.md', 'Delta', 1, 0.5), v('e.md', 'Epsilon', 2, 0.3)], { ids: [POSITION] })] });
+		await act(async () => {});
+		const items = [...liste().children];
+		const jonction = items.findIndex((li) => li.getAttribute('data-ecart') === 'true');
+		expect(jonction).toBe(1);
+		expect(items[jonction + 1]!.textContent).toBe('seuil d’injection 90\u00a0%');
+		expect(items[jonction + 2]!.getAttribute('data-id')).toBe('d.md');
+	});
+
+	it('repère du seuil : deux fiches au-dessus (non injectées), il les sépare des autres', async () => {
+		monter({ entrees: [entree(A(14, 34), [v('b.md', 'Bêta', 1, 0.95), v('c.md', 'Gamma', 2, 0.92), v('d.md', 'Delta', 3, 0.5)], { ids: [POSITION] })] });
+		await act(async () => {});
+		const items = [...liste().children].map((li) => li.getAttribute('data-id') ?? li.textContent);
+		expect(items.slice(2)).toEqual(['b.md', 'c.md', 'seuil d’injection 90\u00a0%', 'd.md']);
 	});
 
 	it('repère du seuil d’injection : avant la première note sous le seuil ; une fiche au-dessus non injectée le dit au survol', async () => {
@@ -178,14 +205,15 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(within(lignes()[2]!).getByRole('button', { name: 'Bêta' }).getAttribute('title')).toMatch(/Au-dessus du seuil sans être injectée/u);
 	});
 
-	it('pas de ligne qui rappelle le message ; « affinage… » à droite du filet seulement pendant l’affinage', async () => {
+	it('pas de ligne qui rappelle le message ; « affinage… » dans le bouton des modèles pendant l’affinage, puis l’icône seule', async () => {
 		const { remplacer } = monter({ entrees: [{ ...CALIBRE, affinage: 'en_cours', texte: 'Le message classé' }] });
-		await act(async () => {});
-		expect(screen.getByText('affinage…')).toBeTruthy();
-		expect(liste().textContent).not.toContain('Le message classé');
+		const bouton = await screen.findByRole('button', { name: /– affinage…$/u });
+		expect(bouton.textContent).toBe('affinage…');
+		expect(liste().textContent).not.toMatch(/Le message classé|affinage/u);
 		remplacer([{ ...CALIBRE, affinage: 'fait' }]);
-		expect(screen.queryByText('affinage…')).toBeNull();
-		expect(screen.queryByText('ordre seul')).toBeNull();
+		const apres = screen.getByRole('button', { name: /^Modèles de cette session/u });
+		expect(apres.textContent).toBe('');
+		expect(apres.getAttribute('aria-label')).not.toMatch(/affinage|ordre seul/u);
 	});
 
 	it('glissement à l’affinage : la même entrée rediffusée avec d’autres rangs réordonne la liste, ▲/▼ quelques secondes', async () => {

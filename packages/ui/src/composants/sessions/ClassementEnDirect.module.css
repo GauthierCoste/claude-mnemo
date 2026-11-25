@@ -212,55 +212,26 @@
 }
 
 /* La jonction : un filet sous les fiches injectées, et l'état du classement à droite s'il sort de l'ordinaire. */
+/* Entre les fiches injectées et le classement : un espacement, pas de trait (le repère du seuil est le seul trait du panneau). */
 .jonction {
-	margin: 4px 0;
-	padding: 2px 4px 0;
+	margin: 0;
+	padding: 0 4px;
 }
 
-.jonction[data-filet='true'] {
-	margin-top: 8px;
-	padding-top: 6px;
-	border-top: 1px solid var(--bd);
+.jonction[data-ecart='true'] {
+	margin-top: 12px;
 }
 
-.ligneJonction {
-	display: flex;
-	align-items: center;
-	justify-content: flex-end;
-	gap: 8px;
-	font-size: 11px;
-}
-
-.affinage,
-.ordreSeul {
+/* « ordre seul » d'une session terminée (sans bouton des modèles) : à droite du titre, encadré comme un état. */
+.ordreSeulFixe {
 	flex: none;
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
+	padding: 0 5px;
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-1);
 	font: 500 10px var(--mono);
 	color: var(--mu);
 	white-space: nowrap;
 	cursor: help;
-}
-
-.ordreSeul {
-	padding: 0 5px;
-	border: 1px solid var(--bd2);
-	border-radius: var(--r-1);
-}
-
-.pouls {
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-	background: var(--ac);
-	animation: pouls 1s ease-in-out infinite alternate;
-}
-
-@keyframes pouls {
-	from {
-		opacity: 0.3;
-	}
 }
 
 .coupure {
@@ -308,9 +279,8 @@
 }
 
 .intertitre {
-	margin: 10px 0 2px;
-	padding: 6px 4px 0;
-	border-top: 1px solid var(--bd);
+	margin: 14px 0 2px;
+	padding: 0 4px;
 	font: 500 10px var(--mono);
 	color: var(--dim);
 }
@@ -476,8 +446,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.ligne[data-nouvelle='true'],
-	.pouls {
+	.ligne[data-nouvelle='true'] {
 		animation: none;
 	}
 }

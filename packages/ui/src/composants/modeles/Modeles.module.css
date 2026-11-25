@@ -119,6 +119,24 @@
 	box-shadow: 0 0 0 2px var(--fond-panneau);
 }
 
+/* Sans menu (modèles non installés) : l'état du classement seul, à la même place et dans le même style. */
+.etatSeul {
+	display: inline-flex;
+	padding: 1px 6px;
+	border: 1px solid transparent;
+	border-radius: var(--r-1);
+	font: 500 10.5px var(--mono);
+	letter-spacing: 0.04em;
+	color: var(--mu);
+	white-space: nowrap;
+	cursor: help;
+}
+
+/* Classement en ordre seul (aucune note en %) : dit dans le bouton, encadré comme un état. */
+.ordreSeul {
+	border-color: var(--bd2);
+}
+
 /* Un niveau propre à la session se voit (il diffère de celui de partout). */
 .propre {
 	color: var(--tx);
