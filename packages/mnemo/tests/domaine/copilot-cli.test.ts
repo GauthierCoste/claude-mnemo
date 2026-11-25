@@ -46,9 +46,7 @@ describe('outils de GitHub Copilot CLI', () => {
 		expect(OUTILS_COPILOT_CLI.commande({ nom: 'write_bash', entree: { input: 'y' } })).toEqual({ illisible: true });
 		expect(OUTILS_COPILOT_CLI.commande({ nom: 'view', entree: { path: 'a' } })).toBeNull();
 		expect(OUTILS_COPILOT_CLI.prefixeMcp).toBe('mnemo-');
-		const motif = new RegExp(`^(?:${OUTILS_COPILOT_CLI.motifApresOutil})$`, 'u');
-		for (const nom of ['create', 'edit', 'apply_patch', 'mnemo-proposer']) expect(motif.test(nom), nom).toBe(true);
-		for (const nom of ['bash', 'view', 'mnemo-', 'recreate']) expect(motif.test(nom), nom).toBe(false);
+		expect(OUTILS_COPILOT_CLI.motifApresOutil).toBeUndefined();
 	});
 });
 

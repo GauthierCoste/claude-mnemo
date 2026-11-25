@@ -29,12 +29,6 @@ const LECTURE_DE_L_EDITEUR = 'view';
 /** Outils du serveur MCP `mnemo` chez GitHub Copilot CLI : `<serveur>-<outil>`. */
 const PREFIXE_MCP = 'mnemo-';
 
-/**
- * Outils après lesquels un fichier ou une fiche est lu ou écrit (expression rationnelle qui couvre tout le nom). Pas de
- * `matcher` chez Copilot : son `postToolUse` est installé pour tous les outils (il efface le dialogue ouvert).
- */
-const MOTIF_APRES_OUTIL = 'create|edit|str_replace_editor|apply_patch|mnemo-.+';
-
 /** Un outil de Copilot lui-même (ni MCP `<serveur>-<outil>`) : ses noms n'ont pas de tiret. */
 const estOutilDeCopilot = (nom: string): boolean => /^[a-z][a-z0-9_]*$/u.test(nom);
 
@@ -60,5 +54,5 @@ export const OUTILS_COPILOT_CLI: OutilsDuMoteur = {
 		return ligneDeCommande(action.entree['command']) ?? '';
 	},
 	prefixeMcp: PREFIXE_MCP,
-	motifApresOutil: MOTIF_APRES_OUTIL,
+	// pas de `motifApresOutil` : `postToolUse` est installé pour tous les outils (il efface le dialogue ouvert)
 };

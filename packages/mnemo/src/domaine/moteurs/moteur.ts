@@ -23,8 +23,11 @@ export type OutilsDuMoteur = {
 	commande(action: ActionOutil): string | null | CommandeIllisible;
 	/** Préfixe des outils du serveur MCP `mnemo` chez ce moteur. */
 	prefixeMcp: string;
-	/** Motif (`matcher`) des outils après lesquels `apres_outil` est appelé : un fichier, une fiche lus ou écrits. */
-	motifApresOutil: string;
+	/**
+	 * Motif (`matcher`) des outils après lesquels `apres_outil` est appelé : un fichier, une fiche lus ou écrits ; absent : le
+	 * moteur l'installe pour tous les outils (Mistral Vibe, GitHub Copilot CLI : il efface aussi le dialogue ouvert).
+	 */
+	motifApresOutil?: string;
 };
 
 /**
