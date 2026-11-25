@@ -623,8 +623,13 @@ Benchmarks measure Mnemo on fictitious corpora shipped with it (`packages/mnemo/
   test memory; with a file, your questions on the memory of the folder.
 - `mnemo banc consignes [--json]`: checked instructions (actions refused or allowed by the `outil` hook) and reminded
   ones (injected at the right message). Without `claude`, in a few seconds.
-- `mnemo banc contexte [--json]` and `mnemo banc contexte --extraire <session>`: the cards proposed on messages labelled
-  by hand, from the file `.mnemo/banc-contexte.json` (private, never committed); see [banc.md](banc.md#banc-du-contexte-sobre).
+- `mnemo banc contexte [--json]`: the cards proposed on messages labelled by hand, and the measures of the judged
+  messages, from the file `.mnemo/banc-contexte.json` (private, never committed); see
+  [banc.md](banc.md#banc-du-contexte-sobre). `--extraire [<session>] [--nombre <n>]` adds real messages from your
+  sessions (varied, deduplicated), each with the notes to judge: the union of the first ones by meaning, by words and by
+  the reranker. `--juger` shows them one at a time, without score or rank, one key per answer (`o` useful, `n` not
+  useful, `i` undecided, `r` nothing useful for this message, `s` skip the message, `b` back, `q` quit), saves each
+  answer and resumes where you stopped. `--json` also gives the judged pairs with their raw signals.
 - `mnemo banc extraction --reel` and `mnemo banc contradictions --reel`: the archivist run by the real `claude -p` on
   test documents, then scored. **They consume your Claude subscription**: without `--reel`, the command refuses.
 

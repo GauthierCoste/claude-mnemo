@@ -3,10 +3,11 @@
  * compte les cartes justes et indésirables. « Proposée » : la fiche de position servie ou une carte.
  */
 import { ficheDePosition } from './chercher.ts';
-import type { Dependances, EtatSessions } from './ports.ts';
+import type { Dependances } from './ports.ts';
 import { servir } from './servir.ts';
 import { SANS_EXTRACTION, synchroniser } from './synchroniser.ts';
 import { raisonDeMutisme } from '../domaine/message-muet.ts';
+import type { ListeDuBanc, Signaux } from './banc-signaux.ts';
 
 /**
  * Un message étiqueté. `attendues` / `interdites` : chemin complet de fiche ou dernier segment (« Corvel.md » désigne
@@ -28,7 +29,30 @@ export type CasContexte = {
 	interdites: string[];
 	silence: boolean;
 	injectees?: string[];
+	/** Session d'origine (id) et rang du message parmi ses messages porteurs (1 = le premier), pour les plis groupés par session. */
+	session?: string;
+	rang?: number;
+	/** Le message porteur d'avant dans la session (variante jointe de la requête, spec § 3.2) ; null s'il n'y en a pas. */
+	precedent?: string | null;
+	/**
+	 * Jugement par mise en commun (spec § 6.1) : les fiches à juger, figées à l'extraction (l'union des premières selon le sens,
+	 * les mots et le reranker). Un cas sans `candidates` est un cas étiqueté à la main (`attendues`, `interdites`).
+	 */
+	candidates?: CandidateAJuger[];
+	/** Chemin → jugement ; une candidate absente n'est pas encore jugée. */
+	jugements?: Record<string, Jugement>;
+	/** Vrai : le message a été sauté au jugement ; il ne compte nulle part. */
+	saute?: boolean;
 };
+export type Jugement = 'pertinente' | 'non_pertinente' | 'indecise';
+export const JUGEMENTS: readonly Jugement[] = ['pertinente', 'non_pertinente', 'indecise'];
+/** `seule` : le message ; `jointe` : le message joint au message porteur d'avant (spec § 3.2). */
+export type VarianteRequete = 'seule' | 'jointe';
+/**
+ * Une fiche à juger : titre et première ligne figés à l'extraction (ce que l'on montre), les listes où elle était en tête
+ * (jamais montrées) et ses signaux bruts par variante de requête, calculés à l'extraction.
+ */
+export type CandidateAJuger = { chemin: string; titre: string; ligne: string; listes: ListeDuBanc[]; signaux: Partial<Record<VarianteRequete, Signaux>> };
 /** `indesirables` : fiches interdites proposées, et, dans un cas `silence`, tout ce qui est proposé (sauf la fiche de position d'un `premier` muet). */
 export type MesureContexte = { cas: number; justes: number; attenduesProposees: number; attenduesTotal: number; indesirables: number; caracteres: number };
 export type EchecContexte = { nom: string; manquees: string[]; indesirables: string[] };
@@ -36,7 +60,7 @@ export type EchecContexte = { nom: string; manquees: string[]; indesirables: str
 const DELAI_MS = 5000;
 
 /** Le nom désigne le chemin : égal, ou dernier segment (« Corvel.md » désigne `projets/clients/Corvel/Corvel.md`). */
-const designe = (nom: string, chemin: string) => chemin === nom || chemin.endsWith(`/${nom}`);
+export const designe = (nom: string, chemin: string) => chemin === nom || chemin.endsWith(`/${nom}`);
 
 /**
  * Rejoue un cas : les chemins proposés (fiche de position servie puis cartes), les cartes seules, si le message est muet, la taille
@@ -99,21 +123,4 @@ export async function rejouerCas(dep: Dependances, cas: readonly CasContexte[]):
 		else echecs.push({ nom: c.nom, manquees, indesirables });
 	}
 	return { mesure, echecs };
-}
-
-/**
- * Les messages journalisés de la session, dans l'ordre, en cas à étiqueter (`attendues`, `interdites` vides). Le premier message
- * non muet est le `premier`.
- */
-export async function extraireCas(etat: EtatSessions, session: string): Promise<CasContexte[]> {
-	const journal = await etat.servis(session, 200);
-	const positionDeLaSession = (await etat.lire(session))?.position;
-	if (positionDeLaSession === undefined && journal.length === 0) throw new Error(`Session inconnue ou sans journal : ${session}`);
-	const entrees = journal.filter((e) => e.moment === 'message' && e.demande !== null).sort((a, b) => a.horodatageMs - b.horodatageMs);
-	let dejaPremier = false;
-	return entrees.map((e, i): CasContexte => {
-		const premier = !dejaPremier && e.muet === null;
-		if (premier) dejaPremier = true;
-		return { nom: `${session.slice(0, 8)} #${i + 1}`, position: e.position ?? positionDeLaSession ?? '', message: e.demande!, premier, attendues: [], interdites: [], silence: false };
-	});
 }
