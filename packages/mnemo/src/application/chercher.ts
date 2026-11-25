@@ -526,7 +526,7 @@ export async function chercher(dep: Dependances, requete: Requete): Promise<Trou
  * dont le document a changé sans être encore réextrait (`differees` : la CLI renvoie à `mnemo index`) et les notes
  * du reranker par id (null s'il n'a pas tourné). `rapide` : les mots (et le graphe) seuls, sans aucun modèle ni
  * vectorisation — le premier temps de la recherche de l'interface. `demarrer` (vrai par défaut) : faux, les modèles
- * arrêtés ne sont pas lancés (l'interface laisse ce geste à l'utilisateur). `signal` : abandon (voir `OptionsRecherche`).
+ * arrêtés ne sont pas attendus (l'étape saute) mais lancés en arrière-plan, pour la recherche suivante. `signal` : abandon (voir `OptionsRecherche`).
  */
 export async function chercherAvecAvis(
 	dep: Dependances,

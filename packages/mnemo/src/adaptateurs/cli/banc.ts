@@ -18,7 +18,7 @@ import { motifRegleInvalide } from '../../domaine/regles-verifiees.ts';
 import type { Regle } from '../../domaine/consigne.ts';
 import { ecrirePlugin, trouverClaude } from '../../infra/claude.ts';
 import { dossierServeurs } from '../../infra/modeles/dossier.ts';
-import { arreterServeurs } from '../../infra/modeles/serveurs.ts';
+import { arreterServeurs, lireEtatServeurs, pidVivant } from '../../infra/modeles/serveurs.ts';
 import { appelPlugin, dependancesReelles } from '../../infra/systeme.ts';
 import type { Executer } from './declarer.ts';
 import { AUCUNE_MEMOIRE, ErreurCli } from './erreurs.ts';
@@ -69,18 +69,29 @@ export function lireQuestions(texte: string): Question[] {
 	});
 }
 
+/** Pid du gardien des modèles de la machine s'il est vivant, sinon null. */
+async function gardienVivant(serveurs: string): Promise<number | null> {
+	const etat = await lireEtatServeurs(serveurs);
+	return etat !== null && pidVivant(etat.gardien.pid) ? etat.gardien.pid : null;
+}
+
 /**
- * `travail` dans un dossier temporaire neuf, supprimé ensuite. Les serveurs de modèles (ceux de la machine, partagés) sont
- * arrêtés avant la suppression : le banc ne laisse pas leur mémoire prise, le prochain usage les relance. Le nettoyage se fait une seule fois, même interrompu (Ctrl-C ou SIGTERM : rien ne reste derrière). Interrompu, le
- * `signal` passé à `travail` est d'abord levé : un processus lancé avec lui (`claude -p`) est tué.
+ * `travail` dans un dossier temporaire neuf, supprimé ensuite. Les serveurs de modèles sont partagés par toute la machine :
+ * ils ne sont arrêtés avant la suppression que si le banc a lancé leur gardien (un gardien vivant autre que celui d'avant le
+ * banc) ; celui qui tournait déjà, celui de l'app par exemple, est laissé. Le nettoyage se fait une seule fois, même
+ * interrompu (Ctrl-C ou SIGTERM : rien ne reste derrière). Interrompu, le `signal` passé à `travail` est d'abord levé : un
+ * processus lancé avec lui (`claude -p`) est tué.
  */
 async function dansUnDossierTemporaire<T>(prefixe: string, travail: (dossier: string, signal: AbortSignal) => Promise<T>): Promise<T> {
+	const serveurs = dossierServeurs(process.env, process.platform, homedir());
+	const gardienAvant = await gardienVivant(serveurs);
 	const dossier = await mkdtemp(resolve(tmpdir(), prefixe));
 	const abandon = new AbortController();
 	let nettoyage: Promise<void> | null = null;
 	const nettoyer = (): Promise<void> =>
 		(nettoyage ??= (async () => {
-			await arreterServeurs(dossierServeurs(process.env, process.platform, homedir())).catch(() => 'rien');
+			const gardien = await gardienVivant(serveurs);
+			if (gardien !== null && gardien !== gardienAvant) await arreterServeurs(serveurs).catch(() => 'rien');
 			await rm(dossier, { recursive: true, force: true });
 		})());
 	const interrompre = (): void => {

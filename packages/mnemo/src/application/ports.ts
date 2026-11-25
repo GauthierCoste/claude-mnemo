@@ -327,8 +327,8 @@ export interface ExtractionDifferee {
 /**
  * `budgetMs` : temps total accordé à l'appel (démarrage compris) ; au-delà, `null`. `demarrer` : sans serveur en marche,
  * en lancer un (en arrière-plan : un premier chargement plus long que le budget rend `null` maintenant, les appels suivants
- * le trouveront prêt) ; `false` (« si en marche », pour les hooks) : rendre `null` aussitôt, en lançant les modèles sans les
- * attendre (le tour suivant les trouvera prêts).
+ * le trouveront prêt) ; `false` (« si en marche » : hooks, recherche de l'interface) : rendre `null` aussitôt, en lançant
+ * les modèles sans les attendre (l'appel suivant les trouvera prêts).
  */
 export type OptionsModele = { budgetMs: number; demarrer: boolean };
 

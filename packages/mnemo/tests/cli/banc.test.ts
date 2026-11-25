@@ -6,7 +6,10 @@ import { lireQuestions } from '../../src/adaptateurs/cli/banc.ts';
 import { proposer } from '../../src/application/proposer.ts';
 import { piecesPourPlateforme } from '../../src/infra/modeles/catalogue.ts';
 import { dossierPiece } from '../../src/infra/modeles/installer.ts';
-import { pidVivant } from '../../src/infra/modeles/serveurs.ts';
+import { homedir } from 'node:os';
+import { rerankerLlama, sensLlama } from '../../src/infra/modeles/client-llama.ts';
+import { dossierServeurs } from '../../src/infra/modeles/dossier.ts';
+import { arreterServeurs, lireEtatServeurs, pidVivant } from '../../src/infra/modeles/serveurs.ts';
 import { dependancesReelles } from '../../src/infra/systeme.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { ENV_TEST } from '../aides/env-test.ts';
@@ -180,5 +183,33 @@ describe('commande mnemo banc', () => {
 		expect(await fin).toBe(130);
 		expect(readdirSync(d).filter((n) => n.startsWith('mnemo-banc-'))).toEqual([]);
 		await attendreQue(() => pids().every((pid) => !pidVivant(pid)), 10_000);
+	}, 60_000);
+
+	it('un gardien des modèles qui tournait avant le banc reste en vie après', async () => {
+		const d = await dossierTemporaire();
+		const modeles = await dossierTemporaire();
+		for (const piece of piecesPourPlateforme(process.platform, process.arch)!.filter((p) => p.nom !== 'moteur')) {
+			const dossier = dossierPiece(modeles, piece);
+			mkdirSync(dossier, { recursive: true });
+			writeFileSync(join(dossier, '.empreinte'), `${piece.sha256}\n`);
+			writeFileSync(join(dossier, piece.fichier), '');
+		}
+		const env = { ...ENV_TEST, TMPDIR: d, MNEMO_MODELES: modeles, MNEMO_LLAMA_SERVEUR: FAUX_LLAMA };
+		const serveurs = dossierServeurs(env, process.platform, homedir());
+		try {
+			// le gardien « de l'app » : lancé avant le banc, depuis un autre dossier
+			expect(await sensLlama(d, { env }).vecteurs(['a'], { budgetMs: 15_000, demarrer: true })).toHaveLength(1);
+			expect(await rerankerLlama(d, { env }).noter('q', ['a'], { budgetMs: 15_000, demarrer: true })).toHaveLength(1);
+			const avant = (await lireEtatServeurs(serveurs))!;
+			serveursLances.push(avant.sens!.pid, avant.reranker!.pid);
+			const r = await new Promise<number>((resoudre) => {
+				execFile(process.execPath, [MAIN, 'banc', 'consignes', '--json'], { cwd: d, env }, (erreur) => resoudre(erreur ? (erreur.code as number) : 0));
+			});
+			expect(r).toBe(0);
+			expect(pidVivant(avant.gardien.pid) && pidVivant(avant.sens!.pid) && pidVivant(avant.reranker!.pid)).toBe(true);
+			expect((await lireEtatServeurs(serveurs))!.gardien.pid).toBe(avant.gardien.pid);
+		} finally {
+			await arreterServeurs(serveurs);
+		}
 	}, 60_000);
 });
