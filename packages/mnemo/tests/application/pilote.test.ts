@@ -7,6 +7,7 @@ import type { CommandeMoteur, EtatSessions, FichierPlugin, Pilotage } from '../.
 import type { Session } from '../../src/domaine/session.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
 import { MOTEUR_CODEX } from '../../src/infra/moteurs/codex.ts';
+import { MOTEUR_COPILOT_CLI } from '../../src/infra/moteurs/copilot-cli.ts';
 import { HOOKS_DU_POSTE_CODEX } from '../../src/infra/moteurs/codex/hooks-json.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { DEPOT_ABSENT, fauxPorts } from '../aides/faux-ports.ts';
@@ -713,6 +714,89 @@ describe('Pilote : sessions Codex', () => {
 		expect(await c.etat.lire(ID_A)).toMatchObject({ etat: 'en_pause' });
 		// abandon d'une session sans fil : possible (rien à reprendre)
 		expect(await c.pilote.terminer(ID_A, { bilan: false })).toMatchObject({ etat: 'terminee' });
+	});
+});
+
+const COPILOT = { commande: '/usr/bin/node', avant: ['/aides/faux-copilot.mjs'] };
+
+/** GitHub Copilot CLI dans le pilotage du test (jamais lancé), sa configuration dans un dossier jetable, un profil qui l'utilise. */
+async function avecCopilot(c: Contexte): Promise<void> {
+	const maison = join(await dossierTemporaire(), 'copilot');
+	c.pil.moteurs = { ...c.pil.moteurs, 'copilot-cli': { moteur: { ...MOTEUR_COPILOT_CLI, version: async () => '1.0.116' }, commande: COPILOT } };
+	c.pil.plugin.appel = APPEL_CODEX;
+	c.pil.hote.env = { ...c.pil.hote.env, COPILOT_HOME: maison };
+	await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmoteur: copilot-cli\nhooks: [debut, message, arret, fin]\n---\n# Rédaction\n\nRédige les courriers.\n');
+}
+
+describe('Pilote : sessions GitHub Copilot CLI', () => {
+	it('lancement : --session-id (marque), consigne par le dossier de session, premier message par --interactive ; arrêt par /exit', async () => {
+		const c = await contexte();
+		await avecCopilot(c);
+		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha', objectif: 'Écris au client' });
+		expect(s).toMatchObject({ moteur: 'copilot-cli' });
+		const t = c.terminaux.lances[0]!;
+		expect(t.options.args.slice(0, 2)).toEqual([...COPILOT.avant, `--session-id=${s.id}`]);
+		expect(t.options.args.at(-1)).toBe('--interactive=Écris au client');
+		expect(t.options.env).toMatchObject({ MNEMO_SESSION: s.id, MNEMO_MOTEUR: 'copilot-cli', COPILOT_CUSTOM_INSTRUCTIONS_DIRS: `${RACINE}/.mnemo/plugins/${s.id}` });
+		expect(c.plugins.get(s.id)!.map((f) => f.chemin)).toEqual(['.github/instructions/mnemo.instructions.md']);
+		expect(t.options.touches).toMatchObject({ arret: '\x15/exit', pauseAvantEntreeMs: 100 });
+		expect(c.pilote.motifSansReprise((await c.etat.lire(s.id))!)).toBeNull();
+	});
+
+	it('aucun hook depuis ce lancement (écran de confiance peut-être ouvert) : rien n’est tapé, arrêt sans touche ; après un hook, comme les autres', async () => {
+		const c = await contexte();
+		await avecCopilot(c);
+		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
+		const t = c.terminaux.lances[0]!;
+		await expect(c.pilote.confier(s.id, 'Fais ceci')).rejects.toThrow(ErreurSessionNonCommencee);
+		await expect(c.pilote.terminer(s.id, { bilan: true })).rejects.toThrow(/Bilan impossible : la session n'a pas encore commencé/u);
+		expect(t.ecrits).toEqual([]);
+		await new Promise((r) => setTimeout(r, 5));
+		await c.etat.appliquer(s.id, 'message', Date.now(), { fil: s.id });
+		await c.pilote.confier(s.id, 'Fais ceci');
+		expect(t.ecrits).toEqual(['Fais ceci', '\r']);
+		c.terminaux.arretFinit = true;
+		await c.pilote.pause(s.id);
+		expect(t.optionsArret).toEqual([{ echap: false }]);
+		// relancée : de nouveau non commencée jusqu'à son premier hook ; une pause l'arrête sans touche
+		await new Promise((r) => setTimeout(r, 5));
+		await c.pilote.reprendre(s.id);
+		const r = c.terminaux.lances[1]!;
+		expect(r.options.args.slice(0, 2)).toEqual([...COPILOT.avant, `--session-id=${s.id}`]);
+		expect(r.options.args.some((a) => a.startsWith('--interactive'))).toBe(false);
+		await expect(c.pilote.confier(s.id, 'Encore')).rejects.toThrow(ErreurSessionNonCommencee);
+		await c.pilote.pause(s.id);
+		expect(r.optionsArret).toEqual([{ sansTouche: true }]);
+		expect(r.ecrits).toEqual([]);
+	});
+
+	it('session qui ne tourne pas : la consigne, puis le bilan, partent avec la reprise comme premier message, jamais tapés', async () => {
+		const c = await contexte({ sessions: [session(ID_A, { etat: 'en_pause', profil: 'redaction', moteur: 'copilot-cli', modele: '' })] });
+		await avecCopilot(c);
+		await c.pilote.confier(ID_A, 'Relis le contrat');
+		const t = c.terminaux.lances[0]!;
+		expect(t.options.args.at(-1)).toBe('--interactive=Relis le contrat');
+		expect(t.ecrits).toEqual([]);
+		c.terminaux.arretFinit = true;
+		await c.pilote.pause(ID_A);
+		const avant = Date.now();
+		const b = await c.pilote.terminer(ID_A, { bilan: true });
+		expect(b).toMatchObject({ arretAttendu: 'bilan', etat: 'attend' });
+		expect(b!.bilanDemandeMs).toBeGreaterThanOrEqual(avant);
+		const u = c.terminaux.lances[1]!;
+		expect(u.options.args.at(-1)).toMatch(/^--interactive=\S/u);
+		expect(u.ecrits).toEqual([]);
+	});
+
+	it('redémarrage du service pendant un bilan : relancée avec le bilan comme premier message', async () => {
+		const c = await contexte({ sessions: [session(ID_A, { etat: 'attend', profil: 'redaction', moteur: 'copilot-cli', modele: '', arretAttendu: 'service', bilanDemandeMs: 5 })] });
+		await avecCopilot(c);
+		expect(await c.pilote.reprendreAuDemarrage()).toEqual([ID_A]);
+		const t = c.terminaux.lances[0]!;
+		expect(t.options.args.at(-1)).toMatch(/^--interactive=\S/u);
+		expect(await c.etat.lire(ID_A)).toMatchObject({ arretAttendu: 'bilan' });
+		expect((await c.etat.lire(ID_A))!.bilanDemandeMs).toBeGreaterThan(5);
+		expect(t.ecrits).toEqual([]);
 	});
 });
 

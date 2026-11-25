@@ -17,6 +17,7 @@ const EFFETS: Record<IdMoteur, string> = {
 	'claude-code': 'skills et hooks par un plugin de session, plugins Claude Code au choix',
 	codex: 'skills listées dans la consigne et lues par l’outil lire ; pas de plugins',
 	'mistral-vibe': 'skills listées dans la consigne et lues par l’outil lire ; pas de plugins',
+	'copilot-cli': 'skills listées dans la consigne et lues par l’outil lire ; pas de plugins',
 };
 
 /** Ligne d'état d'un moteur sur ce poste : sa version, ou pourquoi ses sessions ne se lanceront pas ici. */

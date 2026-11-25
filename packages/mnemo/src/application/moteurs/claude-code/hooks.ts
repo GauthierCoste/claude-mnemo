@@ -96,5 +96,22 @@ function lireArguments(args: string[]): { evenement: EvenementHook; options: Set
  */
 const ECHEANCES_MS: Record<EvenementHook, number> = { debut: 900, message: 900, outil: 2000, apres_outil: 900, arret: 900, fin: 1400 };
 
-/** Claude Code n'appelle Mnemo que par le plugin d'une session Mnemo : jamais inerte. */
-export const HOOKS_CLAUDE_CODE: HooksDuMoteur = { lireArguments, inerte: () => false, traduire, sortie: sortieDe, echeancesMs: ECHEANCES_MS, finIgnoreeSiVivante: false };
+/**
+ * Moteurs qui exécutent eux-mêmes des hooks au format de Claude Code trouvés dans le dépôt (GitHub Copilot CLI : ceux de
+ * `.claude/settings.json` dans un dossier approuvé, noms et entrée de Claude Code ; mesuré).
+ */
+const LISENT_LES_HOOKS_DE_CLAUDE_CODE: ReadonlySet<string> = new Set(['copilot-cli']);
+
+/**
+ * Claude Code n'appelle Mnemo que par le plugin d'une session Mnemo : jamais inerte, sauf dans une session d'un moteur qui
+ * exécute lui-même des hooks au format de Claude Code (`MNEMO_MOTEUR`, `LISENT_LES_HOOKS_DE_CLAUDE_CODE`) : des hooks de Mnemo
+ * copiés dans un `.claude/settings.json` y feraient double emploi avec ceux du moteur, qui parlent déjà pour la session.
+ */
+export const HOOKS_CLAUDE_CODE: HooksDuMoteur = {
+	lireArguments,
+	inerte: (env) => env.MNEMO_MOTEUR !== undefined && LISENT_LES_HOOKS_DE_CLAUDE_CODE.has(env.MNEMO_MOTEUR),
+	traduire,
+	sortie: sortieDe,
+	echeancesMs: ECHEANCES_MS,
+	finIgnoreeSiVivante: false,
+};

@@ -44,7 +44,7 @@ export type SuiviModeles = {
  */
 export type ActionsInit = {
 	declarerMcp(): Promise<ResultatDeclaration>;
-	/** Déclaration du serveur MCP chez un moteur facultatif (sur son option : `--codex`, `--mistral`). */
+	/** Déclaration du serveur MCP chez un moteur facultatif (sur son option : `--codex`, `--mistral`, `--copilot`). */
 	declarerAuMoteur(id: IdMoteur): Promise<ResultatDeclaration>;
 	/** Hooks de Mnemo pour tout le poste chez ce moteur (`~/.codex/hooks.json`, `~/.vibe/hooks.toml`). */
 	installerHooks(id: IdMoteur): Promise<ResultatInstallationHooks>;
@@ -134,7 +134,7 @@ class EchecMotive extends Error {
  * dit, puis le code de sortie est 1 (en texte, une déclaration MCP impossible reste dite sans être un échec, comme avant).
  * `--codex` : déclare aussi le serveur MCP chez Codex et installe les hooks de Mnemo dans `~/.codex/hooks.json` (sans
  * question ; sans `--codex`, Codex n'est jamais touché) ; de même `--mistral` chez Mistral Vibe (`~/.vibe/config.toml` et
- * `~/.vibe/hooks.toml`).
+ * `~/.vibe/hooks.toml`) et `--copilot` chez GitHub Copilot CLI (`~/.copilot/mcp-config.json` et `~/.copilot/hooks/mnemo.json`).
  */
 export async function commandeInit(args: string[], o: OptionsInit = {}): Promise<void> {
 	const choix = lireOptionsInit(args);

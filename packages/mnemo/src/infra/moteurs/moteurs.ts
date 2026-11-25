@@ -2,13 +2,14 @@ import type { Moteur, MoteurDuPoste, MoteurDuService, Pilotage } from '../../app
 import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
 import { MOTEUR_CLAUDE_CODE } from './claude-code.ts';
 import { MOTEUR_CODEX } from './codex.ts';
+import { MOTEUR_COPILOT_CLI } from './copilot-cli.ts';
 import { MOTEUR_MISTRAL_VIBE } from './mistral-vibe.ts';
 
 /** Moteurs qui font tourner des sessions. */
-export const MOTEURS: readonly Moteur[] = [MOTEUR_CLAUDE_CODE, MOTEUR_CODEX, MOTEUR_MISTRAL_VIBE];
+export const MOTEURS: readonly Moteur[] = [MOTEUR_CLAUDE_CODE, MOTEUR_CODEX, MOTEUR_MISTRAL_VIBE, MOTEUR_COPILOT_CLI];
 
 /** Tous les moteurs connus sur le poste (commande, déclaration MCP, hooks du poste). */
-export const MOTEURS_DU_POSTE: Readonly<Record<IdMoteur, MoteurDuPoste>> = { 'claude-code': MOTEUR_CLAUDE_CODE, codex: MOTEUR_CODEX, 'mistral-vibe': MOTEUR_MISTRAL_VIBE };
+export const MOTEURS_DU_POSTE: Readonly<Record<IdMoteur, MoteurDuPoste>> = { 'claude-code': MOTEUR_CLAUDE_CODE, codex: MOTEUR_CODEX, 'mistral-vibe': MOTEUR_MISTRAL_VIBE, 'copilot-cli': MOTEUR_COPILOT_CLI };
 
 /** Un moteur facultatif : `mnemo init` ne le touche que sur son option ; il a son bloc dans `PosteVerifie`. */
 export type MoteurFacultatif = MoteurDuPoste & { installation: { facultatif: NonNullable<MoteurDuPoste['installation']['facultatif']> } };

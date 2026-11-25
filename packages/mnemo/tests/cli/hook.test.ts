@@ -704,6 +704,64 @@ describe('mnemo hook --moteur mistral-vibe', () => {
 	});
 });
 
+describe('mnemo hook --moteur copilot-cli', () => {
+	const copilot = (racine: string, champs: Record<string, unknown>) => JSON.stringify({ sessionId: ID, timestamp: 1795634385845, cwd: racine, ...champs });
+
+	it('session Mnemo : entrée en camelCase, refus et contexte au format de Copilot, fil = sessionId, permissionRequest = dialogue ouvert', async () => {
+		const racine = await dossierVerifie({ moteur: 'copilot-cli' });
+		await writeFile(join(racine, '_mnemo', 'consignes', 'env.md'), `${entete('consigne', 'portee: globale\nniveau: verifiee\nregle: { type: chemins_interdits, motifs: ["**/.env"] }\n')}# E\n\nJamais de .env.\n`);
+		await attendu(racine, '');
+		const env = { MNEMO_RACINE: racine, MNEMO_SESSION: ID, MNEMO_MOTEUR: 'copilot-cli' };
+		const r = await hook(racine, 'outil --moteur copilot-cli', copilot(racine, { toolCallId: 'c1', toolName: 'bash', toolArgs: { command: 'git push --force', description: 'x' } }), env);
+		expect(r.code).toBe(0);
+		expect(r.out).toBe(`${JSON.stringify({ permissionDecision: 'deny', permissionDecisionReason: REFUS_PUSH })}\n`);
+		const cree = await hook(racine, 'outil --moteur copilot-cli', copilot(racine, { toolName: 'create', toolArgs: { path: join(racine, '.env'), file_text: 'A=1' } }), env);
+		expect(JSON.parse(cree.out)).toEqual({ permissionDecision: 'deny', permissionDecisionReason: expect.stringContaining('Jamais de .env.') });
+		const patch = await hook(racine, 'outil --moteur copilot-cli', copilot(racine, { toolName: 'apply_patch', toolArgs: '*** Begin Patch\n*** Add File: config/.env\n+A=1\n*** End Patch\n' }), env);
+		expect(JSON.parse(patch.out)).toMatchObject({ permissionDecision: 'deny' });
+		expect((await hook(racine, 'outil --moteur copilot-cli', copilot(racine, { toolName: 'view', toolArgs: { path: join(racine, '.env') } }), env)).out).toBe('');
+
+		const { requetes } = await fauxService(racine, (_req, corps) => (JSON.parse(corps).evenement === 'message' ? { contexte: 'Contexte du service.' } : {}));
+		const m = await hook(racine, 'message --moteur copilot-cli', copilot(racine, { prompt: 'Bonjour' }), env);
+		expect(m.out).toBe(`${JSON.stringify({ additionalContext: 'Contexte du service.' })}\n`);
+		await hook(racine, 'permissionRequest --moteur copilot-cli', copilot(racine, { toolName: 'mnemo/lire', toolInput: {} }), env);
+		await hook(racine, 'permissionRequest --moteur copilot-cli', copilot(racine, { toolName: 'create', toolInput: { path: join(racine, 'a.md') } }), env);
+		await hook(racine, 'arret --moteur copilot-cli', copilot(racine, { transcriptPath: '/c/session-state/x/events.jsonl', stopReason: 'end_turn' }), env);
+		expect(requetes.map((q) => JSON.parse(q.corps) as Record<string, unknown>)).toEqual([
+			expect.objectContaining({ evenement: 'message', session: ID, fil: ID, moteur: 'copilot-cli', prompt: 'Bonjour' }),
+			expect.objectContaining({ evenement: 'arret', arret: 'notification', moteur: 'copilot-cli' }),
+			expect.objectContaining({ evenement: 'arret', arret: 'stop', moteur: 'copilot-cli', transcription: '/c/session-state/x/events.jsonl' }),
+		]);
+	});
+
+	it('hors d’une session GitHub Copilot CLI de Mnemo, et hooks de Claude Code lancés par Copilot dans sa session : sortie vide, aucun appel ; échéances sous les timeoutSec', async () => {
+		const racine = await dossierVerifie({ moteur: 'copilot-cli' });
+		const { requetes } = await fauxService(racine, () => ({ refus: 'jamais' }));
+		for (const moteur of ['codex', '']) {
+			const r = await hook(racine, 'outil --moteur copilot-cli', copilot(racine, { toolName: 'bash', toolArgs: { command: 'git push --force' } }), { MNEMO_RACINE: racine, MNEMO_SESSION: ID, MNEMO_MOTEUR: moteur });
+			expect(r).toMatchObject({ code: 0, out: '', err: '' });
+		}
+		// un hook de Mnemo au format de Claude Code dans .claude/settings.json, que Copilot lance avec l'entrée de Claude Code (mesuré)
+		const claude = JSON.stringify({ hook_event_name: 'PreToolUse', session_id: ID, timestamp: '2026-11-25T10:00:00.000Z', cwd: racine, tool_name: 'Bash', tool_input: { command: 'git push --force' } });
+		expect(await hook(racine, 'PreToolUse', claude, { MNEMO_RACINE: racine, MNEMO_SESSION: ID, MNEMO_MOTEUR: 'copilot-cli' })).toMatchObject({ code: 0, out: '', err: '' });
+		expect(await hook(racine, 'fin', JSON.stringify({ hook_event_name: 'SessionEnd', session_id: ID, cwd: racine, reason: 'other' }), { MNEMO_RACINE: racine, MNEMO_SESSION: ID, MNEMO_MOTEUR: 'copilot-cli' })).toMatchObject({ code: 0, out: '' });
+		expect(requetes).toHaveLength(0);
+		expect((await lireSession(racine))?.etat).toBe('attend');
+		const { HOOKS_COPILOT_CLI_INSTALLES } = await import('../../src/domaine/moteurs/copilot-cli/hooks-installes.ts');
+		const { hooksDuMoteur } = await import('../../src/application/moteurs/hooks.ts');
+		const hooks = hooksDuMoteur('copilot-cli')!;
+		const vus = new Set<string>();
+		for (const { evenement, args, timeoutSec } of HOOKS_COPILOT_CLI_INSTALLES) {
+			const lu = hooks.lireArguments([...args]);
+			expect(lu, evenement).not.toBeNull();
+			expect(hooks.lireArguments([evenement])?.evenement, evenement).toBe(lu!.evenement);
+			vus.add(lu!.evenement);
+			expect(hooks.echeancesMs[lu!.evenement], evenement).toBeLessThan(timeoutSec * 1000);
+		}
+		expect([...vus].sort()).toEqual([...EVENEMENTS_HOOK].sort());
+	});
+});
+
 describe('mnemo hook fin : épisode minimal', () => {
 	/** Dossier Mnemo réel (mémoire git), projet `alpha/` sous git, session de ce projet. */
 	async function dossierAvecMemoire(): Promise<string> {

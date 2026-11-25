@@ -3,7 +3,7 @@ import { estIdMoteur, MOTEUR_PAR_DEFAUT } from '@mnemo/commun';
 import type { IdMoteur } from '@mnemo/commun';
 import type { SessionVue } from '@mnemo/contrat';
 
-export const NOMS_MOTEURS: Readonly<Record<IdMoteur, string>> = { 'claude-code': 'Claude Code', codex: 'Codex', 'mistral-vibe': 'Mistral Vibe' };
+export const NOMS_MOTEURS: Readonly<Record<IdMoteur, string>> = { 'claude-code': 'Claude Code', codex: 'Codex', 'mistral-vibe': 'Mistral Vibe', 'copilot-cli': 'GitHub Copilot CLI' };
 
 /** Nom d'un moteur ; absent : Claude Code (session ou profil d'avant les moteurs) ; inconnu de l'interface : son identifiant. */
 export const nomDuMoteur = (id: string | undefined): string => (id === undefined ? NOMS_MOTEURS[MOTEUR_PAR_DEFAUT] : estIdMoteur(id) ? NOMS_MOTEURS[id] : id);

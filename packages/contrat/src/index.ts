@@ -935,12 +935,13 @@ export type ReponseRejetLot = { id: string };
  * côté ne donne qu'une ligne `saute`. `lanceur` : macOS seulement. `codex` et `codex_hooks` : seulement avec `--codex`
  * (déclaration MCP chez Codex ; hooks de Mnemo dans `~/.codex/hooks.json`, à approuver une fois dans Codex), aucune ligne
  * sans ; de même `mistral` et `mistral_hooks` avec `--mistral` (déclaration MCP dans `~/.vibe/config.toml`, hooks dans
- * `~/.vibe/hooks.toml`). `motif` (étapes `mcp`, `codex`, `codex_hooks`, `mistral` et `mistral_hooks`, `echec` seulement) :
- * `perime`, une déclaration (ou des hooks) de Mnemo de portée utilisateur existe déjà et lance un autre Node ou un autre
- * `main.ts` (autre installation de Mnemo), que `mnemo declarer --remplacer` (`--moteur codex` ou `--moteur mistral-vibe`)
- * reprend. Absent : tout autre échec.
+ * `~/.vibe/hooks.toml`), `copilot` et `copilot_hooks` avec `--copilot` (déclaration MCP dans `~/.copilot/mcp-config.json`,
+ * hooks dans `~/.copilot/hooks/mnemo.json`). `motif` (étapes `mcp`, `codex`, `codex_hooks`, `mistral`, `mistral_hooks`,
+ * `copilot` et `copilot_hooks`, `echec` seulement) : `perime`, une déclaration (ou des hooks) de Mnemo de portée utilisateur
+ * existe déjà et lance un autre Node ou un autre `main.ts` (autre installation de Mnemo), que `mnemo declarer --remplacer`
+ * (`--moteur codex`, `--moteur mistral-vibe` ou `--moteur copilot-cli`) reprend. Absent : tout autre échec.
  */
-export type EtapeInit = 'memoire' | 'mcp' | 'codex' | 'codex_hooks' | 'mistral' | 'mistral_hooks' | 'modeles' | 'commande' | 'lanceur';
+export type EtapeInit = 'memoire' | 'mcp' | 'codex' | 'codex_hooks' | 'mistral' | 'mistral_hooks' | 'copilot' | 'copilot_hooks' | 'modeles' | 'commande' | 'lanceur';
 export type MotifEchecInit = 'perime';
 export type EvenementInit = { etape: EtapeInit; etat: 'debut' | 'fait' | 'saute' | 'echec' | 'laisse'; message: string; motif?: MotifEchecInit };
 /**
@@ -979,25 +980,27 @@ export type MoteurVerifie = { ok: boolean; chemin?: string; version?: string; mo
 
 /**
  * `mnemo verifier-poste --json` : ce dont Mnemo a besoin sur le poste, un bloc par moteur. `git.version` : « 2.50.1 » ;
- * `claude.chemin` : le `claude` que lanceront les sessions ; `codex` (Codex, toujours écrit depuis la 1.6) et `mistral`
- * (Mistral Vibe, toujours écrit depuis la 1.7) : facultatifs, absents d'un Mnemo plus ancien ; `motif` : pourquoi ce n'est
- * pas utilisable ; `node.version` : celle qui exécute Mnemo.
+ * `claude.chemin` : le `claude` que lanceront les sessions ; `codex` (Codex, toujours écrit depuis la 1.6), `mistral`
+ * (Mistral Vibe) et `copilot` (GitHub Copilot CLI), toujours écrits depuis la 1.7 : facultatifs, absents d'un Mnemo plus
+ * ancien ; `motif` : pourquoi ce n'est pas utilisable ; `node.version` : celle qui exécute Mnemo.
  */
 export type PosteVerifie = {
 	git: { ok: boolean; version?: string; motif?: string };
 	claude: { ok: boolean; chemin?: string; motif?: string };
 	codex?: MoteurVerifie;
 	mistral?: MoteurVerifie;
+	copilot?: MoteurVerifie;
 	node: { version: string };
 };
 
 /**
- * `mnemo declarer (--remplacer | --retirer) [--moteur claude-code | codex | mistral-vibe] --json` : une ligne.
+ * `mnemo declarer (--remplacer | --retirer) [--moteur claude-code | codex | mistral-vibe | copilot-cli] --json` : une ligne.
  * `absent` : aucune déclaration `mnemo` ; `deja` : elle lance déjà ce Node et ce Mnemo ; `remplace` : refaite sur eux ;
  * `retire` : retirée ; `autre` : laissée (elle ne lance pas ce Mnemo, ou n'est pas de portée utilisateur) ; `echec` : code
- * de sortie 1, `message` dit pourquoi. `hooks` (Codex et Mistral Vibe) : les hooks de Mnemo de `~/.codex/hooks.json` ou de
- * `~/.vibe/hooks.toml`, traités de même après la déclaration MCP (`--remplacer` ne refait que des hooks de Mnemo existants ;
- * `--retirer` ne retire que ceux de ce Node et ce Mnemo) ; leur échec donne aussi le code 1.
+ * de sortie 1, `message` dit pourquoi. `hooks` (Codex, Mistral Vibe, GitHub Copilot CLI) : les hooks de Mnemo de
+ * `~/.codex/hooks.json`, de `~/.vibe/hooks.toml` ou de `~/.copilot/hooks/mnemo.json`, traités de même après la déclaration
+ * MCP (`--remplacer` ne refait que des hooks de Mnemo existants ; `--retirer` ne retire que ceux de ce Node et ce Mnemo) ;
+ * leur échec donne aussi le code 1.
  */
 export type SortieDeclarer = { resultat: ResultatDeclarer; message: string; hooks?: { resultat: ResultatDeclarer; message: string } };
 export type ResultatDeclarer = 'absent' | 'deja' | 'remplace' | 'autre' | 'retire' | 'echec';

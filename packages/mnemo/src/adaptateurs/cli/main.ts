@@ -15,11 +15,11 @@ Commandes :
   init [dossier]    crée la mémoire (dossier ${DOSSIER_MEMOIRE}/) ; dans un terminal, guide pas à pas (dossier, projets,
                     déclaration MCP à Claude Code, modèles, commande, lanceur) [--oui : les défauts, sans question]
                     [--mcp|--sans-mcp] [--modeles|--sans-modeles] [--commande|--sans-commande] [--lanceur|--sans-lanceur] :
-                    l'étape faite ou sautée sans question ; [--codex] [--mistral] : déclare aussi le serveur MCP à Codex,
-                    à Mistral Vibe, et y installe les hooks ;
+                    l'étape faite ou sautée sans question ; [--codex] [--mistral] [--copilot] : déclare aussi le serveur
+                    MCP à Codex, à Mistral Vibe, à GitHub Copilot CLI, et y installe les hooks ;
                     [--json] : une ligne JSON par événement, sans question
-  verifier-poste    git, Claude Code, Codex et Mistral Vibe (facultatifs, avec leur déclaration MCP et leurs hooks) et Node
-                    sur ce poste [--json]
+  verifier-poste    git, Claude Code, Codex, Mistral Vibe et GitHub Copilot CLI (facultatifs, avec leur déclaration MCP et
+                    leurs hooks) et Node sur ce poste [--json]
   lit <chemin>      affiche une fiche, chemin relatif à ${DOSSIER_MEMOIRE}/
   liste [dossier]   liste le contenu d'un dossier de la mémoire
   cherche <texte>   cherche dans la mémoire [--dossier <chemin>] [--tout] [--limite N] [--contexte]
@@ -39,11 +39,12 @@ Commandes :
   arreter [dossier] arrête le service du dossier (comme Ctrl-C ; pour un service démarré par « ouvrir »)
   lanceur           crée ~/Applications/Mnemo.app (macOS), qui fait « mnemo ouvrir » pour ce dossier [--retirer]
   commande          installe la commande « mnemo » dans ~/.local/bin (macOS, Linux) [--retirer]
-  declarer          déclaration MCP existante (Codex, Mistral Vibe : et leurs hooks) : --remplacer (sur ce Node et ce Mnemo)
-                    | --retirer [--moteur claude-code|codex|mistral-vibe] (claude-code par défaut) [--json]
-  mcp               serveur MCP pour Claude Code, Codex et Mistral Vibe (stdio)
-  hook <événement>  hook de session (debut, message, outil, apres_outil, arret, fin) [--moteur claude-code|codex|mistral-vibe],
-                    entrée JSON sur stdin
+  declarer          déclaration MCP existante (Codex, Mistral Vibe, GitHub Copilot CLI : et leurs hooks) : --remplacer (sur ce
+                    Node et ce Mnemo) | --retirer [--moteur claude-code|codex|mistral-vibe|copilot-cli] (claude-code par
+                    défaut) [--json]
+  mcp               serveur MCP pour Claude Code, Codex, Mistral Vibe et GitHub Copilot CLI (stdio)
+  hook <événement>  hook de session (debut, message, outil, apres_outil, arret, fin)
+                    [--moteur claude-code|codex|mistral-vibe|copilot-cli], entrée JSON sur stdin
   ligne-etat        ligne d'état des sessions Mnemo : transmet les quotas du compte au service, entrée JSON sur stdin
   sessions          sessions en cours (service lancé)
   session <action>  lancer <dossier> [--profil p] [--objectif t] | terminer <id> [--sans-bilan] | voir <id>

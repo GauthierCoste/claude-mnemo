@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { estIdMoteur, estModele, IDS_MOTEURS, MODELE_MAX, MOTEUR_PAR_DEFAUT } from '../src/index.ts';
 
 describe('moteurs', () => {
-	it('Claude Code, Codex et Mistral Vibe ; Claude Code par défaut', () => {
-		expect(IDS_MOTEURS).toEqual(['claude-code', 'codex', 'mistral-vibe']);
+	it('Claude Code, Codex, Mistral Vibe et GitHub Copilot CLI ; Claude Code par défaut', () => {
+		expect(IDS_MOTEURS).toEqual(['claude-code', 'codex', 'mistral-vibe', 'copilot-cli']);
 		expect(MOTEUR_PAR_DEFAUT).toBe('claude-code');
 		expect(estIdMoteur('codex')).toBe(true);
+		expect(estIdMoteur('copilot-cli')).toBe(true);
 		expect(estIdMoteur('gemini')).toBe(false);
 		expect(estIdMoteur(undefined)).toBe(false);
 	});
