@@ -65,6 +65,20 @@ export async function ecrireAtomique(reel: string, attendu: string | null, texte
 	}
 }
 
+/**
+ * Supprime le fichier lu (un fichier propre à Mnemo : `hooks/mnemo.json` de GitHub Copilot CLI), relu juste avant : changé
+ * depuis la lecture, rien n'est supprimé. Null, ou l'échec qui dit pourquoi.
+ */
+export async function supprimerConfiguration(chemin: string, lu: ConfigurationLue): Promise<{ echec: string } | null> {
+	try {
+		if ((await texteOuAbsent(lu.reel)) !== lu.texte) throw new Error(`${lu.reel} a changé pendant la suppression : relancez la commande.`);
+		await rm(lu.reel, { force: true });
+		return null;
+	} catch (erreur) {
+		return { echec: `suppression de ${chemin} impossible : ${message(erreur)}` };
+	}
+}
+
 /** Écrit `texte` à la place du fichier lu (`ecrireAtomique`) ; null, ou l'échec qui dit pourquoi. */
 export async function ecrireConfiguration(chemin: string, lu: ConfigurationLue, texte: string): Promise<{ echec: string } | null> {
 	try {

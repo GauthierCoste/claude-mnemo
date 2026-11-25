@@ -1,6 +1,9 @@
-/** Version lue dans la sortie de `<moteur> --version` (« codex-cli 0.171.0-alpha.13 », « vibe 3.1.5 ») ; null si elle est illisible. */
+/**
+ * Version lue dans la sortie de `<moteur> --version` (« codex-cli 0.171.0-alpha.13 », « vibe 3.1.5 », « GitHub Copilot CLI
+ * 1.0.116. », point final de la phrase écarté) ; null si elle est illisible.
+ */
 export function versionDans(sortie: string): string | null {
-	return /(?:^|\s)v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\s|$)/u.exec(sortie.trim())?.[1] ?? null;
+	return /(?:^|\s)v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]*[0-9A-Za-z])?)\.?(?:\s|$)/u.exec(sortie.trim())?.[1] ?? null;
 }
 
 /** `[majeure, mineure, correctif]` d'une version ; une préversion (`0.171.0-alpha.N`) compte comme sa version (0.171.0). */

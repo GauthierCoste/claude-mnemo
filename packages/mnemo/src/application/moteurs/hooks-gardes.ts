@@ -18,10 +18,13 @@ const OPTIONS: Partial<Record<EvenementHook, readonly string[]>> = { arret: ['--
  * - `arret` : ce qu'est un arrêt d'après son entrée (null : ignoré) ; par défaut, `notification` sur `--notification` ;
  * - `dialogueDuParent` : un dialogue ouvert (`arret` `notification`) porte `parent_session_id`, l'identifiant de la session
  *   quand il vient d'un agent qu'elle a lancé (son approbation s'affiche dans le terminal de la session) : il compte pour elle ;
+ * - `champs` : l'entrée lue ramenée à la forme commune (`session_id`, `cwd`, `prompt`, `source`, `tool_name`, `tool_input`,
+ *   `reason`, `transcript_path`, `parent_session_id`, `notification_type`) ; absent : elle l'a déjà (Codex, Mistral Vibe) ;
  * - `sortie`, `echeancesMs`, `finIgnoreeSiVivante` : ceux de `HooksDuMoteur`.
  */
 export type ReglagesHooksGardes = {
 	moteur: IdMoteur;
+	champs?(lu: Record<string, unknown>): Record<string, unknown>;
 	evenements: Readonly<Record<string, EvenementHook>>;
 	notifications: ReadonlySet<string>;
 	raisonsIgnorees: ReadonlySet<string>;
@@ -40,8 +43,8 @@ const arretParDefaut = (_champs: Record<string, unknown>, options: ReadonlySet<s
  * session d'un autre moteur en hérite (avec son `MNEMO_MOTEUR`), un agent lancé par l'agent compris.
  *
  * Entrée traduite (champs mesurés chez Codex et Mistral Vibe : `session_id`, `transcript_path`, `cwd`, puis `source`,
- * `prompt`, `tool_name`, `tool_input`, `reason`…). Session : `MNEMO_SESSION` seulement — le `session_id` du moteur est son
- * propre identifiant (`fil`). Null hors d'une session Mnemo, pour un hook que le profil de la session ne demande pas
+ * `prompt`, `tool_name`, `tool_input`, `reason`… ; ceux d'un autre moteur ramenés à cette forme par `champs`). Session :
+ * `MNEMO_SESSION` seulement — le `session_id` du moteur est son propre identifiant (`fil`). Null hors d'une session Mnemo, pour un hook que le profil de la session ne demande pas
  * (`MNEMO_HOOKS` : `outil`, `apres_outil` ; `debut` et `message` y passent sans contexte), pour une fin ou un arrêt ignorés,
  * ou une entrée illisible hors `outil` (qui doit décider : son action est alors « non lue »).
  */
@@ -61,7 +64,7 @@ export function hooksGardes(r: ReglagesHooksGardes): HooksDuMoteur {
 		if (effet === 'absent') return null;
 		const lu = 'texte' in lecture ? objetJson(lecture.texte) : null;
 		if (lu === null && evenement !== 'outil') return null;
-		const champs = lu ?? {};
+		const champs = lu === null ? {} : (r.champs?.(lu) ?? lu);
 		if (evenement === 'fin' && typeof champs.reason === 'string' && r.raisonsIgnorees.has(champs.reason)) return null;
 		const arret = evenement === 'arret' ? arretDe(champs, options) : null;
 		if (evenement === 'arret' && arret === null) return null;

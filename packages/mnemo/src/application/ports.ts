@@ -1162,6 +1162,13 @@ export type Moteur = MoteurDuPoste & {
 	reglagesMcp?(env: Record<string, string | undefined>): Promise<string[]>;
 	/** Pourquoi la session ne peut pas être reprise par ce moteur (Codex, Mistral Vibe : son `fil` encore inconnu) ; null : elle le peut. */
 	motifSansReprise(session: Session): string | null;
+	/**
+	 * Vrai : le moteur n'envoie aucun hook avant le premier message de chaque lancement, et son écran pose peut-être d'abord une
+	 * question (GitHub Copilot CLI : confiance du dossier, « Yes » choisi par défaut). Rien n'est tapé dans son terminal avant un
+	 * hook de ce lancement ; une ligne pour une session qui ne tourne pas (bilan, consigne) part avec sa reprise, comme premier
+	 * message (`ContextePreparation.objectif`), que le moteur envoie lui-même une fois la question réglée par l'utilisateur.
+	 */
+	debutAuPremierMessage?: true;
 	fichiersDeSession(dep: Dependances, session: Session, profil: Profil, appel: AppelPlugin): Promise<FichierPlugin[]>;
 	/** Lève si la session ne peut pas être lancée ainsi (identifiant, modèle ou `fil` refusés). */
 	preparer(contexte: ContextePreparation): Lancement;

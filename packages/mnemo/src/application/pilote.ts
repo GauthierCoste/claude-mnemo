@@ -58,7 +58,8 @@ export type Pilote = {
 	taper(id: string, ligne: string): Promise<void>;
 	/**
 	 * Confie une ligne à une session : reprise d'abord si elle ne tourne pas (son `debut` attendu, 30 s au plus), puis tapée
-	 * comme par `taper`. Rend la session ; rien n'est tapé si elle ne peut pas tourner ici (mode dégradé, reprise impossible).
+	 * comme par `taper` ; chez un moteur `debutAuPremierMessage`, la ligne part avec la reprise, comme son premier message. Rend
+	 * la session ; rien n'est tapé si elle ne peut pas tourner ici (mode dégradé, reprise impossible).
 	 */
 	confier(id: string, ligne: string): Promise<Session | null>;
 	/**
@@ -148,7 +149,15 @@ type Vivant = {
 	fini: Promise<void>;
 	ecritMajMs: number | null;
 	arret: boolean;
+	/** Instant du lancement du processus : un hook reçu depuis le montre commencé (`debutAuPremierMessage`). */
+	lanceMs: number;
 };
+
+/**
+ * Ce qui part avec une reprise, comme premier message du moteur (`debutAuPremierMessage`) : une `ligne` confiée, ou le bilan
+ * demandé à `bilanDemandeMs` (la session est alors en bilan dès son lancement).
+ */
+type SuiteDeReprise = { ligne: string } | { bilanDemandeMs: number };
 
 const NOM_DE_VARIABLE = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 
@@ -446,7 +455,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		} catch {
 			return manuel();
 		}
-		const vivant: Vivant = { terminal, moteur, tampon: tamponCirculaire(CAPACITE_TAMPON), abonnes: new Set(), fini: Promise.resolve(), ecritMajMs: null, arret: false };
+		const vivant: Vivant = { terminal, moteur, tampon: tamponCirculaire(CAPACITE_TAMPON), abonnes: new Set(), fini: Promise.resolve(), ecritMajMs: null, arret: false, lanceMs };
 		// avant toute sortie du moteur : le terminal n'a encore aucun abonné, la relecture la montrera d'abord
 		for (const avertissement of avertissements) vivant.tampon.ajouter(lignesDAvertissement(avertissement));
 		terminal.surSortie((d) => {
@@ -486,9 +495,11 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 
 	/**
 	 * La session tenue n'a pas encore commencé chez son moteur : il ne sait pas encore la reprendre (Codex : `fil` inconnu tant
-	 * qu'aucun `debut` n'est reçu). État illisible : tenue pour commencée.
+	 * qu'aucun `debut` n'est reçu), ou, chez un moteur `debutAuPremierMessage`, aucun hook n'est reçu depuis ce lancement (son
+	 * écran pose peut-être une question, à laquelle une ligne tapée répondrait). État illisible : tenue pour commencée.
 	 */
-	const nonCommencee = (v: Vivant, s: Session | null): boolean => s !== null && v.moteur.motifSansReprise(s) !== null;
+	const nonCommencee = (v: Vivant, s: Session | null): boolean =>
+		s !== null && (v.moteur.motifSansReprise(s) !== null || (v.moteur.debutAuPremierMessage === true && s.majMs <= v.lanceMs));
 
 	/**
 	 * Arrête le terminal tenu, à son tour dans la file de la session ; un dialogue de permission peut être ouvert (dernier arrêt
@@ -527,13 +538,13 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		return 'efface';
 	};
 
-	const reprendre = (id: string): Promise<Session | null> => {
+	const reprendre = (id: string, suite?: SuiteDeReprise): Promise<Session | null> => {
 		if (vivants.has(id) || enLancement.has(id) || arrete) return pil.etat.lire(id);
 		const liberer = marquer(id);
-		return suivi(reprendreSession(id).finally(liberer));
+		return suivi(reprendreSession(id, suite).finally(liberer));
 	};
 
-	const reprendreSession = async (id: string): Promise<Session | null> => {
+	const reprendreSession = async (id: string, suite?: SuiteDeReprise): Promise<Session | null> => {
 		const s = await pil.etat.lire(id);
 		if (s === null || s.etat === 'terminee') return s;
 		const duService = moteurDe(s);
@@ -542,15 +553,17 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		if (sansReprise !== null) throw new ErreurRepriseImpossible(repriseImpossible(sansReprise));
 		if (duService.commande === null || !pil.terminaux.disponibles().ok) return s;
 		if ((await verifierPid(s)) === 'ailleurs') return pil.etat.lire(id);
-		// un bilan d'avant (interrompu par une pause) est oublié : seul `reprendreAuDemarrage` en redemande un
-		const prete = await modifier(id, { arretAttendu: null, etat: 'attend', bilanDemandeMs: null, bilanLuMs: null });
+		// un bilan d'avant (interrompu par une pause) est oublié : seul `reprendreAuDemarrage` en redemande un, ou la suite
+		const bilanDemandeMs = suite !== undefined && 'bilanDemandeMs' in suite ? suite.bilanDemandeMs : null;
+		const prete = await modifier(id, { arretAttendu: bilanDemandeMs === null ? null : 'bilan', etat: 'attend', bilanDemandeMs, bilanLuMs: null });
 		if (prete === null) return null;
+		const premierMessage = suite === undefined ? undefined : 'ligne' in suite ? suite.ligne : texteDuBilan(prete);
 		try {
-			await demarrer(prete, 'reprise');
+			await demarrer(prete, 'reprise', premierMessage);
 		} catch {
 			// plugin ou dossier en défaut : rien ne tourne, la session reste à relire (le bilan la reprendra)
 			await arreterSession(id).catch(() => {});
-			return modifier(id, { etat: 'a_relire' });
+			return modifier(id, { etat: 'a_relire', arretAttendu: null, bilanDemandeMs: null });
 		}
 		return pil.etat.lire(id);
 	};
@@ -724,11 +737,27 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		return vivants.has(id) && !arrete;
 	};
 
+	/**
+	 * Une session qui ne tourne pas, d'un moteur qui n'envoie aucun hook avant un message (`debutAuPremierMessage`) : une ligne
+	 * pour elle part avec sa reprise, jamais tapée (son écran pose peut-être une question à chaque lancement).
+	 */
+	const ligneAvecLaReprise = (s: Session): boolean => !vivants.has(s.id) && moteurDe(s)?.moteur.debutAuPremierMessage === true;
+
+	/** Bilan demandé avec la reprise (`ligneAvecLaReprise`), puis surveillé comme les autres ; rien si la session ne tourne pas ensuite. */
+	const bilanAvecLaReprise = async (id: string): Promise<Session | null> => {
+		const bilanDemandeMs = Date.now();
+		const apres = await reprendre(id, { bilanDemandeMs });
+		if (!vivants.has(id) || apres?.bilanDemandeMs !== bilanDemandeMs) return pil.etat.lire(id);
+		surveillerBilan(id, bilanDemandeMs);
+		return apres;
+	};
+
 	/** L'agent rédige le bilan dans son terminal : une session qu'on ne peut pas faire tourner est rendue sans bilan demandé. */
 	const bilan = async (id: string): Promise<Session | null> => {
 		await enLancement.get(id);
 		const s = await pil.etat.lire(id);
 		if (s === null || s.etat === 'terminee') return s;
+		if (ligneAvecLaReprise(s)) return bilanAvecLaReprise(id);
 		if (!(await assurerVivante(id))) return pil.etat.lire(id);
 		await pasAvantDebut(id, 'Bilan impossible');
 		const bilanDemandeMs = Date.now();
@@ -743,6 +772,10 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		await enLancement.get(id);
 		const s = await pil.etat.lire(id);
 		if (s === null || s.etat === 'terminee') return s;
+		if (ligneAvecLaReprise(s)) {
+			await reprendre(id, { ligne });
+			return pil.etat.lire(id);
+		}
 		if (await assurerVivante(id)) {
 			await pasAvantDebut(id, 'Consigne non transmise');
 			await taper(id, ligne);
@@ -808,7 +841,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			return pil.etat.lire(id);
 		},
 
-		reprendre,
+		reprendre: (id) => reprendre(id),
 
 		entree(id, d) {
 			const v = vivants.get(id);
@@ -863,9 +896,11 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 				const refaireBilan = (s.arretAttendu === 'service' || s.arretAttendu === 'bilan') && s.bilanDemandeMs !== null;
 				if (relancees.length > 0) await new Promise((r) => setTimeout(r, ESPACEMENT_RELANCES_MS));
 				const repriseMs = Date.now();
+				// le bilan part avec la reprise chez un moteur qui n'envoie aucun hook avant un message
+				const bilanAvecReprise = refaireBilan && ligneAvecLaReprise(s) ? { bilanDemandeMs: repriseMs } : undefined;
 				// moteur sans implémentation ici : la session reste en l'état, jamais relancée par un autre moteur ; moteur qui ne
 				// sait pas la reprendre (Codex sans `fil`) : à relire, avec son épisode minimal
-				const apres = await reprendre(s.id).catch(async (erreur: unknown) => {
+				const apres = await reprendre(s.id, bilanAvecReprise).catch(async (erreur: unknown) => {
 					if (erreur instanceof ErreurMoteurIndisponible) return null;
 					if (!(erreur instanceof ErreurRepriseImpossible)) throw erreur;
 					const aRelire = await modifier(s.id, { etat: 'a_relire', arretAttendu: null, pid: null });
@@ -874,7 +909,9 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 				});
 				if (apres !== null && vivants.has(s.id)) {
 					relancees.push(s.id);
-					if (refaireBilan) void suivi(redemanderBilan(s.id, repriseMs)).catch(() => {});
+					if (bilanAvecReprise !== undefined) {
+						if (apres.bilanDemandeMs === repriseMs) surveillerBilan(s.id, repriseMs);
+					} else if (refaireBilan) void suivi(redemanderBilan(s.id, repriseMs)).catch(() => {});
 				}
 			}
 			return relancees;

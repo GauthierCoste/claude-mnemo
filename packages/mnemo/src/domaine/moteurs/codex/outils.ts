@@ -1,6 +1,7 @@
 import type { ActionOutil } from '../../regles-verifiees.ts';
 import { ligneDeCommande } from '../ligne-de-commande.ts';
 import type { OutilsDuMoteur } from '../moteur.ts';
+import { cheminsDuPatch, cheminsEcritsDuPatch } from '../patch.ts';
 
 /**
  * Outils de commande de Codex, visés par `commandes_interdites` : `Bash`, avec `{ command }` en chaîne (mesuré par un hook
@@ -17,19 +18,6 @@ const PREFIXE_MCP = 'mcp__mnemo__';
 
 /** Outils après lesquels Mnemo note ce que Codex a écrit ou lu : un patch, une fiche lue ou écrite par Mnemo. */
 const MOTIF_APRES_OUTIL = 'apply_patch|mcp__mnemo__.*';
-
-/** En-têtes d'un patch qui nomment un fichier écrit (ajouté, modifié, supprimé, destination d'un déplacement), lus avec tolérance. */
-const EN_TETE = /^\s*\*\*\*\s*(?:add file|update file|delete file|move to)\s*:\s*(.*?)\s*$/iu;
-
-/** Chemins nommés par les en-têtes du patch, dans l'ordre, sans doublon ni chemin vide. */
-export function cheminsDuPatch(patch: string): string[] {
-	const chemins: string[] = [];
-	for (const ligne of patch.split(/\r?\n/u)) {
-		const chemin = EN_TETE.exec(ligne)?.[1];
-		if (chemin !== undefined && chemin !== '' && !chemins.includes(chemin)) chemins.push(chemin);
-	}
-	return chemins;
-}
 
 /** Commande de l'action d'un outil de commande (`command`, sinon `cmd`) ; « » si elle n'en porte pas. */
 function commandeDe(action: ActionOutil): string {
@@ -54,12 +42,7 @@ function texteDuPatch(action: ActionOutil): string | null {
  */
 export const OUTILS_CODEX: OutilsDuMoteur = {
 	cheminsEcrits(action) {
-		if (action.nom === OUTIL_PATCH) {
-			const patch = texteDuPatch(action);
-			if (patch === null) return 'illisible';
-			const chemins = cheminsDuPatch(patch);
-			return chemins.length === 0 && /\S/u.test(patch.replace(/^\s*\*\*\*\s*(?:begin|end) patch\s*$/gimu, '')) ? 'illisible' : chemins;
-		}
+		if (action.nom === OUTIL_PATCH) return cheminsEcritsDuPatch(texteDuPatch(action));
 		if (!OUTILS_COMMANDE.has(action.nom)) return null;
 		const commande = commandeDe(action);
 		if (!/apply_patch/u.test(commande) || !/\*\*\*\s*begin patch/iu.test(commande)) return null;
