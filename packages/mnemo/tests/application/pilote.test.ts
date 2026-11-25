@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { creerPilote, ErreurConsigneNonTransmise, ErreurMoteurIndisponible, ErreurRepriseImpossible, ErreurSessionNonCommencee, ligneManuelle } from '../../src/application/pilote.ts';
+import { creerPilote, ErreurMoteurIndisponible, ErreurRepriseImpossible, ErreurSessionNonCommencee, ligneManuelle } from '../../src/application/pilote.ts';
 import type { Pilote } from '../../src/application/pilote.ts';
 import type { CommandeMoteur, EtatSessions, FichierPlugin, Pilotage } from '../../src/application/ports.ts';
 import { dialogueOuvert } from '../../src/domaine/session.ts';
@@ -635,7 +635,8 @@ describe('Pilote : sessions Codex', () => {
 		const m = await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' });
 		if (!('manuel' in m)) throw new Error('manuel attendu');
 		expect(m.manuel).toMatch(/MNEMO_MOTEUR='codex' .*'\/usr\/bin\/node' '\/aides\/faux-codex\.mjs' '-c' 'mnemo_session='\\''/u);
-		expect(m.manuel).toMatch(/^cd '\/racine\/alpha' && env -u CODEX_API_KEY /u);
+		expect(m.manuel).toMatch(/^cd '\/racine\/alpha' && env -u ANTHROPIC_API_KEY -u CLAUDECODE /u);
+		expect(m.manuel).toContain('-u CODEX_API_KEY ');
 	});
 
 	it('Codex trop ancien : lancement refusé avec sa version ; version illisible : lancé', async () => {
@@ -766,26 +767,17 @@ describe('Pilote : sessions GitHub Copilot CLI', () => {
 		expect(c.pilote.attendPremierMessage((await c.etat.lire(claude.id))!)).toBe(false);
 	});
 
-	it('aucun hook depuis ce lancement (écran de confiance peut-être ouvert) : rien n’est tapé ; la consigne relance la session (signaux, puis reprise avec elle) ; après un hook, tapée', async () => {
+	it('aucun hook depuis ce lancement (écran de confiance peut-être ouvert) : rien n’est tapé, consigne refusée, taper sans effet ; après un hook, tapée', async () => {
 		const c = await contexte();
 		await avecCopilot(c);
 		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
-		const t = c.terminaux.lances[0]!;
+		const u = c.terminaux.lances[0]!;
 		await new Promise((r) => setTimeout(r, 5));
-		await c.pilote.confier(s.id, 'Fais ceci');
-		expect(t.ecrits).toEqual([]);
-		expect(t.optionsArret).toEqual([{ sansTouche: true }]);
-		const r = c.terminaux.lances[1]!;
-		expect(r.options.args.slice(0, 2)).toEqual([...COPILOT.avant, `--session-id=${s.id}`]);
-		expect(r.options.args.at(-1)).toBe('--interactive=Fais ceci');
-		expect(await c.etat.lire(s.id)).toMatchObject({ etat: 'attend', arretAttendu: null });
-		// `taper` (consignes de l'archiviste) passe par la même voie : jamais tapée dans la question de l'écran
-		await new Promise((r) => setTimeout(r, 5));
+		await expect(c.pilote.confier(s.id, 'Fais ceci')).rejects.toThrow(ErreurSessionNonCommencee);
 		await c.pilote.taper(s.id, 'Encore');
-		expect(r.ecrits).toEqual([]);
-		expect(r.optionsArret).toEqual([{ sansTouche: true }]);
-		const u = c.terminaux.lances[2]!;
-		expect(u.options.args.at(-1)).toBe('--interactive=Encore');
+		expect(u.ecrits).toEqual([]);
+		expect(u.optionsArret).toEqual([]);
+		expect(c.terminaux.lances).toHaveLength(1);
 		// un hook de ce lancement : commencée, la consigne est tapée ; pause par les touches
 		await new Promise((r) => setTimeout(r, 5));
 		await c.etat.appliquer(s.id, 'message', Date.now(), { fil: s.id });
@@ -796,7 +788,7 @@ describe('Pilote : sessions GitHub Copilot CLI', () => {
 		// relancée : de nouveau non commencée jusqu'à son premier hook ; une pause l'arrête sans touche
 		await new Promise((r) => setTimeout(r, 5));
 		await c.pilote.reprendre(s.id);
-		const v = c.terminaux.lances[3]!;
+		const v = c.terminaux.lances[1]!;
 		expect(v.options.args.some((a) => a.startsWith('--interactive'))).toBe(false);
 		await c.pilote.pause(s.id);
 		expect(v.optionsArret).toEqual([{ sansTouche: true }]);
@@ -822,14 +814,13 @@ describe('Pilote : sessions GitHub Copilot CLI', () => {
 		expect([...c.dep.fichiers.keys()].filter((chemin) => chemin.startsWith('episodes/'))).toEqual([]);
 	});
 
-	it('consigne pour une session qui ne tourne pas, dont la reprise n’est pas lancée (terminal en échec, ligne à coller) : refus ; un bilan n’y reste pas demandé', async () => {
+	it('bilan d’une session qui ne tourne pas, dont la reprise n’est pas lancée (terminal en échec) : il n’y reste pas demandé', async () => {
 		const c = await contexte({ sessions: [session(ID_A, { etat: 'en_pause', profil: 'redaction', moteur: 'copilot-cli', modele: '' })] });
 		await avecCopilot(c);
 		const lancer = c.terminaux.lancer;
 		c.terminaux.lancer = () => {
 			throw new Error('pty en panne');
 		};
-		await expect(c.pilote.confier(ID_A, 'Relis le contrat')).rejects.toThrow(ErreurConsigneNonTransmise);
 		expect(await c.pilote.terminer(ID_A, { bilan: true })).toMatchObject({ arretAttendu: null, bilanDemandeMs: null });
 		c.terminaux.lancer = lancer;
 		expect(c.terminaux.lances).toHaveLength(0);
@@ -870,20 +861,16 @@ describe('Pilote : sessions GitHub Copilot CLI', () => {
 		expect(t.ecrits[0]).toBe(MOTEUR_COPILOT_CLI.touches.echap);
 	});
 
-	it('session qui ne tourne pas : la consigne, puis le bilan, partent avec la reprise comme premier message, jamais tapés', async () => {
+	it('session qui ne tourne pas : la consigne refusée sans reprise ; le bilan part avec la reprise comme premier message, jamais tapé', async () => {
 		const c = await contexte({ sessions: [session(ID_A, { etat: 'en_pause', profil: 'redaction', moteur: 'copilot-cli', modele: '' })] });
 		await avecCopilot(c);
-		await c.pilote.confier(ID_A, 'Relis le contrat');
-		const t = c.terminaux.lances[0]!;
-		expect(t.options.args.at(-1)).toBe('--interactive=Relis le contrat');
-		expect(t.ecrits).toEqual([]);
-		c.terminaux.arretFinit = true;
-		await c.pilote.pause(ID_A);
+		await expect(c.pilote.confier(ID_A, 'Relis le contrat')).rejects.toThrow(ErreurSessionNonCommencee);
+		expect(c.terminaux.lances).toHaveLength(0);
 		const avant = Date.now();
 		const b = await c.pilote.terminer(ID_A, { bilan: true });
 		expect(b).toMatchObject({ arretAttendu: 'bilan', etat: 'attend' });
 		expect(b!.bilanDemandeMs).toBeGreaterThanOrEqual(avant);
-		const u = c.terminaux.lances[1]!;
+		const u = c.terminaux.lances[0]!;
 		expect(u.options.args.at(-1)).toMatch(/^--interactive=\S/u);
 		expect(u.ecrits).toEqual([]);
 	});

@@ -2,7 +2,8 @@ import type { Session } from '../domaine/session.ts';
 import type { Moteur } from './ports.ts';
 
 /**
- * Une ligne pour une session (bilan, consigne), et le moment où son moteur peut la recevoir. Un moteur peut ne rien montrer
+ * Le bilan d'une session, et le moment où son moteur peut le recevoir (une consigne, elle, n'est tapée qu'une fois la session
+ * commencée : `confier`). Un moteur peut ne rien montrer
  * de la session avant un hook de ce lancement : Codex ne sait pas la reprendre tant que son `fil` est inconnu, GitHub Copilot CLI
  * (`debutAuPremierMessage`) n'envoie aucun hook avant le premier message et pose d'abord une question à chaque lancement
  * (confiance du dossier, « Yes » choisi par défaut), à laquelle une ligne tapée répondrait.
@@ -33,6 +34,3 @@ export function voieDeLaLigne(d: { tourne: boolean; commencee: boolean; debutAuP
 	if (d.commencee) return 'tapee';
 	return d.debutAuPremierMessage && d.reprisePossible ? 'relance' : 'refusee';
 }
-
-/** Ce qui part avec une reprise, comme premier message du moteur : une `ligne` confiée, ou le bilan demandé à `bilanDemandeMs`. */
-export type SuiteDeReprise = { ligne: string } | { bilanDemandeMs: number };

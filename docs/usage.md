@@ -465,8 +465,9 @@ machine by `mnemo init --copilot`: see [installation.md](installation.md#github-
   waits for your first message; it sends no hook before that message. Answer the question and type your message
   yourself: Mnemo types nothing into the session until then, and the interface shows « Attend ton premier message ». The
   objective of a new session goes with it as its first message (`--interactive`), sent by Copilot once you have answered
-  the question. A wrap-up or an instruction for a session that has not started yet restarts it with that text as its
-  first message: nothing is lost, it had received none.
+  the question. A wrap-up for a session that has not started yet, or that is not running, restarts it with the wrap-up as
+  its first message: nothing is lost, it had received none. An instruction is refused until the session has started:
+  type it yourself in its terminal.
 - **Resume.** Mnemo gives the session its identity at launch (`--session-id`) and resumes it with the same option.
 - **Stop.** Mnemo stops a Copilot session by typing `/exit` (before the first message, it stops the process without
   typing anything).
