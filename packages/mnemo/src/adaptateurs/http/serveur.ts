@@ -10,6 +10,7 @@ import { extractionDifferee } from '../../application/extraction-differee.ts';
 import { creerPilote } from '../../application/pilote.ts';
 import type { Dependances, Modeles, Pilotage } from '../../application/ports.ts';
 import { modelesLocaux } from '../../infra/modeles/client-llama.ts';
+import { migrerAncienGardien } from '../../infra/modeles/migration-gardien-dossier.ts';
 import { dossierClaudeParDefaut, memoireClaude, projetsClaude } from '../../infra/memoire-claude.ts';
 import { jetonDuDossier } from '../../infra/jeton-local.ts';
 import { ecrireService, retirerService } from '../../infra/service-local.ts';
@@ -235,7 +236,7 @@ export async function demarrerService(options: {
 	interface?: string;
 	/** Configuration de Claude Code lue (jamais écrite) par `amorce` ; par défaut `CLAUDE_CONFIG_DIR`, sinon `~/.claude`. */
 	dossierClaude?: string;
-	/** Modèles locaux (état, démarrage sur demande) ; par défaut ceux du dossier (`modelesLocaux`). */
+	/** Modèles locaux (état, démarrage sur demande) ; par défaut ceux de la machine (`modelesLocaux`). */
 	modeles?: Modeles;
 	/** Variable d'environnement qui a fixé `port` (`MNEMO_PORT`) : le réglage `service.port` est alors sans effet. */
 	portFixePar?: string;
@@ -283,6 +284,15 @@ export async function demarrerService(options: {
 		taches.add(suivie);
 		void suivie.finally(() => taches.delete(suivie));
 	};
+
+	// ancien gardien des modèles propre à ce dossier (jusqu'à la 1.5) : arrêté, ses fichiers retirés ; un seul gardien désormais
+	enFond(
+		migrerAncienGardien(racine).then((r) => {
+			if (r === null) return;
+			const bilan = typeof r === 'object' ? `${r.enChargement} serveur(s) encore en chargement` : { arrete: 'arrêté', perime: 'état périmé retiré', rien: 'rien en marche, état retiré' }[r];
+			journal(`ancien gardien des modèles de ce dossier : ${bilan}.`);
+		}),
+	);
 
 	const hub = creerHub({
 		pilote,

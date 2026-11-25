@@ -43,7 +43,7 @@ export type ContexteService = {
  */
 export async function serviceFaux(
 	reglages: ReglagesService = {},
-	options: { pil?: (pil: Pilotage) => void; avant?: (etat: EtatSessions) => Promise<void>; interface?: string; dossierClaude?: string; portFixePar?: string; appClaude?: Partial<Omit<AppClaude, 'racine'>> } = {},
+	options: { pil?: (pil: Pilotage) => void; avant?: (etat: EtatSessions, racine: string) => Promise<void>; interface?: string; dossierClaude?: string; portFixePar?: string; appClaude?: Partial<Omit<AppClaude, 'racine'>> } = {},
 ): Promise<ContexteService> {
 	const racine = await dossierTemporaire();
 	const dep = fauxPorts();
@@ -73,7 +73,7 @@ export async function serviceFaux(
 		},
 	};
 	options.pil?.(pil);
-	await options.avant?.(etat);
+	await options.avant?.(etat, racine);
 	for (const d of existants) await mkdir(join(racine, d), { recursive: true });
 	// interface : un dossier absent par défaut (les tests ne dépendent pas de `packages/ui/dist`)
 	// configuration de Claude Code : jamais la vraie (~/.claude) ; un dossier absent par défaut
