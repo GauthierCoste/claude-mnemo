@@ -803,6 +803,36 @@ export type DeclarationMcp = {
 	retirer(a: AppelDeclaration): Promise<ResultatRetraitMcp>;
 };
 
+/** Ce que reçoivent les hooks du poste : le Node et le `main.ts` que les hooks lancent, l'environnement de l'utilisateur (`CODEX_HOME`). */
+export type AppelHooksDuPoste = { node: string; main: string; env: Record<string, string | undefined> };
+
+/** Approbation des hooks par l'utilisateur chez le moteur (Codex : `/hooks`), lue sans rien changer. */
+export type ApprobationHooksDuPoste = { etat: 'approuves' | 'a_approuver' | 'inconnu'; motif: string };
+
+/**
+ * Hooks de Mnemo lus : `a_jour` (ceux de ce Node et ce `main.ts`), `perime` (des hooks de Mnemo, mais pas ceux-là), `absent` ;
+ * `chemin` : le fichier lu ; `approbation` : seulement s'ils sont à jour.
+ */
+export type LectureHooksDuPoste = { etat: 'a_jour' | 'perime' | 'absent'; chemin: string; approbation?: ApprobationHooksDuPoste } | { echec: string };
+/** `installe` : il n'y en avait pas ; `mis_a_jour` : des hooks de Mnemo refaits ; `deja` : rien à changer. */
+export type ResultatInstallationHooks = 'installe' | 'mis_a_jour' | 'deja' | { echec: string };
+/** Comme `ResultatInstallationHooks`, sans jamais installer : `absent` s'il n'y a aucun hook de Mnemo. */
+export type ResultatRemplacementHooks = 'absent' | 'mis_a_jour' | 'deja' | { echec: string };
+/** `autre` : des hooks de Mnemo d'une autre installation (autre Node, autre Mnemo) : laissés. */
+export type ResultatRetraitHooks = 'absent' | 'retire' | 'autre' | { echec: string };
+
+/**
+ * Hooks de Mnemo installés pour tout le poste chez un moteur qui ne les prend pas d'un plugin de session (Codex :
+ * `~/.codex/hooks.json`). Jamais une autre entrée touchée ; un fichier illisible n'est jamais réécrit. `installer` et
+ * `remplacer` refont tous les hooks de Mnemo ; `retirer` ne retire que ceux de ce Node et ce `main.ts`.
+ */
+export type HooksDuPoste = {
+	lire(a: AppelHooksDuPoste): Promise<LectureHooksDuPoste>;
+	installer(a: AppelHooksDuPoste): Promise<ResultatInstallationHooks>;
+	remplacer(a: AppelHooksDuPoste): Promise<ResultatRemplacementHooks>;
+	retirer(a: AppelHooksDuPoste): Promise<ResultatRetraitHooks>;
+};
+
 /** Un fichier de session du moteur (plugin de Claude Code) ; `chemin` relatif à son dossier, séparé par « / ». */
 export type FichierPlugin = { chemin: string; texte: string };
 
@@ -854,6 +884,11 @@ export type AppelHook = {
 export type HooksDuMoteur = {
 	/** `<événement> [options]` (nom Mnemo ou nom du moteur), options permises une fois chacune ; null sinon. */
 	lireArguments(args: string[]): { evenement: EvenementHook; options: Set<string> } | null;
+	/**
+	 * Vrai : le hook ne fait rien dans cet environnement — entrée lue puis écartée, sortie vide, code 0, aucun appel au
+	 * service, aucun effet (Codex : hooks installés pour tout le poste, hors d'une session Mnemo).
+	 */
+	inerte(env: Record<string, string | undefined>): boolean;
 	/** Entrée traduite (et le chemin de la transcription, hors de l'entrée) ; null si elle est à ignorer. */
 	traduire(appel: AppelHook): { entree: EntreeHook; transcription?: string } | null;
 	/**
@@ -885,6 +920,8 @@ export type MoteurDuPoste = {
 	commandeParDefaut: string;
 	trouver(env: Record<string, string | undefined>, plateforme: string): CommandeMoteur | null;
 	declarationMcp: DeclarationMcp;
+	/** Hooks installés pour tout le poste (Codex) ; absent : le moteur les prend des fichiers de chaque session (Claude Code). */
+	hooksDuPoste?: HooksDuPoste;
 };
 
 /**

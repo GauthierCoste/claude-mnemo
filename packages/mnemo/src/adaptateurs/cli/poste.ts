@@ -1,8 +1,9 @@
 import { fileURLToPath } from 'node:url';
-import type { EtatMcpVerifie, PosteVerifie } from '@mnemo/contrat';
+import type { EtatHooksVerifie, EtatMcpVerifie, PosteVerifie } from '@mnemo/contrat';
 import type { CommandeMoteur, Executer } from '../../application/ports.ts';
 import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
 import { MOTEUR_CODEX } from '../../infra/moteurs/codex.ts';
+import { nodeDurable } from '../../infra/node-durable.ts';
 import { ErreurCli } from './erreurs.ts';
 import { executeurReel } from './executeur.ts';
 
@@ -28,13 +29,29 @@ const ETATS_MCP: Record<Exclude<EtatMcpVerifie['etat'], 'echec' | 'desactive'>, 
 	autre: 'une déclaration MCP « mnemo » qui ne lance pas Mnemo',
 };
 
-/** Codex : facultatif ; trouvé, sa déclaration MCP est lue (`codex mcp get`, sans rien changer). */
+/** Codex : facultatif ; trouvé, sa déclaration MCP (`codex mcp get`) et ses hooks de Mnemo (`hooks.json`, `config.toml`) sont lus, sans rien changer. */
 async function verifierCodex(d: DependancesPoste): Promise<PosteVerifie['codex']> {
 	const commande = d.codex();
 	if (commande === null) return { ok: false, motif: 'Codex introuvable (commande codex absente du PATH et de ChatGPT.app, ou MNEMO_CODEX invalide).' };
 	const lu = await MOTEUR_CODEX.declarationMcp.lire({ executer: d.executer, main: d.main, commande, plateforme: d.plateforme, env: d.env, delaiMs: DELAI_CODEX_MS });
 	const mcp: EtatMcpVerifie = typeof lu !== 'string' ? { etat: 'echec', motif: lu.echec } : lu === 'desactive' ? { etat: lu, motif: MOTIF_DESACTIVE } : { etat: lu };
-	return { ok: true, chemin: commande.avant[0] ?? commande.commande, mcp };
+	const hooks = await MOTEUR_CODEX.hooksDuPoste!.lire({ node: nodeDurable(d.plateforme as NodeJS.Platform), main: d.main, env: d.env });
+	const etatHooks: EtatHooksVerifie = 'echec' in hooks ? { etat: 'echec', motif: hooks.echec } : { etat: hooks.etat, ...(hooks.approbation === undefined ? {} : { approbation: hooks.approbation }) };
+	return { ok: true, chemin: commande.avant[0] ?? commande.commande, mcp, hooks: etatHooks };
+}
+
+const ETATS_HOOKS: Record<Exclude<EtatHooksVerifie['etat'], 'echec'>, string> = {
+	a_jour: 'hooks installés',
+	perime: 'hooks installés pour un autre Node ou un autre Mnemo (mnemo declarer --moteur codex --remplacer)',
+	absent: 'hooks non installés (mnemo init --codex)',
+};
+const APPROBATIONS: Record<NonNullable<EtatHooksVerifie['approbation']>['etat'], string> = { approuves: 'approuvés', a_approuver: 'à approuver dans Codex (/hooks)', inconnu: 'approbation inconnue' };
+
+/** Ligne des hooks de Codex : leur état, puis leur approbation et son motif. */
+function ligneHooks(hooks: EtatHooksVerifie): string {
+	if (hooks.etat === 'echec') return `hooks illisibles : ${hooks.motif ?? ''}`;
+	const approbation = hooks.approbation === undefined ? '' : `, ${APPROBATIONS[hooks.approbation.etat]} (${hooks.approbation.motif})`;
+	return `${ETATS_HOOKS[hooks.etat]}${approbation}`;
 }
 
 /** Version lue dans « git version 2.50.1 (Apple Git-155) » ; toute la ligne si elle n'a pas cette forme. */
@@ -89,7 +106,8 @@ export async function commandeVerifierPoste(args: string[], partiel: Partial<Dep
 	ecrire(poste.claude.ok ? `Claude Code : ${poste.claude.chemin}` : `Claude Code : absent — ${poste.claude.motif}`);
 	const { codex } = poste;
 	const mcp = codex.mcp === undefined ? '' : ` — ${codex.mcp.etat === 'echec' ? `déclaration MCP illisible : ${codex.mcp.motif ?? ''}` : codex.mcp.etat === 'desactive' ? `serveur MCP ${MOTIF_DESACTIVE}` : ETATS_MCP[codex.mcp.etat]}`;
-	ecrire(codex.ok ? `Codex : ${codex.chemin}${mcp}` : `Codex : absent (facultatif) — ${codex.motif}`);
+	const hooks = codex.hooks === undefined ? '' : ` — ${ligneHooks(codex.hooks)}`;
+	ecrire(codex.ok ? `Codex : ${codex.chemin}${mcp}${hooks}` : `Codex : absent (facultatif) — ${codex.motif}`);
 	ecrire(`Node : ${poste.node.version}`);
 	if (!poste.git.ok || !poste.claude.ok) throw new ErreurCli('Poste incomplet : installez ce qui manque, puis relancez « mnemo verifier-poste ».', 1);
 }

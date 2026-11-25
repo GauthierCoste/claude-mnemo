@@ -3,6 +3,11 @@ import type { PosteVerifie } from '@mnemo/contrat';
 import { describe, expect, it } from 'vitest';
 import type { Executer } from '../../src/application/ports.ts';
 import { commandeVerifierPoste, verifierPoste } from '../../src/adaptateurs/cli/poste.ts';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { hooksAttendus, remplacerHooks, texteHooksJson } from '../../src/domaine/moteurs/codex/hooks-installes.ts';
+import { nodeDurable } from '../../src/infra/node-durable.ts';
+import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
 const gitRepond = (code: number, sortie: string, erreur = ''): Executer => async (commande, args) => {
 	expect([commande, ...args]).toEqual(['git', '--version']);
@@ -76,7 +81,9 @@ describe('verifier-poste : Codex', () => {
 		return get;
 	};
 	const declaration = (command: string, args: string[]) => ({ code: 0, sortie: JSON.stringify({ name: 'mnemo', enabled: true, transport: { type: 'stdio', command, args } }), erreur: '' });
-	const deps = (executer: Executer) => ({ executer, claude, codex: () => CODEX, versionNode: '26.13.1', main: MAIN, plateforme: 'darwin', env: {} });
+	/** `CODEX_HOME` jetable, jamais le vrai `~/.codex` ; vide par défaut : aucun hook. */
+	const MAISON = join('/nulle-part', 'codex-home-absent');
+	const deps = (executer: Executer, maison = MAISON) => ({ executer, claude, codex: () => CODEX, versionNode: '26.13.1', main: MAIN, plateforme: 'darwin', env: { CODEX_HOME: maison } });
 
 	it('trouvé : son chemin et l’état de sa déclaration MCP, lue sans rien changer', async () => {
 		const cas: [{ code: number; sortie: string; erreur: string }, string][] = [
@@ -85,7 +92,7 @@ describe('verifier-poste : Codex', () => {
 			[declaration('/vieux/node', ['/autre/packages/mnemo/src/adaptateurs/cli/main.ts', 'mcp']), 'perime'],
 			[declaration('/usr/bin/python3', ['/opt/serveur.py']), 'autre'],
 		];
-		for (const [get, etat] of cas) expect((await verifierPoste(deps(repond(get)))).codex, etat).toEqual({ ok: true, chemin: '/opt/outils/codex', mcp: { etat } });
+		for (const [get, etat] of cas) expect((await verifierPoste(deps(repond(get)))).codex, etat).toEqual({ ok: true, chemin: '/opt/outils/codex', mcp: { etat }, hooks: { etat: 'absent' } });
 		const desactivee = JSON.stringify({ name: 'mnemo', enabled: false, transport: { type: 'stdio', command: process.execPath, args: [MAIN, 'mcp'] } });
 		expect((await verifierPoste(deps(repond({ code: 0, sortie: desactivee, erreur: '' })))).codex.mcp).toEqual({ etat: 'desactive', motif: expect.stringContaining('enabled = false') });
 		const illisible = await verifierPoste(deps(repond({ code: 0, sortie: 'pas du JSON', erreur: '' })));
@@ -95,9 +102,31 @@ describe('verifier-poste : Codex', () => {
 	it('texte : une ligne Codex ; Codex absent n’est pas un manque (code 0)', async () => {
 		const lignes: string[] = [];
 		await commandeVerifierPoste([], deps(repond({ code: 1, sortie: '', erreur: "Error: No MCP server named 'mnemo' found." })), (l) => lignes.push(l));
-		expect(lignes[2]).toBe('Codex : /opt/outils/codex — serveur MCP non déclaré (mnemo init --codex)');
+		expect(lignes[2]).toBe('Codex : /opt/outils/codex — serveur MCP non déclaré (mnemo init --codex) — hooks non installés (mnemo init --codex)');
 		const sans: string[] = [];
 		await commandeVerifierPoste([], { ...deps(repond(declaration('x', []))), codex: () => null }, (l) => sans.push(l));
 		expect(sans[2]).toMatch(/^Codex : absent \(facultatif\)/u);
+	});
+
+	it('hooks de Mnemo : à jour et à approuver, approuvés (empreinte non recalculée, dit), périmés, illisibles', async () => {
+		const maison = await dossierTemporaire();
+		await mkdir(maison, { recursive: true });
+		const get = declaration(process.execPath, [MAIN, 'mcp']);
+		const MAIN_MNEMO = '/depot/packages/mnemo/src/adaptateurs/cli/main.ts';
+		const avec = (executer: Executer) => ({ ...deps(executer, maison), main: MAIN_MNEMO });
+		const fichier = join(maison, 'hooks.json');
+		await writeFile(fichier, texteHooksJson(remplacerHooks({}, hooksAttendus(nodeDurable('darwin'), MAIN_MNEMO))));
+		expect((await verifierPoste(avec(repond(get)))).codex.hooks).toEqual({ etat: 'a_jour', approbation: { etat: 'a_approuver', motif: expect.stringContaining('7 hook(s) de Mnemo sur 7') } });
+		const cles = ['session_start', 'user_prompt_submit', 'pre_tool_use', 'post_tool_use', 'stop', 'permission_request', 'session_end'];
+		await writeFile(join(maison, 'config.toml'), cles.map((c) => `[hooks.state."${fichier}:${c}:0:0"]\ntrusted_hash = "sha256:0"\n`).join('\n'));
+		const approuves = (await verifierPoste(avec(repond(get)))).codex.hooks;
+		expect(approuves).toEqual({ etat: 'a_jour', approbation: { etat: 'approuves', motif: expect.stringContaining('recalculer') } });
+		const lignes: string[] = [];
+		await commandeVerifierPoste([], avec(repond(get)), (l) => lignes.push(l));
+		expect(lignes[2]).toMatch(/^Codex : \/opt\/outils\/codex — .* — hooks installés, approuvés \(approbation enregistrée/u);
+		await writeFile(fichier, texteHooksJson(remplacerHooks({}, hooksAttendus('/vieux/node', MAIN_MNEMO))));
+		expect((await verifierPoste(avec(repond(get)))).codex.hooks).toEqual({ etat: 'perime' });
+		await writeFile(fichier, '{');
+		expect((await verifierPoste(avec(repond(get)))).codex.hooks).toEqual({ etat: 'echec', motif: expect.stringContaining('JSON illisible') });
 	});
 });

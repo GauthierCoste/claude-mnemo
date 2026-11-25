@@ -1,6 +1,6 @@
 import { estSourceDeDebut, estUuid } from '../../../domaine/session.ts';
 import type { EvenementHook } from '../../../domaine/session.ts';
-import { estObjet } from '../../../domaine/valeurs.ts';
+import { estObjet, objetJson } from '../../../domaine/valeurs.ts';
 import type { EntreeHook, ReponseHook } from '../../evenements.ts';
 import type { AppelHook, HooksDuMoteur } from '../../ports.ts';
 
@@ -50,15 +50,6 @@ export function sortieDe(evenement: EvenementHook, reponse: ReponseHook): string
 	return `${JSON.stringify({ hookSpecificOutput: { hookEventName: nom, additionalContext: contexte } })}\n`;
 }
 
-function objetJson(texte: string): Record<string, unknown> | null {
-	try {
-		const lu: unknown = JSON.parse(texte);
-		return estObjet(lu) ? lu : null;
-	} catch {
-		return null;
-	}
-}
-
 /**
  * Entrée de Claude Code traduite ; null si elle est à ignorer (`SessionEnd` de `/clear`) ou illisible hors `outil`, qui doit
  * rendre une décision : son action est alors « non lue ». Session : `MNEMO_SESSION`, sinon `session_id` ; « » sans uuid valide.
@@ -105,4 +96,5 @@ function lireArguments(args: string[]): { evenement: EvenementHook; options: Set
  */
 const ECHEANCES_MS: Record<EvenementHook, number> = { debut: 900, message: 900, outil: 2000, apres_outil: 900, arret: 900, fin: 1400 };
 
-export const HOOKS_CLAUDE_CODE: HooksDuMoteur = { lireArguments, traduire, sortie: sortieDe, echeancesMs: ECHEANCES_MS };
+/** Claude Code n'appelle Mnemo que par le plugin d'une session Mnemo : jamais inerte. */
+export const HOOKS_CLAUDE_CODE: HooksDuMoteur = { lireArguments, inerte: () => false, traduire, sortie: sortieDe, echeancesMs: ECHEANCES_MS };

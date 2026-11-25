@@ -529,7 +529,7 @@ describe('mnemo hook (avec le service)', () => {
 		]);
 	});
 
-	it('--moteur : Claude Code par défaut ou nommé, transmis au service ; moteur inconnu ou sans implémentation : rien', async () => {
+	it('--moteur : Claude Code par défaut ou nommé, transmis au service ; moteur inconnu, ou Codex hors session Mnemo : rien', async () => {
 		const racine = await dossierMnemo();
 		const { requetes } = await fauxService(racine, () => ({}));
 		await hook(racine, 'arret', JSON.stringify({ session_id: ID, cwd: racine }), { MNEMO_RACINE: racine });
@@ -543,7 +543,8 @@ describe('mnemo hook (avec le service)', () => {
 			expect(r.code, args).toBe(0);
 			expect(r.out, args).toBe('');
 		}
-		expect((await hook(racine, 'arret --moteur codex', '{}', { MNEMO_RACINE: racine })).err).toMatch(/moteur sans implémentation dans cette version : « codex »/u);
+		// Codex hors d'une session Mnemo (MNEMO_SESSION vide) : inerte, rien sur stderr, aucun appel au service
+		expect((await hook(racine, 'arret --moteur codex', '{}', { MNEMO_RACINE: racine })).err).toBe('');
 		expect((await hook(racine, 'arret --moteur gemini', '{}', { MNEMO_RACINE: racine })).err).toMatch(/moteur inconnu « gemini »/u);
 		expect(requetes).toHaveLength(2);
 	});
@@ -575,6 +576,78 @@ describe('mnemo hook (avec le service)', () => {
 		const r = await hook(racine, 'message', entreeMessage(racine), { MNEMO_RACINE: racine });
 		expect(r.code).toBe(0);
 		expect(JSON.parse(r.out).hookSpecificOutput.additionalContext).toContain('Réponds en français.');
+	});
+});
+
+describe('mnemo hook --moteur codex', () => {
+	const FIL = '01a2130a-e03f-79a1-8d42-ee06d9253f90';
+	const codex = (racine: string, champs: Record<string, unknown>) => JSON.stringify({ session_id: FIL, transcript_path: '/t.jsonl', cwd: racine, ...champs });
+
+	it('session Mnemo : contexte au format de Codex, session de MNEMO_SESSION et fil = session_id de Codex, PermissionRequest = dialogue ouvert', async () => {
+		const racine = await dossierMnemo();
+		const { requetes } = await fauxService(racine, (_req, corps) => (JSON.parse(corps).evenement === 'message' ? { contexte: 'Contexte du service.' } : {}));
+		const env = { MNEMO_RACINE: racine, MNEMO_SESSION: ID };
+		const r = await hook(racine, 'message --moteur codex', codex(racine, { hook_event_name: 'UserPromptSubmit', turn_id: 't', prompt: 'Bonjour' }), env);
+		expect(r.code).toBe(0);
+		expect(r.out).toBe(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: 'Contexte du service.' } })}\n`);
+		await hook(racine, 'arret --notification --moteur codex', codex(racine, { hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'ls' } }), env);
+		await hook(racine, 'PermissionRequest --moteur codex', codex(racine, { hook_event_name: 'PermissionRequest' }), env);
+		await hook(racine, 'arret --moteur codex', codex(racine, { hook_event_name: 'Stop', stop_hook_active: false }), env);
+		const corps = requetes.map((q) => JSON.parse(q.corps) as Record<string, unknown>);
+		expect(corps).toEqual([
+			expect.objectContaining({ evenement: 'message', session: ID, fil: FIL, moteur: 'codex', prompt: 'Bonjour', transcription: '/t.jsonl' }),
+			expect.objectContaining({ evenement: 'arret', arret: 'notification', fil: FIL, moteur: 'codex' }),
+			expect.objectContaining({ evenement: 'arret', arret: 'notification', moteur: 'codex' }),
+			expect.objectContaining({ evenement: 'arret', arret: 'stop', moteur: 'codex' }),
+		]);
+	});
+
+	it('outil : refus au format de Codex (permissionDecision deny, sans systemMessage) ; apply_patch vers un chemin interdit refusé', async () => {
+		const racine = await dossierVerifie();
+		await writeFile(join(racine, '_mnemo', 'consignes', 'env.md'), `${entete('consigne', 'portee: globale\nniveau: verifiee\nregle: { type: chemins_interdits, motifs: ["**/.env"] }\n')}# E\n\nJamais de .env.\n`);
+		await attendu(racine, '');
+		const env = { MNEMO_RACINE: racine, MNEMO_SESSION: ID };
+		const r = await hook(racine, 'outil --moteur codex', codex(racine, { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'git push --force' } }), env);
+		expect(r.code).toBe(0);
+		expect(r.out).toBe(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: REFUS_PUSH } })}\n`);
+		const patch = await hook(racine, 'outil --moteur codex', codex(racine, { hook_event_name: 'PreToolUse', tool_name: 'apply_patch', tool_input: { command: '*** Begin Patch\n*** Add File: config/.env\n+A=1\n*** End Patch\n' } }), env);
+		expect(JSON.parse(patch.out).hookSpecificOutput).toMatchObject({ permissionDecision: 'deny', permissionDecisionReason: expect.stringContaining('Jamais de .env.') });
+		// le nom d'un outil de Claude Code ne vaut rien chez Codex
+		const write = await hook(racine, 'outil --moteur codex', codex(racine, { hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: join(racine, '.env') } }), env);
+		expect(write.out).toBe('');
+	});
+
+	it('hors d’une session Mnemo (MNEMO_SESSION absente ou invalide) : sortie vide, code 0, aucun appel au service, aucun effet, même pour outil', async () => {
+		const racine = await dossierVerifie();
+		const { requetes } = await fauxService(racine, () => ({ refus: 'jamais' }));
+		for (const session of ['', 'pas-un-uuid']) {
+			for (const [args, champs] of [
+				['outil --moteur codex', { tool_name: 'Bash', tool_input: { command: 'git push --force' } }],
+				['message --moteur codex', { prompt: 'Bonjour' }],
+				['fin --moteur codex', { reason: 'other' }],
+			] as const) {
+				const r = await hook(racine, args, codex(racine, champs), { MNEMO_RACINE: racine, MNEMO_SESSION: session });
+				expect(r, args).toMatchObject({ code: 0, out: '', err: '' });
+			}
+		}
+		expect(requetes).toHaveLength(0);
+		expect((await lireSession(racine))?.etat).toBe('attend');
+	});
+
+	it('chaque échéance tient sous le timeout installé dans hooks.json ; fin sous les 3 s de SessionEnd', async () => {
+		const { HOOKS_CODEX_INSTALLES } = await import('../../src/domaine/moteurs/codex/hooks-installes.ts');
+		const { hooksDuMoteur } = await import('../../src/application/moteurs/hooks.ts');
+		const hooks = hooksDuMoteur('codex')!;
+		const vus = new Set<string>();
+		for (const { evenement, args, timeout } of HOOKS_CODEX_INSTALLES) {
+			const lu = hooks.lireArguments([...args]);
+			expect(lu, evenement).not.toBeNull();
+			expect(hooks.lireArguments([evenement])?.evenement, evenement).toBe(lu!.evenement);
+			vus.add(lu!.evenement);
+			expect(hooks.echeancesMs[lu!.evenement], evenement).toBeLessThan(timeout * 1000);
+		}
+		expect([...vus].sort()).toEqual([...EVENEMENTS_HOOK].sort());
+		expect(hooks.echeancesMs.fin).toBeLessThan(3000);
 	});
 });
 

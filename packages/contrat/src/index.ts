@@ -789,12 +789,12 @@ export type ReponseRejetLot = { id: string };
 /**
  * `mnemo init --json` (lu par un programme qui pilote l'installation) : une ligne JSON par événement sur la sortie
  * standard, et rien d'autre. Une étape menée s'annonce (`debut`) puis finit (`fait` ou `echec`) ; une étape laissée de
- * côté ne donne qu'une ligne `saute`. `lanceur` : macOS seulement. `codex` : seulement avec `--codex` (déclaration MCP
- * chez Codex), aucune ligne sans. `motif` (étapes `mcp` et `codex`, `echec` seulement) : `perime`, une déclaration de
+ * côté ne donne qu'une ligne `saute`. `lanceur` : macOS seulement. `codex` et `codex_hooks` : seulement avec `--codex`
+ * (déclaration MCP chez Codex ; hooks de Mnemo dans `~/.codex/hooks.json`, à approuver une fois dans Codex), aucune ligne sans. `motif` (étapes `mcp` et `codex`, `echec` seulement) : `perime`, une déclaration de
  * Mnemo de portée utilisateur existe déjà et lance un autre Node ou un autre `main.ts` (autre installation de Mnemo), que
  * `mnemo declarer --remplacer` (`--moteur codex` pour Codex) reprend. Absent : tout autre échec.
  */
-export type EtapeInit = 'memoire' | 'mcp' | 'codex' | 'modeles' | 'commande' | 'lanceur';
+export type EtapeInit = 'memoire' | 'mcp' | 'codex' | 'codex_hooks' | 'modeles' | 'commande' | 'lanceur';
 export type MotifEchecInit = 'perime';
 export type EvenementInit = { etape: EtapeInit; etat: 'debut' | 'fait' | 'saute' | 'echec'; message: string; motif?: MotifEchecInit };
 /**
@@ -816,15 +816,24 @@ export type LigneInit = EvenementInit | ProgressionInit | FinInit;
 export type EtatMcpVerifie = { etat: 'deja' | 'absent' | 'perime' | 'autre' | 'desactive' | 'echec'; motif?: string };
 
 /**
+ * Hooks de Mnemo de `~/.codex/hooks.json`, lus sans rien changer : `a_jour` (ceux de ce Node et ce Mnemo), `perime` (d'une
+ * autre installation : `mnemo declarer --moteur codex --remplacer`), `absent` (`mnemo init --codex`), `echec` (fichier
+ * illisible, `motif`). `approbation` (à jour seulement), lue dans `hooks.state` de `config.toml` : `approuves`,
+ * `a_approuver` (dans Codex, `/hooks` ; désactivés compris), `inconnu` ; Mnemo ne recalcule pas l'empreinte de Codex, une
+ * approbation périmée n'est donc pas vue (`motif` le dit).
+ */
+export type EtatHooksVerifie = { etat: 'a_jour' | 'perime' | 'absent' | 'echec'; motif?: string; approbation?: { etat: 'approuves' | 'a_approuver' | 'inconnu'; motif: string } };
+
+/**
  * `mnemo verifier-poste --json` : ce dont Mnemo a besoin sur le poste, un bloc par moteur. `git.version` : « 2.50.1 » ;
  * `claude.chemin` : le `claude` que lanceront les sessions ; `codex.chemin` : le `codex` trouvé (facultatif : son absence
- * n'est pas un manque), `codex.mcp` : sa déclaration MCP, lue quand il est trouvé ; `motif` : pourquoi ce n'est pas
+ * n'est pas un manque), `codex.mcp` : sa déclaration MCP, lue quand il est trouvé, `codex.hooks` : ses hooks de Mnemo ; `motif` : pourquoi ce n'est pas
  * utilisable ; `node.version` : celle qui exécute Mnemo.
  */
 export type PosteVerifie = {
 	git: { ok: boolean; version?: string; motif?: string };
 	claude: { ok: boolean; chemin?: string; motif?: string };
-	codex: { ok: boolean; chemin?: string; motif?: string; mcp?: EtatMcpVerifie };
+	codex: { ok: boolean; chemin?: string; motif?: string; mcp?: EtatMcpVerifie; hooks?: EtatHooksVerifie };
 	node: { version: string };
 };
 
@@ -832,6 +841,9 @@ export type PosteVerifie = {
  * `mnemo declarer (--remplacer | --retirer) [--moteur claude-code | codex] --json` : une ligne.
  * `absent` : aucune déclaration `mnemo` ; `deja` : elle lance déjà ce Node et ce Mnemo ; `remplace` : refaite sur eux ;
  * `retire` : retirée ; `autre` : laissée (elle ne lance pas ce Mnemo, ou n'est pas de portée utilisateur) ; `echec` : code
- * de sortie 1, `message` dit pourquoi.
+ * de sortie 1, `message` dit pourquoi. `hooks` (Codex seulement) : les hooks de Mnemo de `~/.codex/hooks.json`, traités de
+ * même après la déclaration MCP (`--remplacer` ne refait que des hooks de Mnemo existants ; `--retirer` ne retire que ceux
+ * de ce Node et ce Mnemo) ; leur échec donne aussi le code 1.
  */
-export type SortieDeclarer = { resultat: 'absent' | 'deja' | 'remplace' | 'autre' | 'retire' | 'echec'; message: string };
+export type SortieDeclarer = { resultat: ResultatDeclarer; message: string; hooks?: { resultat: ResultatDeclarer; message: string } };
+export type ResultatDeclarer = 'absent' | 'deja' | 'remplace' | 'autre' | 'retire' | 'echec';

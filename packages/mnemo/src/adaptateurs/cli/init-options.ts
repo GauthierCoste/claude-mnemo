@@ -11,7 +11,7 @@ export type OptionsLuesInit = {
 	oui: boolean;
 	json: boolean;
 	mcp: ChoixExplicite;
-	/** `--codex` : déclarer aussi le serveur MCP chez Codex (jamais sans). */
+	/** `--codex` : déclarer aussi le serveur MCP chez Codex et y installer les hooks de Mnemo (jamais sans). */
 	codex: boolean;
 	modeles: ChoixExplicite;
 	commande: ChoixExplicite;

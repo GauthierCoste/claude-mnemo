@@ -7,7 +7,7 @@ import type { LigneInit } from '@mnemo/contrat';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { commandeInit } from '../../src/adaptateurs/cli/init.ts';
 import type { SuiviModeles } from '../../src/adaptateurs/cli/init.ts';
-import type { ResultatDeclaration } from '../../src/application/ports.ts';
+import type { ResultatDeclaration, ResultatInstallationHooks } from '../../src/application/ports.ts';
 import { journalInit, PAS_PROGRESSION_MS } from '../../src/adaptateurs/cli/init-journal.ts';
 import { lireOptionsInit } from '../../src/adaptateurs/cli/init-options.ts';
 import type { Piece } from '../../src/infra/modeles/catalogue.ts';
@@ -263,9 +263,10 @@ describe('mnemo init : échec en mode texte', () => {
 });
 
 describe('mnemo init --codex', () => {
-	const avecCodex = (declaration: ResultatDeclaration) => ({
+	const avecCodex = (declaration: ResultatDeclaration, hooks: ResultatInstallationHooks = 'installe') => ({
 		...actions(),
 		declarerCodex: vi.fn(async () => declaration),
+		installerHooksCodex: vi.fn(async () => hooks),
 	});
 
 	it('déclare chez Codex (étape « codex »), le reste inchangé ; sans --codex, Codex n’est jamais touché', async () => {
@@ -275,13 +276,16 @@ describe('mnemo init --codex', () => {
 		const sortie = capture();
 		await commandeInit([racine, '--json', '--sans-mcp', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: a });
 		expect(a.declarerCodex).toHaveBeenCalledOnce();
+		expect(a.installerHooksCodex).toHaveBeenCalledOnce();
 		expect(a.declarerMcp).not.toHaveBeenCalled();
-		expect(evenements(lignesJson(sortie.texte()))).toEqual(['memoire:debut', 'memoire:fait', 'mcp:saute', 'codex:debut', 'codex:fait', 'modeles:saute', 'commande:saute', 'lanceur:saute']);
+		expect(evenements(lignesJson(sortie.texte()))).toEqual(['memoire:debut', 'memoire:fait', 'mcp:saute', 'codex:debut', 'codex:fait', 'codex_hooks:debut', 'codex_hooks:fait', 'modeles:saute', 'commande:saute', 'lanceur:saute']);
+		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'codex_hooks', etat: 'fait', message: expect.stringContaining('approuve-les une fois dans Codex (/hooks)') });
 		const sans = avecCodex('declare');
 		const sortieSans = capture();
 		await commandeInit([racine, '--json', '--mcp'], { sortie: sortieSans.flux, plateforme: 'linux', actions: sans });
 		expect(sans.declarerCodex).not.toHaveBeenCalled();
-		expect(evenements(lignesJson(sortieSans.texte())).some((e) => e.startsWith('codex:'))).toBe(false);
+		expect(sans.installerHooksCodex).not.toHaveBeenCalled();
+		expect(evenements(lignesJson(sortieSans.texte())).some((e) => e.startsWith('codex'))).toBe(false);
 	});
 
 	it('texte : une ligne dit ce qui est fait chez Codex', async () => {
@@ -290,6 +294,18 @@ describe('mnemo init --codex', () => {
 		const sortie = capture();
 		await commandeInit([racine, '--sans-mcp', '--codex'], { sortie: sortie.flux, interactif: false, plateforme: 'linux', actions: avecCodex('deja') });
 		expect(sortie.texte()).toContain('Serveur MCP déjà déclaré à Codex.');
+		expect(sortie.texte()).toContain('Hooks de Mnemo installés chez Codex (~/.codex/hooks.json) ; approuve-les une fois dans Codex (/hooks)');
+	});
+
+	it('hooks.json de Codex illisible : étape codex_hooks en échec (code 1), la déclaration MCP faite reste dite', async () => {
+		avecMcpFactice();
+		const racine = await dossierTemporaire();
+		const sortie = capture();
+		const a = avecCodex('declare', { echec: '/h/.codex/hooks.json : JSON illisible (x) ; corrige-le, Mnemo ne le réécrit pas.' });
+		await expect(commandeInit([racine, '--json', '--sans-mcp', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: a })).rejects.toMatchObject({ code: 1 });
+		const lignes = lignesJson(sortie.texte());
+		expect(lignes).toContainEqual({ etape: 'codex', etat: 'fait', message: 'Serveur MCP déclaré pour toutes les sessions Codex.' });
+		expect(lignes).toContainEqual({ etape: 'codex_hooks', etat: 'echec', message: expect.stringContaining('JSON illisible') });
 	});
 
 	it('déclaration de Mnemo périmée chez Codex : échec de motif « perime » ; une autre déclaration : échec sans motif', async () => {
@@ -313,7 +329,9 @@ describe('mnemo init --codex', () => {
 		const sortie = capture();
 		await commandeInit([racine, '--json', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: a });
 		expect(a.declarerCodex).not.toHaveBeenCalled();
+		expect(a.installerHooksCodex).not.toHaveBeenCalled();
 		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'codex', etat: 'saute', message: 'Serveur MCP non déclaré à Codex (MNEMO_SANS_MCP=1).' });
+		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'codex_hooks', etat: 'saute', message: 'Hooks non installés chez Codex (MNEMO_SANS_MCP=1).' });
 	});
 });
 

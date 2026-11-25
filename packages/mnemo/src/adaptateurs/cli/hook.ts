@@ -268,7 +268,7 @@ type Appel = { moteur: IdMoteur; hooks: HooksDuMoteur; evenement: EvenementHook;
 
 /**
  * `mnemo hook <événement> [--notification | --sans-contexte] [--moteur <id>]` : appelé par le moteur de la session (plugin
- * d'une session Mnemo pour Claude Code), entrée JSON sur stdin. Le service d'abord (`POST /api/hook`), sinon le calcul ici.
+ * d'une session Mnemo pour Claude Code ; `~/.codex/hooks.json` pour Codex, inerte hors d'une session Mnemo), entrée JSON sur stdin. Le service d'abord (`POST /api/hook`), sinon le calcul ici.
  * Code 0 ; sur stdout, seulement la réponse JSON attendue par le moteur (`sortie` de ses hooks) ; un refus d'`outil` et un
  * accord non vérifié sont écrits sur stderr, gardés par le moteur dans son journal.
  */
@@ -288,7 +288,14 @@ export async function commandeHook(args: string[]): Promise<void> {
 		return;
 	}
 	const { evenement } = lu;
-	const r = await reponseAvantEcheance(lu, { debutMs, echeance: debutMs + lu.hooks.echeancesMs[evenement] });
+	const echeance = debutMs + lu.hooks.echeancesMs[evenement];
+	if (lu.hooks.inerte(process.env)) {
+		// hors d'une session Mnemo : l'entrée est lue jusqu'au bout (l'écriture du moteur ne casse pas), puis rien
+		await lireEntree(echeance - Date.now());
+		terminer('');
+		return;
+	}
+	const r = await reponseAvantEcheance(lu, { debutMs, echeance });
 	const sortie = lu.hooks.sortie(evenement, r);
 	if (evenement === 'outil' && sortie !== '') process.stderr.write(`mnemo hook : action refusée : ${r.refus}\n`);
 	if (r.avis !== undefined) process.stderr.write(`mnemo hook : ${r.avis}\n`);

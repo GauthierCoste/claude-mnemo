@@ -10,6 +10,7 @@ import { DECLARATION_MCP_CODEX } from '../../src/infra/moteurs/codex/declaration
 import { trouverCodex } from '../../src/infra/moteurs/codex/trouver-codex.ts';
 import { MOTEURS, MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
+import { commandesDuHook } from '../../src/domaine/moteurs/codex/hooks-installes.ts';
 
 afterEach(() => {
 	vi.unstubAllEnvs();
@@ -305,12 +306,12 @@ describe('mnemo declarer --moteur codex (faux codex par MNEMO_CODEX)', () => {
 		const lignes: string[] = [];
 		const claude = vi.fn(() => null);
 		await commandeDeclarer(['--moteur', 'codex', '--remplacer', '--json'], { claude, main: MAIN, env: { CODEX_HOME: d } }, (l) => lignes.push(l));
-		expect(JSON.parse(lignes[0]!)).toEqual({ resultat: 'remplace', message: 'Codex : Déclaration MCP refaite avec ce Node et ce Mnemo.' });
+		expect(JSON.parse(lignes[0]!)).toEqual({ resultat: 'remplace', message: 'Codex : Déclaration MCP refaite avec ce Node et ce Mnemo.', hooks: { resultat: 'absent', message: 'Codex : Aucun hook de Mnemo dans hooks.json : rien à faire.' } });
 		expect(JSON.parse(await readFile(join(d, 'etat.json'), 'utf8'))).toEqual({ command: process.execPath, args: [MAIN, 'mcp'] });
 		await commandeDeclarer(['--retirer', '--moteur', 'codex', '--json'], { claude, main: MAIN, env: { CODEX_HOME: d } }, (l) => lignes.push(l));
 		expect(JSON.parse(lignes[1]!)).toMatchObject({ resultat: 'retire' });
-		await commandeDeclarer(['--moteur', 'codex', '--retirer'], { claude, main: MAIN }, (l) => lignes.push(l));
-		expect(lignes[2]).toBe('Codex : Aucune déclaration MCP « mnemo » : rien à faire.');
+		await commandeDeclarer(['--moteur', 'codex', '--retirer'], { claude, main: MAIN, env: { CODEX_HOME: d } }, (l) => lignes.push(l));
+		expect(lignes.slice(2)).toEqual(['Codex : Aucune déclaration MCP « mnemo » : rien à faire.', 'Codex : Aucun hook de Mnemo dans hooks.json : rien à faire.']);
 		expect(claude).not.toHaveBeenCalled();
 		expect((await readFile(join(d, 'appels.log'), 'utf8')).trim().split('\n')).toEqual([
 			'mcp get mnemo --json',
@@ -340,11 +341,36 @@ describe('mnemo declarer --moteur codex (faux codex par MNEMO_CODEX)', () => {
 		expect((await readFile(join(d, 'appels.log'), 'utf8')).trim().split('\n')).toEqual(['mcp get mnemo --json']);
 	});
 
+	it('hooks de Mnemo de hooks.json : --remplacer refait ceux d’un autre Node, --retirer retire ceux de ce Mnemo, jamais une autre entrée ; JSON illisible : code 1', async () => {
+		const MAIN_MNEMO = '/depot/packages/mnemo/src/adaptateurs/cli/main.ts';
+		const d = await dossierTemporaire();
+		await writeFile(join(d, 'faux-codex.mjs'), FAUX_CODEX);
+		vi.stubEnv('MNEMO_CODEX', join(d, 'faux-codex.mjs'));
+		const etranger = { hooks: [{ type: 'command', command: 'autre-outil --hook' }] };
+		const ancien = commandesDuHook('/vieux/node', MAIN_MNEMO, ['arret']);
+		await writeFile(join(d, 'hooks.json'), JSON.stringify({ hooks: { Stop: [etranger, { hooks: [{ type: 'command', ...ancien, timeout: 3 }] }] } }));
+		const lignes: string[] = [];
+		await commandeDeclarer(['--moteur', 'codex', '--remplacer', '--json'], { main: MAIN_MNEMO, env: { CODEX_HOME: d } }, (l) => lignes.push(l));
+		expect(JSON.parse(lignes[0]!).hooks).toEqual({ resultat: 'remplace', message: expect.stringContaining('approuve-les de nouveau dans Codex (/hooks)') });
+		const apres = JSON.parse(await readFile(join(d, 'hooks.json'), 'utf8')) as { hooks: Record<string, unknown[]> };
+		expect(apres.hooks.Stop![0]).toEqual(etranger);
+		expect(JSON.stringify(apres.hooks.Stop![1])).toContain(JSON.stringify(process.execPath).slice(1, -1));
+		expect(Object.keys(apres.hooks)).toContain('SessionEnd');
+		await commandeDeclarer(['--moteur', 'codex', '--retirer', '--json'], { main: MAIN_MNEMO, env: { CODEX_HOME: d } }, (l) => lignes.push(l));
+		expect(JSON.parse(lignes[1]!).hooks).toMatchObject({ resultat: 'retire' });
+		expect(JSON.parse(await readFile(join(d, 'hooks.json'), 'utf8'))).toEqual({ hooks: { Stop: [etranger] } });
+		await writeFile(join(d, 'hooks.json'), '{ cassé');
+		await commandeDeclarer(['--moteur', 'codex', '--retirer', '--json'], { main: MAIN_MNEMO, env: { CODEX_HOME: d } }, (l) => lignes.push(l));
+		expect(JSON.parse(lignes[2]!).hooks).toMatchObject({ resultat: 'echec', message: expect.stringContaining('JSON illisible') });
+		expect(process.exitCode).toBe(1);
+		expect(await readFile(join(d, 'hooks.json'), 'utf8')).toBe('{ cassé');
+	});
+
 	it('codex introuvable : échec, code 1 ; moteur inconnu ou --moteur sans valeur : erreur d’usage', async () => {
 		vi.stubEnv('MNEMO_CODEX', '/nulle/part/codex');
 		const lignes: string[] = [];
-		await commandeDeclarer(['--moteur', 'codex', '--remplacer', '--json'], { main: MAIN }, (l) => lignes.push(l));
-		expect(JSON.parse(lignes[0]!)).toMatchObject({ resultat: 'echec' });
+		await commandeDeclarer(['--moteur', 'codex', '--remplacer', '--json'], { main: MAIN, env: { CODEX_HOME: await dossierTemporaire() } }, (l) => lignes.push(l));
+		expect(JSON.parse(lignes[0]!)).toMatchObject({ resultat: 'echec', hooks: { resultat: 'absent' } });
 		expect(process.exitCode).toBe(1);
 		await expect(commandeDeclarer(['--moteur', 'gemini', '--remplacer'], {})).rejects.toMatchObject({ code: 2 });
 		await expect(commandeDeclarer(['--remplacer', '--moteur'], {})).rejects.toMatchObject({ code: 2 });

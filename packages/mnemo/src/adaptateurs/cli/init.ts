@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import type { EtapeInit, MotifEchecInit } from '@mnemo/contrat';
 import { initialiser } from '../../application/initialiser.ts';
 import type { ResultatInitialisation } from '../../application/initialiser.ts';
-import type { ResultatDeclaration } from '../../application/ports.ts';
+import type { ResultatDeclaration, ResultatInstallationHooks } from '../../application/ports.ts';
 import { citerPosix, citerPowerShell } from '../../domaine/citer.ts';
 import { commandeManuelle, declarerServeurMcp } from '../../infra/moteurs/claude-code/declaration-mcp.ts';
 import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
@@ -44,6 +44,8 @@ export type ActionsInit = {
 	declarerMcp(): Promise<ResultatDeclaration>;
 	/** Déclaration du serveur MCP chez Codex (`--codex`). */
 	declarerCodex(): Promise<ResultatDeclaration>;
+	/** Hooks de Mnemo dans `~/.codex/hooks.json` (`--codex`). */
+	installerHooksCodex(): Promise<ResultatInstallationHooks>;
 	installerModeles(racine: string, suivi?: SuiviModeles): Promise<void>;
 	creerLanceur(racine: string, ecrire?: (ligne: string) => void): Promise<void>;
 	installerCommande(ecrire?: (ligne: string) => void): Promise<void>;
@@ -69,6 +71,7 @@ const actionsReelles: ActionsInit = {
 	declarerMcp: () => declarerServeurMcp(executeurReel(), MAIN, trouverClaude(process.env, process.platform)),
 	declarerCodex: () =>
 		MOTEUR_CODEX.declarationMcp.declarer({ executer: executeurReel(), main: MAIN, commande: MOTEUR_CODEX.trouver(process.env, process.platform), plateforme: process.platform, env: process.env }),
+	installerHooksCodex: () => MOTEUR_CODEX.hooksDuPoste!.installer({ node: nodeDurable(process.platform), main: MAIN, env: process.env }),
 	installerModeles: async (racine, suivi) => (await import('./modeles.ts')).commandeModeles(['installer'], { racine, ...suivi }),
 	creerLanceur: async (racine, ecrire) => (await import('./lanceur.ts')).commandeLanceur([], racine, ecrire),
 	installerCommande: async (ecrire) => (await import('./commande.ts')).commandeCommande([], ecrire === undefined ? {} : { ecrire }),
@@ -124,7 +127,8 @@ class EchecMotive extends Error {
  * non (`MNEMO_SANS_MCP=1` l'emporte sur `--mcp`). `--json` : aucune question, une ligne `LigneInit` (`@mnemo/contrat`) par
  * événement et rien d'autre sur la sortie standard. L'échec d'une étape hors mémoire n'arrête pas les suivantes : il est
  * dit, puis le code de sortie est 1 (en texte, une déclaration MCP impossible reste dite sans être un échec, comme avant).
- * `--codex` : déclare aussi le serveur MCP chez Codex (sans question ; sans `--codex`, Codex n'est jamais touché).
+ * `--codex` : déclare aussi le serveur MCP chez Codex et installe les hooks de Mnemo dans `~/.codex/hooks.json` (sans
+ * question ; sans `--codex`, Codex n'est jamais touché).
  */
 export async function commandeInit(args: string[], o: OptionsInit = {}): Promise<void> {
 	const choix = lireOptionsInit(args);
@@ -223,8 +227,11 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 		for (const ligne of messagesInit(racine, resultat, declaration)) ecrire(ligne);
 		if (sansDeclaration !== null) ecrire(sansDeclaration);
 
-		// Codex : seulement sur --codex (jamais par défaut ni sur question) ; MNEMO_SANS_MCP=1 l'emporte
-		if (choix.codex && sansMcpEnv) j.evenement('codex', 'saute', 'Serveur MCP non déclaré à Codex (MNEMO_SANS_MCP=1).');
+		// Codex : seulement sur --codex (jamais par défaut ni sur question) : serveur MCP puis hooks ; MNEMO_SANS_MCP=1 l'emporte (ni l'un ni l'autre)
+		if (choix.codex && sansMcpEnv) {
+			j.evenement('codex', 'saute', 'Serveur MCP non déclaré à Codex (MNEMO_SANS_MCP=1).');
+			j.evenement('codex_hooks', 'saute', 'Hooks non installés chez Codex (MNEMO_SANS_MCP=1).');
+		}
 		else if (choix.codex) {
 			let ligne: string | null = null;
 			await mener('codex', 'Serveur MCP (Codex)', 'Déclaration du serveur MCP à Codex.', async () => {
@@ -235,6 +242,14 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 				return ligne;
 			});
 			if (ligne !== null) ecrire(ligne);
+			let ligneHooks: string | null = null;
+			await mener('codex_hooks', 'Hooks (Codex)', 'Installation des hooks de Mnemo chez Codex (~/.codex/hooks.json).', async () => {
+				const r = await actions.installerHooksCodex();
+				if (typeof r !== 'string') throw new Error(r.echec);
+				ligneHooks = messageHooksCodex(r);
+				return ligneHooks;
+			});
+			if (ligneHooks !== null) ecrire(ligneHooks);
 		}
 
 		// sur une mémoire existante, les modèles ne sont pas proposés (seulement installés sur --modeles)
@@ -382,6 +397,13 @@ export function messageCodex(declaration: ResultatDeclaration): string {
 			: `Une déclaration MCP « mnemo » qui ne lance pas Mnemo existe chez Codex : retirez-la (\`codex mcp remove mnemo\`) puis : ${declaration.manuel}`;
 	if (declaration.introuvable) return `Codex introuvable : lancez vous-même : ${declaration.manuel}`;
 	return `Déclaration automatique à Codex impossible (${declaration.raison}) : lancez vous-même : ${declaration.manuel}`;
+}
+
+/** Une ligne pour les hooks installés chez Codex : approuvés une fois par l'utilisateur, sans quoi Codex ne les lance pas. */
+export function messageHooksCodex(r: Exclude<ResultatInstallationHooks, { echec: string }>): string {
+	const approuver = 'approuve-les une fois dans Codex (/hooks) : sans approbation, Codex ne les lance pas.';
+	if (r === 'deja') return 'Hooks de Mnemo déjà installés chez Codex ; s’ils ne sont pas encore approuvés, approuve-les dans Codex (/hooks).';
+	return r === 'installe' ? `Hooks de Mnemo installés chez Codex (~/.codex/hooks.json) ; ${approuver}` : `Hooks de Mnemo mis à jour chez Codex (~/.codex/hooks.json) ; ${approuver}`;
 }
 
 /** Ligne de démarrage à copier-coller sans la commande `mnemo` : PowerShell (`& 'node.exe' …`) sous Windows, POSIX ailleurs. */
