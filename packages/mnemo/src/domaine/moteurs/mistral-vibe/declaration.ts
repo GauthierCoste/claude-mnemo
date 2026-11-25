@@ -1,16 +1,18 @@
 import { citerPosix, citerPowerShell } from '../../citer.ts';
 import type { LancementMcp } from '../declaration-mnemo.ts';
-import { avecBlocALaFin, elementsDuTableau, entreesToml, sansPlages } from '../toml-lecture.ts';
-import type { ValeurToml } from '../toml-lecture.ts';
+import { avecBlocALaFin, avecPlagesRemplacees, sansPlages } from '../toml-edition.ts';
+import { elementsDuTableau, entreesToml } from '../toml-lecture.ts';
+import type { Plage, ValeurToml } from '../toml-lecture.ts';
 import { listeValeursToml, valeurToml } from '../toml.ts';
 
 /**
  * Déclaration du serveur `mnemo` dans `config.toml` de Mistral Vibe (Vibe 3.1.5 : un élément `[[mcp_servers]]` de
  * `name = "mnemo"`, `transport = "stdio"`, `command` en chaîne ou en liste, `args`, puis `env`, `cwd`, `disabled`,
  * `disabled_tools`, `startup_timeout_sec`…). `lancement` : null pour un autre transport ou une commande illisible ;
- * `active` : `disabled` n'est pas vrai ; `reglages` : ce qu'elle porte que Mnemo ne pose pas ; `plage` : sa place dans le texte.
+ * `active` : `disabled` n'est pas vrai ; `reglages` : ce qu'elle porte que Mnemo ne pose pas ; `plages` : ses places dans le
+ * texte (une sous-table écrite plus loin en a une à part).
  */
-export type DeclarationMistralVibe = { lancement: LancementMcp | null; active: boolean; reglages: string[]; plage: { debut: number; fin: number } };
+export type DeclarationMistralVibe = { lancement: LancementMcp | null; active: boolean; reglages: string[]; plages: Plage[] };
 
 /** Clés que Mnemo écrit dans sa déclaration. */
 const CLES_DE_MNEMO = new Set(['name', 'transport', 'command', 'args']);
@@ -36,7 +38,7 @@ export function declarationDansConfig(texte: string | null): { declaration: Decl
 	const args = v['args'] === undefined ? [] : estListeDeChaines(v['args']) ? v['args'] : null;
 	const stdio = v['transport'] === 'stdio' && commande !== null && commande.length > 0 && args !== null;
 	const lancement = stdio ? { commande: commande[0]!, args: [...commande.slice(1), ...args] } : null;
-	return { declaration: { lancement, active, reglages, plage: { debut: element.debut, fin: element.fin } } };
+	return { declaration: { lancement, active, reglages, plages: element.plages } };
 }
 
 /** Bloc écrit par Mnemo : chaînes TOML littérales quand c'est possible (chemins Windows lisibles). */
@@ -44,16 +46,15 @@ export function blocDeDeclaration(node: string, main: string): string {
 	return `[[mcp_servers]]\nname = "mnemo"\ntransport = "stdio"\ncommand = ${valeurToml(node)}\nargs = ${listeValeursToml([main, 'mcp'])}\n`;
 }
 
-/** Le texte avec la déclaration de Mnemo à la place de `remplacee` (sa plage), ou ajoutée à la fin ; le reste tel quel. */
-export function texteAvecDeclaration(texte: string | null, node: string, main: string, remplacee?: { debut: number; fin: number }): string {
+/** Le texte avec la déclaration de Mnemo à la place de `remplacee` (ses plages), ou ajoutée à la fin ; le reste tel quel. */
+export function texteAvecDeclaration(texte: string | null, node: string, main: string, remplacee?: readonly Plage[]): string {
 	const bloc = blocDeDeclaration(node, main);
 	if (texte === null) return bloc;
-	if (remplacee === undefined) return avecBlocALaFin(texte, bloc);
-	return `${texte.slice(0, remplacee.debut)}${bloc}${texte.slice(remplacee.fin)}`;
+	return remplacee === undefined ? avecBlocALaFin(texte, bloc) : avecPlagesRemplacees(texte, remplacee, bloc);
 }
 
-/** Le texte sans la déclaration (sa plage) ; le reste tel quel. */
-export const texteSansDeclaration = (texte: string, plage: { debut: number; fin: number }): string => sansPlages(texte, [plage]);
+/** Le texte sans la déclaration (ses plages) ; le reste tel quel. */
+export const texteSansDeclaration = (texte: string, plages: readonly Plage[]): string => sansPlages(texte, plages);
 
 /**
  * Commande à copier-coller (chemins cités pour POSIX ou PowerShell) : `vibe mcp add`, qui réécrit tout `config.toml` (ses

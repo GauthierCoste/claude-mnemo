@@ -1,7 +1,7 @@
 /**
  * Lecture d'un fichier TOML d'un moteur, entrée par entrée, avec la place de chacune dans le texte : de quoi lire une table
- * (`[[mcp_servers]]`, `[[hooks]]`) et la remplacer ou la retirer sans toucher au reste (commentaires, ordre, forme). Les
- * valeurs lues : chaînes (des quatre formes), booléens, tableaux et tables en ligne ; nombres et dates restent en texte.
+ * (`[[mcp_servers]]`, `[[hooks]]`) et la remplacer ou la retirer sans toucher au reste (`toml-edition.ts`). Les valeurs
+ * lues : chaînes (des quatre formes), booléens, tableaux et tables en ligne ; nombres et dates restent en texte.
  */
 
 /** Un nombre, une date ou un autre littéral TOML, gardé tel quel. */
@@ -247,24 +247,16 @@ export function entreesToml(texte: string): EntreeToml[] | null {
 	}
 }
 
-/** Clé TOML pointée (`a."b.c".'d'`) en segments ; null si elle est mal formée. */
-export function segmentsDeCle(texte: string): string[] | null {
-	const l = new Lecteur(texte);
-	try {
-		const segments = l.cle();
-		return l.i === texte.length ? segments : null;
-	} catch (erreur) {
-		if (erreur instanceof Illisible) return null;
-		throw erreur;
-	}
-}
+/** Une place dans le texte : de `debut` à `fin` (exclu). */
+export type Plage = { debut: number; fin: number };
 
 /**
- * Un élément d'un tableau de tables (`[[nom]]`) : son en-tête, ses clés (sous-tables `[nom.x]` qui le suivent comprises,
- * sous leur chemin), sa place dans le texte. `fin` : après sa dernière entrée (les commentaires et lignes vides qui suivent
- * restent au texte).
+ * Un élément d'un tableau de tables (`[[nom]]`) : ses clés (sous-tables `[nom.x]` qui le suivent comprises, sous leur chemin)
+ * et ses places dans le texte, disjointes et dans l'ordre : son en-tête et ses entrées, puis chaque sous-table écrite après une
+ * autre table (`[[nom]]`, `[autre]`, `[nom.x]`). Une plage finit après sa dernière entrée : les commentaires et lignes vides
+ * qui suivent restent au texte.
  */
-export type ElementDeTableau = { valeurs: { [cle: string]: ValeurToml }; debut: number; fin: number };
+export type ElementDeTableau = { valeurs: { [cle: string]: ValeurToml }; plages: Plage[] };
 
 /**
  * Éléments du tableau de tables `nom` (racine du fichier), dans l'ordre ; `enLigne` : le tableau est écrit en valeur
@@ -274,54 +266,43 @@ export function elementsDuTableau(entrees: readonly EntreeToml[], nom: string): 
 	const elements: ElementDeTableau[] = [];
 	let enLigne = false;
 	let courant: ElementDeTableau | null = null;
+	// l'élément de l'entrée précédente : une sous-table qui la suit prolonge sa plage, sinon elle en ouvre une autre
+	let precedent: ElementDeTableau | null = null;
 	let table: string[] = [];
 	try {
 		for (const e of entrees) {
 			if (e.genre !== 'valeur') {
 				courant = null;
 				table = e.cle;
-				if (e.cle[0] !== nom) continue;
+				if (e.cle[0] !== nom) {
+					precedent = null;
+					continue;
+				}
 				if (e.genre === 'tableau' && e.cle.length === 1) {
-					courant = { valeurs: {}, debut: e.debut, fin: e.fin };
+					courant = { valeurs: {}, plages: [{ debut: e.debut, fin: e.fin }] };
 					elements.push(courant);
+					precedent = courant;
 					continue;
 				}
 				// sous-table d'un élément : celle du dernier élément ouvert
 				const dernier = elements.at(-1);
 				if (e.genre === 'tableau' || dernier === undefined) return null;
 				courant = dernier;
-				courant.fin = e.fin;
+				if (precedent === dernier) dernier.plages.at(-1)!.fin = e.fin;
+				else dernier.plages.push({ debut: e.debut, fin: e.fin });
+				precedent = dernier;
 				poser(courant.valeurs, e.cle.slice(1), {});
 				continue;
 			}
 			if (table.length === 0 && e.cle[0] === nom) enLigne = true;
+			precedent = courant;
 			if (courant === null) continue;
 			poser(courant.valeurs, [...table.slice(1), ...e.cle], e.valeur);
-			courant.fin = e.fin;
+			courant.plages.at(-1)!.fin = e.fin;
 		}
 	} catch (erreur) {
 		if (erreur instanceof Illisible) return null;
 		throw erreur;
 	}
 	return { elements, enLigne };
-}
-
-/**
- * Le texte sans les plages données (triées ou non, sans chevauchement), ni les lignes vides juste avant chacune (celle qui
- * séparait un bloc ajouté par `avecBlocALaFin`) : un bloc ajouté puis retiré rend le texte d'avant.
- */
-export function sansPlages(texte: string, plages: readonly { debut: number; fin: number }[]): string {
-	let resultat = '';
-	let i = 0;
-	for (const p of [...plages].sort((a, b) => a.debut - b.debut)) {
-		resultat = `${resultat}${texte.slice(i, p.debut)}`.replace(/(^|\n)(?:[ \t]*\n)+$/u, '$1');
-		i = p.fin;
-	}
-	return resultat + texte.slice(i);
-}
-
-/** Le texte suivi de `bloc`, séparé par une ligne vide (et un saut de ligne final ajouté s'il manquait). */
-export function avecBlocALaFin(texte: string, bloc: string): string {
-	const base = texte.replace(/\s+$/u, '');
-	return base === '' ? bloc : `${base}\n\n${bloc}`;
 }

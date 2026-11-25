@@ -61,13 +61,22 @@ describe('déclaration MCP dans config.toml', () => {
 		const d = declarationDansConfig(`${ancienne}\n[tools.bash]\npermission = "ask"\n`);
 		if (!('declaration' in d) || d.declaration === null) throw new Error('déclaration attendue');
 		const avec = `${ancienne}\n[tools.bash]\npermission = "ask"\n`;
-		const refaite = texteAvecDeclaration(avec, NODE, MAIN, d.declaration.plage);
+		const refaite = texteAvecDeclaration(avec, NODE, MAIN, d.declaration.plages);
 		expect(refaite).toContain(`command = '${NODE}'`);
 		expect(refaite).not.toContain('/autre/node');
 		expect(refaite).toContain('[tools.bash]\npermission = "ask"');
-		expect(texteSansDeclaration(avec, d.declaration.plage)).toBe(`${CONFIG}\n[tools.bash]\npermission = "ask"\n`);
+		expect(texteSansDeclaration(avec, d.declaration.plages)).toBe(`${CONFIG}\n[tools.bash]\npermission = "ask"\n`);
 		expect(declarationDansConfig('a = "ouvert\n')).toEqual({ echec: expect.stringContaining('TOML') });
 		expect(declarationDansConfig('mcp_servers = [{ name = "mnemo" }]\n')).toEqual({ echec: expect.stringContaining('tableau en ligne') });
+	});
+
+	it('sous-table [mcp_servers.env] écrite après [tools.bash] : retirée ou remplacée sans toucher [tools.bash]', () => {
+		const texte = `active_model = "x"\n\n[[mcp_servers]]\nname = "mnemo"\ntransport = "stdio"\ncommand = "/usr/bin/node"\nargs = ["${MAIN}", "mcp"]\n\n[tools.bash]\npermission = "never"\n\n[mcp_servers.env]\nA = "1"\n`;
+		const d = declarationDansConfig(texte);
+		if (!('declaration' in d) || d.declaration === null) throw new Error('déclaration attendue');
+		expect(d.declaration.reglages).toEqual(['env']);
+		expect(texteSansDeclaration(texte, d.declaration.plages)).toBe('active_model = "x"\n\n[tools.bash]\npermission = "never"\n');
+		expect(texteAvecDeclaration(texte, NODE, MAIN, d.declaration.plages)).toBe(`active_model = "x"\n\n${blocDeDeclaration(NODE, MAIN)}\n[tools.bash]\npermission = "never"\n`);
 	});
 
 	it('commande à coller : vibe mcp add, chemins cités pour le shell de la plateforme', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { avecBlocALaFin, elementsDuTableau, entreesToml, LitteralToml, sansPlages } from '../../src/domaine/moteurs/toml-lecture.ts';
+import { avecBlocALaFin, avecPlagesRemplacees, sansPlages } from '../../src/domaine/moteurs/toml-edition.ts';
+import { elementsDuTableau, entreesToml, LitteralToml } from '../../src/domaine/moteurs/toml-lecture.ts';
 
 const CONFIG = `# réglages de l'utilisateur
 active_model = "local" # commentaire
@@ -71,14 +72,38 @@ describe('lecture TOML par entrées', () => {
 			{ name: 'mnemo', transport: 'stdio', command: '/opt/node', args: ['/d/adaptateurs/cli/main.ts', 'mcp'], env: { CLE: 'valeur' } },
 		]);
 		const mnemo = lu.elements[1]!;
-		const reste = sansPlages(CONFIG, [mnemo]);
+		expect(mnemo.plages).toHaveLength(1);
+		const reste = sansPlages(CONFIG, mnemo.plages);
 		expect(reste).toContain('# le serveur de Mnemo\n\n[tools.mnemo_lire]');
 		expect(reste).not.toContain('mnemo"');
 		expect(elementsDuTableau(entreesToml('mcp_servers = [{ name = "x" }]\n')!, 'mcp_servers')).toEqual({ elements: [], enLigne: true });
 	});
 
-	it('un bloc ajouté à la fin, après une ligne vide', () => {
+	it('un bloc ajouté à la fin, après une ligne vide, puis retiré : le texte d’avant', () => {
 		expect(avecBlocALaFin('a = 1\n\n\n', '[[b]]\nc = 2\n')).toBe('a = 1\n\n[[b]]\nc = 2\n');
 		expect(avecBlocALaFin('', '[[b]]\n')).toBe('[[b]]\n');
+		const avec = avecBlocALaFin('a = 1\n', '[[b]]\nc = 2\n');
+		expect(sansPlages(avec, elementsDuTableau(entreesToml(avec)!, 'b')!.elements[0]!.plages)).toBe('a = 1\n');
+	});
+
+	it('sous-table écrite après une autre table : une plage à part, la table du milieu jamais touchée', () => {
+		const texte = '[[mcp_servers]]\nname = "mnemo"\ncommand = "n"\n\n[tools.bash]\npermission = "never"\n\n[mcp_servers.env]\nA = "1"\n';
+		const element = elementsDuTableau(entreesToml(texte)!, 'mcp_servers')!.elements[0]!;
+		expect(element.valeurs).toEqual({ name: 'mnemo', command: 'n', env: { A: '1' } });
+		expect(element.plages).toHaveLength(2);
+		expect(sansPlages(texte, element.plages)).toBe('[tools.bash]\npermission = "never"\n');
+		expect(avecPlagesRemplacees(texte, element.plages, '[[mcp_servers]]\nname = "mnemo"\n')).toBe('[[mcp_servers]]\nname = "mnemo"\n\n[tools.bash]\npermission = "never"\n');
+		// sous-table qui suit son élément : une seule plage
+		const contigu = '[[m]]\na = 1\n[m.env]\nB = "2"\n';
+		expect(elementsDuTableau(entreesToml(contigu)!, 'm')!.elements[0]!.plages).toEqual([{ debut: 0, fin: contigu.length }]);
+	});
+
+	it('fichier en CRLF : blocs ajoutés en CRLF, retirés sans laisser de LF', () => {
+		const texte = '[[hooks]]\r\nname = "moi"\r\n';
+		const avec = avecBlocALaFin(texte, '[[hooks]]\nname = "mnemo"\n');
+		expect(avec).toBe('[[hooks]]\r\nname = "moi"\r\n\r\n[[hooks]]\r\nname = "mnemo"\r\n');
+		const mnemo = elementsDuTableau(entreesToml(avec)!, 'hooks')!.elements[1]!;
+		expect(sansPlages(avec, mnemo.plages)).toBe(texte);
+		expect(avecPlagesRemplacees(avec, mnemo.plages, '[[hooks]]\nname = "autre"\n')).toBe('[[hooks]]\r\nname = "moi"\r\n\r\n[[hooks]]\r\nname = "autre"\r\n');
 	});
 });

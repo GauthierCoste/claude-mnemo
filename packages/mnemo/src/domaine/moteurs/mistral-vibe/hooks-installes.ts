@@ -1,5 +1,6 @@
 import { commandeGardee, estCommandeDeHookMnemo, lanceCeNodeEtCeMain } from '../commande-de-hook.ts';
-import { avecBlocALaFin, elementsDuTableau, entreesToml, sansPlages } from '../toml-lecture.ts';
+import { avecBlocALaFin, sansPlages } from '../toml-edition.ts';
+import { elementsDuTableau, entreesToml } from '../toml-lecture.ts';
 import type { ElementDeTableau } from '../toml-lecture.ts';
 import { valeurToml } from '../toml.ts';
 import { OUTILS_MISTRAL_VIBE } from './outils.ts';
@@ -74,7 +75,7 @@ const normalise = (bloc: string): string => bloc.replace(/\r\n/gu, '\n').trimEnd
 export function etatDesHooksMistralVibe(texte: string, elements: readonly ElementDeTableau[], node: string, main: string, plateforme: string): { etat: 'a_jour' | 'perime' | 'absent'; autres: boolean } {
 	if (elements.length === 0) return { etat: 'absent', autres: false };
 	const autres = elements.some((e) => !lanceCeNodeEtCeMain(commandeMnemo(e)!, node, main));
-	const lus = elements.map((e) => normalise(texte.slice(e.debut, e.fin)));
+	const lus = elements.map((e) => normalise(e.plages.map((p) => texte.slice(p.debut, p.fin)).join('\n')));
 	const attendus = blocsAttendus(node, main, plateforme).map(normalise);
 	const aJour = lus.length === attendus.length && attendus.every((a) => lus.filter((l) => l === a).length === 1);
 	return { etat: aJour ? 'a_jour' : 'perime', autres };
@@ -85,6 +86,6 @@ export function etatDesHooksMistralVibe(texte: string, elements: readonly Elemen
  * à la fin ; tout le reste tel quel.
  */
 export function texteAvecHooks(texte: string | null, elements: readonly ElementDeTableau[], blocs: readonly string[], aRetirer: (commande: string) => boolean = () => true): string {
-	const reste = sansPlages(texte ?? '', elements.filter((e) => aRetirer(commandeMnemo(e)!)));
+	const reste = sansPlages(texte ?? '', elements.filter((e) => aRetirer(commandeMnemo(e)!)).flatMap((e) => e.plages));
 	return blocs.length === 0 ? reste : avecBlocALaFin(reste, blocs.join('\n'));
 }
