@@ -71,6 +71,8 @@ export const HOOKS_MISTRAL_VIBE: HooksDuMoteur = hooksGardes({
 	notifications: new Set(['notification']),
 	raisonsIgnorees: new Set(['clear']),
 	arret: arretDe,
+	// approbation demandée par un sous-agent (`task`) : `parent_session_id` est la session (non mesuré)
+	dialogueDuParent: true,
 	sortie: sortieDe,
 	echeancesMs: ECHEANCES_MS,
 	finIgnoreeSiVivante: true,

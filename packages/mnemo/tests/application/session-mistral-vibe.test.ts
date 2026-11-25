@@ -151,6 +151,11 @@ describe('hooks de Mistral Vibe', () => {
 		expect(HOOKS_MISTRAL_VIBE.traduire(appel('arret', { notification_type: 'question_asked' }, ['--notification']))?.entree.arret).toBe('notification');
 		expect(HOOKS_MISTRAL_VIBE.traduire(appel('arret', { notification_type: 'turn_failed' }, ['--notification']))?.entree.arret).toBe('stop');
 		expect(HOOKS_MISTRAL_VIBE.traduire(appel('arret', { notification_type: 'turn_completed' }, ['--notification']))).toBeNull();
+		// approbation demandée par un sous-agent : son parent est la session, le dialogue compte pour elle (non mesuré)
+		const duSousAgent = HOOKS_MISTRAL_VIBE.traduire(appel('arret', { session_id: 'sous-agent-1', parent_session_id: FIL, notification_type: 'approval_requested' }, ['--notification']));
+		expect(duSousAgent?.entree).toMatchObject({ arret: 'notification', fil: FIL });
+		// un autre arrêt d'un sous-agent garde son propre fil (étranger à la session)
+		expect(HOOKS_MISTRAL_VIBE.traduire(appel('arret', { session_id: 'sous-agent-1', parent_session_id: FIL }))?.entree.fil).toBe('sous-agent-1');
 		expect(HOOKS_MISTRAL_VIBE.traduire(appel('fin', { reason: 'clear' }))).toBeNull();
 		expect(HOOKS_MISTRAL_VIBE.traduire(appel('fin', { reason: 'exit' }))?.entree.evenement).toBe('fin');
 	});

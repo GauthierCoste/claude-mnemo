@@ -16,6 +16,8 @@ const OPTIONS: Partial<Record<EvenementHook, readonly string[]>> = { arret: ['--
  *   du moteur qui valent `arret --notification` (un dialogue est ouvert) ;
  * - `raisonsIgnorees` : raisons d'une fin de conversation qui ne termine pas la session (`/clear`…) ;
  * - `arret` : ce qu'est un arrêt d'après son entrée (null : ignoré) ; par défaut, `notification` sur `--notification` ;
+ * - `dialogueDuParent` : un dialogue ouvert (`arret` `notification`) porte `parent_session_id`, l'identifiant de la session
+ *   quand il vient d'un agent qu'elle a lancé (son approbation s'affiche dans le terminal de la session) : il compte pour elle ;
  * - `sortie`, `echeancesMs`, `finIgnoreeSiVivante` : ceux de `HooksDuMoteur`.
  */
 export type ReglagesHooksGardes = {
@@ -24,6 +26,7 @@ export type ReglagesHooksGardes = {
 	notifications: ReadonlySet<string>;
 	raisonsIgnorees: ReadonlySet<string>;
 	arret?(champs: Record<string, unknown>, options: ReadonlySet<string>): 'notification' | 'stop' | null;
+	dialogueDuParent?: boolean;
 	sortie(evenement: EvenementHook, reponse: ReponseHook): string;
 	echeancesMs: Record<EvenementHook, number>;
 	finIgnoreeSiVivante: boolean;
@@ -65,6 +68,7 @@ export function hooksGardes(r: ReglagesHooksGardes): HooksDuMoteur {
 		// le moteur lance le hook dans le dossier de la session : la meilleure position connue quand l'entrée n'en donne pas
 		const entree: EntreeHook = { evenement, session, horodatageMs: maintenantMs, cwd: reel(typeof champs.cwd === 'string' && champs.cwd !== '' ? champs.cwd : cwdProcessus) };
 		if (estFil(champs.session_id)) entree.fil = champs.session_id;
+		if (r.dialogueDuParent === true && arret === 'notification' && estFil(champs.parent_session_id)) entree.fil = champs.parent_session_id;
 		if (typeof champs.prompt === 'string') entree.prompt = champs.prompt;
 		if (evenement === 'debut' && estSourceDeDebut(champs.source)) entree.source = champs.source;
 		// une entrée d'outil en texte (patch brut de Codex) est gardée sous `input`, où les outils du moteur la lisent
