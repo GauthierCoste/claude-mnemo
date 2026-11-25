@@ -130,7 +130,7 @@ describe('injection automatique et pistes', () => {
 	it('l’explication des seuils dit que 100 % veut dire jamais et qu’ils n’agissent qu’avec une note calibrée', () => {
 		expect(champ('contexte.seuilInjection').explication).toContain('100 % : jamais');
 		expect(champ('contexte.seuilInjection').explication).toContain('note calibrée');
-		expect(champ('contexte.seuilPiste').explication).toContain('note calibrée');
+		expect(champ('contexte.seuilPiste').explication).toContain('note est apprise');
 		for (const c of CHAMPS_REGLAGES.filter((x) => x.groupe === 'contexte')) expect(`${c.libelle} ${c.explication}`).not.toMatch(/servi|nourri|·/u);
 	});
 
