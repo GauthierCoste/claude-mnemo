@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deverrouiller, lieuDeclare, perimetreDe, TYPES_NON_PROPOSABLES, type Arete, type FicheDuGraphe } from '../../src/domaine/perimetre.ts';
+import { deverrouiller, lieuDeclare, neutres, perimetreDe, TYPES_NON_PROPOSABLES, type Arete, type FicheDuGraphe } from '../../src/domaine/perimetre.ts';
 
 const SVE = 'organisations/clients/SVE/SVE.md';
 const OUTIL = 'organisations/clients/SVE/Outil Parcs.md';
@@ -85,6 +85,23 @@ describe('perimetreDe', () => {
 		const { ailleurs } = perimetreDe(SOUS, fiches, aretes);
 		expect(ailleurs.has(SVE)).toBe(false);
 		expect(ailleurs.has(OUTIL)).toBe(false);
+	});
+});
+
+describe('neutres', () => {
+	it('les fiches sans lieu déclaré, hors du périmètre et d\'ailleurs (le type est filtré par l\'appelant)', () => {
+		const neutresDeSVE = neutres(fiches, perimetreDe(SVE, fiches, aretes), declarants);
+		expect([...neutresDeSVE].sort()).toEqual(['organisations/clients/clients.md', 'sources/x/doc.md']);
+	});
+	it('une fiche neutre du périmètre y reste : elle n\'est pas comptée deux fois', () => {
+		const neutresDeSVE = neutres(fiches, perimetreDe(SVE, fiches, aretes), declarants);
+		expect(neutresDeSVE.has(YSALINE)).toBe(false);
+		expect(neutresDeSVE.has(GIT)).toBe(false);
+	});
+	it('à la racine : toutes les fiches sans lieu, aucune fiche rangée sous un lieu', () => {
+		const aLaRacine = neutres(fiches, perimetreDe(null, fiches, aretes), declarants);
+		expect([...aLaRacine].sort()).toEqual(['organisations/clients/clients.md', YSALINE, GIT, 'sources/x/doc.md'].sort());
+		for (const c of [SVE, OUTIL, SOUS, CORVEL, ERP]) expect(aLaRacine.has(c)).toBe(false);
 	});
 });
 

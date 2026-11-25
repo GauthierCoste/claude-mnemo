@@ -1,4 +1,5 @@
 import type { ElementIndexe } from './elements.ts';
+import { bm25Relatif } from './signaux-de-note.ts';
 
 export type Candidat = { element: ElementIndexe; rangs: number[] };
 
@@ -142,11 +143,5 @@ function bm25Relatifs(candidats: Candidat[], complementaires: ReadonlySet<number
 		if (i < 0 || bm25 === undefined || !(bm25 < 0)) return;
 		meilleurs.set(i, Math.min(meilleurs.get(i) ?? 0, bm25));
 	});
-	return candidats.map(({ element }, k) => {
-		const meilleur = meilleurs.get(listeDe[k]!);
-		const bm25 = element.bm25;
-		if (meilleur === undefined || bm25 === undefined || !Number.isFinite(bm25)) return 1;
-		// un bm25 nul (ou positif) quand la liste en a de négatifs : aucun mot ne compte, r = 0
-		return bm25 < 0 ? Math.min(1, bm25 / meilleur) : 0;
-	});
+	return candidats.map(({ element }, k) => bm25Relatif(element.bm25, meilleurs.get(listeDe[k]!) ?? null));
 }

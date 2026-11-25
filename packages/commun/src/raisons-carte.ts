@@ -1,11 +1,19 @@
 /**
  * Pourquoi une carte est proposée : fiche du périmètre de la position, fiche nommée dans le message, fiche proche de la question,
- * fiche liée à une fiche injectée à la main.
+ * fiche liée à une fiche injectée à la main, fiche proche du message (neutre, ou d'ailleurs dont le lieu est nommé), fiche
+ * souvent injectée dans d'autres sessions (l'historique des gestes l'a fait monter).
  */
-export type RaisonCarte = 'perimetre' | 'nommee' | 'question' | 'liee';
+export type RaisonCarte = 'perimetre' | 'nommee' | 'question' | 'liee' | 'proche' | 'historique';
 
 /** Libellé de la raison d'une carte proposée. */
-export const RAISONS_CARTE: Record<RaisonCarte, string> = { perimetre: 'du périmètre', nommee: 'nommée', question: 'question', liee: 'liée' };
+export const RAISONS_CARTE: Record<RaisonCarte, string> = {
+	perimetre: 'du périmètre',
+	nommee: 'nommée',
+	question: 'question',
+	liee: 'liée',
+	proche: 'proche du message',
+	historique: 'souvent injectée',
+};
 
 /**
  * Libellé affiché d'une raison. Toute raison qui porte un `depuis` (la raison d'un signal : la fiche d'où vient le poids, la fiche

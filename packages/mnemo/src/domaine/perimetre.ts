@@ -63,6 +63,18 @@ export function perimetreDe(position: string | null, fiches: readonly FicheDuGra
 	return { dans, ailleurs };
 }
 
+/**
+ * Fiches neutres : sans lieu déclaré (ni elles ni un dossier au-dessus d'elles), ni du périmètre (`dans`) ni d'ailleurs. Elles
+ * conviennent à toute position ; à la racine (périmètre vide), ce sont les seules candidates (spec classement vivant § 3.3).
+ */
+export function neutres(fiches: readonly FicheDuGraphe[], perimetre: Perimetre, declarants: ReadonlySet<string>): Set<string> {
+	const resultat = new Set<string>();
+	for (const { chemin } of fiches) {
+		if (!perimetre.dans.has(chemin) && !perimetre.ailleurs.has(chemin) && lieuDeclare(chemin, declarants) === null) resultat.add(chemin);
+	}
+	return resultat;
+}
+
 /** Fiches d'ailleurs rendues proposables parce que leur lieu est nommé : le lieu lui-même, les fiches rangées sous son dossier (sous-lieux compris) et celles dont il est le lieu déclaré. */
 export function deverrouiller(lieuxNommes: readonly string[], fiches: readonly FicheDuGraphe[], declarants: ReadonlySet<string>): Set<string> {
 	const lieux = new Set(lieuxNommes);
