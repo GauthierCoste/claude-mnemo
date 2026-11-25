@@ -3,15 +3,19 @@
  * service : aucune fiche ne couvre le dossier de la session), carte Dossier / Moteur / Démarrée / Durée / Branche / Contexte
  * (fenêtre du moteur), « Injecté dans la session » (fiches injectées ◆, classement vivant du dernier message, pistes et fiches
  * lues ◈ ; clic → Mémoire › Fichiers), puis les actions permises par l'état ; une session que son moteur ne peut pas reprendre
- * (Codex pas encore commencé) a pause, reprise et bilan grisés, avec la raison.
+ * (Codex pas encore commencé) a pause, reprise et bilan grisés, avec la raison. Quotas : dits absents pour un moteur qui n'en
+ * communique pas (ceux des autres sont dans la barre de titre). Une session qui attend son premier message (GitHub Copilot
+ * CLI) le dit.
  */
+import { estIdMoteur, MOTEUR_PAR_DEFAUT } from '@mnemo/commun';
 import type { EntreeServieVue, InjectionVue, LueVue, SessionVue } from '@mnemo/contrat';
 import { useState, type ReactNode } from 'react';
 import { useFenetre, useGraphe } from '../../client/hooks.ts';
 import { couleurDeBranche, rangsDesFiches } from '../../graphe/branches.ts';
-import { moteurEtModele } from '../../moteurs/noms.ts';
+import { moteurEtModele, nomDuMoteur } from '../../moteurs/noms.ts';
 import { bilanPermis, dureeSession } from '../../sessions/etats.ts';
 import { Bouton } from '../commun/Bouton.tsx';
+import { abonnementDuMoteur } from '../Quotas.tsx';
 import { useActionSession, type ActionSession } from './actions-session.ts';
 import { ClassementEnDirect } from './ClassementEnDirect.tsx';
 import { EnteteSession } from './EnteteSession.tsx';
@@ -68,9 +72,17 @@ export function PanneauContexte(p: {
 	const idRaison = `sans-reprise-${x.id}`;
 	// indisponibles avec leur raison (sous les boutons) : ils gardent le focus et l'annoncent au clavier
 	const bloque = { indisponible: sansReprise !== null && { raison: idRaison } };
+	// un moteur connu sans quotas lisibles : dit en clair (un moteur inconnu de l'interface : rien n'est affirmé)
+	const moteur = x.moteur ?? MOTEUR_PAR_DEFAUT;
+	const sansQuotas = estIdMoteur(moteur) && abonnementDuMoteur(moteur) === null;
 	return (
 		<aside className={s.panneau} aria-label="Contexte" style={p.largeur === undefined ? undefined : { width: p.largeur }}>
 			<EnteteSession session={x} />
+			{x.attentePremierMessage === true && (
+				<p role="note" className={s.avis}>
+					En attente de ton premier message dans le terminal ; réponds d’abord à la question de {nomDuMoteur(x.moteur)} s’il en pose une. Bilan et consigne restent possibles.
+				</p>
+			)}
 			{x.dossierNonRattache !== null && (
 				<p role="note" className={s.avis}>
 					{x.dossierNonRattache}
@@ -87,6 +99,12 @@ export function PanneauContexte(p: {
 				<span>{dureeSession(x, p.maintenant)}</span>
 				<span>Branche</span>
 				<span>{x.branche ?? '—'}</span>
+				{sansQuotas && (
+					<>
+						<span>Quotas</span>
+						<span>non communiqués par {nomDuMoteur(moteur)}</span>
+					</>
+				)}
 				{fenetre !== null && (
 					<>
 						<span>Contexte</span>

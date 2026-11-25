@@ -52,6 +52,12 @@ export type SessionVue = {
 	 * rédigé par le service ; absent : elle le peut (session non terminée seulement).
 	 */
 	sansReprise?: string;
+	/**
+	 * La session tourne ici sans avoir commencé chez son moteur, qui n'envoie rien avant le premier message (GitHub Copilot CLI,
+	 * qui demande aussi à chaque lancement la confiance dans le dossier) : elle attend le premier message de l'utilisateur, tapé
+	 * dans son terminal. Bilan et consigne restent possibles : le service la relance avec eux. Absent : non.
+	 */
+	attentePremierMessage?: true;
 };
 
 /** Une fiche écartée dans `sessions` sessions distinctes, sur `jours` jours, sans geste positif depuis. */

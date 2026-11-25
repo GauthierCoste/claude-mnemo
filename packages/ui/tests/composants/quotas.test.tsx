@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
+import { IDS_MOTEURS } from '@mnemo/commun';
 import type { ReponseQuotas } from '@mnemo/contrat';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FournisseurClient } from '../../src/client/contexte.tsx';
-import { abonnementsEnCours, Quotas, quotasEnCours, remiseLisible } from '../../src/composants/Quotas.tsx';
+import { abonnementDuMoteur, abonnementsEnCours, Quotas, quotasEnCours, remiseLisible } from '../../src/composants/Quotas.tsx';
 import { creerFauxClient } from '../aides/faux-client.tsx';
 
 afterEach(cleanup);
@@ -35,6 +36,12 @@ describe('abonnementsEnCours', () => {
 		]);
 		expect(abonnementsEnCours({ 'claude-code': { semaine: { pourcentage: 1, remiseMs: midi - 1 } }, codex: chatgpt }, midi).map((a) => a.libelle)).toEqual(['ChatGPT']);
 		expect(abonnementsEnCours({}, midi)).toEqual([]);
+	});
+});
+
+describe('abonnementDuMoteur', () => {
+	it('Claude et ChatGPT ; Mistral Vibe et GitHub Copilot CLI n’en communiquent pas de lisibles', () => {
+		expect(IDS_MOTEURS.map((m) => abonnementDuMoteur(m))).toEqual(['Claude', 'ChatGPT', null, null]);
 	});
 });
 

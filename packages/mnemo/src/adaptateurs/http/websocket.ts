@@ -169,7 +169,7 @@ export function creerHub(o: {
 	};
 
 	const signaler = (s: Session): void => {
-		const vue = vueSession(s, o.pilote.enCours(s.id), o.pilote.motifSansReprise(s), o.suggestions?.(s.id), o.coupures?.());
+		const vue = vueSession(s, o.pilote.enCours(s.id), o.pilote.motifSansReprise(s), o.suggestions?.(s.id), o.coupures?.(), o.pilote.attendPremierMessage(s));
 		const texte = JSON.stringify(vue);
 		const avant = diffusees.get(s.id);
 		if (avant === texte) return;
@@ -228,7 +228,7 @@ export function creerHub(o: {
 				}
 			}
 			if (c.ws.readyState !== WebSocket.OPEN) return;
-			c.ws.send(JSON.stringify({ type: 'sessions', sessions: sessions.map((s) => vueSession(s, o.pilote.enCours(s.id), o.pilote.motifSansReprise(s), o.suggestions?.(s.id), o.coupures?.())) } satisfies MessageServeur));
+			c.ws.send(JSON.stringify({ type: 'sessions', sessions: sessions.map((s) => vueSession(s, o.pilote.enCours(s.id), o.pilote.motifSansReprise(s), o.suggestions?.(s.id), o.coupures?.(), o.pilote.attendPremierMessage(s))) } satisfies MessageServeur));
 			if (modeles !== null) c.ws.send(JSON.stringify({ type: 'modeles', modeles } satisfies MessageServeur));
 			c.accueilli = true;
 			const enAttente = c.enAttente.splice(0);
@@ -272,7 +272,7 @@ export function creerHub(o: {
 		if (derniereModification === null) {
 			// référence : les vues actuelles, sans rien diffuser (le pilote a pu en signaler entre-temps : les siennes restent)
 			for (const s of await o.etat.lister({ archivees: true })) {
-				if (!diffusees.has(s.id)) diffusees.set(s.id, JSON.stringify(vueSession(s, o.pilote.enCours(s.id), o.pilote.motifSansReprise(s), undefined, o.coupures?.())));
+				if (!diffusees.has(s.id)) diffusees.set(s.id, JSON.stringify(vueSession(s, o.pilote.enCours(s.id), o.pilote.motifSansReprise(s), undefined, o.coupures?.(), o.pilote.attendPremierMessage(s))));
 				if (s.etat !== 'terminee' && !serviesConnues.has(s.id)) await sonderServi(s, true);
 			}
 		} else if (modification !== derniereModification) {

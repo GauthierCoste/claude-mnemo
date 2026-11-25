@@ -1,8 +1,10 @@
 /**
- * Mode démo : l'écran d'un faux `claude` ou d'un faux `codex` en séquences ANSI (couleurs des 16 teintes du thème, cadre
- * d'accueil, invite encadrée à la largeur du terminal, indicateur de réflexion), chacun avec ses marques : celles de Claude
- * Code (✻, ⎿, « ? for shortcuts ») jamais sur une session Codex. Chargé seulement avec `demo.ts`, jamais dans la construction.
+ * Mode démo : l'écran d'un faux `claude`, `codex`, `vibe` ou `copilot` en séquences ANSI (couleurs des 16 teintes du thème,
+ * cadre d'accueil, invite encadrée à la largeur du terminal, indicateur de réflexion), chacun avec ses marques : celles de
+ * Claude Code (✻, ⎿, « ? for shortcuts ») jamais sur la session d'un autre moteur. Chargé seulement avec `demo.ts`, jamais
+ * dans la construction.
  */
+import type { IdMoteur } from '@mnemo/commun';
 import { RACINE_DEMO, type SessionDemo } from './demo-donnees.ts';
 
 const CSI = '\x1b[';
@@ -35,12 +37,14 @@ function cadre(lignes: string[], largeur: number, couleur: string): string {
 
 /** Marques du terminal de chaque moteur : puce des réponses et outils, renvoi des résultats, réflexion, aide sous l'invite. */
 type Marques = { puce: string; resultat: string; reflexion: string; aide: string; invite: string };
-const MARQUES: Record<'claude-code' | 'codex', Marques> = {
+const MARQUES: Record<IdMoteur, Marques> = {
 	'claude-code': { puce: '●', resultat: '⎿', reflexion: `${SGR.jaune}✻${SGR.fin} `, aide: `  ${SGR.gris}? for shortcuts${SGR.fin}`, invite: '>' },
 	codex: { puce: '•', resultat: '└', reflexion: `${SGR.gris}•${SGR.fin} `, aide: '', invite: '›' },
+	'mistral-vibe': { puce: '•', resultat: '└', reflexion: `${SGR.jaune}⠋${SGR.fin} `, aide: `  ${SGR.gris}accept edits${SGR.fin}`, invite: '>' },
+	'copilot-cli': { puce: '●', resultat: '└', reflexion: `${SGR.cyan}◉${SGR.fin} `, aide: `  ${SGR.gris}/ commands · ? help${SGR.fin}`, invite: '❯' },
 };
 /** Moteur d'une session de la démo (absent : Claude Code). */
-export type MoteurDemo = keyof typeof MARQUES;
+export type MoteurDemo = IdMoteur;
 const marques = (moteur: MoteurDemo = 'claude-code'): Marques => MARQUES[moteur];
 
 function accueil(dossier: string, s?: SessionDemo): string {
@@ -49,6 +53,13 @@ function accueil(dossier: string, s?: SessionDemo): string {
 		// le modèle n'est écrit que s'il est choisi : sinon, celui par défaut de Codex, que la démo ne prétend pas connaître
 		const modele = s.modele === undefined || s.modele === '' ? [] : [`   ${SGR.gris}model:     ${s.modele}${SGR.fin}`];
 		return cadre([` ${SGR.gras}>_ OpenAI Codex${SGR.fin} ${SGR.gris}(v0.171.0-alpha.13)${SGR.fin}`, '', ...modele, `   ${SGR.gris}directory: ${cwd}${SGR.fin}`], LARGEUR_ACCUEIL, SGR.gris);
+	}
+	if (s?.moteur === 'mistral-vibe') {
+		const modele = s.modele === undefined || s.modele === '' ? [] : [`   ${SGR.gris}${s.modele}${SGR.fin}`];
+		return cadre([` ${SGR.gras}Mistral Vibe${SGR.fin} ${SGR.gris}v3.1.5${SGR.fin}`, ...modele, `   ${SGR.gris}Type /help for more information${SGR.fin}`, `   ${SGR.gris}${cwd}${SGR.fin}`], LARGEUR_ACCUEIL, SGR.jaune);
+	}
+	if (s?.moteur === 'copilot-cli') {
+		return cadre([` ${SGR.gras}GitHub Copilot CLI${SGR.fin} ${SGR.gris}1.0.116${SGR.fin}`, '', `   ${SGR.gris}${cwd}${SGR.fin}`], LARGEUR_ACCUEIL, SGR.magenta);
 	}
 	return cadre(
 		[
@@ -80,7 +91,7 @@ export function effacerInvite(avecIndicateur: boolean): string {
 /** Indicateur de réflexion du moteur. */
 export function indicateur(texte: string, moteur?: MoteurDemo): string {
 	const m = marques(moteur);
-	return `${m.reflexion}${moteur === 'codex' ? SGR.gras : SGR.jaune}${texte}…${SGR.fin} ${SGR.gris}(esc to interrupt)${SGR.fin}`;
+	return `${m.reflexion}${moteur === undefined || moteur === 'claude-code' ? SGR.jaune : SGR.gras}${texte}…${SGR.fin} ${SGR.gris}(esc to interrupt)${SGR.fin}`;
 }
 
 /** Remplace l'indicateur posé au-dessus de l'invite (trois lignes plus haut) sans déplacer le curseur de saisie. */
@@ -111,11 +122,13 @@ function ligne(genre: SessionDemo['ecran'][number][0], texte: string, moteur?: M
 		case 'w':
 			// tel que le service l'écrit (`lignesDAvertissement`)
 			return `[Mnemo] ${texte}`;
+		case 'x':
+			return texte;
 		case 't': {
 			const o = /^● ([\w]+)\((.*)\)$/.exec(texte);
 			if (o) return `${SGR.vert}${m.puce}${SGR.fin} ${SGR.gras}${o[1]}${SGR.fin}(${o[2]})`;
-			// Codex : « Ran … », « Edited … », « Called … », après sa puce
-			return moteur === 'codex' ? `${SGR.vert}${m.puce}${SGR.fin} ${SGR.gras}${texte}${SGR.fin}` : `${SGR.vert}${texte}${SGR.fin}`;
+			// autres moteurs : « Ran … », « Edited … », « Called … », après leur puce
+			return moteur !== undefined && moteur !== 'claude-code' ? `${SGR.vert}${m.puce}${SGR.fin} ${SGR.gras}${texte}${SGR.fin}` : `${SGR.vert}${texte}${SGR.fin}`;
 		}
 		case 'r':
 			return `${SGR.gris}  ${m.resultat}  ${texte}${SGR.fin}`;
@@ -134,11 +147,13 @@ export function ecranInitial(s: SessionDemo | undefined, colonnes: number, trava
 	let corps = `${accueil(s?.dossier ?? '', s)}${NL}${NL}`;
 	if (s) {
 		s.ecran.forEach(([genre, texte], i) => {
-			corps += (i === 0 ? '' : genre === 'r' ? NL : `${NL}${NL}`) + ligne(genre, texte, s.moteur);
+			corps += (i === 0 ? '' : genre === 'r' || genre === 'x' ? NL : `${NL}${NL}`) + ligne(genre, texte, s.moteur);
 		});
 		corps += `${NL}${NL}`;
 	} else corps += `${SGR.gris}  Session lancée depuis l'interface.${SGR.fin}${NL}${NL}`;
 	if (travaille) corps += `${indicateur('Travaille', s?.moteur)}${NL}${NL}`;
+	// question de l'écran ouverte (confiance du dossier) : pas encore d'invite
+	if (s?.attentePremierMessage === true) return corps;
 	return corps + invite(colonnes, s?.moteur);
 }
 

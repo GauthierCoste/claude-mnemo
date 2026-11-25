@@ -12,12 +12,15 @@ import { NOMS_MOTEURS } from '../../../moteurs/noms.ts';
 import { Bouton } from '../../commun/Bouton.tsx';
 import s from './Profils.module.css';
 
-/** Ce que change le moteur pour la session, dit sur la ligne de chaque choix. */
+/**
+ * Ce que change le moteur pour la session, dit sur la ligne de chaque choix : ce qu'il apporte et ce qui lui manque (quotas de
+ * l'abonnement lus ou non, premier message attendu).
+ */
 const EFFETS: Record<IdMoteur, string> = {
-	'claude-code': 'skills et hooks par un plugin de session, plugins Claude Code au choix',
-	codex: 'skills listées dans la consigne et lues par l’outil lire ; pas de plugins',
-	'mistral-vibe': 'skills listées dans la consigne et lues par l’outil lire ; pas de plugins',
-	'copilot-cli': 'skills listées dans la consigne et lues par l’outil lire ; pas de plugins',
+	'claude-code': 'skills et hooks par un plugin de session, plugins Claude Code au choix, quotas de l’abonnement lus',
+	codex: 'skills listées dans la consigne et lues par l’outil lire, hooks à approuver une fois dans Codex, quotas de l’abonnement lus ; pas de plugins',
+	'mistral-vibe': 'skills listées dans la consigne et lues par l’outil lire ; ni plugins, ni quotas de l’abonnement',
+	'copilot-cli': 'attend ton premier message dans le terminal à chaque lancement ; skills listées dans la consigne et lues par l’outil lire ; ni plugins, ni quotas de l’abonnement',
 };
 
 /** Ligne d'état d'un moteur sur ce poste : sa version, ou pourquoi ses sessions ne se lanceront pas ici. */
@@ -56,9 +59,17 @@ export function ChoixMoteur(p: { profil: string; moteur: IdMoteur; modele: strin
 									{NOMS_MOTEURS[m]} {etat.manque && <span className={s.inactif}>indisponible</span>}
 								</span>
 							</label>
-							<span id={`${id}-${m}`} className={s.detailChoix}>
-								{reserve ? 'Réservé : l’archiviste reste sur Claude Code.' : `${etat.texte} — ${EFFETS[m]}`}
-							</span>
+							{reserve ? (
+								<span id={`${id}-${m}`} className={s.detailChoix}>
+									Réservé : l’archiviste reste sur Claude Code.
+								</span>
+							) : (
+								// l'état sur ce poste, puis l'effet : deux lignes, lues ensemble comme description
+								<span id={`${id}-${m}`}>
+									<span className={s.detailChoix}>{etat.texte}</span>
+									<span className={s.detailChoix}>{EFFETS[m]}</span>
+								</span>
+							)}
 						</div>
 					);
 				})}

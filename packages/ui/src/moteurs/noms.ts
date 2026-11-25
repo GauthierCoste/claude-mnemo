@@ -7,9 +7,9 @@ export { NOMS_MOTEURS };
 /** Nom d'un moteur ; absent : Claude Code (session ou profil d'avant les moteurs) ; inconnu de l'interface : son identifiant. */
 export const nomDuMoteur = (id: string | undefined): string => (id === undefined ? NOMS_MOTEURS[MOTEUR_PAR_DEFAUT] : estIdMoteur(id) ? NOMS_MOTEURS[id] : id);
 
-/** « Codex · gpt-6.2-sol », « Claude Code · modèle par défaut ». */
+/** « Codex (gpt-6.2-sol) », « Claude Code (modèle par défaut) ». */
 export function moteurEtModele(s: Pick<SessionVue, 'moteur' | 'modele'>): string {
-	return `${nomDuMoteur(s.moteur)} · ${s.modele === undefined || s.modele === '' ? 'modèle par défaut' : s.modele}`;
+	return `${nomDuMoteur(s.moteur)} (${s.modele === undefined || s.modele === '' ? 'modèle par défaut' : s.modele})`;
 }
 
 /**

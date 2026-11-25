@@ -47,6 +47,11 @@ export type Pilote = {
 	 */
 	motifSansReprise(s: Session): string | null;
 	/**
+	 * La session tourne ici, chez un moteur qui n'envoie aucun hook avant le premier message (`debutAuPremierMessage`), et aucun
+	 * hook de ce lancement n'est arrivé : elle attend le premier message de l'utilisateur dans son terminal.
+	 */
+	attendPremierMessage(s: Session): boolean;
+	/**
 	 * Termine une session. `bilan` : l'agent rédige l'épisode (consigne tapée dans le terminal ; une session qui ne tourne pas
 	 * est d'abord reprise ; chez un moteur `debutAuPremierMessage`, la consigne part avec la reprise, et une session qui tourne
 	 * sans avoir commencé est d'abord arrêtée par signaux : `voieDeLaLigne`), puis la session est arrêtée à son premier `arret` ;
@@ -988,6 +993,11 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		},
 
 		motifSansReprise,
+
+		attendPremierMessage(s) {
+			const v = vivants.get(s.id);
+			return v !== undefined && v.moteur.debutAuPremierMessage === true && s.etat !== 'terminee' && !commencee(v.moteur, s, v.lanceMs);
+		},
 
 		async taper(id, ligne) {
 			if (arrete) return;

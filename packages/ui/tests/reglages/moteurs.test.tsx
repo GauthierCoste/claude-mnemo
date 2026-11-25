@@ -47,8 +47,41 @@ describe('Réglages › Profils : moteur et modèle', () => {
 		const codex = within(moteur(editeur)).getByRole('radio', { name: 'Codex' });
 		// la description se complète quand les moteurs sont chargés (version) : attendue, sans course
 		const description = () => document.getElementById(codex.getAttribute('aria-describedby')!)!;
-		await waitFor(() => expect(description().textContent).toMatch(/^version 0\.171\.0-alpha\.13 — skills listées/u));
+		await waitFor(() => expect(description().firstElementChild?.textContent).toBe('version 0.171.0-alpha.13'));
+		expect(description().lastElementChild?.textContent).toMatch(/^skills listées dans la consigne/u);
+		expect(description().textContent).not.toMatch(/[—·]/u);
 		expect(description().closest('label')).toBeNull();
+	});
+
+	it('Mistral Vibe et GitHub Copilot CLI : leur version, leurs effets (ce qui leur manque compris), leurs modèles proposés ; un profil Vibe les montre', async () => {
+		const editeur = await choisirProfil('veille-technique');
+		const groupe = moteur(editeur);
+		expect((within(groupe).getByRole('radio', { name: 'Mistral Vibe' }) as HTMLInputElement).checked).toBe(true);
+		const description = (nom: string) => document.getElementById(within(groupe).getByRole('radio', { name: nom }).getAttribute('aria-describedby')!)!;
+		await waitFor(() => expect(description('Mistral Vibe').firstElementChild?.textContent).toBe('version 3.1.5'));
+		expect(description('Mistral Vibe').lastElementChild?.textContent).toMatch(/ni plugins, ni quotas de l’abonnement$/u);
+		expect(description('GitHub Copilot CLI').firstElementChild?.textContent).toBe('version 1.0.116');
+		expect(description('GitHub Copilot CLI').lastElementChild?.textContent).toMatch(/^attend ton premier message dans le terminal à chaque lancement/u);
+		expect(modele(editeur).value).toBe('mistral-medium-3.5');
+		const proposes = await within(editeur).findByRole('group', { name: 'Modèles proposés par Mistral Vibe' });
+		expect(within(proposes).getAllByRole('button').map((b) => b.textContent)).toEqual(['mistral-large-4-0', 'mistral-medium-3.5']);
+		expect(within(editeur).queryByText('Plugins Claude Code')).toBeNull();
+		expect(await within(editeur).findByText('Skills de Mistral Vibe')).toBeTruthy();
+		// passer à Copilot : modèle par défaut, ses modèles proposés, l'aperçu suit une fois enregistré
+		await act(async () => within(groupe).getByRole('radio', { name: 'GitHub Copilot CLI' }).click());
+		expect(modele(editeur).value).toBe('');
+		expect(modele(editeur).placeholder).toBe('par défaut de GitHub Copilot CLI');
+		const deCopilot = await within(editeur).findByRole('group', { name: 'Modèles proposés par GitHub Copilot CLI' });
+		expect(within(deCopilot).getAllByRole('button').map((b) => b.textContent)).toEqual(['claude-sonnet-5.5', 'gpt-6.2-sol', 'gemini-4-neon']);
+	});
+
+	it('archiviste : Mistral Vibe et GitHub Copilot CLI réservés, comme Codex', async () => {
+		const archiviste = await choisirProfil('archiviste');
+		for (const nom of ['Codex', 'Mistral Vibe', 'GitHub Copilot CLI']) {
+			const radio = within(moteur(archiviste)).getByRole('radio', { name: nom }) as HTMLInputElement;
+			expect(radio.disabled).toBe(true);
+			expect(document.getElementById(radio.getAttribute('aria-describedby')!)?.textContent).toBe('Réservé : l’archiviste reste sur Claude Code.');
+		}
 	});
 
 	it('aller-retour de moteur : le modèle saisi pour chacun est gardé pendant l’édition', async () => {
@@ -124,6 +157,25 @@ describe('Réglages › Système › Moteurs', () => {
 		// groupe en lecture seule : pas de pied Enregistrer / Annuler
 		expect(within(page).queryByRole('button', { name: 'Enregistrer' })).toBeNull();
 		expect(within(page).queryByRole('button', { name: 'Annuler les modifications' })).toBeNull();
+	});
+
+	it('Mistral Vibe et GitHub Copilot CLI : un groupe chacun ; la commande du service qui déclare Mnemo chez Copilot, à copier', async () => {
+		await ouvrirReglages();
+		await act(async () => screen.getByRole('tab', { name: 'Système' }).click());
+		const page = await screen.findByRole('form', { name: 'Réglages système' });
+		await act(async () => within(within(page).getByRole('navigation', { name: 'Groupes de réglages' })).getByRole('button', { name: /^Moteurs/u }).click());
+		const vibe = await within(page).findByRole('group', { name: 'Mistral Vibe' });
+		expect(within(vibe).getByText('sessions possibles')).toBeTruthy();
+		expect(within(vibe).getAllByRole('img', { name: 'satisfait' })).toHaveLength(4);
+		const copilot = within(page).getByRole('group', { name: 'GitHub Copilot CLI' });
+		const point = within(copilot).getByText('Serveur MCP mnemo').closest('li')!;
+		expect(point.textContent).toContain('non déclaré');
+		expect(point.textContent).toContain('Les sessions de GitHub Copilot CLI lancées hors de Mnemo ne lisent pas la mémoire.');
+		expect(within(point).getByText('mnemo init --copilot').tagName).toBe('CODE');
+		expect(within(point).getByRole('button', { name: 'Copier « mnemo init --copilot »' })).toBeTruthy();
+		// aucun point d'approbation chez eux : rien à approuver dans le moteur
+		expect(within(copilot).queryByText('Approbation des hooks')).toBeNull();
+		expect(within(vibe).queryByText('Approbation des hooks')).toBeNull();
 	});
 
 	it('« Relire » : désactivé, section occupée et « Vérification… » pendant chaque lecture ; redémarrage proposé en deux commandes', async () => {

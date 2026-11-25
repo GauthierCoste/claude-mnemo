@@ -44,4 +44,10 @@ describe('vueSession', () => {
 		expect(vueSession(archiviste({ moteur: 'codex', modele: 'gpt-a' }), false, 'fil inconnu')).toMatchObject({ moteur: 'codex', modele: 'gpt-a', sansReprise: 'fil inconnu' });
 		expect(vueSession(archiviste({ etat: 'terminee', moteur: 'codex' }), false, 'fil inconnu')).not.toHaveProperty('sansReprise');
 	});
+
+	it('attentePremierMessage : seulement quand le pilote le dit, jamais pour une session terminée', () => {
+		expect(vueSession(archiviste({}), true)).not.toHaveProperty('attentePremierMessage');
+		expect(vueSession(archiviste({ moteur: 'copilot-cli' }), true, null, [], [], true).attentePremierMessage).toBe(true);
+		expect(vueSession(archiviste({ etat: 'terminee', moteur: 'copilot-cli' }), false, null, [], [], true)).not.toHaveProperty('attentePremierMessage');
+	});
 });

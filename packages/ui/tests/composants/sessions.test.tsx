@@ -259,12 +259,12 @@ describe('vue Sessions', () => {
 	it('moteur et modèle dans le panneau ; Codex sans identifiant : pause et bilan indisponibles avec la raison (focus gardé, clic sans effet), abandon possible', async () => {
 		const faux = await monter();
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
-		expect(within(contexte).getByText('Claude Code · modèle par défaut')).toBeTruthy();
+		expect(within(contexte).getByText('Claude Code (modèle par défaut)')).toBeTruthy();
 		expect(within(carte('s1')).queryByTitle(/^Moteur/u)).toBeNull();
 		const raison = 'session Codex dont l’identifiant chez Codex est inconnu : elle ne peut pas être reprise';
 		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'codex', modele: 'gpt-a', sansReprise: raison } }));
-		expect(within(contexte).getByText('Codex · gpt-a')).toBeTruthy();
-		expect(within(carte('s1')).getByTitle('Moteur : Codex · gpt-a').textContent).toBe('Codex · gpt-a');
+		expect(within(contexte).getByText('Codex (gpt-a)')).toBeTruthy();
+		expect(within(carte('s1')).getByTitle('Moteur : Codex (gpt-a)').textContent).toBe('Codex (gpt-a)');
 		const pause = within(contexte).getByRole('button', { name: 'Mettre en pause' }) as HTMLButtonElement;
 		expect(pause.disabled).toBe(false);
 		expect(pause.getAttribute('aria-disabled')).toBe('true');
@@ -282,6 +282,44 @@ describe('vue Sessions', () => {
 		expect(bilan.textContent).toContain('impossible pour l’instant');
 		await act(async () => bilan.click());
 		expect(faux.api.envoyer).not.toHaveBeenCalled();
+	});
+
+	it('GitHub Copilot CLI qui attend le premier message : dit dans l’état et le panneau ; bilan et pause restent possibles ; dit plus rien une fois commencée', async () => {
+		const faux = await monter({ '/api/sessions/s1/bilan': { statut: 'ok' } });
+		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'copilot-cli', attentePremierMessage: true } }));
+		expect(within(contexte).getByText('Attend ton premier message')).toBeTruthy();
+		expect(within(carte('s1')).getByRole('img', { name: 'Attend ton premier message' })).toBeTruthy();
+		const note = within(contexte).getByText(/^En attente de ton premier message dans le terminal/u);
+		expect(note.getAttribute('role')).toBe('note');
+		expect(note.textContent).toBe('En attente de ton premier message dans le terminal ; réponds d’abord à la question de GitHub Copilot CLI s’il en pose une. Bilan et consigne restent possibles.');
+		expect(within(contexte).getByRole('button', { name: 'Mettre en pause' }).getAttribute('aria-disabled')).toBeNull();
+		const bilan = within(contexte).getByRole('button', { name: 'Terminer avec bilan' });
+		expect(bilan.getAttribute('aria-disabled')).toBeNull();
+		await act(async () => bilan.click());
+		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions/s1/bilan', undefined);
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'copilot-cli' } }));
+		expect(within(contexte).queryByText(/premier message/u)).toBeNull();
+		expect(within(contexte).getByText('Attend ta réponse')).toBeTruthy();
+	});
+
+	it('quotas : absents dits en clair pour Mistral Vibe et GitHub Copilot CLI ; rien pour Claude Code et Codex (barre de titre)', async () => {
+		const faux = await monter();
+		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
+		const quotas = () => within(contexte).queryByText('Quotas');
+		expect(quotas()).toBeNull();
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'codex' } }));
+		expect(quotas()).toBeNull();
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'mistral-vibe', modele: 'mistral-medium-3.5' } }));
+		expect(quotas()?.nextElementSibling?.textContent).toBe('non communiqués par Mistral Vibe');
+		expect(within(contexte).getByText('Mistral Vibe (mistral-medium-3.5)')).toBeTruthy();
+		expect(within(carte('s1')).getByTitle('Moteur : Mistral Vibe (mistral-medium-3.5)')).toBeTruthy();
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'copilot-cli' } }));
+		expect(quotas()?.nextElementSibling?.textContent).toBe('non communiqués par GitHub Copilot CLI');
+		expect(within(carte('s1')).getByTitle('Moteur : GitHub Copilot CLI (modèle par défaut)').textContent).toBe('GitHub Copilot CLI');
+		// un moteur inconnu de l'interface : rien n'est affirmé
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'autre-agent' } }));
+		expect(quotas()).toBeNull();
 	});
 
 	it('« Abandonner » demande une confirmation', async () => {

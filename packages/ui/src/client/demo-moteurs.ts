@@ -1,6 +1,7 @@
 /**
- * Moteurs du mode démo (`GET moteurs`) : Claude Code et Codex trouvés, Codex avec ses modèles et des hooks encore à
- * approuver (pour voir la commande qui y remédie dans Réglages › Système › Moteurs).
+ * Moteurs du mode démo (`GET moteurs`) : les quatre trouvés ; Codex avec des hooks encore à approuver, GitHub Copilot CLI sans
+ * déclaration MCP permanente (pour voir les commandes qui y remédient dans Réglages › Système › Moteurs, rédigées comme le
+ * service les rédige).
  */
 import type { MoteurVue, ReponseMoteurs } from '@mnemo/contrat';
 
@@ -40,8 +41,47 @@ const CODEX: MoteurVue = {
 	],
 };
 
+const MISTRAL_VIBE: MoteurVue = {
+	id: 'mistral-vibe',
+	nom: 'Mistral Vibe',
+	indisponible: null,
+	manuel: false,
+	version: '3.1.5',
+	modeles: ['mistral-large-4-0', 'mistral-medium-3.5'],
+	poste: [
+		{ cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée', detail: '~/.local/bin/vibe' },
+		{ cle: 'version', libelle: 'Version', ok: true, etat: '3.1.5' },
+		{ cle: 'mcp', libelle: 'Serveur MCP mnemo', ok: true, etat: 'déclaré' },
+		{ cle: 'hooks', libelle: 'Hooks de Mnemo', ok: true, etat: 'installés' },
+	],
+};
+
+const COPILOT_CLI: MoteurVue = {
+	id: 'copilot-cli',
+	nom: 'GitHub Copilot CLI',
+	indisponible: null,
+	manuel: false,
+	version: '1.0.116',
+	modeles: ['claude-sonnet-5.5', 'gpt-6.2-sol', 'gemini-4-neon'],
+	poste: [
+		{ cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée', detail: '/opt/homebrew/bin/copilot' },
+		{ cle: 'version', libelle: 'Version', ok: true, etat: '1.0.116' },
+		{
+			cle: 'mcp',
+			libelle: 'Serveur MCP mnemo',
+			ok: false,
+			etat: 'non déclaré',
+			detail: 'Les sessions de GitHub Copilot CLI lancées hors de Mnemo ne lisent pas la mémoire.',
+			remede: { texte: 'mnemo init --copilot', dans: 'terminal' },
+		},
+		{ cle: 'hooks', libelle: 'Hooks de Mnemo', ok: true, etat: 'installés' },
+	],
+};
+
+const TOUS = [CLAUDE_CODE, CODEX, MISTRAL_VIBE, COPILOT_CLI];
+
 /** `poste` : avec les points vérifiés du poste. */
 export function moteursDemo(poste: boolean): ReponseMoteurs {
 	const sans = ({ poste: _, ...m }: MoteurVue): MoteurVue => m;
-	return { moteurs: poste ? [structuredClone(CLAUDE_CODE), structuredClone(CODEX)] : [sans(CLAUDE_CODE), sans(CODEX)] };
+	return { moteurs: TOUS.map((m) => (poste ? structuredClone(m) : sans(m))) };
 }

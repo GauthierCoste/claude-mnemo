@@ -3,7 +3,8 @@
  * (Codex), côte à côte quand les deux sont relevés, sinon celui qui l'est ; communs à toutes les sessions (la fenêtre de
  * contexte, propre à chaque session, reste sur sa jauge). Replié, par abonnement, un cercle à deux anneaux (intérieur :
  * 5 heures ; extérieur : semaine) ; un clic le déplie en barres avec la remise à zéro, un autre le replie. Rien tant qu'aucun
- * quota n'est connu.
+ * quota n'est connu. Mistral Vibe et GitHub Copilot CLI n'en communiquent aucun de lisible : le panneau Contexte de leurs
+ * sessions le dit.
  */
 import type { IdMoteur } from '@mnemo/commun';
 import type { QuotaVue, QuotasDesMoteursVue, QuotasVue } from '@mnemo/contrat';
@@ -38,6 +39,9 @@ const ABONNEMENTS: readonly { moteur: IdMoteur; libelle: string }[] = [
 	{ moteur: 'claude-code', libelle: 'Claude' },
 	{ moteur: 'codex', libelle: 'ChatGPT' },
 ];
+
+/** Libellé de l'abonnement dont Mnemo lit les quotas pour ce moteur ; null : ce moteur n'en communique pas de lisibles. */
+export const abonnementDuMoteur = (moteur: IdMoteur): string | null => ABONNEMENTS.find((a) => a.moteur === moteur)?.libelle ?? null;
 
 export type AbonnementEnCours = { moteur: IdMoteur; libelle: string; quotas: QuotasVue };
 

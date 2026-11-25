@@ -752,6 +752,20 @@ describe('Pilote : sessions GitHub Copilot CLI', () => {
 		expect((await c.etat.lire(s.id))!.fil).toBe(s.id);
 	});
 
+	it('attendPremierMessage : vrai tant qu’aucun hook de ce lancement n’est arrivé ; faux après un hook, pour une session qui ne tourne pas ici, et chez Claude Code', async () => {
+		const c = await contexte();
+		await avecCopilot(c);
+		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
+		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBe(true);
+		await new Promise((r) => setTimeout(r, 5));
+		await c.etat.appliquer(s.id, 'debut', Date.now(), { fil: s.id });
+		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBe(false);
+		await c.pilote.pause(s.id);
+		expect(c.pilote.attendPremierMessage((await c.etat.lire(s.id))!)).toBe(false);
+		const claude = await lancee(c, { profil: 'travail', dossier: 'alpha' });
+		expect(c.pilote.attendPremierMessage((await c.etat.lire(claude.id))!)).toBe(false);
+	});
+
 	it('aucun hook depuis ce lancement (écran de confiance peut-être ouvert) : rien n’est tapé ; la consigne relance la session (signaux, puis reprise avec elle) ; après un hook, tapée', async () => {
 		const c = await contexte();
 		await avecCopilot(c);
