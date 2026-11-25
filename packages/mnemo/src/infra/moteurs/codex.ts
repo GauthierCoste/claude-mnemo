@@ -9,6 +9,7 @@ import { modelesCodex } from './codex/modeles.ts';
 import { reglagesMcpCodex } from './codex/reglages-mcp.ts';
 import { versionCodex } from './codex/version.ts';
 import { refusDeVersionCodex } from '../../domaine/moteurs/codex/version.ts';
+import { lectureTranscriptionCodex } from './codex/transcription.ts';
 import { trouverCodex } from './codex/trouver-codex.ts';
 
 /** Marque d'une session dans la ligne de commande de `codex` : l'argument `-c mnemo_session='<uuid>'` (chaîne littérale TOML). */
@@ -18,7 +19,8 @@ export const marqueCodex = (uuid: string): string => `mnemo_session='${uuid}'`;
  * Codex : `codex` (`MNEMO_CODEX`, le PATH, puis ChatGPT.app), une consigne par session (`developer_instructions`, skills
  * listées), ses hooks installés pour tout le poste (`~/.codex/hooks.json`, inertes hors d'une session Mnemo), ses outils,
  * reprise par `codex resume <fil>`, arrêt par `/quit` ; le serveur MCP déclaré par `codex mcp`. Introuvable : la session est
- * refusée (une ligne à coller ne lancerait rien). Télémétrie (fenêtre de contexte, quotas) : pas encore lue.
+ * refusée (une ligne à coller ne lancerait rien). Télémétrie : fenêtre de contexte et quotas de l'abonnement ChatGPT lus
+ * dans la transcription (`token_count`) ; pas de ligne d'état.
  */
 export const MOTEUR_CODEX: Moteur = {
 	id: 'codex',
@@ -39,5 +41,5 @@ export const MOTEUR_CODEX: Moteur = {
 	touches: TOUCHES_CODEX,
 	hooks: HOOKS_CODEX,
 	outils: OUTILS_CODEX,
-	telemetrie: { fenetre: { lire: async () => null }, quotas: () => null },
+	telemetrie: { fenetre: lectureTranscriptionCodex(), quotas: () => null },
 };

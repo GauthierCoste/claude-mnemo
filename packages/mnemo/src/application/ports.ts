@@ -908,10 +908,17 @@ export type HooksDuMoteur = {
 };
 
 /**
- * Lecture de la transcription d'une session (`chemin`, donné par les hooks) : sa fenêtre de contexte, et les quotas du compte
- * si le moteur les y écrit (Claude Code : jamais, ils viennent de sa ligne d'état) ; null : illisible ou refusée.
+ * Où trouver la transcription d'une session : `chemin` donné par les hooks (refusé hors du dossier des transcriptions du
+ * moteur) ; `fil`, l'identifiant de la session chez le moteur, pour la chercher à défaut ; `dossier` du projet.
  */
-export type LectureFenetre = { lire(chemin: string, dossier?: string | null): Promise<{ fenetre: FenetreDeContexte; quotas?: Quotas } | null> };
+export type SourceTranscription = { chemin?: string; fil?: string; dossier?: string | null };
+
+/**
+ * Lecture de la transcription d'une session : sa fenêtre de contexte, et les quotas de l'abonnement si le moteur les y écrit
+ * (Codex ; Claude Code jamais, ils viennent de sa ligne d'état) ; chacun absent s'il n'y est pas encore ; null : transcription
+ * introuvable, refusée ou illisible.
+ */
+export type LectureFenetre = { lire(source: SourceTranscription): Promise<{ fenetre?: FenetreDeContexte; quotas?: Quotas } | null> };
 
 /** Télémétrie d'un moteur : transcription, et quotas du compte tirés de ce que le moteur en dit ailleurs (null : illisibles). */
 export type TelemetrieDuMoteur = { fenetre: LectureFenetre; quotas(brut: unknown): Quotas | null };

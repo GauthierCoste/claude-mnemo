@@ -6,7 +6,7 @@ import s from './BarreTitre.module.css';
 
 /**
  * Barre de titre (`.title`) : logo de Mnemo, racine du dossier Mnemo, champ de la palette (aligné à gauche, après la racine ; la
- * palette s'y pose, `champPalette`) ; à droite, les quotas du compte Claude, le bouton des modèles locaux, puis celui de l'archiviste.
+ * palette s'y pose, `champPalette`) ; à droite, les quotas des abonnements (Claude, ChatGPT), le bouton des modèles locaux, puis celui de l'archiviste.
  */
 export function BarreTitre(p: {
 	racine: string | null;

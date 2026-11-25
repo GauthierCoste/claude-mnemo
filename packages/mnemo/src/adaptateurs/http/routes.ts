@@ -23,7 +23,7 @@ import { lireElement, motifIntrouvable } from '../../application/lire.ts';
 import { lister } from '../../application/lister.ts';
 import { ErreurMoteurIndisponible, ErreurRepriseImpossible, ErreurSessionNonCommencee } from '../../application/pilote.ts';
 import type { Pilote } from '../../application/pilote.ts';
-import type { Dependances, DossiersRacine, MemoireClaude, Modeles, Pilotage, ProjetsClaude } from '../../application/ports.ts';
+import type { Dependances, DossiersRacine, MemoireClaude, Modeles, Pilotage, ProjetsClaude, SourceTranscription } from '../../application/ports.ts';
 import { ErreurFichier } from '../../application/ports.ts';
 import { dossierAccepte, ErreurDossier, niveauDossiers } from '../../application/dossiers.ts';
 import type { GenreErreurDossier } from '../../application/dossiers.ts';
@@ -361,25 +361,64 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	};
 	/** Télémétrie du moteur (Claude Code par défaut) ; null : moteur inconnu de ce service. */
 	const telemetrie = (moteur: IdMoteur = MOTEUR_PAR_DEFAUT) => pil.moteurs[moteur]?.moteur.telemetrie ?? null;
+	/** Quotas de l'abonnement de chaque moteur, communs à toutes ses sessions : le dernier relevé de chacun. */
+	const quotasParMoteur: Partial<Record<IdMoteur, Quotas>> = {};
 	/**
-	 * Fenêtre de contexte de chaque session, relue dans sa transcription (par le moteur qui a lancé le hook) après un hook ;
-	 * diffusée si elle change. Jauge seulement : la transcription n'est jamais lue pour le contexte injecté.
+	 * Note un relevé des quotas d'un moteur ; un relevé plus ancien que celui gardé est ignoré (une session reprise relit une
+	 * vieille transcription). Diffusé si les fenêtres changent (`quotas` en plus pour Claude Code, que lisent les anciens
+	 * clients) ; sinon seul l'instant du relevé est mis à jour.
+	 */
+	const noterQuotas = (moteur: IdMoteur, recus: Quotas): void => {
+		const avant = quotasParMoteur[moteur];
+		if (avant?.releveMs !== undefined && recus.releveMs !== undefined && recus.releveMs < avant.releveMs) return;
+		quotasParMoteur[moteur] = recus;
+		if (memesQuotas(avant, recus)) return;
+		if (moteur === MOTEUR_PAR_DEFAUT) ctx.diffuser({ type: 'quotas', quotas: recus });
+		ctx.diffuser({ type: 'quotasMoteurs', moteurs: { ...quotasParMoteur } });
+	};
+	const reponseQuotas = (): ReponseQuotas => ({ quotas: quotasParMoteur[MOTEUR_PAR_DEFAUT] ?? null, moteurs: { ...quotasParMoteur } });
+	/**
+	 * Fenêtre de contexte de chaque session, relue dans sa transcription (par le moteur qui a lancé le hook) après un hook,
+	 * avec les quotas de l'abonnement quand le moteur les y écrit (Codex) ; diffusés s'ils changent. Jauge seulement : la
+	 * transcription n'est jamais lue pour le contexte injecté.
 	 */
 	const fenetres = new Map<string, FenetreVue>();
-	const relireFenetre = async (session: string, chemin: string, dossier: string | null, moteur: IdMoteur | undefined): Promise<void> => {
+	const relireFenetre = async (session: string, source: SourceTranscription, moteur: IdMoteur = MOTEUR_PAR_DEFAUT): Promise<void> => {
 		const lecture = telemetrie(moteur)?.fenetre;
 		if (lecture === undefined) return;
-		// les quotas éventuels de la transcription ne sont pas encore relevés ici (Claude Code n'en écrit pas)
-		const lue = await lecture.lire(chemin, dossier);
+		const lue = await lecture.lire(source);
 		if (lue === null) return;
-		const { fenetre } = lue;
+		const { fenetre, quotas } = lue;
+		if (quotas !== undefined) noterQuotas(moteur, quotas.releveMs === undefined ? { ...quotas, releveMs: Date.now() } : quotas);
+		if (fenetre === undefined) return;
 		const avant = fenetres.get(session);
 		if (avant !== undefined && avant.utilises === fenetre.utilises && avant.max === fenetre.max && avant.avantResume === fenetre.avantResume) return;
 		fenetres.set(session, fenetre);
 		ctx.diffuser({ type: 'fenetre', session, fenetre });
 	};
-	/** Quotas du compte Claude, communs à toutes les sessions : le dernier relevé reçu d'une ligne d'état (Claude Code). */
-	let quotas: Quotas | null = null;
+	/**
+	 * Une seule lecture à la fois par session : un hook arrivé pendant une lecture en demande une autre, faite juste après (la
+	 * transcription a pu changer entre-temps) ; les suivants s'y joignent.
+	 */
+	const lectures = new Map<string, { encore: (() => Promise<void>) | null }>();
+	const relireApresHook = (session: string, relire: () => Promise<void>): void => {
+		const enCours = lectures.get(session);
+		if (enCours !== undefined) {
+			enCours.encore = relire;
+			return;
+		}
+		const etat: { encore: (() => Promise<void>) | null } = { encore: null };
+		lectures.set(session, etat);
+		void (async () => {
+			let suivante: (() => Promise<void>) | null = relire;
+			while (suivante !== null) {
+				await suivante().catch(() => {});
+				suivante = etat.encore;
+				etat.encore = null;
+			}
+			lectures.delete(session);
+		})();
+	};
 	/** Écartés de la session, rendus et diffusés après un changement. */
 	const ecartesDiffuses = async (id: string): Promise<Reponse> => {
 		const ecartes = (await pil.etat.ecartes(id)).map(vueEcarte);
@@ -553,7 +592,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		{
 			methode: 'GET',
 			chemin: ROUTES.quotas,
-			action: async () => ok({ quotas } satisfies ReponseQuotas),
+			action: async () => ok(reponseQuotas()),
 		},
 		{
 			methode: 'POST',
@@ -564,11 +603,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const brut = await r.json();
 				const recus = telemetrie()?.quotas(estObjet(brut) ? brut.rate_limits : undefined) ?? null;
 				if (recus === null) throw new ErreurHttp(400, 'Aucune fenêtre de quota lisible.');
-				if (!memesQuotas(quotas, recus)) {
-					quotas = recus;
-					ctx.diffuser({ type: 'quotas', quotas: recus });
-				}
-				return ok({ quotas } satisfies ReponseQuotas);
+				noterQuotas(MOTEUR_PAR_DEFAUT, { ...recus, releveMs: Date.now() });
+				return ok(reponseQuotas());
 			},
 		},
 		{
@@ -616,9 +652,10 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				// les modèles de la session bornés par son niveau (relu à chaque appel)
 				const depDuHook = entree.session === '' ? dep : dependancesDeSession(dep, pil.etat, entree.session);
 				const reponse = await traiterEvenement(depDuHook, pil, entree, { froid: 'permis', ...(echeance === undefined ? {} : { echeance }), racine: ctx.racine, sansCasse: ctx.sansCasse, enFond: ctx.enFond, demandees, rattachee: (id) => pilote.reecrirePlugin(id) });
-				if (entree.session !== '' && transcription !== undefined && (entree.evenement === 'message' || entree.evenement === 'apres_outil' || entree.evenement === 'arret' || entree.evenement === 'debut')) {
-					// hors du chemin du hook : sa réponse n'attend pas la lecture
-					void relireFenetre(entree.session, transcription, entree.cwd, entree.moteur).catch(() => {});
+				if (entree.session !== '' && (transcription !== undefined || entree.fil !== undefined)) {
+					// à chaque hook, hors de son chemin : sa réponse n'attend pas la lecture (ni son échéance)
+					const source: SourceTranscription = { ...(transcription === undefined ? {} : { chemin: transcription }), ...(entree.fil === undefined ? {} : { fil: entree.fil }), dossier: entree.cwd };
+					relireApresHook(entree.session, () => relireFenetre(entree.session, source, entree.moteur));
 				}
 				if (entree.session !== '') {
 					const s = await pil.etat.lire(entree.session).catch(() => null);

@@ -1,8 +1,8 @@
-import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import { fenetreDeContexte } from '../../../domaine/moteurs/claude-code/fenetre-contexte.ts';
 import type { FenetreDeContexte } from '../../../domaine/moteurs/moteur.ts';
+import { lignesDeLaFin } from '../../fin-de-fichier.ts';
 import { seuilDeResumeAuto } from './reglage-resume-auto.ts';
 
 /**
@@ -26,27 +26,9 @@ export function fenetreDeTranscription(racinePermise: string = join(homedir(), '
 	};
 }
 
-/** Lignes de la fin du fichier (la première, coupée, écartée) ; null si le chemin est refusé ou illisible. */
+/** Lignes de la fin du fichier ; null si le chemin est refusé ou illisible. */
 async function lireFin(racine: string, chemin: string, octetsLus: number): Promise<string[] | null> {
 	const absolu = resolve(chemin);
 	if (!absolu.startsWith(racine + sep) || extname(absolu) !== '.jsonl') return null;
-	let fichier;
-	try {
-		fichier = await open(absolu, 'r');
-	} catch {
-		return null;
-	}
-	try {
-		const { size } = await fichier.stat();
-		const debut = Math.max(0, size - octetsLus);
-		const tampon = Buffer.alloc(size - debut);
-		await fichier.read(tampon, 0, tampon.length, debut);
-		const lignes = tampon.toString('utf8').split('\n');
-		if (debut > 0) lignes.shift();
-		return lignes.filter((l) => l.trim() !== '');
-	} catch {
-		return null;
-	} finally {
-		await fichier.close();
-	}
+	return lignesDeLaFin(absolu, octetsLus);
 }

@@ -797,9 +797,11 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 				// fenêtres de contexte fictives, de plus en plus pleines, pour voir les trois couleurs de la jauge
 				return { fenetres: Object.fromEntries(monde.sessions.filter((x) => x.etat !== 'terminee').map((x, i) => [x.id, { utilises: [38_000, 124_000, 171_000, 92_000, 58_000][i % 5]!, max: 200_000 }])) } satisfies ReponseFenetres;
 			case ROUTES.quotas: {
-				// quotas fictifs : fenêtre de 5 h à moitié, semaine bien entamée, remises dans 2 h et dans 3 jours
+				// quotas fictifs : Claude, fenêtre de 5 h à moitié, semaine bien entamée, remises dans 2 h et dans 3 jours ; ChatGPT, semaine seule
 				const maintenant = Date.now();
-				return { quotas: { cinqHeures: { pourcentage: 42, remiseMs: maintenant + 2 * 3_600_000 }, semaine: { pourcentage: 61, remiseMs: maintenant + 3 * 86_400_000 } } } satisfies ReponseQuotas;
+				const claude = { cinqHeures: { pourcentage: 42, remiseMs: maintenant + 2 * 3_600_000 }, semaine: { pourcentage: 61, remiseMs: maintenant + 3 * 86_400_000 }, releveMs: maintenant };
+				const chatgpt = { semaine: { pourcentage: 18, remiseMs: maintenant + 5 * 86_400_000 }, releveMs: maintenant };
+				return { quotas: claude, moteurs: { 'claude-code': claude, codex: chatgpt } } satisfies ReponseQuotas;
 			}
 			case ROUTES.sessions:
 				return { sessions: [...monde.sessions] };

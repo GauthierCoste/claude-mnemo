@@ -10,7 +10,7 @@ import {
 	type FenetreVue,
 	type ReponseAServir,
 	type ReponseFenetres,
-	type QuotasVue,
+	type QuotasDesMoteursVue,
 	type ReponseQuotas,
 	type EntreeServieVue,
 	type LueVue,
@@ -311,16 +311,20 @@ export function useAServir(session: string): AServir {
 	};
 }
 
+const AUCUN_QUOTA: QuotasDesMoteursVue = {};
+
 /**
- * Quotas du compte Claude (communs à toutes les sessions) : lus au service, puis tenus par les messages `quotas` ; null tant
- * qu'aucune ligne d'état n'en a transmis.
+ * Quotas de l'abonnement de chaque moteur (communs à toutes ses sessions) : lus au service, puis tenus par les messages
+ * `quotasMoteurs` ; vide tant qu'aucun n'est relevé. Un service sans `moteurs` : ceux de Claude Code seuls.
  */
-export function useQuotas(): QuotasVue | null {
+export function useQuotas(): QuotasDesMoteursVue {
 	const { api, connexion } = useClient();
 	const base = useRessource('quotas', () => api.lire<ReponseQuotas>(ROUTES.quotas));
-	const [recus, setRecus] = useState<QuotasVue | null>(null);
-	useEffect(() => connexion.surMessage((m) => m.type === 'quotas' && setRecus(m.quotas)), [connexion]);
-	return recus ?? base.donnees?.quotas ?? null;
+	const [recus, setRecus] = useState<QuotasDesMoteursVue | null>(null);
+	useEffect(() => connexion.surMessage((m) => m.type === 'quotasMoteurs' && setRecus(m.moteurs)), [connexion]);
+	const lue = base.donnees;
+	const duService = useMemo(() => (lue === undefined ? AUCUN_QUOTA : (lue.moteurs ?? (lue.quotas === null ? AUCUN_QUOTA : { 'claude-code': lue.quotas }))), [lue]);
+	return recus ?? duService;
 }
 
 /**

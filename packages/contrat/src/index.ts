@@ -100,24 +100,32 @@ export type BlocApercuVue = {
 	elements?: { nom: string; detail: string; actif: boolean }[];
 };
 
-/** Remplissage de la fenêtre de contexte de Claude Code d'une session (tokens), lu dans sa transcription. */
-/** `avantResume` : `max` est le seuil de résumé automatique de Claude Code. */
+/** Remplissage de la fenêtre de contexte du moteur d'une session (tokens), lu dans sa transcription (Claude Code, Codex). */
+/** `avantResume` : `max` est le seuil de résumé automatique du moteur (Claude Code). */
 export type FenetreVue = { utilises: number; max: number; avantResume?: true };
 
 /** Réponse de `fenetres` GET : la fenêtre connue de chaque session (id → fenêtre), depuis le démarrage du service. */
 export type ReponseFenetres = { fenetres: Record<string, FenetreVue> };
 
-/** Une fenêtre de quota du compte Claude : part consommée (0 à 100) et instant de sa remise à zéro (ms depuis l'époque). */
+/** Une fenêtre de quota d'un abonnement : part consommée (0 à 100) et instant de sa remise à zéro (ms depuis l'époque). */
 export type QuotaVue = { pourcentage: number; remiseMs: number };
 
 /**
- * Quotas du compte Claude (abonnement Pro, Max ou Ultra), tels que la dernière ligne d'état d'une session les a transmis :
- * communs à toutes les sessions. Une fenêtre absente est inconnue (pas encore de réponse de Claude, ou compte sans quota).
+ * Quotas de l'abonnement d'un moteur, communs à toutes ses sessions : compte Claude (Pro, Max ou Ultra) pour Claude Code,
+ * transmis par la ligne d'état d'une session ; compte ChatGPT pour Codex, lus dans la transcription d'une session. Une
+ * fenêtre absente est inconnue (pas encore de réponse, ou compte sans ce quota). `releveMs` : instant du relevé (ms depuis
+ * l'époque ; absent d'un service plus ancien).
  */
-export type QuotasVue = { cinqHeures?: QuotaVue; semaine?: QuotaVue };
+export type QuotasVue = { cinqHeures?: QuotaVue; semaine?: QuotaVue; releveMs?: number };
 
-/** Réponse de `quotas` GET : les derniers quotas reçus depuis le démarrage du service, null avant. */
-export type ReponseQuotas = { quotas: QuotasVue | null };
+/** Quotas de chaque abonnement relevé, par moteur ; un moteur absent n'a encore rien relevé. */
+export type QuotasDesMoteursVue = Partial<Record<IdMoteur, QuotasVue>>;
+
+/**
+ * Réponse de `quotas` GET : les derniers quotas reçus depuis le démarrage du service. `quotas` : ceux de Claude Code (null
+ * avant), gardé pour les clients qui ne lisent que lui ; `moteurs` : ceux de chaque moteur (absent d'un service plus ancien).
+ */
+export type ReponseQuotas = { quotas: QuotasVue | null; moteurs?: QuotasDesMoteursVue };
 
 /** Fiches demandées à injecter dans une session (« Injecter dans la session »), injectées au prochain message de la session. */
 export type ReponseAServir = { chemins: string[] };
@@ -269,7 +277,10 @@ export type MessageServeur =
 	/** Fiches lues par la session (après un outil qui en a lu une) : la liste entière, comme `lues` de la route `servis`. */
 	| { type: 'lues'; session: string; lues: LueVue[] }
 	| { type: 'fenetre'; session: string; fenetre: FenetreVue }
+	/** Les quotas de Claude Code ont changé (gardé pour les clients qui ne lisent que lui ; voir `quotasMoteurs`). */
 	| { type: 'quotas'; quotas: QuotasVue }
+	/** Les quotas d'un abonnement ont changé : ceux de tous les moteurs, comme `moteurs` de `GET quotas`. */
+	| { type: 'quotasMoteurs'; moteurs: QuotasDesMoteursVue }
 	/** L'état des modèles locaux a changé (niveau, gardien, appels en cours) : la vue entière, comme `GET modeles`. */
 	| { type: 'modeles'; modeles: EtatModelesVue }
 	| { type: 'memoire'; modifieeMs: number }
@@ -307,7 +318,8 @@ export type MessageClient =
  * - `aServir` GET → `ReponseAServir` ; POST `{ chemin }` (une fiche indexée : 404 sinon ; 409 session terminée) → `ReponseAServir` ; DELETE `?chemin=` → `ReponseAServir` : fiches injectées entières au prochain message de la session (message `aServir` diffusé) ;
  * - `fenetres` GET → `ReponseFenetres` : la fenêtre de contexte connue de chaque session (message `fenetre` à chaque changement) ;
  * - `quotas` GET → `ReponseQuotas` ; POST `{ rate_limits }` (de `mnemo ligne-etat`, tel que Claude Code le donne à sa ligne
- *   d'état) → `ReponseQuotas` : les quotas du compte, diffusés (message `quotas`) quand ils changent ; 400 sans fenêtre lisible ;
+ *   d'état) → `ReponseQuotas` : les quotas du compte Claude, diffusés (messages `quotas` et `quotasMoteurs`) quand ils changent ;
+ *   400 sans fenêtre lisible. Ceux de Codex sont relevés par le service à chaque hook (transcription), diffusés par `quotasMoteurs` ;
  * - `modeles` GET → `EtatModelesVue` (envoyée aussi, message `modeles`, à l'accueil d'un client WebSocket et à chaque
  *   changement : niveau, gardien, appels en cours) ;
  * - `modelesDemarrer` POST → `EtatModelesVue` : lance les modèles installés et permis par le niveau (geste de l'utilisateur ;

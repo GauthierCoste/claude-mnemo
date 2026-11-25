@@ -12,7 +12,8 @@ import { trouverClaude } from './claude-code/trouver-claude.ts';
 /** La fenêtre lue dans la transcription ; jamais de quotas (ceux de Claude Code viennent de sa ligne d'état). */
 function sansQuotas(transcription: LectureTranscription): LectureFenetre {
 	return {
-		async lire(chemin, dossier) {
+		async lire({ chemin, dossier }) {
+			if (chemin === undefined) return null;
 			const fenetre = await transcription.lire(chemin, dossier);
 			return fenetre === null ? null : { fenetre };
 		},
