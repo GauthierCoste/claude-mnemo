@@ -10,6 +10,7 @@ import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
 import type { EtatIndicateur } from '../domaine/refus-outil.ts';
 import type { Geste, GesteCompte, NoteDuGeste, OrigineGeste } from '../domaine/gestes.ts';
 import type { SignauxBruts } from '../domaine/signaux-de-note.ts';
+import type { CoefficientsNote, IdentiteDesModeles } from '../domaine/modele-de-note.ts';
 import type { TypeSource } from '../domaine/regles.ts';
 import type { FichierPlugin } from './plugin.ts';
 import type { AppelPlugin } from './plugin.ts';
@@ -284,7 +285,15 @@ export type Dependances = {
 	pluginsClaude: PluginsClaude;
 	/** Lots d'informations proposés par l'archiviste, en attente de l'utilisateur (état local, hors mémoire). */
 	lots: Lots;
+	/**
+	 * Coefficients de la note de confiance (`.mnemo/coefficients-note.json`, sinon le module du dépôt) et identité des modèles
+	 * installés, lus à chaque usage. Absent : le module du dépôt, modèles installés inconnus.
+	 */
+	note?: () => NoteChargee;
 };
+
+/** Coefficients de la note de confiance et identité des modèles installés (fichiers GGUF du sens et du reranker). */
+export type NoteChargee = { coefficients: CoefficientsNote; installes: IdentiteDesModeles };
 
 /**
  * Lots d'informations (`domaine/lot.ts`) : enregistrés par l'archiviste (`entretenir` › `proposer_lot`), décidés par
@@ -569,6 +578,8 @@ export type Classe = {
 	servi: boolean;
 	rang: number;
 	p?: number | null;
+	/** `p` sans le terme de l'a priori (garde de l'injection automatique) ; présent avec `p` seulement. */
+	pSansApriori?: number;
 	/**
 	 * `apriori` : absent des entrées écrites avant l'a priori des gestes (lu comme 0) ; `cosinusZ` : absent des entrées écrites
 	 * avant lui ; `logit` (brut, du reranker au hook) : présent seulement pour une candidate qu'il a notée.
@@ -613,6 +624,11 @@ export type EntreeServie = {
 	rangMessage?: number | null;
 	/** Affinage du classement en arrière-plan (`completerClassement`) : en cours, ou fait ; absent : pas d'affinage. */
 	affinage?: Affinage;
+	/**
+	 * Le classement est-il noté par des modèles acceptés (`p` en %, spec classement vivant § 4.1) ? Faux : ordre seul (aucun modèle
+	 * appris, ou modèle refusé). Absent : pas de classement, ou entrée ancienne.
+	 */
+	calibree?: boolean;
 };
 
 /** État de l'affinage d'un classement en arrière-plan (spec classement vivant § 3.6). */
@@ -737,10 +753,11 @@ export interface EtatSessions {
 	 * Remplace le classement et l'état d'affinage de l'entrée de message de la session à cet horodatage (affinage en arrière-plan :
 	 * mêmes candidates, notes complétées ; `affinage` null : rien n'a été ajouté), seulement si c'est encore l'entrée de message
 	 * porteur la plus récente de la session (un message porteur plus récent rend l'affinage caduc ; une entrée d'après un outil
-	 * ou un message muet, non). `options.sens` : le sens, absent au hook, a été calculé. Rend vrai si l'entrée a été mise à
-	 * jour ; caduc, l'état d'affinage de l'entrée revient à null.
+	 * ou un message muet, non). `options.sens` : le sens, absent au hook, a été calculé ; `options.calibree` : le classement
+	 * complété est-il calibré (absent : inchangé). Rend vrai si l'entrée a été mise à jour ; caduc, l'état d'affinage de l'entrée
+	 * revient à null.
 	 */
-	completerClassement(session: string, horodatageMs: number, classement: Classe[], affinage: Affinage | null, options?: { sens?: boolean }): Promise<boolean>;
+	completerClassement(session: string, horodatageMs: number, classement: Classe[], affinage: Affinage | null, options?: { sens?: boolean; calibree?: boolean }): Promise<boolean>;
 	/**
 	 * Les `limite` dernières entrées de la session, les plus récentes d'abord ; `moment` : celles de ce moment seulement ;
 	 * `options.classement` : `dernier` ne lit le classement que de la plus récente rendue.

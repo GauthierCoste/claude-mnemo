@@ -3,6 +3,9 @@ import { AFFINEES_MAX, affiner, BUDGET_AFFINAGE_MS, CANDIDATES_AFFINEES, candida
 import type { DemandeAffinage } from '../../src/application/affiner.ts';
 import type { LigneDeClassement } from '../../src/application/classement-du-message.ts';
 import type { Affinage, Classe, Dependances, OptionsModele } from '../../src/application/ports.ts';
+import { modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
+import type { ModeleDeNote } from '../../src/domaine/modele-de-note.ts';
+import { sigmoide } from '../../src/domaine/regression-logistique.ts';
 
 const ligne = (i: number, surcharge: Partial<LigneDeClassement> = {}): LigneDeClassement => ({
 	chemin: `notes/f${i}.md`,
@@ -58,13 +61,13 @@ function dependances(options: { logitDe?: (texte: string) => number; delaiMs?: n
 
 /** L'état : l'entrée la plus récente de la session, à cet horodatage ; une entrée plus récente (`suivante`) rend caduc. */
 function etatFaux(horodatageMs: number) {
-	const ecritures: { classement: Classe[]; affinage: Affinage | null; sens: boolean }[] = [];
+	const ecritures: { classement: Classe[]; affinage: Affinage | null; sens: boolean; calibree?: boolean }[] = [];
 	const etat = {
 		suivante: false,
 		ecritures,
-		async completerClassement(session: string, h: number, classement: Classe[], affinage: Affinage | null, options?: { sens?: boolean }) {
+		async completerClassement(session: string, h: number, classement: Classe[], affinage: Affinage | null, options?: { sens?: boolean; calibree?: boolean }) {
 			if (etat.suivante || session !== 's1' || h !== horodatageMs) return false;
-			ecritures.push({ classement, affinage, sens: options?.sens === true });
+			ecritures.push({ classement, affinage, sens: options?.sens === true, ...(options?.calibree === undefined ? {} : { calibree: options.calibree }) });
 			return true;
 		},
 	};
@@ -226,5 +229,51 @@ describe('affiner', () => {
 		const r = await affiner(dep, etatFaux(100), demande({ sens: false, classement: lignes }), { reranker: false });
 		expect(appels).toEqual([]);
 		expect(r!.classement[0]!.id).toBe('notes/f5.md');
+	});
+});
+
+describe('affiner avec une note de confiance apprise', () => {
+	const INSTALLES = { sens: 'sens.gguf@aaaaaaaaaaaa', reranker: 'reranker.gguf@bbbbbbbbbbbb' };
+	const modele = (surcharge: Partial<ModeleDeNote>): ModeleDeNote => ({ ...modeleNonAppris(), apprisLe: '2026-11-25', refus: [], accepte: true, gguf: INSTALLES, ...surcharge });
+	const SENS = modele({ biais: -1, poids: { cosinusRelatif: 2 } });
+	const COMPLETS = modele({ biais: -1, poids: { logit: 1, cosinusRelatif: 2 } });
+	// cosinus relatif décroissant : la note Sens seul suit l'ordre du hook
+	const classement = Array.from({ length: 40 }, (_, i) => ligne(i, { signaux: { ...ligne(i).signaux, cosinusRelatif: 0.3 - i / 100 } }));
+	const pSens = (i: number) => sigmoide(-1 + 2 * (0.3 - i / 100));
+	const pComplets = (i: number, logit: number) => sigmoide(-1 + logit + 2 * (0.3 - i / 100));
+	const logitDe = (t: string) => (t.includes('Fiche 20') ? 4 : -1);
+
+	it('modèles acceptés : p recalculé avec les logits (Complets pour les notées, Sens seul pour les autres), ordre par p, calibré', async () => {
+		const { dep } = dependances({ logitDe });
+		dep.note = () => ({ coefficients: { complets: COMPLETS, sens: SENS }, installes: INSTALLES });
+		const etat = etatFaux(100);
+		const r = await affiner(dep, etat, demande({ classement }));
+		const fait = etat.ecritures.at(-1)!;
+		expect(fait).toMatchObject({ affinage: 'fait', calibree: true });
+		expect(r!.classement[0]).toMatchObject({ id: 'notes/f20.md', p: Math.round(pComplets(20, 4) * 10_000) / 10_000, rangHook: 21 });
+		const p = (id: string) => r!.classement.find((c) => c.id === id)!.p!;
+		expect(p('notes/f0.md')).toBeCloseTo(pComplets(0, -1), 4);
+		// au-delà des 30 soumises : Sens seul
+		expect(p('notes/f35.md')).toBeCloseTo(pSens(35), 4);
+		const ps = r!.classement.map((c) => c.p!);
+		expect(ps.every((v, i) => i === 0 || ps[i - 1]! >= v)).toBe(true);
+	});
+
+	it('modèle refusé : même ordre par sa note, sans p, non calibré ; aucun modèle appris : l’ordre provisoire, non calibré', async () => {
+		const { dep } = dependances({ logitDe });
+		dep.note = () => ({ coefficients: { complets: COMPLETS, sens: SENS }, installes: INSTALLES });
+		const accepte = await affiner(dep, etatFaux(100), demande({ classement }));
+		dep.note = () => ({ coefficients: { complets: { ...COMPLETS, accepte: false }, sens: { ...SENS, accepte: false } }, installes: INSTALLES });
+		const etat = etatFaux(100);
+		const refuse = await affiner(dep, etat, demande({ classement }));
+		expect(etat.ecritures.at(-1)).toMatchObject({ affinage: 'fait', calibree: false });
+		expect(refuse!.classement.map((c) => c.id)).toEqual(accepte!.classement.map((c) => c.id));
+		expect(refuse!.classement.every((c) => c.p === undefined)).toBe(true);
+		const { dep: sansModele } = dependances({ logitDe });
+		const provisoire = etatFaux(100);
+		const r = await affiner(sansModele, provisoire, demande({ classement }));
+		expect(provisoire.ecritures.at(-1)).toMatchObject({ affinage: 'fait', calibree: false });
+		expect(r!.classement[0]!.id).toBe('notes/f20.md');
+		expect(r!.classement.every((c) => c.p === undefined)).toBe(true);
 	});
 });

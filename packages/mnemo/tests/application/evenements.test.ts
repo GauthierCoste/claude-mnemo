@@ -11,8 +11,10 @@ import { aprioriDesGestes } from '../../src/application/apriori.ts';
 import type { DemandeAffinage } from '../../src/application/affiner.ts';
 import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
+import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import type { Reranker, Sens } from '../../src/application/ports.ts';
 import { servirQuestion } from '../aides/servir.ts';
+import { modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
 import { texteDossierNonRattache } from '../../src/domaine/rattachement.ts';
 import type { EvenementHook, Session } from '../../src/domaine/session.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
@@ -631,6 +633,35 @@ describe('traiterEvenement : contexte sobre au message', () => {
 		vus.length = 0;
 		await traiterEvenement(dep, pil, message(15, 'et pour les factures annulées ?'), { ...local, varianteRequete: 'jointe' });
 		expect(vus).toEqual(['et pour les factures annulées ?']);
+	});
+
+	it('note apprise : la requête suit la variante du modèle, l’entrée journalise sa calibration ; modèle refusé : pistes à chaque message, non calibré', async () => {
+		const { dep, etat, pil } = await memoire();
+		const vus: string[] = [];
+		dep.sens = { modele: () => 'espion@1', vecteurs: async (textes) => (vus.push(...textes), textes.map((t) => Float32Array.from([t.includes('avoir') ? 1 : 0.2, 1]))) };
+		await synchroniser(dep, SANS_EXTRACTION);
+		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
+		const sens = { ...modeleNonAppris(), apprisLe: '2026-11-25', refus: [], accepte: true, requete: 'jointe' as const, biais: 0, poids: { cosinusRelatif: 1 } };
+		dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens }, installes: { sens: null, reranker: null } });
+		await traiterEvenement(dep, pil, message(10, 'les avoirs du catalogue de la refonte'), local);
+		expect((await etat.servis(ID, 1))[0]).toMatchObject({ calibree: true });
+		vus.length = 0;
+		await traiterEvenement(dep, pil, message(11, 'et pour les factures annulées ?'), local);
+		expect(vus).toEqual(['les avoirs du catalogue de la refonte\net pour les factures annulées ?']);
+		// refusé : pas de %, mais une piste à un message qui n'est pas le premier (une fiche nouvelle, au-dessus du seuil)
+		const REMISES = 'projets/vela/remises.md';
+		await dep.coffre.ecrire(REMISES, `${entete()}# Remises\n\nUne remise devient un avoir.\n`);
+		await synchroniser(dep, SANS_EXTRACTION);
+		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
+		dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens: { ...sens, accepte: false, requete: 'seule' as const } }, installes: { sens: null, reranker: null } });
+		const r = await traiterEvenement(dep, pil, message(12, 'quel montant pour la refonte du catalogue en avoir'), local);
+		const j = (await etat.servis(ID, 1))[0]!;
+		expect(j.calibree).toBe(false);
+		expect(j.classement.every((c) => c.p === undefined)).toBe(true);
+		expect(j.classement.find((c) => c.id === REMISES)).toMatchObject({ piste: true, raison: 'perimetre' });
+		expect(r.contexte).toContain('- Remises — projets/vela/remises.md');
+		// déjà proposée : classée, jamais reproposée
+		expect(j.classement.find((c) => c.id === AVOIRS)).toMatchObject({ deja: 'proposee' });
 	});
 
 	it('hook local sans service : une écartée toujours (active) sort des candidates, une rétablie y revient ; a priori 0', async () => {

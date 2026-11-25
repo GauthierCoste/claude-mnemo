@@ -202,7 +202,8 @@ CREATE TABLE IF NOT EXISTS servis (
 	position TEXT,
 	rang_message INTEGER,
 	affinage TEXT,
-	ms_service INTEGER
+	ms_service INTEGER,
+	calibree INTEGER
 );
 CREATE INDEX IF NOT EXISTS servis_session ON servis (session, rang);
 ${SCHEMA_ECARTES}${SCHEMA_RATTACHEMENT}${SCHEMA_FICHES_SERVIES_LUES_ECRITES}${SCHEMA_CARTES}${SCHEMA_INJECTIONS_MANUELLES}${SCHEMA_LOTS}${SCHEMA_GESTES}`;
@@ -299,6 +300,7 @@ function ligneVersEntree(l: Ligne): EntreeServie {
 		...(l.rang_message === null || l.rang_message === undefined ? {} : { rangMessage: Number(l.rang_message) }),
 		...(l.affinage === 'en_cours' || l.affinage === 'fait' ? { affinage: l.affinage as Affinage } : {}),
 		...(typeof l.ms_service === 'number' ? { msService: l.ms_service } : {}),
+		...(l.calibree === 0 || l.calibree === 1 ? { calibree: l.calibree === 1 } : {}),
 	};
 }
 
@@ -442,13 +444,15 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				if (!colonnesServis.includes('rang_message')) base.exec('ALTER TABLE servis ADD COLUMN rang_message INTEGER');
 				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
 				if (!colonnesServis.includes('ms_service')) base.exec('ALTER TABLE servis ADD COLUMN ms_service INTEGER');
+				if (!colonnesServis.includes('calibree')) base.exec('ALTER TABLE servis ADD COLUMN calibree INTEGER');
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
 			} else if (version === VERSION_ETAT) {
-				// 13 non publiée : un état déjà en 13 (développement) reçoit l'état d'affinage du classement, la durée vue du service
-				// et les écartées toujours
+				// 13 non publiée : un état déjà en 13 (développement) reçoit l'état d'affinage du classement, la durée vue du service,
+				// la calibration du classement et les écartées toujours
 				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
 				if (!colonnesServis.includes('ms_service')) base.exec('ALTER TABLE servis ADD COLUMN ms_service INTEGER');
+				if (!colonnesServis.includes('calibree')) base.exec('ALTER TABLE servis ADD COLUMN calibree INTEGER');
 				base.exec(SCHEMA_ECARTEES_TOUJOURS);
 				const colonnesEcartees = (base.prepare('PRAGMA table_info(ecartees_toujours)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesEcartees.includes('retablie_ms')) base.exec('ALTER TABLE ecartees_toujours ADD COLUMN retablie_ms INTEGER');
@@ -693,8 +697,8 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 				base
 					// le rang du message : celui du dernier message porteur, pour une entrée de message non muette
 					.prepare(
-						`INSERT INTO servis (session, moment, horodatage_ms, ids, texte, ms, sens, demande, classement, muet, cartes, position, ms_service, rang_message)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? THEN (SELECT messages_porteurs FROM sessions WHERE id = ?) END)`,
+						`INSERT INTO servis (session, moment, horodatage_ms, ids, texte, ms, sens, demande, classement, muet, cartes, position, ms_service, calibree, rang_message)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? THEN (SELECT messages_porteurs FROM sessions WHERE id = ?) END)`,
 					)
 					.run(
 						entree.session,
@@ -710,6 +714,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 						JSON.stringify(entree.cartes),
 						entree.position,
 						entree.msService ?? null,
+						entree.calibree === undefined ? null : entree.calibree ? 1 : 0,
 						entree.moment === 'message' && entree.muet === null ? 1 : 0,
 						entree.session,
 					);
@@ -730,15 +735,16 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 		},
 
 		async completerClassement(session, horodatageMs, classement, affinage, options) {
+			const calibree = options?.calibree === undefined ? null : options.calibree ? 1 : 0;
 			return ecrire(() => {
 				// seulement l'entrée de message porteur la plus récente de la session : un message porteur plus récent rend l'affinage
 				// caduc (une entrée d'après un outil ou un message muet, non : Claude enchaîne souvent un outil juste après le message)
 				const { changes } = base
 					.prepare(
-						`UPDATE servis SET classement = ?, affinage = ?, sens = CASE WHEN ? THEN 1 ELSE sens END
+						`UPDATE servis SET classement = ?, affinage = ?, sens = CASE WHEN ? THEN 1 ELSE sens END, calibree = CASE WHEN ? IS NULL THEN calibree ELSE ? END
 						WHERE rang = (SELECT MAX(rang) FROM servis WHERE session = ? AND moment = 'message' AND muet IS NULL) AND session = ? AND horodatage_ms = ? AND moment = 'message'`,
 					)
-					.run(JSON.stringify(classement), affinage, options?.sens === true ? 1 : 0, session, session, horodatageMs);
+					.run(JSON.stringify(classement), affinage, options?.sens === true ? 1 : 0, calibree, calibree, session, session, horodatageMs);
 				if (changes > 0) {
 					ecriture(session);
 					return true;
@@ -754,7 +760,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 			// `dernier` : le JSON du classement n'est lu que pour l'entrée la plus récente rendue (hors trace d'un /clear, qui n'en a pas)
 			const colonnes =
 				options?.classement === 'dernier'
-					? `session, moment, horodatage_ms, ids, texte, ms, sens, demande, muet, cartes, position, rang_message, affinage, ms_service,
+					? `session, moment, horodatage_ms, ids, texte, ms, sens, demande, muet, cartes, position, rang_message, affinage, ms_service, calibree,
 						CASE WHEN rang = (SELECT MAX(rang) FROM servis WHERE session = ?1 AND NOT (moment = 'debut' AND ids = '[]' AND texte = '')${moment === undefined ? '' : ' AND moment = ?2'}) THEN classement ELSE '[]' END AS classement`
 					: '*';
 			const filtre = moment === undefined ? 'session = ?1' : 'session = ?1 AND moment = ?2';

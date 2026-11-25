@@ -157,3 +157,49 @@ export function moduleDeCoefficients(c: CoefficientsNote): string {
 		'',
 	].join('\n');
 }
+
+const estObjet = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const nombreFini = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const texteOuNull = (v: unknown): v is string | null => v === null || typeof v === 'string';
+
+/** Un modèle lu du JSON ; null s'il est invalide (forme, poids négatifs ou de variables hors du niveau). */
+function lireModele(niveau: NiveauDeNote, v: unknown): ModeleDeNote | null {
+	if (!estObjet(v) || typeof v['accepte'] !== 'boolean' || !nombreFini(v['biais']) || !estObjet(v['poids']) || !estObjet(v['gguf'])) return null;
+	const poids: Partial<Record<VariableDeNote, number>> = {};
+	for (const [variable, w] of Object.entries(v['poids'])) {
+		if (!(VARIABLES_DU_NIVEAU[niveau] as readonly string[]).includes(variable) || !nombreFini(w) || w < 0) return null;
+		poids[variable as VariableDeNote] = w;
+	}
+	const methode = v['methodeCosinus'];
+	const requete = v['requete'] ?? 'seule';
+	const { sens, reranker } = v['gguf'];
+	if ((methode !== 'mediane' && methode !== 'zscore') || (requete !== 'seule' && requete !== 'jointe') || !texteOuNull(sens) || !texteOuNull(reranker) || !texteOuNull(v['apprisLe'] ?? null)) return null;
+	const entier = (x: unknown) => (nombreFini(x) ? x : 0);
+	return {
+		accepte: v['accepte'],
+		biais: v['biais'],
+		poids,
+		methodeCosinus: methode,
+		requete,
+		lambda: nombreFini(v['lambda']) ? v['lambda'] : null,
+		converge: v['converge'] !== false,
+		apprisLe: (v['apprisLe'] as string | null | undefined) ?? null,
+		gguf: { sens, reranker },
+		paires: entier(v['paires']),
+		messages: entier(v['messages']),
+		sessions: entier(v['sessions']),
+		mesures: estObjet(v['mesures']) ? (v['mesures'] as MesuresDuModele) : null,
+		refus: Array.isArray(v['refus']) ? v['refus'].filter((r): r is string => typeof r === 'string') : [],
+	};
+}
+
+/**
+ * Les coefficients lus de `.mnemo/coefficients-note.json` (`jsonDeCoefficients`) ; null si le contenu est invalide (un modèle
+ * de chaque niveau attendu) : la valeur par défaut s'applique alors.
+ */
+export function lireCoefficients(brut: unknown): CoefficientsNote | null {
+	if (!estObjet(brut)) return null;
+	const complets = lireModele('complets', brut['complets']);
+	const sens = lireModele('sens', brut['sens']);
+	return complets === null || sens === null ? null : { complets, sens };
+}

@@ -24,12 +24,13 @@ async function ouvrir(): Promise<{ etat: EtatSessions; chemin: string; dossier: 
 	return { etat, chemin, dossier };
 }
 
-/** Retire ce que la version 13 a ajouté (journal durable des gestes, écartées toujours, dernier message porteur, rang du message des entrées servies). */
+/** Retire ce que la version 13 a ajouté (journal durable des gestes, écartées toujours, dernier message porteur, rang du message et calibration des entrées servies). */
 function sansVersion13(base: DatabaseSync): void {
 	base.exec('DROP TABLE gestes');
 	base.exec('DROP TABLE ecartees_toujours');
 	base.exec('ALTER TABLE sessions DROP COLUMN dernier_message');
 	base.exec('ALTER TABLE servis DROP COLUMN rang_message');
+	base.exec('ALTER TABLE servis DROP COLUMN calibree');
 }
 
 /** Retire ce que la version 12 a ajouté (niveau des modèles d'une session). */
@@ -254,6 +255,21 @@ describe('etat.sqlite', () => {
 		const vingtCaduc = (await etat.servis('s1', 10, 'message')).find((e) => e.horodatageMs === 20)!;
 		expect(vingtCaduc.classement).toEqual(avant);
 		expect(vingtCaduc).not.toHaveProperty('affinage');
+	});
+
+	it('calibration du classement : journalisée, relue (aussi « dernier »), mise à jour par l’affinage, gardée si l’affinage ne la donne pas ; absente : rien', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('s1'));
+		const entree = { session: 's1', moment: 'message' as const, ids: [], texte: '', ms: 1, sens: true, demande: 'q', muet: null, cartes: [], position: null };
+		const classement = [{ id: 'a.md', note: 0.8, servi: false, rang: 1, p: 0.91, pSansApriori: 0.88, signaux: { cosinus: 0.8, cosinusRelatif: 0.1, bm25Relatif: 0, signalSession: 0 } }];
+		await etat.journaliser({ ...entree, horodatageMs: 5, classement: [] });
+		await etat.journaliser({ ...entree, horodatageMs: 10, classement, calibree: false });
+		expect((await etat.servis('s1', 2)).map((e) => e.calibree)).toEqual([false, undefined]);
+		expect((await etat.servis('s1', 1))[0]!.classement).toEqual(classement);
+		expect(await etat.completerClassement('s1', 10, classement, 'fait', { calibree: true })).toBe(true);
+		expect((await etat.servis('s1', 1, undefined, { classement: 'dernier' }))[0]).toMatchObject({ calibree: true, affinage: 'fait' });
+		expect(await etat.completerClassement('s1', 10, classement, null)).toBe(true);
+		expect((await etat.servis('s1', 1))[0]!.calibree).toBe(true);
 	});
 
 	it('journal : un même instant ne s’écrit qu’une fois par session et par moment (repli local du hook)', async () => {
@@ -886,7 +902,7 @@ describe('etat.sqlite', () => {
 		verif.close();
 	});
 
-	it('état déjà en 13 (développement) sans écartées toujours ni affinage : table et colonnes ajoutées, rien perdu', async () => {
+	it('état déjà en 13 (développement) sans écartées toujours, affinage ni calibration : table et colonnes ajoutées, rien perdu', async () => {
 		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('s1'));
 		await etat.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche: 'a.md', empreinte: null, horodatageMs: 5 });
@@ -895,9 +911,12 @@ describe('etat.sqlite', () => {
 		const base = new DatabaseSync(chemin);
 		base.exec('DROP TABLE ecartees_toujours');
 		base.exec('ALTER TABLE servis DROP COLUMN affinage');
+		base.exec('ALTER TABLE servis DROP COLUMN calibree');
 		base.close();
 		const rouvert = ouvrirEtat(chemin);
 		ouverts.push(rouvert);
+		await rouvert.journaliser({ session: 's1', moment: 'message', horodatageMs: 7, ids: [], texte: '', ms: 1, sens: true, demande: 'q', classement: [], calibree: true, muet: null, cartes: [], position: null });
+		expect((await rouvert.servis('s1', 1))[0]!.calibree).toBe(true);
 		expect(await rouvert.gestes({ limite: null })).toMatchObject([{ geste: 'ecartee_ici', fiche: 'a.md' }]);
 		expect(await rouvert.ecarterToujours({ fiche: 'a.md', session: 's1', horodatageMs: 10 })).toBe('ecartee');
 		expect(await rouvert.ecarteesToujours()).toEqual([{ fiche: 'a.md', session: 's1', horodatageMs: 10, retablieMs: null }]);

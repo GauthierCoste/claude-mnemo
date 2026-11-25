@@ -34,7 +34,7 @@ export type ReglageDInjection = {
 	pistesParMessage: number;
 };
 
-export const REGLAGE_PAR_DEFAUT: ReglageDInjection = { seuil: 0.9, injectionsParMessage: 2, garde: 0.7, seuilPiste: 0.6, pistesParMessage: 3 };
+export const REGLAGE_PAR_DEFAUT: ReglageDInjection = { seuil: 0.9, injectionsParMessage: 2, garde: 0.7, seuilPiste: 0.3, pistesParMessage: 3 };
 
 const estReelle = (session: string) => session !== SESSION_MANUELLE;
 const part = (n: number, d: number): number | null => (d === 0 ? null : n / d);

@@ -98,7 +98,7 @@ export const CHAMPS_REGLAGES: readonly ChampReglage[] = [
 		libelle: 'Seuil des pistes',
 		explication: 'Note minimale d’une piste (carte proposée sans injecter la fiche dans la session), jamais au-dessus du seuil d’injection. Agit seulement avec une note calibrée ; sans elle, les premières de l’ordre.',
 		genre: 'entier',
-		defaut: 60,
+		defaut: 30,
 		min: 0,
 		max: 100,
 		unite: '%',

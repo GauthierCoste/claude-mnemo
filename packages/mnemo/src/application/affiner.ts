@@ -2,6 +2,8 @@
  * Affinage du classement en arrière-plan (spec classement vivant § 3.6) : après la réponse du hook de message, le service fait
  * noter par le reranker les 30 premières candidates de l'ordre du hook, plus les fiches désignées par un signal (40 au plus ;
  * celles que le hook a déjà notées gardent sa note) ; si le sens n'avait pas répondu au hook, il calcule aussi les cosinus.
+ * Avec une note de confiance apprise, la note est recalculée avec les logits (Complets pour les fiches notées par le reranker,
+ * Sens seul pour les autres) et range le classement, `p` seulement d'un modèle accepté ; sans, l'ordre provisoire (`ordreAffine`).
  * L'entrée du journal est complétée (même horodatage, `affinage` `en_cours` puis `fait`, ou null si rien n'a été ajouté) et
  * rediffusée à chaque étape. **Rien d'autre** : ni injection, ni piste, ni file (rien en différé, décision du 24/11).
  * Un message porteur plus récent de la session rend l'affinage caduc (sa demande coupe celle-ci, entre deux morceaux ; l'état
@@ -12,6 +14,7 @@ import { normaliser } from '../domaine/sens.ts';
 import { cosinusDesFiches, cosinusRelatif, cosinusZ } from '../domaine/signaux-de-note.ts';
 import { requeteDuReranker, texteDuReranker } from '../domaine/textes-du-reranker.ts';
 import { classementDuJournal } from './classement-du-message.ts';
+import { modelesActifs, noterLeClassement } from './note-du-classement.ts';
 import type { LigneDeClassement } from './classement-du-message.ts';
 import type { Classe, Dependances, EtatSessions, VecteurDuMessage } from './ports.ts';
 
@@ -85,7 +88,7 @@ export function candidatesAffinees(ordre: readonly LigneDeClassement[]): string[
 }
 
 /**
- * L'ordre affiné : d'abord les fiches notées par le reranker, par leur note (sa base, la sigmoïde du logit, plus le signal de
+ * L'ordre affiné de la règle provisoire (aucune note apprise) : d'abord les fiches notées par le reranker, par leur note (sa base, la sigmoïde du logit, plus le signal de
  * session : comme l'outil `contexte`), puis les autres, par leur note du sens si elle est connue ; à égalité, l'ordre d'avant.
  */
 export function ordreAffine(lignes: readonly LigneDeClassement[], logits: ReadonlyMap<string, number>): LigneDeClassement[] {
@@ -129,8 +132,8 @@ export async function affiner(dep: Dependances, etat: Pick<EtatSessions, 'comple
 		await o.diffuser?.().catch(() => {});
 	};
 	const avant = classementDuJournal(d.classement);
-	const ecrire = (classement: Classe[], affinage: 'en_cours' | 'fait' | null, sens = false) =>
-		etat.completerClassement(d.session, d.horodatageMs, classement, affinage, sens ? { sens: true } : undefined).catch(() => false);
+	const ecrire = (classement: Classe[], affinage: 'en_cours' | 'fait' | null, options?: { sens: boolean; calibree: boolean }) =>
+		etat.completerClassement(d.session, d.horodatageMs, classement, affinage, options === undefined ? undefined : { ...(options.sens ? { sens: true } : {}), calibree: options.calibree }).catch(() => false);
 	// caduc (ou rien d'ajouté) : l'entrée garde le classement du hook, sans état d'affinage ; l'état le remet aussi à null s'il
 	// n'est plus l'entrée la plus récente
 	const sansAffinage = async (): Promise<null> => {
@@ -174,8 +177,14 @@ export async function affiner(dep: Dependances, etat: Pick<EtatSessions, 'comple
 	if (coupe()) return sansAffinage();
 	if (logits.size === duHook && vecteur === null) return sansAffinage();
 	const rangHook = new Map(d.classement.map((l, i) => [l.chemin, i + 1]));
-	const affine = classementDuJournal(ordreAffine(lignes, logits)).map((c) => ({ ...c, rangHook: rangHook.get(c.id) ?? c.rang }));
-	if (!(await ecrire(affine, 'fait', vecteur !== null))) {
+	// la note recalculée avec les logits (et le sens, s'il manquait au hook) ; sans note apprise, l'ordre provisoire
+	const note = noterLeClassement(
+		lignes.map((l) => ({ ...l, logit: logits.get(l.chemin) ?? null })),
+		modelesActifs(dep),
+	);
+	const ordre = note.parNote ? note.lignes : ordreAffine(lignes, logits);
+	const affine = classementDuJournal(ordre).map((c) => ({ ...c, rangHook: rangHook.get(c.id) ?? c.rang }));
+	if (!(await ecrire(affine, 'fait', { sens: vecteur !== null, calibree: note.calibree }))) {
 		await diffuser();
 		return null;
 	}

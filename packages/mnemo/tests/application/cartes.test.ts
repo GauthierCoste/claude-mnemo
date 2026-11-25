@@ -3,6 +3,11 @@ import { calculerCartes, ligneDeCarte, RESERVE_APRES_RERANKER_MS } from '../../s
 import type { DemandeCartes } from '../../src/application/cartes.ts';
 import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
 import type { Dependances, Reranker, Sens } from '../../src/application/ports.ts';
+import { classementDuJournal } from '../../src/application/classement-du-message.ts';
+import type { LigneDeClassement } from '../../src/application/classement-du-message.ts';
+import { modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
+import type { CoefficientsNote, ModeleDeNote } from '../../src/domaine/modele-de-note.ts';
+import { sigmoide } from '../../src/domaine/regression-logistique.ts';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
 import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
@@ -886,5 +891,171 @@ describe('ligneDeCarte', () => {
 
 	it('vide sans synthèse', () => {
 		expect(ligneDeCarte('')).toBe('');
+	});
+});
+
+describe('calculerCartes : note de confiance (modèle accepté, refusé, aucun)', () => {
+	const NEUTRES = Array.from({ length: 6 }, (_, i) => `notes/Note ${i}.md`);
+	const INSTALLES = { sens: 'sens.gguf@aaaaaaaaaaaa', reranker: 'reranker.gguf@bbbbbbbbbbbb' };
+	const message = 'la maquette des sites';
+	/** Mémoire de base plus 6 neutres (10 candidates), le sens par les mots ; un message qui n'est pas le premier (règle provisoire : aucune piste). */
+	async function avecSens() {
+		const dep = await memoire();
+		for (const [i, chemin] of NEUTRES.entries()) await dep.coffre.ecrire(chemin, fiche('pratique', `Note ${i}`, `Maquette numéro ${i}.`, '', '', '2026-10-01'));
+		await synchroniser(dep, SANS_EXTRACTION);
+		dep.sens = sensParMots;
+		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
+		avecReglages(dep, { pistesParMessage: 3 });
+		return dep;
+	}
+	const suite = (surcharge: Partial<DemandeCartes> = {}) => demande({ message, premier: false, pistes: false, servirPosition: false, ...surcharge });
+	const modele = (surcharge: Partial<ModeleDeNote> = {}): ModeleDeNote => ({ ...modeleNonAppris(), apprisLe: '2026-11-25', refus: [], accepte: true, gguf: INSTALLES, ...surcharge });
+	/** Sens seul : les mots d'abord (bm25 relatif), le sens ensuite ; un ordre autre que la note provisoire (sens plus poids). */
+	const SENS: Pick<ModeleDeNote, 'biais' | 'poids'> = { biais: -1, poids: { cosinusRelatif: 2, bm25Relatif: 3 } };
+	const avecModeles = (dep: Dependances, coefficients: Partial<CoefficientsNote>, installes = INSTALLES) => {
+		dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens: modeleNonAppris(), ...coefficients }, installes });
+	};
+	const pSens = (l: LigneDeClassement) => sigmoide(SENS.biais + 2 * l.signaux.cosinusRelatif! + 3 * (l.signaux.bm25Relatif ?? 0));
+	const decroissant = (valeurs: number[]) => valeurs.every((v, i) => i === 0 || valeurs[i - 1]! >= v);
+
+	it('modèle accepté : p en % sur chaque ligne, ordre par p, pistes au seuil à un message qui n’est pas le premier, calibré', async () => {
+		const dep = await avecSens();
+		avecModeles(dep, { sens: modele(SENS) });
+		const c = await calculerCartes(dep, suite());
+		expect(c.calibree).toBe(true);
+		expect(c.classement.length).toBe(10);
+		for (const l of c.classement) {
+			expect(l.p).toBeCloseTo(pSens(l), 9);
+			// sans a priori : p_sans_apriori = p
+			expect(l.pSansApriori).toBeCloseTo(l.p!, 9);
+		}
+		expect(decroissant(c.classement.map((l) => l.p!))).toBe(true);
+		const attendues = c.classement.filter((l) => l.p! >= 0.3).slice(0, 3);
+		expect(attendues.length).toBeGreaterThan(0);
+		expect(chemins(c)).toEqual(attendues.map((l) => l.chemin));
+		expect(c.classement.filter((l) => l.piste).map((l) => l.chemin)).toEqual(attendues.map((l) => l.chemin));
+		// la carte porte le % de la note
+		expect(c.cartes.map((x) => x.note)).toEqual(attendues.map((l) => l.p));
+		// au journal : p et p_sans_apriori à 4 décimales
+		expect(classementDuJournal(c.classement)[0]).toMatchObject({ p: expect.any(Number), pSansApriori: expect.any(Number) });
+	});
+
+	it('modèle appris mais refusé : même ordre et mêmes pistes qu’accepté, sans % ni calibration', async () => {
+		const dep = await avecSens();
+		avecModeles(dep, { sens: modele(SENS) });
+		const accepte = await calculerCartes(dep, suite());
+		avecModeles(dep, { sens: modele({ ...SENS, accepte: false, refus: ['trop peu d’injections'] }) });
+		const refuse = await calculerCartes(dep, suite());
+		expect(refuse.calibree).toBe(false);
+		expect(refuse.classement.map((l) => l.chemin)).toEqual(accepte.classement.map((l) => l.chemin));
+		expect(refuse.classement.every((l) => l.p === null && l.pSansApriori === undefined)).toBe(true);
+		expect(chemins(refuse)).toEqual(chemins(accepte));
+		expect(chemins(refuse).length).toBeGreaterThan(0);
+		expect(refuse.cartes.every((x) => x.note === null)).toBe(true);
+		expect(classementDuJournal(refuse.classement).every((l) => l.p === undefined)).toBe(true);
+	});
+
+	it('modèle refusé pour d’autres fichiers GGUF que ceux installés : ordre et pistes par sa note, p null', async () => {
+		const dep = await avecSens();
+		avecModeles(dep, { sens: modele(SENS) });
+		const accepte = await calculerCartes(dep, suite());
+		avecModeles(dep, { sens: modele(SENS) }, { ...INSTALLES, sens: 'sens.gguf@cccccccccccc' });
+		const autres = await calculerCartes(dep, suite());
+		expect(autres.calibree).toBe(false);
+		expect(autres.classement.every((l) => l.p === null)).toBe(true);
+		expect(autres.classement.map((l) => l.chemin)).toEqual(accepte.classement.map((l) => l.chemin));
+		expect(chemins(autres)).toEqual(chemins(accepte));
+	});
+
+	it('aucun modèle appris : la règle provisoire, inchangée (ordre de la note provisoire, aucune piste hors du premier message)', async () => {
+		const dep = await avecSens();
+		const sansNote = await calculerCartes(dep, suite());
+		avecModeles(dep, {});
+		const defaut = await calculerCartes(dep, suite());
+		for (const c of [sansNote, defaut]) {
+			expect(c.calibree).toBe(false);
+			expect(c.cartes).toEqual([]);
+			expect(c.classement.every((l) => l.p === null && !l.piste)).toBe(true);
+			expect(decroissant(c.classement.map((l) => l.note!))).toBe(true);
+		}
+		expect(defaut.classement).toEqual(sansNote.classement);
+		// au premier message, les premières de l'ordre provisoire, sans seuil
+		const premier = await calculerCartes(dep, demande({ message, servirPosition: false }));
+		expect(chemins(premier)).toEqual(premier.classement.slice(0, 3).map((l) => l.chemin));
+	});
+
+	it('seuil des pistes : une note sous le seuil ne part pas en piste, même avec de la place', async () => {
+		const dep = await avecSens();
+		avecModeles(dep, { sens: modele({ ...SENS, accepte: false }) });
+		avecReglages(dep, { pistesParMessage: 10, seuilPiste: 90 });
+		const c = await calculerCartes(dep, suite());
+		const auSeuil = c.classement.filter((l) => pSens(l) >= 0.9).map((l) => l.chemin);
+		expect(chemins(c)).toEqual(auSeuil);
+		expect(chemins(c).length).toBeLessThan(c.classement.length);
+	});
+
+	it('sens absent : ni note ni p, la règle provisoire (pistes par les mots au premier message seulement)', async () => {
+		const dep = await avecSens();
+		avecModeles(dep, { sens: modele(SENS) });
+		dep.sens = { modele: sensParMots.modele, vecteurs: async () => null };
+		const c = await calculerCartes(dep, suite());
+		expect(c.calibree).toBe(false);
+		expect(c.cartes).toEqual([]);
+		expect(c.classement.every((l) => l.p === null)).toBe(true);
+	});
+
+	it('au hook : Sens seul pour toutes, Complets pour les rerankées (les premières selon le Sens seul)', async () => {
+		const dep = await avecSens();
+		const COMPLETS: Pick<ModeleDeNote, 'biais' | 'poids'> = { biais: 0, poids: { logit: 1, cosinusRelatif: 1 } };
+		avecModeles(dep, { sens: modele(SENS), complets: modele(COMPLETS) });
+		const parSens = await calculerCartes(dep, suite());
+		const textes: string[][] = [];
+		dep.reranker = { noter: async (_r, t) => (textes.push(t), t.map((x) => (x.startsWith('Note 5') ? 4 : -2))) };
+		const duree = dureeDuReranker();
+		for (const [documents, ms] of [[5, 35], [10, 60], [5, 35]] as const) duree.noter({ documents, ms });
+		const c = await calculerCartes(dep, suite({ dureeReranker: duree }));
+		// le reranker a noté les premières de l'ordre du Sens seul
+		expect(textes).toHaveLength(1);
+		const rerankees = parSens.classement.slice(0, textes[0]!.length).map((l) => l.chemin);
+		expect(textes[0]!.map((t) => t.split('\n')[0])).toEqual(parSens.classement.slice(0, textes[0]!.length).map((l) => l.titre));
+		for (const l of c.classement) {
+			if (rerankees.includes(l.chemin)) {
+				expect(l.logit).not.toBeNull();
+				expect(l.p).toBeCloseTo(sigmoide(l.logit! + l.signaux.cosinusRelatif!), 9);
+			} else {
+				expect(l.logit).toBeNull();
+				expect(l.p).toBeCloseTo(pSens(l), 9);
+			}
+		}
+		expect(decroissant(c.classement.map((l) => l.p!))).toBe(true);
+		expect(c.calibree).toBe(true);
+		// un Complets refusé : ses notes ordonnent, sans %
+		avecModeles(dep, { sens: modele(SENS), complets: modele({ ...COMPLETS, accepte: false }) });
+		const mixte = await calculerCartes(dep, suite({ dureeReranker: duree }));
+		expect(mixte.calibree).toBe(false);
+		expect(mixte.classement.map((l) => l.chemin)).toEqual(c.classement.map((l) => l.chemin));
+		expect(mixte.classement.filter((l) => l.logit !== null).every((l) => l.p === null)).toBe(true);
+	});
+
+	it('outil contexte : la même note (Complets sur les rerankées), sans la base du reranker ; % seulement d’un modèle accepté', async () => {
+		const dep = await avecSens();
+		const COMPLETS: Pick<ModeleDeNote, 'biais' | 'poids'> = { biais: -2, poids: { logit: 1, cosinusRelatif: 1 } };
+		avecModeles(dep, { sens: modele(SENS), complets: modele(COMPLETS) });
+		dep.reranker = { noter: async (_r, t) => t.map((x) => (/^ERP/u.test(x) ? 3 : /^Outil/u.test(x) ? 2 : -1)) };
+		const question = { question: true, classer: false, servirPosition: false, message: 'maquette ERP du site' };
+		const c = await calculerCartes(dep, demande(question));
+		expect(c.mesure).toBe('reranker');
+		expect(c.calibree).toBe(true);
+		expect(chemins(c).slice(0, 2)).toEqual([ERP, OUTIL]);
+		// la note de la carte : σ(z) du Complets, pas la sigmoïde du logit plus les poids
+		const notes = c.cartes.map((x) => x.note!);
+		expect(decroissant(notes)).toBe(true);
+		expect(notes[0]).not.toBeCloseTo(sigmoide(3), 3);
+		// refusé : même ordre, aucune note
+		avecModeles(dep, { sens: modele({ ...SENS, accepte: false }), complets: modele({ ...COMPLETS, accepte: false }) });
+		const refuse = await calculerCartes(dep, demande(question));
+		expect(refuse.calibree).toBe(false);
+		expect(chemins(refuse)).toEqual(chemins(c));
+		expect(refuse.cartes.every((x) => x.note === null)).toBe(true);
 	});
 });

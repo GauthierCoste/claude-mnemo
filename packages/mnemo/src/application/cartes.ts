@@ -4,11 +4,13 @@
  * l'ordre du message), ou d'un classement unique par la note (`domaine/note-des-pistes.ts` : sens du message plus poids des
  * signaux). À chaque message porteur, toutes les candidates (périmètre de la position, fiches neutres, fiches d'ailleurs dont le
  * lieu est nommé, voisines des fiches injectées à la main) sont classées (`classement-du-message.ts`) : le classement entier va
- * au journal et au panneau ; tant qu'aucune note apprise n'est acceptée, les premières nouvelles ne partent en pistes qu'au premier
- * message et au message qui part avec une fiche injectée à la main. Au hook, le reranker note les premières de l'ordre si
- * l'estimation de sa durée tient dans le temps restant (`duree-reranker.ts`) : son logit brut va aux signaux, sans rien décider.
- * L'outil `contexte` classe sur sa question. La fiche de position seule est servie entière. Avec le
- * sens, toute carte porte sa note, fiche nommée et fiche de position comprises, sans que la note les reclasse.
+ * au journal et au panneau. Avec une note de confiance apprise (`note-du-classement.ts`, acceptée ou non), elle ordonne le
+ * classement et choisit les pistes à chaque message classé (seuil des pistes) ; elle ne donne un % (`p`) que si son modèle est
+ * accepté. Sans note apprise (règle provisoire), les premières nouvelles ne partent en pistes qu'au premier message et au message
+ * qui part avec une fiche injectée à la main. Au hook, le reranker note les premières de l'ordre si l'estimation de sa durée
+ * tient dans le temps restant (`duree-reranker.ts`) : son logit fait noter la fiche au niveau Complets. L'outil `contexte`
+ * classe sur sa question, avec la même note. La fiche de position seule est servie entière. Avec le sens, toute carte porte sa
+ * note, fiche nommée et fiche de position comprises, sans que la note les reclasse.
  */
 import { fichesNommees } from '../domaine/fiches-nommees.ts';
 import type { Nommable } from '../domaine/fiches-nommees.ts';
@@ -24,12 +26,14 @@ import { expressionFts } from '../domaine/requete.ts';
 import { sansFaitsInactifs } from '../domaine/sans-faits-inactifs.ts';
 import { requeteDuReranker, syntheseDuTexte, texteDuReranker as texteDeFiche } from '../domaine/textes-du-reranker.ts';
 import { normaliser } from '../domaine/sens.ts';
+import { noteApprise, noterLaCandidate, pCalibre } from '../domaine/note-de-confiance.ts';
 import { candidatesDuMessage, classerLeMessage, ficheProposable } from './classement-du-message.ts';
 import type { LigneDeClassement } from './classement-du-message.ts';
 import { ficheDePosition } from './chercher.ts';
 import type { DureeDuReranker } from './duree-reranker.ts';
 import { aujourdhui } from './commun.ts';
 import { resolveurDeLiens } from './liens.ts';
+import { auSeuilDePiste, modelesActifs, noterLeClassement } from './note-du-classement.ts';
 import type { CarteJournalisee, DejaDansLaSession, Dependances, FicheServieLueOuEcrite, RaisonCarte, VecteurDuMessage } from './ports.ts';
 
 /** Fiches lues ou écrites par la session, d'après son état : chemin → empreinte de la fiche à sa lecture (null : écrite, ou inconnue). */
@@ -75,9 +79,9 @@ export type DemandeCartes = {
 	/** Vrai : classer les candidates (message porteur, ou message qui part avec une fiche injectée à la main) : le classement va au journal et au panneau. */
 	classer: boolean;
 	/**
-	 * Vrai : Claude reçoit des pistes (les premières nouvelles du classement). Tant qu'aucune note apprise n'est acceptée : au premier
-	 * message porteur (périmètre) et au message qui part avec une fiche injectée à la main (voisinage) seulement ; les fiches nommées,
-	 * elles, sont toujours proposées.
+	 * Règle provisoire (aucune note apprise) : vrai si Claude reçoit des pistes (les premières nouvelles du classement), au premier
+	 * message porteur (périmètre) et au message qui part avec une fiche injectée à la main (voisinage) seulement. Avec une note
+	 * apprise, les pistes viennent à chaque message classé, au seuil des pistes. Les fiches nommées, elles, sont toujours proposées.
 	 */
 	pistes: boolean;
 	/** Premier message porteur de la session (et de nouveau après /clear ou /compact) : sans le sens, le périmètre part en pistes par date. */
@@ -122,6 +126,8 @@ export type CartesCalculees = {
 	mesure: 'reranker' | 'sens' | 'aucune';
 	vecteur?: VecteurDuMessage;
 	classement: LigneDeClassement[];
+	/** Le classement (ou, outil `contexte`, ses cartes) est noté par des modèles acceptés : `p` en % ; faux : ordre seul. */
+	calibree: boolean;
 	/**
 	 * L'appel de mesure à lancer après la réponse du hook (`requete` pour le reranker, textes des premières de l'ordre) : le
 	 * service n'a pas d'estimation fiable de la durée du reranker, et aucun appel en cours n'en donnera une. Il ne décide et
@@ -219,17 +225,18 @@ function rerankerTient(duree: DureeDuReranker | undefined, documents: number, fi
 }
 
 /**
- * Reranker au hook (spec classement vivant § 3.6) : il note les premières candidates de l'ordre, de 8 à 5 selon ce que
+ * Reranker au hook (spec classement vivant § 3.6) : il note les premières candidates de l'ordre (celui de la note Sens seul si un
+ * modèle est appris, sinon l'ordre provisoire), de 8 à 5 selon ce que
  * l'estimation de sa durée laisse tenir avant sa propre échéance (`fin - RESERVE_APRES_RERANKER_MS`) ; rend leurs logits bruts
  * par chemin. Vide sans estimation fiable (hook sans service, trop peu de mesures), si rien ne tient, si un autre appel du
  * reranker est en cours dans le service, ou s'il ne répond pas à temps : ni erreur, ni attente au-delà de son échéance.
- * Le logit n'est qu'un signal brut : il ne change ni l'ordre ni les pistes tant qu'aucune note apprise ne l'utilise.
+ * Avec un modèle Complets appris, le logit fait noter la fiche à ce niveau ; sans, il n'est qu'un signal brut.
  */
 async function logitsAuHook(
 	dep: Dependances,
 	duree: DureeDuReranker | undefined,
 	requete: string,
-	ordre: readonly Note[],
+	ordre: readonly string[],
 	texte: (chemin: string) => string,
 	fin: number,
 ): Promise<Map<string, number>> {
@@ -237,7 +244,7 @@ async function logitsAuHook(
 	const finReranker = fin - RESERVE_APRES_RERANKER_MS;
 	const k = duree.documentsAuHook(finReranker - Date.now(), ordre.length);
 	if (k === null) return new Map();
-	const premieres = ordre.slice(0, k).map((n) => n.chemin);
+	const premieres = ordre.slice(0, k);
 	const notes = await notesDuReranker(dep, requete, premieres.map(texte), finReranker);
 	return notes === null ? new Map() : new Map(premieres.map((c, i) => [c, notes[i]!]));
 }
@@ -325,6 +332,8 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 	let mesure: CartesCalculees['mesure'] = 'aucune';
 	let vecteurDuCalcul: VecteurDuMessage | null = null;
 	let aMesurer: CartesCalculees['aMesurer'];
+	let calibree = false;
+	const modeles = modelesActifs(dep);
 	const date = (chemin: string) => elementDe.get(chemin)?.date ?? '';
 
 	// Note unique : sens du message (base) plus le poids de chaque signal. Un nouveau signal s'ajoute à cette liste.
@@ -334,14 +343,47 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 	// La raison d'une carte classée : le signal qui l'a fait monter s'il pèse plus que le sens, sinon d'où vient la candidate
 	// (`origine`) ; une candidate venue seulement d'un signal (origine null) a toujours la raison de ce signal.
 	// La note n'est montrée que si le sens (ou le reranker) a noté : sans modèle, la base vaut 0 et la note ne dirait rien.
-	const choisie = (n: Note, origine: 'perimetre' | 'question' | 'proche' | null): Choisie => {
+	// Avec une note apprise (`noteApprise`), la note de la carte est son `p` calibré (null : ordre seul, sans %).
+	const choisie = (n: Note, origine: 'perimetre' | 'question' | 'proche' | null, noteApprise?: number | null): Choisie => {
 		const s = origine === null ? apportPrincipal(n) : signalDominant(n);
-		const note = mesure === 'aucune' ? null : n.total;
+		const note = noteApprise !== undefined ? noteApprise : mesure === 'aucune' ? null : n.total;
 		return s === null ? { chemin: n.chemin, raison: origine ?? 'perimetre', depuis: null, note } : { chemin: n.chemin, raison: s.signal, depuis: s.depuis, note };
 	};
 
-	if (d.question) {
-		// Outil `contexte` : tout est proposable, ailleurs compris ; la note (sens plus signaux) classe, le reranker remplace le sens.
+	if (d.question && noteApprise(modeles)) {
+		// Outil `contexte` avec une note apprise : les candidates comme sans elle (les plus proches du sens au-dessus du seuil, les
+		// désignées, sinon les mots), notées par les signaux du hook (cosinus relatif à toute la mémoire, bm25 relatif, signal de
+		// session) ; la note Sens seul ordonne, le reranker note les 30 premières, la note Complets les reclasse.
+		const candidates = elements.map((e) => e.chemin).filter(proposable);
+		vecteurDuCalcul = await vecteurDuMessage(dep, requete, d.fin);
+		const m = await classerLeMessage(dep, { candidates, message: requete, vecteur: vecteurDuCalcul?.valeurs ?? null, nombreDeFiches: elements.length, noter: noterPiste, date });
+		if (m.sens) mesure = 'sens';
+		const parChemin = new Map(m.ordre.map((n) => [n.chemin, n]));
+		const cosinus = (n: Note): number | null => m.signaux(n).cosinus;
+		let pool: Note[];
+		if (m.sens) {
+			const proches = m.ordre.filter((n) => cosinus(n) !== null).sort((a, b) => cosinus(b)! - cosinus(a)! || a.chemin.localeCompare(b.chemin)).slice(0, CANDIDATS_QUESTION);
+			const dejaPris = new Set(proches.map((n) => n.chemin));
+			const manquantes = m.ordre.filter((n) => designeesParSignal.has(n.chemin) && !dejaPris.has(n.chemin) && cosinus(n) !== null);
+			// le seuil de sens porte sur la base : un signal fait monter une fiche proche, il ne fait pas entrer une fiche lointaine
+			pool = [...proches, ...manquantes].filter((n) => n.base >= reglages.similariteRecherche);
+		} else {
+			pool = m.ordreDesMots.slice(0, CANDIDATS_QUESTION).flatMap((c) => (parChemin.has(c) ? [parChemin.get(c)!] : []));
+		}
+		const ligne = (n: Note): LigneDeClassement => ({ chemin: n.chemin, titre: titre(n.chemin), note: n.total, p: null, signaux: m.signaux(n), logit: null, deja: null, raison: null, piste: false });
+		const parSens = noterLeClassement(pool.map(ligne), modeles);
+		const soumises = parSens.lignes.slice(0, CANDIDATS_RERANKER);
+		const rerank = rerankerTient(d.dureeReranker, soumises.length, d.fin) ? await notesDuReranker(dep, requete, soumises.map((l) => texteDuReranker(l.chemin)), d.fin) : null;
+		if (rerank !== null) mesure = 'reranker';
+		const logitDe = new Map(rerank === null ? [] : soumises.map((l, i) => [l.chemin, rerank[i]!] as const));
+		const finale = noterLeClassement(parSens.lignes.map((l) => ({ ...l, logit: logitDe.get(l.chemin) ?? null })), modeles);
+		calibree = finale.calibree;
+		choisies = finale.lignes
+			.slice(0, CARTES_QUESTION_MAX)
+			.map((l) => choisie(parChemin.get(l.chemin)!, 'question', finale.parNote ? pCalibre(finale.notes.get(l.chemin) ?? null) : undefined));
+	} else if (d.question) {
+		// Outil `contexte` sans note apprise (règle provisoire) : tout est proposable, ailleurs compris ; la note (sens plus signaux)
+		// classe, le reranker remplace le sens.
 		const candidates = elements.map((e) => e.chemin).filter(proposable);
 		let notes: Note[] = [];
 		vecteurDuCalcul = await vecteurDuMessage(dep, requete, d.fin);
@@ -409,38 +451,67 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 			...(aprioris === undefined ? {} : { aprioris }),
 		});
 		if (m.sens) mesure = 'sens';
-		// reranker au hook sur les premières de l'ordre, si l'estimation de sa durée le permet : son logit va aux signaux bruts seulement
-		const logits = await logitsAuHook(dep, d.dureeReranker, requete, m.ordre, texteDuReranker, d.fin);
-		if (logits.size === 0 && d.dureeReranker !== undefined && !d.dureeReranker.fiable() && d.dureeReranker.enCours() === 0 && m.ordre.length > 0 && requete.trim() !== '') {
-			aMesurer = { requete: requeteDuReranker(requete), textes: m.ordre.slice(0, DOCUMENTS_A_MESURER).map((n) => texteDuReranker(n.chemin)) };
-		}
-		const noteHorsClassement = (chemin: string): number | null => (mesure === 'aucune' ? null : noterPiste(chemin, m.base(chemin)).total);
-		// Pistes : les premières nouvelles de l'ordre (pas de seuil tant qu'aucune note apprise n'est acceptée), seulement si la demande
-		// en veut. Sans le sens, il faut que les mots trouvent la fiche ou qu'un signal la désigne : la date seule ne dit rien du message ;
-		// au premier message seulement, le périmètre part par date, comme avant le classement vivant.
-		const pisteEligible = (n: Note): boolean =>
-			!dejaVue(n.chemin) &&
-			!nommeesRetenues.has(n.chemin) &&
-			(mesure !== 'aucune' || m.bm25(n.chemin) > 0 || n.apports.length > 0 || (d.premier === true && origine(n.chemin) === 'perimetre'));
-		const pistes = d.pistes ? m.ordre.filter(pisteEligible).slice(0, reglages.pistesParMessage) : [];
-		choisies = [
-			...pistes.map((n) => choisie(n, origine(n.chemin))),
-			...cartesNommees.map((chemin): Choisie => ({ chemin, raison: 'nommee', depuis: null, note: noteHorsClassement(chemin) })),
-		];
-		if (carteDePosition !== null) noteDePosition = noteHorsClassement(carteDePosition);
-		const raisonDe = new Map(choisies.map((c) => [c.chemin, c.raison]));
-		const enPiste = new Set(pistes.map((n) => n.chemin));
-		classement = m.ordre.map((n) => ({
+		const parChemin = new Map(m.ordre.map((n) => [n.chemin, n]));
+		const ligne = (n: Note): LigneDeClassement => ({
 			chemin: n.chemin,
 			titre: titre(n.chemin),
 			note: mesure === 'aucune' ? null : n.total,
 			p: null,
 			signaux: m.signaux(n),
-			logit: logits.get(n.chemin) ?? null,
+			logit: null,
 			deja: dejaDe(n.chemin),
-			raison: raisonDe.get(n.chemin) ?? null,
-			piste: enPiste.has(n.chemin),
-		}));
+			raison: null,
+			piste: false,
+		});
+		// note Sens seul pour toutes les candidates, si un modèle est appris : l'ordre que suit le reranker au hook
+		const parSens = noterLeClassement(m.ordre.map(ligne), modeles);
+		const ordreDuHook = parSens.lignes.map((l) => l.chemin);
+		// reranker au hook sur les premières de cet ordre, si l'estimation de sa durée le permet
+		const logits = await logitsAuHook(dep, d.dureeReranker, requete, ordreDuHook, texteDuReranker, d.fin);
+		if (logits.size === 0 && d.dureeReranker !== undefined && !d.dureeReranker.fiable() && d.dureeReranker.enCours() === 0 && m.ordre.length > 0 && requete.trim() !== '') {
+			aMesurer = { requete: requeteDuReranker(requete), textes: ordreDuHook.slice(0, DOCUMENTS_A_MESURER).map(texteDuReranker) };
+		}
+		// note finale : Complets pour les candidates que le reranker a notées, Sens seul pour les autres
+		const note = noterLeClassement(
+			parSens.lignes.map((l) => ({ ...l, logit: logits.get(l.chemin) ?? null })),
+			modeles,
+		);
+		calibree = note.calibree;
+		/** Note d'une carte hors classement (fiche nommée, fiche de position trop longue) : comme une candidate, sans reclasser. */
+		const noteHorsClassement = (chemin: string): number | null => {
+			if (mesure === 'aucune') return null;
+			const n = noterPiste(chemin, m.base(chemin));
+			if (!note.parNote) return n.total;
+			return pCalibre(note.notes.get(chemin) ?? noterLaCandidate(modeles, m.signaux(n)));
+		};
+		let pistes: Note[];
+		if (note.parNote) {
+			// Une note apprise (acceptée ou non) : à chaque message classé, les nouvelles qui atteignent le seuil des pistes, dans
+			// l'ordre de la note, au plus `pistesParMessage`.
+			pistes = d.classer
+				? note.lignes
+						.filter((l) => !dejaVue(l.chemin) && !nommeesRetenues.has(l.chemin) && auSeuilDePiste(note.notes.get(l.chemin), reglages.seuilPiste))
+						.slice(0, reglages.pistesParMessage)
+						.map((l) => parChemin.get(l.chemin)!)
+				: [];
+		} else {
+			// Règle provisoire (aucune note apprise, ou le sens n'a rien noté) : les premières nouvelles de l'ordre, sans seuil, seulement
+			// si la demande en veut. Sans le sens, il faut que les mots trouvent la fiche ou qu'un signal la désigne : la date seule ne dit
+			// rien du message ; au premier message seulement, le périmètre part par date, comme avant le classement vivant.
+			const pisteEligible = (n: Note): boolean =>
+				!dejaVue(n.chemin) &&
+				!nommeesRetenues.has(n.chemin) &&
+				(mesure !== 'aucune' || m.bm25(n.chemin) > 0 || n.apports.length > 0 || (d.premier === true && origine(n.chemin) === 'perimetre'));
+			pistes = d.pistes ? m.ordre.filter(pisteEligible).slice(0, reglages.pistesParMessage) : [];
+		}
+		choisies = [
+			...pistes.map((n) => choisie(n, origine(n.chemin), note.parNote ? pCalibre(note.notes.get(n.chemin) ?? null) : undefined)),
+			...cartesNommees.map((chemin): Choisie => ({ chemin, raison: 'nommee', depuis: null, note: noteHorsClassement(chemin) })),
+		];
+		if (carteDePosition !== null) noteDePosition = noteHorsClassement(carteDePosition);
+		const raisonDe = new Map(choisies.map((c) => [c.chemin, c.raison]));
+		const enPiste = new Set(pistes.map((n) => n.chemin));
+		classement = note.lignes.map((l) => ({ ...l, raison: raisonDe.get(l.chemin) ?? null, piste: enPiste.has(l.chemin) }));
 	}
 	// la fiche de position trop longue reste la première carte
 	if (carteDePosition !== null) choisies.unshift({ chemin: carteDePosition, raison: 'perimetre', depuis: null, note: noteDePosition });
@@ -462,5 +533,5 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		});
 	}
 	if (position !== null) position = { ...position, encadree: encadrees.has(position.chemin) };
-	return { position, positionFiche, cartes, mesure, ...(vecteurDuCalcul === null ? {} : { vecteur: vecteurDuCalcul }), classement, ...(aMesurer === undefined ? {} : { aMesurer }) };
+	return { position, positionFiche, cartes, mesure, ...(vecteurDuCalcul === null ? {} : { vecteur: vecteurDuCalcul }), classement, calibree, ...(aMesurer === undefined ? {} : { aMesurer }) };
 }

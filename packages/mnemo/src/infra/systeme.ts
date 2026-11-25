@@ -21,6 +21,7 @@ import { ecrireIndicateur, FICHIER_INDEX, lireIndicateur, marquerIndicateurIllis
 import { depotGit } from './depot-git.ts';
 import { pluginsClaude } from './plugins-claude.ts';
 import { reglagesDuDossier } from './reglages-fichier.ts';
+import { noteDuDossier } from './coefficients-note-fichier.ts';
 import { verrouFichier } from './verrou-fichier.ts';
 import { versionMnemo } from './version.ts';
 import type { ATTENTE_PAR_DEFAUT } from './verrou-fichier.ts';
@@ -210,6 +211,7 @@ export function dependancesReelles(racineDossier: string, options: { attenteVerr
 		sens: sensLlama(racineDossier),
 		reranker: rerankerLlama(racineDossier),
 		reglages: reglagesDuDossier(racineDossier),
+		note: noteDuDossier(racineDossier),
 		pluginsClaude: pluginsClaude(),
 		lots: lotsParesseux(racineDossier),
 		indicateur: {

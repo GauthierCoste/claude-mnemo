@@ -13,21 +13,10 @@ import type { MesuresDAcceptation } from '../../domaine/acceptation-note.ts';
 import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
 import { jsonDeCoefficients, moduleDeCoefficients } from '../../domaine/modele-de-note.ts';
 import type { IdentiteDesModeles } from '../../domaine/modele-de-note.ts';
-import { piecesPourPlateforme } from '../../infra/modeles/catalogue.ts';
+import { fichierDesCoefficients } from '../../infra/coefficients-note-fichier.ts';
 import { ErreurCli } from './erreurs.ts';
 
-/** Coefficients appris d'une mémoire. */
-export const fichierDesCoefficients = (racine: string) => join(racine, DOSSIER_LOCAL, 'coefficients-note.json');
-
-/** Fichiers GGUF du sens et du reranker de cette plateforme : nom du fichier et début du SHA-256. */
-export function ggufInstalles(): IdentiteDesModeles {
-	const pieces = piecesPourPlateforme(process.platform, process.arch) ?? [];
-	const identite = (nom: string) => {
-		const p = pieces.find((x) => x.nom === nom);
-		return p === undefined ? null : `${p.fichier}@${p.sha256.slice(0, 12)}`;
-	};
-	return { sens: identite('sens'), reranker: identite('reranker') };
-}
+export { fichierDesCoefficients, ggufInstalles } from '../../infra/coefficients-note-fichier.ts';
 
 /** Un module de développement ne s'écrit jamais dans une installation (`node_modules`). */
 export function verifierCheminDuModule(chemin: string): string {

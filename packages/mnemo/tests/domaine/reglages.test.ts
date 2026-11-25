@@ -9,7 +9,7 @@ describe('réglages : valeurs par défaut', () => {
 				similariteRecherche: 0.45,
 				seuilInjection: 90,
 				injectionsParMessage: 2,
-				seuilPiste: 60,
+				seuilPiste: 30,
 				pistesParMessage: 3,
 				cartesNommees: 5,
 				poidsInjection: 0.25,
@@ -119,7 +119,7 @@ describe('injection automatique et pistes', () => {
 	it('quatre entiers aux bornes et défauts de la spécification', () => {
 		expect(champ('contexte.seuilInjection')).toMatchObject({ groupe: 'contexte', genre: 'entier', defaut: 90, min: 50, max: 100, unite: '%', effet: 'immediat', libelle: 'Seuil d’injection automatique' });
 		expect(champ('contexte.injectionsParMessage')).toMatchObject({ groupe: 'contexte', genre: 'entier', defaut: 2, min: 0, max: 5, effet: 'immediat' });
-		expect(champ('contexte.seuilPiste')).toMatchObject({ groupe: 'contexte', genre: 'entier', defaut: 60, min: 0, max: 100, unite: '%', effet: 'immediat', libelle: 'Seuil des pistes' });
+		expect(champ('contexte.seuilPiste')).toMatchObject({ groupe: 'contexte', genre: 'entier', defaut: 30, min: 0, max: 100, unite: '%', effet: 'immediat', libelle: 'Seuil des pistes' });
 		expect(champ('contexte.pistesParMessage')).toMatchObject({ groupe: 'contexte', genre: 'entier', defaut: 3, min: 0, max: 10, effet: 'immediat', libelle: 'Pistes par message' });
 		for (const [cle, dehors] of [['contexte.seuilInjection', [49, 101, 90.5]], ['contexte.injectionsParMessage', [-1, 6]], ['contexte.seuilPiste', [-1, 101]], ['contexte.pistesParMessage', [-1, 11, 2.5]]] as const) {
 			for (const v of dehors) expect(modifierReglages(REGLAGES_PAR_DEFAUT, { [cle]: v }).ok, `${cle} = ${v}`).toBe(false);
@@ -138,10 +138,18 @@ describe('injection automatique et pistes', () => {
 		const refus = modifierReglages(REGLAGES_PAR_DEFAUT, { 'contexte.seuilPiste': 95 });
 		expect(refus).toEqual({ ok: false, motifs: ['Seuil des pistes (contexte.seuilPiste) : 95 % dépasse le seuil d’injection automatique (90 %).'] });
 		// baisser le seuil d'injection sous le seuil des pistes actuel est refusé aussi
-		expect(modifierReglages(REGLAGES_PAR_DEFAUT, { 'contexte.seuilInjection': 55 }).ok).toBe(false);
+		const pistesHautes = { ...REGLAGES_PAR_DEFAUT, contexte: { ...REGLAGES_PAR_DEFAUT.contexte, seuilPiste: 80 } };
+		expect(modifierReglages(pistesHautes, { 'contexte.seuilInjection': 55 }).ok).toBe(false);
 		expect(modifierReglages(REGLAGES_PAR_DEFAUT, { 'contexte.seuilInjection': 100, 'contexte.seuilPiste': 100 }).ok).toBe(true);
 		const ensemble = modifierReglages(REGLAGES_PAR_DEFAUT, { 'contexte.seuilInjection': 55, 'contexte.seuilPiste': 55 });
 		expect(ensemble).toEqual({ ok: true, reglages: { ...REGLAGES_PAR_DEFAUT, contexte: { ...REGLAGES_PAR_DEFAUT.contexte, seuilInjection: 55, seuilPiste: 55 } } });
+	});
+
+	it('seuil des pistes à 30 par défaut : un fichier n’a jamais gardé l’ancien défaut (60), il prend le nouveau sans migration', () => {
+		// le fichier ne garde que ce qui diffère du défaut : écrit quand 60 l'était, il ne porte pas de seuil des pistes
+		expect(reglagesEnFichier(REGLAGES_PAR_DEFAUT)).toEqual({});
+		expect(REGLAGES_PAR_DEFAUT.contexte.seuilPiste).toBe(30);
+		expect(lireReglages({ contexte: { pistesParMessage: 4 } }).reglages.contexte).toMatchObject({ seuilPiste: 30, pistesParMessage: 4 });
 	});
 
 	it('fichier où le seuil des pistes dépasse le seuil d’injection : ramené au seuil d’injection, avec un avertissement', () => {

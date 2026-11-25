@@ -15,8 +15,9 @@ import type { SignauxBruts } from '../domaine/signaux-de-note.ts';
 import type { Classe, DejaDansLaSession, Dependances, RaisonCarte } from './ports.ts';
 
 /**
- * Une candidate classée à un message : `note` provisoire qui ordonne (sens du message plus poids des signaux ; null sans modèle du
- * sens), `p` (probabilité de la note apprise ; null tant qu'aucun modèle n'est accepté), signaux bruts, ce que la session en a
+ * Une candidate classée à un message : `note` provisoire (sens du message plus poids des signaux ; null sans modèle du sens), qui
+ * ordonne tant qu'aucun modèle de note n'est appris (`note-du-classement.ts`) ; `p` (probabilité de la note apprise, un % calibré ;
+ * null si aucun modèle accepté ne la note) et `pSansApriori` (le même sans l'a priori, avec `p` seulement), signaux bruts, ce que la session en a
  * déjà fait (`deja`) et, si une carte la propose à ce message, sa raison (`piste` : proposée en piste, pas comme fiche nommée).
  * `logit` : la note brute du reranker (sans sigmoïde) si la candidate lui a été soumise au hook et qu'il a répondu ; null sinon.
  */
@@ -25,6 +26,7 @@ export type LigneDeClassement = {
 	titre: string;
 	note: number | null;
 	p: number | null;
+	pSansApriori?: number;
 	signaux: SignauxBruts;
 	logit: number | null;
 	deja: DejaDansLaSession | null;
@@ -176,7 +178,7 @@ export function classementDuJournal(classement: readonly LigneDeClassement[], ma
 		note: arrondi(l.note),
 		servi: l.deja === 'injectee',
 		rang: i + 1,
-		...(l.p === null ? {} : { p: arrondi(l.p) }),
+		...(l.p === null ? {} : { p: arrondi(l.p), ...(l.pSansApriori === undefined ? {} : { pSansApriori: arrondi(l.pSansApriori) }) }),
 		signaux: {
 			cosinus: arrondi(l.signaux.cosinus),
 			cosinusRelatif: arrondi(l.signaux.cosinusRelatif),

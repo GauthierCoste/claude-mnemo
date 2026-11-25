@@ -17,7 +17,7 @@ async function memoire() {
 }
 
 const carte = (chemin: string, titre: string, surcharge: Partial<Carte> = {}): Carte => ({ chemin, titre, ligne: `Ligne de ${titre}.`, typeFiche: 'sujet', raison: 'perimetre', depuis: null, note: null, encadree: false, empreinte: 'e', ...surcharge });
-const calcul = (surcharge: Partial<CartesCalculees> = {}): CartesCalculees => ({ position: null, positionFiche: null, cartes: [], mesure: 'aucune', classement: [], ...surcharge });
+const calcul = (surcharge: Partial<CartesCalculees> = {}): CartesCalculees => ({ position: null, positionFiche: null, cartes: [], mesure: 'aucune', classement: [], calibree: false, ...surcharge });
 const TITRE_PISTES = '## Pistes de Mnemo (lis avec `lire` celles qui servent ta tâche)';
 
 describe('rendreServi', () => {

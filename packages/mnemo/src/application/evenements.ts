@@ -15,6 +15,7 @@ import type { FichesDemandees } from './fiches-demandees.ts';
 import { cartesDuJournal, dejaLuesDe } from './cartes.ts';
 import type { DemandeAffinage } from './affiner.ts';
 import { classementDuJournal } from './classement-du-message.ts';
+import { modelesActifs, requeteDesModeles } from './note-du-classement.ts';
 import { servir } from './servir.ts';
 import type { DemandeServir, Servi } from './servir.ts';
 import { verifierAction } from './verifier-action.ts';
@@ -370,8 +371,9 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 	const rappels = session !== null && (await pil.etat.servis(session.id, 1, 'message').catch(() => [])).length === 0;
 	const premier = session !== null && muet === null && (await pil.etat.perimetrePropose(session.id).catch(() => 0)) === null;
 	const exclusDefinitivement = await exclusionDefinitive(pil.etat, reglages.apriori);
-	// requête du classement : le message seul, ou joint au message porteur d'avant (variante jointe, message court ou anaphorique)
-	const variante = reglages.varianteRequete ?? VARIANTE_DE_LA_REQUETE;
+	// requête du classement : le message seul, ou joint au message porteur d'avant (variante jointe, message court ou anaphorique) ;
+	// celle avec laquelle la note de confiance a été apprise, s'il y en a une
+	const variante = reglages.varianteRequete ?? requeteDesModeles(modelesActifs(dep)) ?? VARIANTE_DE_LA_REQUETE;
 	const precedent = session !== null && muet === null && precedentUtile(message, variante) ? await messagePorteurPrecedent(pil.etat, session.id, entree.horodatageMs) : null;
 	const requete = requeteDuMessage(message, precedent, variante);
 	const apriori = reglages.apriori;
@@ -442,6 +444,7 @@ async function noterInjection(
 			sens: servi.calcul.mesure !== 'aucune',
 			demande: entree.prompt === undefined ? null : entree.prompt.slice(0, DEMANDE_MAX),
 			classement,
+			...(classement.length === 0 ? {} : { calibree: servi.calcul.calibree }),
 			muet: demande.muet,
 			cartes: cartesDuJournal(cartes),
 			position: session.position,
