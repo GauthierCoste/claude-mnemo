@@ -268,11 +268,15 @@ describe('traiterEvenement : après un outil', () => {
 
 	it('apres_outil : la fiche lue par un outil Mnemo est notée lue ; rien n’est calculé ni servi', async () => {
 		const { dep, etat, pil } = await contexte();
+		// le sens n'est jamais appelé après un outil : rien n'est classé
+		let appels = 0;
+		dep.sens = { modele: () => 'mots@1', vecteurs: async (t) => (appels++, t.map(() => Float32Array.from([1, 0]))) };
 		expect(await traiterEvenement(dep, pil, entree('apres_outil', 10, lire('projets/vela/vela.md#^f-0001')), local)).toEqual({});
 		expect(await etat.fichesServiesLuesOuEcrites(ID)).toMatchObject([{ chemin: 'projets/vela/vela.md', derniereAction: 'lue', empreinteInjectee: null }]);
 		expect(await etat.servis(ID, 5)).toEqual([]);
 		expect(await etat.cartesProposees(ID)).toEqual(new Map());
 		expect(await etat.perimetrePropose(ID)).toBeNull();
+		expect(appels).toBe(0);
 	});
 
 	it('lue après une carte : geste noté une fois par proposition, avec le message porteur ; fiche jamais proposée, `voisins` : rien', async () => {
@@ -433,20 +437,45 @@ describe('traiterEvenement : contexte sobre au message', () => {
 		expect((await etat.servis(ID, 1))[0]).toMatchObject({ moment: 'message', demande: prompt, muet: null, position: 'projets/vela', ids: [VELA], cartes: [{ chemin: AVOIRS, raison: 'perimetre' }] });
 	});
 
-	it('second message porteur : consignes seules sans nom ; avec un nom, la carte nommée', async () => {
+	it('second message porteur : classé de nouveau, seules les nouvelles partent en pistes ; avec un nom, la carte nommée', async () => {
 		const { dep, etat, pil } = await memoire();
 		await traiterEvenement(dep, pil, message(10, 'catalogue références'), local);
-		await dep.coffre.ecrire('projets/vela/ristournes.md', `${entete()}# Ristournes\n\nUne ristourne baisse le prix.\n`);
 		const seul = await traiterEvenement(dep, pil, message(11, 'catalogue références'), local);
 		expect(seul.contexte).toContain('Réponds en français.');
 		expect(seul.contexte).not.toContain('###');
+		// Avoirs, déjà proposée, reste au classement sans repartir en piste
 		expect(seul.contexte).not.toContain('Pistes de Mnemo');
-		const nomme = await traiterEvenement(dep, pil, message(12, 'les Ristournes du catalogue'), local);
-		expect(nomme.contexte).toContain('- Ristournes — projets/vela/ristournes.md');
-		expect(nomme.contexte).not.toContain('- Avoirs');
-		expect((await etat.servis(ID, 1))[0]!.cartes).toEqual([{ chemin: 'projets/vela/ristournes.md', raison: 'nommee' }]);
+		expect((await etat.servis(ID, 1))[0]!.classement).toMatchObject([{ id: AVOIRS, deja: 'proposee', rang: 1 }]);
+		await dep.coffre.ecrire('projets/vela/ristournes.md', `${entete()}# Ristournes\n\nUne ristourne baisse le prix.\n`);
+		const nouvelle = await traiterEvenement(dep, pil, message(12, 'catalogue références'), local);
+		expect(nouvelle.contexte).toContain('- Ristournes — projets/vela/ristournes.md');
+		expect(nouvelle.contexte).not.toContain('- Avoirs');
+		await dep.coffre.ecrire('projets/vela/remises.md', `${entete()}# Remises\n\nUne remise baisse le prix.\n`);
+		const nomme = await traiterEvenement(dep, pil, message(13, 'les Remises du catalogue'), local);
+		expect(nomme.contexte).toContain('- Remises — projets/vela/remises.md');
+		// nommée, elle n'est pas aussi une piste
+		expect((await etat.servis(ID, 1))[0]!.cartes).toEqual([{ chemin: 'projets/vela/remises.md', raison: 'nommee' }]);
 		// le périmètre n'a été noté qu'une fois, au premier message
 		expect(await etat.perimetrePropose(ID)).toBe(10);
+	});
+
+	it('message porteur sans rien à injecter : aucun contexte, mais une entrée au journal avec son classement', async () => {
+		const dep = fauxPorts();
+		await dep.coffre.ecrire(VELA, `${entete('dossier')}# Projet Vela\n\nRefonte du catalogue.\n`);
+		await dep.coffre.ecrire(AVOIRS, `${entete()}# Avoirs\n\nUn avoir annule une facture.\n`);
+		const etat = ouvrirEtat(join(await dossierTemporaire(), 'etat.sqlite'));
+		ouverts.push(etat);
+		await etat.creer(session());
+		const pil = { etat, depot: DEPOT_ABSENT };
+		expect((await traiterEvenement(dep, pil, message(10, 'catalogue références'), local)).contexte).toContain('- Avoirs');
+		// rien de nouveau : ni consigne, ni position, ni piste
+		expect(await traiterEvenement(dep, pil, message(11, 'avoirs des factures'), local)).toEqual({});
+		const [j] = await etat.servis(ID, 1);
+		expect(j).toMatchObject({ moment: 'message', horodatageMs: 11, texte: '', ids: [], cartes: [], demande: 'avoirs des factures', muet: null, rangMessage: 2 });
+		expect(j!.classement).toMatchObject([{ id: AVOIRS, titre: 'Avoirs', rang: 1, deja: 'proposee', servi: false, p: null }]);
+		// un message muet sans rien à injecter n'est pas classé, ni journalisé
+		expect(await traiterEvenement(dep, pil, message(12, 'ok merci'), local)).toEqual({});
+		expect(await etat.servis(ID, 5)).toHaveLength(2);
 	});
 
 	it('message muet (balise) : consignes seules, journal muet « balise », aucune carte notée', async () => {

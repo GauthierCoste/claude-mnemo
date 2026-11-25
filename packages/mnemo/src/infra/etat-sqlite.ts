@@ -676,6 +676,16 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 			});
 		},
 
+		async completerClassement(session, horodatageMs, classement) {
+			return ecrire(() => {
+				const { changes } = base
+					.prepare("UPDATE servis SET classement = ? WHERE session = ? AND horodatage_ms = ? AND moment = 'message'")
+					.run(JSON.stringify(classement), session, horodatageMs);
+				if (changes > 0) ecriture(session);
+				return changes > 0;
+			});
+		},
+
 		async servis(session, limite, moment) {
 			return reessayer(() =>
 				(
@@ -870,8 +880,21 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 					if (s === undefined) return;
 					// texte et rang du message viennent ensemble : du geste, sinon du dernier message porteur de la session
 					const porteur = g.porteur ?? { texte: (s.dernier_message as string | null) ?? null, rang: Number(s.messages_porteurs) };
-					// la note de la dernière carte notée de la fiche dans le journal servi de la session
+					// la ligne de la fiche au dernier classement qui la contient (rang, note, signaux bruts…), sinon la note de sa dernière
+					// carte notée dans le journal servi de la session
 					const noteDuJournal = (): NoteDuGeste | null => {
+						const classee = base
+							.prepare(
+								`SELECT c.value AS ligne FROM servis s, json_each(s.classement) c
+								WHERE s.session = ? AND json_extract(c.value, '$.id') = ?
+								ORDER BY s.rang DESC LIMIT 1`,
+							)
+							.get(g.session, g.fiche) as Ligne | undefined;
+						const ligne = classee === undefined ? null : noteLue(classee.ligne);
+						if (ligne !== null) {
+							const { id: _id, titre: _titre, note: n, ...reste } = ligne;
+							return { ...(typeof n === 'number' ? { note: n } : {}), ...reste };
+						}
 						const l = base
 							.prepare(
 								`SELECT json_extract(c.value, '$.note') AS note FROM servis s, json_each(s.cartes) c

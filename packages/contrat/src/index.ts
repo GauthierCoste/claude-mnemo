@@ -160,9 +160,9 @@ export type ReponseDocuments = {
 
 
 /**
- * Une fiche du classement d'un calcul de `servir` (une ligne par fiche ; `id` : son chemin) : `rang` à partir de 1 ; `note`
- * du reranker dans [0, 1] (meilleure de ses éléments) quand il a tourné, sinon null ;
- * `servi` : elle ou un de ses éléments a été servi à Claude (sinon seulement classée).
+ * Une fiche du classement d'un message (une ligne par fiche ; `id` : son chemin) : `rang` à partir de 1 ; `note` : la note
+ * provisoire qui ordonne (sens du message plus poids ; dans une entrée ancienne, celle du reranker), null sans modèle ;
+ * `servi` : elle (ou un de ses éléments) est déjà injectée dans la session (sinon seulement classée).
  */
 export type ClassementVue = { id: string; titre: string; note: number | null; servi: boolean; rang: number };
 
@@ -182,8 +182,9 @@ export type CarteVue = { id: string; titre: string; raison: RaisonCarteVue; depu
 
 /**
  * Ce que Mnemo a servi à une session : `ids` servis (la fiche de position, ◆), `cartes` proposées (◇) avec leur raison, `muet` (pourquoi
- * le message n'a rien proposé : `balise` message système, `sans_contenu` message sans contenu ; null sinon), `texte` rendu. `classement`
- * ne sert plus qu'aux entrées anciennes (vide aujourd'hui) ; `moment` `apres_outil` et `debut` aussi. Une entrée peut être rediffusée
+ * le message n'a rien proposé : `balise` message système, `sans_contenu` message sans contenu ; null sinon), `texte` rendu. `classement` :
+ * les premières candidates du message, classées à chaque message porteur (le journal les garde toutes) ; `moment` `apres_outil` et
+ * `debut` ne servent plus qu'aux entrées anciennes. Une entrée peut être rediffusée
  * (`servi`), même `horodatageMs`.
  */
 export type EntreeServieVue = {

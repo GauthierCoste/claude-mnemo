@@ -72,17 +72,17 @@ export async function consignesVerifiees(dep: Dependances, position: Position): 
 	return consignesDe(dep, portees, ['verifiee']);
 }
 
-export type DemandeServir = Omit<DemandeCartes, 'perimetre' | 'servirPosition' | 'question' | 'voisinage' | 'demandees'> & {
+export type DemandeServir = Omit<DemandeCartes, 'classer' | 'servirPosition' | 'question' | 'demandees'> & {
 	moment: Moment;
 	/** Le message ne porte pas de sens : ni cartes ni consigne trouvée, seule la fiche de position peut venir. */
 	muet: RaisonMuet | null;
-	/** Premier message non muet de la session, et de nouveau après /clear ou /compact : les cartes du périmètre de la position sont proposées. */
+	/** Premier message non muet de la session, et de nouveau après /clear ou /compact (noté : le périmètre a été proposé). Le classement, lui, tourne à chaque message porteur. */
 	premier: boolean;
 	/** Premier contexte injecté dans la session : les consignes `rappelee` y sont jointes. */
 	rappels: boolean;
 	/**
 	 * Fiches que l'utilisateur a demandé d'injecter (« Injecter dans la session ») : injectées entières, même déjà injectées ou écartées ;
-	 * elles pèsent sur leurs voisines (âge 0), qui sont classées et proposées à ce message avec le périmètre restant.
+	 * elles pèsent sur leurs voisines (âge 0), classées à ce message avec les autres candidates, même si le message est muet.
 	 */
 	demandees?: readonly string[];
 };
@@ -146,7 +146,7 @@ async function consignesTrouvees(dep: Dependances, rappelees: readonly ElementIn
 
 export async function servir(dep: Dependances, demande: DemandeServir): Promise<Servi> {
 	await synchroniser(dep, SANS_EXTRACTION);
-	const { moment, muet, premier, rappels: tousLesRappels, demandees: voulues, injectees: anciennes, ...cartes } = demande;
+	const { moment, muet, premier: _premier, rappels: tousLesRappels, demandees: voulues, injectees: anciennes, ...cartes } = demande;
 	// les fiches injectées à la main à ce message ont l'âge 0 (une réinjection fait repartir le poids)
 	const aInjecter = [...new Set(voulues ?? [])];
 	const aLaMain = [...(anciennes ?? []).filter((i) => !aInjecter.includes(i.chemin)), ...aInjecter.map((chemin) => ({ chemin, messages: 0 }))];
@@ -157,14 +157,13 @@ export async function servir(dep: Dependances, demande: DemandeServir): Promise<
 	const consignes = rendreConsignes(permanentes, rappels);
 	const calcul = await calculerCartes(dep, {
 		...cartes,
-		// un message muet ne nomme rien et ne demande pas de périmètre : seule la fiche de position peut venir
+		// un message muet ne nomme rien et n'est pas classé : seule la fiche de position peut venir, sauf geste
 		message: muet === null ? demande.message : '',
-		perimetre: muet === null && premier,
+		// chaque message porteur est classé ; le geste vaut désignation, même sur un message muet (le message ne donne que la base de la note)
+		classer: moment === 'message' && (muet === null || aInjecter.length > 0),
 		servirPosition: moment === 'message',
 		question: moment === 'contexte',
 		injectees: aLaMain,
-		// le geste vaut désignation, même sur un message muet : le message ne donne que la base de la note
-		voisinage: moment === 'message' && aInjecter.length > 0,
 		// une fiche demandée, injectée entière, n'est pas aussi candidate : écartée avant le plafond, elle ne prend la place d'aucune carte
 		demandees: aInjecter,
 	});

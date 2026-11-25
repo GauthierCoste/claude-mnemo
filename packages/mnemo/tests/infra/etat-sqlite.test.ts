@@ -201,6 +201,45 @@ describe('etat.sqlite', () => {
 		expect((await etat.servis('s1', 2))[1]).toMatchObject({ demande: 'quoi ?', classement });
 	});
 
+	it('completerClassement : remplace le classement de l’entrée de message à cet horodatage, et elle seule ; entrée disparue : rien', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('s1'));
+		await etat.creer(session('s2'));
+		const entree = { moment: 'message' as const, ids: [], texte: '', ms: 1, sens: true, demande: 'q', muet: null, cartes: [], position: null };
+		const signaux = { cosinus: 0.81, cosinusRelatif: 0.12, bm25Relatif: 0.5, signalSession: 0 };
+		const avant = [
+			{ id: 'a.md', titre: 'A', note: 0.81, servi: false, rang: 1, p: null, signaux, piste: true, raison: 'perimetre' as const },
+			{ id: 'b.md', titre: 'B', note: 0.7, servi: false, rang: 2, p: null, signaux, deja: 'proposee' as const },
+		];
+		await etat.journaliser({ ...entree, session: 's1', horodatageMs: 10, classement: avant });
+		await etat.journaliser({ ...entree, session: 's1', horodatageMs: 20, classement: avant });
+		await etat.journaliser({ ...entree, session: 's2', horodatageMs: 10, classement: avant });
+		// les champs du classement vivant sont relus tels quels
+		expect((await etat.servis('s1', 1))[0]!.classement).toEqual(avant);
+		const apres = [
+			{ ...avant[1]!, rang: 1, p: 0.93, signaux: { ...signaux, logit: 2.4 } },
+			{ ...avant[0]!, rang: 2, p: 0.4 },
+		];
+		expect(await etat.completerClassement('s1', 10, apres)).toBe(true);
+		const [vingt, dix] = await etat.servis('s1', 2);
+		expect(dix!.classement).toEqual(apres);
+		// le reste de l'entrée ne change pas
+		expect(dix).toMatchObject({ horodatageMs: 10, demande: 'q', texte: '', moment: 'message' });
+		expect(vingt!.classement).toEqual(avant);
+		expect((await etat.servis('s2', 1))[0]!.classement).toEqual(avant);
+		expect(await etat.completerClassement('s1', 99, apres)).toBe(false);
+	});
+
+	it('une entrée ancienne (classement sans les champs du classement vivant) reste lisible', async () => {
+		const { etat, chemin } = await ouvrir();
+		await etat.creer(session('s1'));
+		await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: 10, ids: [], texte: 't', ms: 1, sens: true, demande: null, classement: [], muet: null, cartes: [], position: null });
+		const base = new DatabaseSync(chemin);
+		base.prepare('UPDATE servis SET classement = ?').run(JSON.stringify([{ id: 'a.md#^f-0001', titre: 'A', note: 0.4, servi: true, rang: 1 }]));
+		base.close();
+		expect((await etat.servis('s1', 1))[0]!.classement).toEqual([{ id: 'a.md#^f-0001', titre: 'A', note: 0.4, servi: true, rang: 1 }]);
+	});
+
 	it('écartés : écarter (une fois), lister, rétablir ; trace gardée ; effacés quand la session se termine (fin ou modifier)', async () => {
 		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('s1'));
@@ -793,6 +832,24 @@ describe('etat.sqlite', () => {
 		expect(await etat.noterMessagePorteur('s1', 'second')).toBe(2);
 		await etat.noterGeste({ geste: 'retablie', session: 's1', fiche: 'a.md', empreinte: null, horodatageMs: 20 });
 		expect(await etat.gestes({ limite: null })).toMatchObject([{ message: 'second', rangMessage: 2 }]);
+	});
+
+	it('journal des gestes : la note d’un geste reprend la ligne de la fiche au dernier classement qui la contient (rang, p, signaux)', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('s1'));
+		await etat.noterMessagePorteur('s1', 'le porteur');
+		const signaux = { cosinus: 0.8, cosinusRelatif: 0.1, bm25Relatif: 0, signalSession: 0 };
+		const classement = [
+			{ id: 'a.md', titre: 'A', note: 0.8, servi: false, rang: 1, p: null, signaux, piste: true, raison: 'proche' as const },
+			{ id: 'b.md', titre: 'B', note: null, servi: false, rang: 2, p: null, signaux },
+		];
+		await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: 10, ids: [], texte: '', ms: 1, sens: true, demande: 'le porteur', classement, muet: null, cartes: [{ chemin: 'a.md', raison: 'proche', note: 0.8 }], position: null });
+		await etat.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche: 'a.md', empreinte: null, horodatageMs: 20 });
+		await etat.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche: 'b.md', empreinte: null, horodatageMs: 21 });
+		const [b, a] = await etat.gestes({ limite: null });
+		expect(a!.note).toEqual({ note: 0.8, servi: false, rang: 1, p: null, signaux, piste: true, raison: 'proche' });
+		// sans note provisoire (pas de sens) : la ligne sans `note`
+		expect(b!.note).toEqual({ servi: false, rang: 2, p: null, signaux });
 	});
 
 	it('journal des gestes : contexte lu dans la session, note de la carte (JSON), vecteur du même message seulement, origines', async () => {

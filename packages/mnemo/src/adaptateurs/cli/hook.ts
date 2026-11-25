@@ -184,6 +184,7 @@ const ETAT_INERTE: EtatSessions = {
 	appliquer: async () => null,
 	modifier: async () => null,
 	journaliser: async () => {},
+	completerClassement: async () => false,
 	servis: async () => [],
 	ecarter: async () => 'terminee',
 	retablir: async () => 'terminee',

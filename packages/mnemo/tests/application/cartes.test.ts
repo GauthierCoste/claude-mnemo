@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { calculerCartes, ligneDeCarte } from '../../src/application/cartes.ts';
-import type { DemandeCartes } from '../../src/application/cartes.ts';
+import { calculerCartes, CLASSEMENT_MAX, classementDuJournal, ligneDeCarte } from '../../src/application/cartes.ts';
+import type { DemandeCartes, LigneDeClassement } from '../../src/application/cartes.ts';
 import type { Dependances, Reranker, Sens } from '../../src/application/ports.ts';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
@@ -43,7 +43,7 @@ async function memoire(options: { syntheseDePosition?: string } = {}) {
 const demande = (surcharge: Partial<DemandeCartes> = {}): DemandeCartes => ({
 	position: 'organisations/clients/SVE',
 	message: 'Maquette ERP',
-	perimetre: true,
+	classer: true,
 	servirPosition: true,
 	question: false,
 	dejaServies: new Map(),
@@ -162,7 +162,7 @@ describe('calculerCartes : premier message', () => {
 
 describe('calculerCartes : fiches nommées', () => {
 	it('propose Corvel puis Ysaline, dans l\'ordre du message, sans ERP Corvelis non nommé', async () => {
-		const c = await calculerCartes(await memoire(), demande({ message: 'parle-moi de Corvel et de Ysaline', perimetre: false }));
+		const c = await calculerCartes(await memoire(), demande({ message: 'parle-moi de Corvel et de Ysaline', classer: false }));
 		expect(c.cartes.map((x) => [x.chemin, x.raison])).toEqual([
 			[CORVEL, 'nommee'],
 			[YSALINE, 'nommee'],
@@ -173,7 +173,7 @@ describe('calculerCartes : fiches nommées', () => {
 	});
 
 	it('ne retient ni source ni dossier nommés', async () => {
-		const c = await calculerCartes(await memoire(), demande({ message: 'regarde Doc SVE et Clients', perimetre: false }));
+		const c = await calculerCartes(await memoire(), demande({ message: 'regarde Doc SVE et Clients', classer: false }));
 		expect(c.cartes).toEqual([]);
 	});
 
@@ -187,19 +187,19 @@ describe('calculerCartes : fiches nommées', () => {
 	});
 
 	it('une fiche d\'ailleurs rangée sous un lieu nommé n\'est proposée que si elle est nommée aussi', async () => {
-		const c = await calculerCartes(await memoire(), demande({ message: 'Corvel et ERP Corvelis', perimetre: false }));
+		const c = await calculerCartes(await memoire(), demande({ message: 'Corvel et ERP Corvelis', classer: false }));
 		expect(chemins(c)).toEqual([CORVEL, ERP]);
 	});
 
 	it('une fiche d\'ailleurs nommée sans son lieu n\'est pas proposée', async () => {
-		const c = await calculerCartes(await memoire(), demande({ message: 'ouvre ERP Corvelis', perimetre: false }));
+		const c = await calculerCartes(await memoire(), demande({ message: 'ouvre ERP Corvelis', classer: false }));
 		expect(c.cartes).toEqual([]);
 	});
 
 	it('au plus contexte.cartesNommees cartes', async () => {
 		const dep = await memoire();
 		avecReglages(dep, { cartesNommees: 1 });
-		const c = await calculerCartes(dep, demande({ message: 'Ysaline, Outil Parcs et Corvel', perimetre: false }));
+		const c = await calculerCartes(dep, demande({ message: 'Ysaline, Outil Parcs et Corvel', classer: false }));
 		expect(chemins(c)).toEqual([YSALINE]);
 	});
 });
@@ -226,9 +226,9 @@ describe('calculerCartes : fiches déjà vues', () => {
 		const empreinte = (await dep.index.fiches()).find((f) => f.chemin === YSALINE)!.empreinte;
 		// fiche nommée, sans le périmètre : seule la règle de l'empreinte lue décide
 		const message = 'parle-moi de Ysaline';
-		const identique = await calculerCartes(dep, demande({ dejaLues: new Map([[YSALINE, empreinte]]), message, perimetre: false }));
+		const identique = await calculerCartes(dep, demande({ dejaLues: new Map([[YSALINE, empreinte]]), message, classer: false }));
 		expect(chemins(identique)).toEqual([]);
-		const changee = await calculerCartes(dep, demande({ dejaLues: new Map([[YSALINE, 'ancienne']]), message, perimetre: false }));
+		const changee = await calculerCartes(dep, demande({ dejaLues: new Map([[YSALINE, 'ancienne']]), message, classer: false }));
 		expect(chemins(changee)).toEqual([YSALINE]);
 	});
 
@@ -242,7 +242,7 @@ describe('calculerCartes : fiches déjà vues', () => {
 
 	it('une fiche servie sans empreinte injectée, ou proposée avec une autre empreinte, est reproposée', async () => {
 		const dep = await memoire();
-		const c = await calculerCartes(dep, demande({ dejaServies: new Map([[OUTIL, null]]), proposees: new Map([[GIT, 'ancienne']]), perimetre: true }));
+		const c = await calculerCartes(dep, demande({ dejaServies: new Map([[OUTIL, null]]), proposees: new Map([[GIT, 'ancienne']]), classer: true }));
 		expect(chemins(c)).toContain(OUTIL);
 		expect(chemins(c)).toContain(GIT);
 	});
@@ -287,13 +287,13 @@ describe('calculerCartes : par le sens', () => {
 		expect([...(notes as number[])].sort((a, b) => b - a)).toEqual(notes);
 	});
 
-	it('message suivant sans carte : le sens n\'est pas appelé et la mesure n\'est pas « sens »', async () => {
+	it('message non classé (muet, sans geste) et sans fiche nommée : le sens n\'est pas appelé et la mesure n\'est pas « sens »', async () => {
 		const dep = await memoire();
 		dep.sens = sensParMots;
 		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
 		let appels = 0;
 		dep.sens = { modele: sensParMots.modele, vecteurs: async (t, o) => (appels++, sensParMots.vecteurs(t, o)) };
-		const c = await calculerCartes(dep, demande({ message: 'on reprend la maquette', perimetre: false }));
+		const c = await calculerCartes(dep, demande({ message: 'on reprend la maquette', classer: false }));
 		expect(appels).toBe(0);
 		expect(c.mesure).not.toBe('sens');
 		expect(c.cartes).toEqual([]);
@@ -301,13 +301,13 @@ describe('calculerCartes : par le sens', () => {
 		expect(c.vecteur).toBeUndefined();
 	});
 
-	it('message suivant avec une fiche nommée : le sens est appelé une fois et la note la fiche nommée', async () => {
+	it('message non classé avec une fiche nommée : le sens est appelé une fois et la note la fiche nommée', async () => {
 		const dep = await memoire();
 		dep.sens = sensParMots;
 		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
 		let appels = 0;
 		dep.sens = { modele: sensParMots.modele, vecteurs: async (t, o) => (appels++, sensParMots.vecteurs(t, o)) };
-		const c = await calculerCartes(dep, demande({ message: 'parle-moi de Corvel et de Ysaline', perimetre: false }));
+		const c = await calculerCartes(dep, demande({ message: 'parle-moi de Corvel et de Ysaline', classer: false }));
 		expect(appels).toBe(1);
 		expect(c.mesure).toBe('sens');
 		// le vecteur du message, déjà calculé, est rendu avec l'identité du modèle (pour le journal des gestes)
@@ -342,6 +342,159 @@ describe('calculerCartes : par le sens', () => {
 	});
 });
 
+describe('calculerCartes : classement à chaque message porteur', () => {
+	const NEUTRE = 'notes/Maquette web.md';
+	/** La mémoire de base, plus une fiche neutre (sans lieu déclaré, reliée à rien). */
+	async function avecNeutre() {
+		const dep = await memoire();
+		await dep.coffre.ecrire(NEUTRE, fiche('pratique', 'Maquette web', 'Règles des maquettes.', '', '', '2026-10-01'));
+		await synchroniser(dep, SANS_EXTRACTION);
+		return dep;
+	}
+	const classees = (c: { classement: { chemin: string }[] }) => c.classement.map((l) => l.chemin);
+
+	it('à un message qui n\'est pas le premier : toutes les candidates sont classées, fiche de position exclue, p null', async () => {
+		const dep = await avecNeutre();
+		const empreinte = (await dep.index.fiches()).find((f) => f.chemin === SVE)!.empreinte;
+		const c = await calculerCartes(dep, demande({ dejaServies: new Map([[SVE, empreinte]]), message: 'on avance' }));
+		expect(c.position).toBeNull();
+		expect(new Set(classees(c))).toEqual(new Set([OUTIL, SOUS, YSALINE, GIT, NEUTRE]));
+		expect(c.classement.every((l) => l.p === null && l.note === null)).toBe(true);
+		// sans le sens : le périmètre part en pistes par date ; la neutre, que ni le sens ni les mots ne désignent, reste classée seulement
+		expect(chemins(c)).toEqual([OUTIL, GIT, SOUS, YSALINE]);
+		expect(c.classement.find((l) => l.chemin === NEUTRE)).toMatchObject({ piste: false, raison: null, deja: null });
+	});
+
+	it('message non classé (muet, sans geste) : rien au classement', async () => {
+		const c = await calculerCartes(await avecNeutre(), demande({ classer: false, message: '' }));
+		expect(c.classement).toEqual([]);
+	});
+
+	it('une fiche neutre est candidate ; trouvée par les mots, elle part en piste, raison « proche du message »', async () => {
+		const c = await calculerCartes(await avecNeutre(), demande({ message: 'Maquette ERP' }));
+		expect(classees(c)).toContain(NEUTRE);
+		expect(c.cartes.find((x) => x.chemin === NEUTRE)?.raison).toBe('proche');
+		expect(c.classement.find((l) => l.chemin === NEUTRE)).toMatchObject({ piste: true, raison: 'proche' });
+		// les mots ont été cherchés : la neutre les porte, les autres non
+		expect(c.classement.find((l) => l.chemin === NEUTRE)!.signaux.bm25Relatif).toBeGreaterThan(0);
+		expect(c.classement.find((l) => l.chemin === GIT)!.signaux.bm25Relatif).toBe(0);
+	});
+
+	it('à la racine : les fiches neutres seules, rien d\'ailleurs ni du lieu d\'un client', async () => {
+		const c = await calculerCartes(await avecNeutre(), demande({ position: '', message: 'Maquette ERP' }));
+		expect(new Set(classees(c))).toEqual(new Set([OUTIL, SOUS, YSALINE, GIT, NEUTRE]));
+		expect(chemins(c)).toEqual([NEUTRE]);
+	});
+
+	it('une fiche d\'ailleurs reste fermée tant que son lieu n\'est pas nommé ; nommé, elle est candidate', async () => {
+		const dep = await avecNeutre();
+		expect(classees(await calculerCartes(dep, demande({ message: 'Maquette ERP' })))).not.toContain(ERP);
+		const c = await calculerCartes(dep, demande({ message: 'Maquette ERP pour Corvel' }));
+		expect(classees(c)).toContain(ERP);
+		// le lieu nommé est une carte « nommée » ; classé lui aussi, avec cette raison, sans être une piste
+		expect(c.cartes.find((x) => x.chemin === CORVEL)?.raison).toBe('nommee');
+		expect(c.classement.find((l) => l.chemin === CORVEL)).toMatchObject({ raison: 'nommee', piste: false });
+		expect(c.cartes.find((x) => x.chemin === ERP)?.raison).toBe('proche');
+	});
+
+	it('jamais au classement : source, dossier, fiche écartée', async () => {
+		const dep = await avecNeutre();
+		for (const position of ['organisations/clients/SVE', '']) {
+			const c = await calculerCartes(dep, demande({ position, message: 'Doc SVE et Clients, Outil Parcs', ecartes: [OUTIL] }));
+			expect(classees(c)).not.toContain(DOC);
+			expect(classees(c)).not.toContain(DOSSIER);
+			expect(classees(c)).not.toContain(OUTIL);
+		}
+	});
+
+	it('déjà injectée, lue ou proposée : au classement, marquée, jamais en piste', async () => {
+		const dep = await avecNeutre();
+		const empreintes = new Map((await dep.index.fiches()).map((f) => [f.chemin, f.empreinte]));
+		const c = await calculerCartes(
+			dep,
+			demande({ dejaServies: new Map([[OUTIL, empreintes.get(OUTIL)!]]), dejaLues: new Map([[SOUS, null]]), proposees: new Map([[GIT, empreintes.get(GIT)!]]) }),
+		);
+		const ligne = (chemin: string) => c.classement.find((l) => l.chemin === chemin);
+		expect(ligne(OUTIL)).toMatchObject({ deja: 'injectee', piste: false });
+		expect(ligne(SOUS)).toMatchObject({ deja: 'lue', piste: false });
+		expect(ligne(GIT)).toMatchObject({ deja: 'proposee', piste: false });
+		// la neutre, trouvée par les mots (« Maquette »), devant Ysaline
+		expect(chemins(c)).toEqual([NEUTRE, YSALINE]);
+	});
+
+	it('pistes : au plus contexte.pistesParMessage, les premières nouvelles de l\'ordre du sens', async () => {
+		const dep = await avecNeutre();
+		dep.sens = sensParMots;
+		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
+		avecReglages(dep, { pistesParMessage: 2 });
+		const empreinte = (await dep.index.fiches()).find((f) => f.chemin === OUTIL)!.empreinte;
+		const c = await calculerCartes(dep, demande({ message: 'la maquette des sites', proposees: new Map([[OUTIL, empreinte]]) }));
+		const nouvelles = c.classement.filter((l) => l.deja === null).map((l) => l.chemin);
+		expect(chemins(c)).toEqual(nouvelles.slice(0, 2));
+		expect(c.classement.filter((l) => l.piste).map((l) => l.chemin)).toEqual(chemins(c));
+		// Outil Parcs, la plus proche du message, est classée en tête mais déjà proposée
+		expect(c.classement[0]).toMatchObject({ chemin: OUTIL, deja: 'proposee', piste: false });
+	});
+
+	it('avec le sens : signaux bruts (cosinus, cosinus relatif à la médiane de toute la mémoire, bm25 relatif), note = cosinus', async () => {
+		const dep = await avecNeutre();
+		dep.sens = sensParMots;
+		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
+		let appels = 0;
+		dep.sens = { modele: sensParMots.modele, vecteurs: async (t, o) => (appels++, sensParMots.vecteurs(t, o)) };
+		const c = await calculerCartes(dep, demande({ message: 'la maquette des sites' }));
+		// le sens du message est calculé une fois
+		expect(appels).toBe(1);
+		expect(c.mesure).toBe('sens');
+		const lignes = c.classement;
+		expect(lignes.every((l) => l.signaux.cosinus !== null && l.signaux.cosinusRelatif !== null)).toBe(true);
+		// un même écart à la médiane pour tous : cosinus − cosinus relatif est une constante (la médiane du message)
+		const medianes = new Set(lignes.map((l) => (l.signaux.cosinus! - l.signaux.cosinusRelatif!).toFixed(9)));
+		expect(medianes.size).toBe(1);
+		for (const l of lignes) expect(l.note).toBeCloseTo(Math.max(0, l.signaux.cosinus!), 9);
+		expect(lignes.every((l) => l.signaux.signalSession === 0)).toBe(true);
+		// l'ordre est celui de la note
+		const notes = lignes.map((l) => l.note!);
+		expect([...notes].sort((a, b) => b - a)).toEqual(notes);
+	});
+
+	it('le geste pèse au classement : signal de session de la voisine d’une fiche injectée à la main', async () => {
+		const dep = await avecNeutre();
+		const c = await calculerCartes(dep, demande({ message: 'Maquette', injectees: [{ chemin: YSALINE, messages: 0 }] }));
+		const erp = c.classement.find((l) => l.chemin === ERP);
+		expect(erp?.signaux.signalSession).toBeGreaterThan(0);
+		expect(erp?.raison).toBe('liee');
+	});
+});
+
+describe('classementDuJournal', () => {
+	const ligne = (i: number): LigneDeClassement => ({
+		chemin: `f/${i}.md`,
+		titre: `F${i}`,
+		note: 1 - i / 1000,
+		p: null,
+		signaux: { cosinus: 0.8, cosinusRelatif: 0.1, bm25Relatif: null, signalSession: 0 },
+		deja: i === 1 ? 'injectee' : null,
+		raison: i === 0 ? 'perimetre' : null,
+		piste: i === 0,
+	});
+
+	it('rangs à partir de 1, servi pour une fiche déjà injectée, champs du classement vivant', () => {
+		const [premiere, seconde] = classementDuJournal([ligne(0), ligne(1)]);
+		expect(premiere).toEqual({ id: 'f/0.md', titre: 'F0', note: 1, servi: false, rang: 1, p: null, signaux: ligne(0).signaux, piste: true, raison: 'perimetre' });
+		expect(seconde).toMatchObject({ id: 'f/1.md', servi: true, rang: 2, deja: 'injectee' });
+		expect(seconde).not.toHaveProperty('piste');
+		expect(seconde).not.toHaveProperty('coupees');
+	});
+
+	it(`au plus ${CLASSEMENT_MAX} lignes, les mieux classées ; la dernière gardée compte les coupées`, () => {
+		const journal = classementDuJournal(Array.from({ length: CLASSEMENT_MAX + 7 }, (_, i) => ligne(i)));
+		expect(journal).toHaveLength(CLASSEMENT_MAX);
+		expect(journal.at(-1)).toMatchObject({ rang: CLASSEMENT_MAX, coupees: 7 });
+		expect(journal.filter((l) => l.coupees !== undefined)).toHaveLength(1);
+	});
+});
+
 describe('calculerCartes : outil contexte (question)', () => {
 	/** Note brute d'après le titre : l'ERP d'abord, puis l'outil, puis le reste. */
 	const fauxReranker: Reranker = {
@@ -352,7 +505,7 @@ describe('calculerCartes : outil contexte (question)', () => {
 		const dep = await memoire();
 		dep.sens = sensParMots;
 		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
-		const c = await calculerCartes(dep, demande({ question: true, perimetre: false, servirPosition: false, message: 'maquette ERP du site' }));
+		const c = await calculerCartes(dep, demande({ question: true, classer: false, servirPosition: false, message: 'maquette ERP du site' }));
 		expect(c.cartes.length).toBeGreaterThan(0);
 		expect(c.cartes.length).toBeLessThanOrEqual(10);
 		expect(c.cartes.every((x) => x.raison === 'question')).toBe(true);
@@ -367,7 +520,7 @@ describe('calculerCartes : outil contexte (question)', () => {
 		dep.sens = sensParMots;
 		dep.reranker = fauxReranker;
 		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
-		const c = await calculerCartes(dep, demande({ question: true, perimetre: false, servirPosition: false, message: 'maquette ERP du site' }));
+		const c = await calculerCartes(dep, demande({ question: true, classer: false, servirPosition: false, message: 'maquette ERP du site' }));
 		expect(chemins(c).slice(0, 2)).toEqual([ERP, OUTIL]);
 		expect(c.mesure).toBe('reranker');
 		expect(c.cartes[0]!.note).toBeGreaterThan(c.cartes[1]!.note!);
@@ -382,7 +535,7 @@ describe('calculerCartes : poids d’une fiche injectée à la main', () => {
 		const empreinte = (await dep.index.fiches()).find((f) => f.chemin === YSALINE)!.empreinte;
 		const c = await calculerCartes(
 			dep,
-			demande({ message: 'Maquette', perimetre: false, servirPosition: false, voisinage: true, injectees: YSALINE_INJECTEE, dejaServies: new Map([[YSALINE, empreinte]]) }),
+			demande({ message: 'Maquette', classer: true, servirPosition: false, injectees: YSALINE_INJECTEE, dejaServies: new Map([[YSALINE, empreinte]]) }),
 		);
 		expect(c.cartes[0]).toMatchObject({ chemin: ERP, raison: 'liee', depuis: { chemin: YSALINE, titre: 'Ysaline' } });
 		// sans modèle, la base vaut 0 : le périmètre restant suit, du plus récent au plus ancien
@@ -390,8 +543,8 @@ describe('calculerCartes : poids d’une fiche injectée à la main', () => {
 		expect(c.cartes.slice(1).every((x) => x.raison === 'perimetre' && x.depuis === null)).toBe(true);
 	});
 
-	it('aux autres messages : rien de nouveau, le poids encore actif ne propose rien hors des fiches nommées', async () => {
-		const c = await calculerCartes(await memoire(), demande({ message: 'Maquette', perimetre: false, injectees: YSALINE_INJECTEE }));
+	it('message non classé (muet, sans geste) : le poids encore actif ne propose rien hors des fiches nommées', async () => {
+		const c = await calculerCartes(await memoire(), demande({ message: 'Maquette', classer: false, injectees: YSALINE_INJECTEE }));
 		expect(c.cartes).toEqual([]);
 	});
 
@@ -404,7 +557,7 @@ describe('calculerCartes : poids d’une fiche injectée à la main', () => {
 		const sans = await calculerCartes(dep, demande({ message }));
 		expect(chemins(sans)[0]).toBe(OUTIL);
 		expect(chemins(sans)).not.toContain(ERP);
-		const avec = await calculerCartes(dep, demande({ message, voisinage: true, injectees: YSALINE_INJECTEE }));
+		const avec = await calculerCartes(dep, demande({ message, injectees: YSALINE_INJECTEE }));
 		expect(chemins(avec).slice(0, 2)).toEqual([ERP, OUTIL]);
 		// ERP Corvelis n'est candidate que par le geste : sa raison est le signal, même si le sens pèse plus que le poids
 		expect(avec.cartes[0]).toMatchObject({ raison: 'liee', depuis: { chemin: YSALINE, titre: 'Ysaline' } });
@@ -412,18 +565,18 @@ describe('calculerCartes : poids d’une fiche injectée à la main', () => {
 	});
 
 	it('une injection trop ancienne (11 messages) ne pèse plus : la voisine n’est plus candidate', async () => {
-		const c = await calculerCartes(await memoire(), demande({ message: 'Maquette', perimetre: false, servirPosition: false, voisinage: true, injectees: [{ chemin: YSALINE, messages: 11 }] }));
+		const c = await calculerCartes(await memoire(), demande({ message: 'Maquette', classer: true, servirPosition: false, injectees: [{ chemin: YSALINE, messages: 11 }] }));
 		expect(chemins(c)).not.toContain(ERP);
 	});
 
 	it('les fiches nommées gardent l’ordre du message et leur raison ; une voisine d’ailleurs nommée est ouverte par le geste', async () => {
 		const dep = await memoire();
-		const c = await calculerCartes(dep, demande({ message: 'Corvel et ERP Corvelis', perimetre: false, injectees: YSALINE_INJECTEE }));
+		const c = await calculerCartes(dep, demande({ message: 'Corvel et ERP Corvelis', classer: false, injectees: YSALINE_INJECTEE }));
 		expect(c.cartes.map((x) => [x.chemin, x.raison])).toEqual([
 			[CORVEL, 'nommee'],
 			[ERP, 'nommee'],
 		]);
-		const seule = await calculerCartes(dep, demande({ message: 'ouvre ERP Corvelis', perimetre: false, injectees: YSALINE_INJECTEE }));
+		const seule = await calculerCartes(dep, demande({ message: 'ouvre ERP Corvelis', classer: false, injectees: YSALINE_INJECTEE }));
 		expect(seule.cartes.map((x) => [x.chemin, x.raison])).toEqual([[ERP, 'nommee']]);
 	});
 
@@ -431,7 +584,7 @@ describe('calculerCartes : poids d’une fiche injectée à la main', () => {
 		const dep = await memoire();
 		dep.sens = sensParMots;
 		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
-		const c = await calculerCartes(dep, demande({ question: true, perimetre: false, servirPosition: false, message: 'maquette ERP du site', injectees: YSALINE_INJECTEE }));
+		const c = await calculerCartes(dep, demande({ question: true, classer: false, servirPosition: false, message: 'maquette ERP du site', injectees: YSALINE_INJECTEE }));
 		expect(chemins(c)[0]).toBe(ERP);
 		// le sens pèse plus que le poids : la raison reste « question »
 		expect(c.cartes[0]!.raison).toBe('question');
@@ -442,7 +595,7 @@ describe('calculerCartes : poids d’une fiche injectée à la main', () => {
 		const question = 'où en est le chantier ?';
 		dep.sens = sensDeSimilarites(question, { 'ERP Corvelis': 0.3, 'Outil Parcs': 0.5 });
 		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
-		const c = await calculerCartes(dep, demande({ question: true, perimetre: false, servirPosition: false, message: question, injectees: YSALINE_INJECTEE }));
+		const c = await calculerCartes(dep, demande({ question: true, classer: false, servirPosition: false, message: question, injectees: YSALINE_INJECTEE }));
 		// ERP Corvelis : sens 0,30 sous le seuil (0,45) ; le poids (0,25) la porterait à 0,55, mais il fait monter, il ne fait pas entrer
 		expect(chemins(c)).toContain(OUTIL);
 		expect(chemins(c)).not.toContain(ERP);
@@ -454,7 +607,7 @@ describe('calculerCartes : poids d’une fiche injectée à la main', () => {
 		dep.sens = sensDeSimilarites(question, { 'ERP Corvelis': 0.6 });
 		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
 		dep.reranker = { noter: async (_requete, textes) => textes.map(() => -2) };
-		const c = await calculerCartes(dep, demande({ question: true, perimetre: false, servirPosition: false, message: question, injectees: YSALINE_INJECTEE }));
+		const c = await calculerCartes(dep, demande({ question: true, classer: false, servirPosition: false, message: question, injectees: YSALINE_INJECTEE }));
 		expect(c.mesure).toBe('reranker');
 		// base sigmoïde(-2) ≈ 0,12 < poids 0,25 : c'est le geste qui la porte
 		expect(c.cartes).toHaveLength(1);
@@ -467,7 +620,7 @@ describe('calculerCartes : poids d’une fiche injectée à la main', () => {
 		dep.sens = sensDeSimilarites(question, { 'ERP Corvelis': 0.6, 'Outil Parcs': 0.6 });
 		await vectoriser(dep, { budgetMs: 60_000, demarrer: true });
 		dep.reranker = { noter: async (_requete, textes) => textes.map((t) => (/^ERP/u.test(t) ? 0.1 : /^Outil/u.test(t) ? 0.2 : -5)) };
-		const c = await calculerCartes(dep, demande({ question: true, perimetre: false, servirPosition: false, message: question, injectees: YSALINE_INJECTEE }));
+		const c = await calculerCartes(dep, demande({ question: true, classer: false, servirPosition: false, message: question, injectees: YSALINE_INJECTEE }));
 		// bases ≈ 0,525 (ERP) et 0,550 (Outil) : ERP passe devant avec le poids (≈ 0,775) ; ramenées à 0 et 1, Outil resterait devant
 		expect(chemins(c)).toEqual([ERP, OUTIL]);
 		// le sens (≈ 0,525) pèse plus que le poids : la raison reste « question »

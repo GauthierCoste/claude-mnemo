@@ -8,7 +8,7 @@ import { raisonDeMutisme } from '../domaine/message-muet.ts';
 import { ficheTouchee } from '../domaine/outil-de-session.ts';
 import { BUDGET_HOOK_MS } from './chercher.ts';
 import type { FichesDemandees } from './fiches-demandees.ts';
-import { cartesDuJournal, dejaLuesDe } from './cartes.ts';
+import { cartesDuJournal, classementDuJournal, dejaLuesDe } from './cartes.ts';
 import { servir } from './servir.ts';
 import type { DemandeServir, Servi } from './servir.ts';
 import { verifierAction } from './verifier-action.ts';
@@ -327,7 +327,8 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 
 /**
  * Note la fiche de position et les fiches demandées injectées (et, pour ces dernières, l'injection à la main, qui pèse sur leurs
- * voisines), les cartes proposées (avec leur empreinte), et journalise le calcul pour le panneau Contexte.
+ * voisines), les cartes proposées (avec leur empreinte), et journalise le calcul pour le panneau Contexte, classement entier compris
+ * (une entrée à chaque message porteur, même sans texte injecté).
  */
 async function noterInjection(
 	dep: Dependances,
@@ -363,7 +364,7 @@ async function noterInjection(
 			ms: Date.now() - debutMs,
 			sens: servi.calcul.mesure !== 'aucune',
 			demande: entree.prompt === undefined ? null : entree.prompt.slice(0, DEMANDE_MAX),
-			classement: [],
+			classement: classementDuJournal(servi.calcul.classement),
 			muet: demande.muet,
 			cartes: cartesDuJournal(cartes),
 			position: session.position,
@@ -392,8 +393,10 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 	const demande = demandees.length === 0 ? lue : { ...lue, demandees };
 	const servi = await servir(dep, demande);
 	if (session !== null && rang !== null) reglages.porteurs?.noter(session.id, { rang, position: demande.position, vecteur: servi.calcul.vecteur ?? null });
-	const injecte = servi.texte !== '' && aTemps(reglages);
-	if (session !== null && injecte) await noterInjection(dep, pil, session, entree, demande, servi, debut, rang);
+	const aTempsPourRepondre = aTemps(reglages);
+	const injecte = servi.texte !== '' && aTempsPourRepondre;
+	// un message porteur est journalisé même sans texte injecté : son classement en est la trace (panneau, apprentissage)
+	if (session !== null && (injecte || (rang !== null && aTempsPourRepondre))) await noterInjection(dep, pil, session, entree, demande, servi, debut, rang);
 	// le hook n'attend plus : les fiches demandées partiront au message suivant
 	if (session !== null && !injecte && demandees.length > 0) reglages.demandees?.remettre(session.id, demandees);
 	return injecte ? { contexte: servi.texte } : {};

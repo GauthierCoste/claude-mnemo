@@ -51,6 +51,9 @@ export async function titresDeLIndex(index: { titres(): Promise<{ chemin: string
 	return new Map((await index.titres().catch(() => [])).map((t) => [t.chemin, t.titre]));
 }
 
+/** Lignes du classement envoyées au panneau Contexte : il en montre le haut ; le journal garde le reste (apprentissage). */
+export const CLASSEMENT_VU_MAX = 30;
+
 export function vueServie(e: EntreeServie, titres: ReadonlyMap<string, string> = new Map()): EntreeServieVue {
 	return {
 		session: e.session,
@@ -60,7 +63,7 @@ export function vueServie(e: EntreeServie, titres: ReadonlyMap<string, string> =
 		texte: e.texte,
 		ms: e.ms,
 		sens: e.sens,
-		classement: e.classement.map((c) => ({ id: c.id, titre: c.titre, note: c.note, servi: c.servi, rang: c.rang })),
+		classement: e.classement.slice(0, CLASSEMENT_VU_MAX).map((c) => ({ id: c.id, titre: c.titre, note: c.note, servi: c.servi, rang: c.rang })),
 		muet: e.muet,
 		cartes: e.cartes.map((c) => ({
 			id: c.chemin,

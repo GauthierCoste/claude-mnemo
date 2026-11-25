@@ -126,6 +126,7 @@ export function etatParesseux(racineDossier: string): EtatSessions {
 		modifier: (id, champs) => etat().modifier(id, champs),
 		battre: (ids, vuVivantMs) => etat().battre(ids, vuVivantMs),
 		journaliser: (entree) => etat().journaliser(entree),
+		completerClassement: (session, horodatageMs, classement) => etat().completerClassement(session, horodatageMs, classement),
 		servis: (session, limite, moment) => etat().servis(session, limite, moment),
 		ecarter: (session, ecarte, trace) => etat().ecarter(session, ecarte, trace),
 		retablir: (session, id) => etat().retablir(session, id),

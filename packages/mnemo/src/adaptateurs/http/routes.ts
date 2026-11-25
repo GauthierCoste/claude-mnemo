@@ -626,7 +626,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 								ctx.diffuser({ type: 'lues', session: s.id, lues });
 							}
 						}
-						if (reponse.contexte !== undefined && (entree.evenement === 'debut' || entree.evenement === 'message')) {
+						// un message porteur est journalisé même sans contexte rendu (son classement) : diffusé aussi (le WebSocket ne rediffuse pas une entrée déjà connue)
+						if (entree.evenement === 'message' || (reponse.contexte !== undefined && entree.evenement === 'debut')) {
 							const [dernier] = await pil.etat.servis(s.id, 1).catch(() => []);
 							if (dernier !== undefined) ctx.diffuser({ type: 'servi', entree: vueServie(dernier, await titresDeLIndex()) });
 						}

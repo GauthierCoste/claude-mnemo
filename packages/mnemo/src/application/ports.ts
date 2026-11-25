@@ -9,6 +9,7 @@ import type { InjectionManuelle } from '../domaine/signal-injection.ts';
 import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
 import type { EtatIndicateur } from '../domaine/refus-outil.ts';
 import type { Geste, GesteCompte, NoteDuGeste, OrigineGeste } from '../domaine/gestes.ts';
+import type { SignauxBruts } from '../domaine/signaux-de-note.ts';
 import type { TypeSource } from '../domaine/regles.ts';
 import type { FichierPlugin } from './plugin.ts';
 import type { AppelPlugin } from './plugin.ts';
@@ -551,10 +552,30 @@ export class ErreurExtraction extends Error {
 }
 
 /**
- * Un candidat de la recherche de `servir`, dans l'ordre où il a été considéré (`rang` à partir de 1) : `note` du reranker
- * dans [0, 1] s'il a tourné, sinon null ; `servi` : son id est parmi ceux servis.
+ * Une fiche du classement d'un message (`rang` à partir de 1, dans l'ordre du classement) : `note` : la note provisoire qui
+ * ordonne (sens du message plus les poids des signaux ; null sans modèle du sens ; dans les entrées anciennes, celle du
+ * reranker) ; `servi` : la fiche est déjà injectée dans la session (ou, entrée ancienne, son id est parmi ceux servis).
+ * Champs du classement vivant, absents des entrées anciennes : `p` (probabilité de la note apprise ; null tant qu'aucun modèle
+ * n'est accepté), `signaux` (bruts, pour l'apprentissage), `deja` (déjà injectée, lue ou proposée dans la session : classée,
+ * jamais reproposée), `piste` (proposée en piste à ce message), `raison` (de la carte proposée à ce message, piste ou fiche
+ * nommée), `coupees` (sur la dernière ligne gardée seulement : nombre de candidates coupées au-delà de `CLASSEMENT_MAX`).
  */
-export type Classe = { id: string; titre: string; note: number | null; servi: boolean; rang: number };
+export type Classe = {
+	id: string;
+	titre: string;
+	note: number | null;
+	servi: boolean;
+	rang: number;
+	p?: number | null;
+	signaux?: SignauxBruts;
+	deja?: DejaDansLaSession;
+	piste?: boolean;
+	raison?: RaisonCarte;
+	coupees?: number;
+};
+
+/** Ce que la session a déjà fait d'une fiche classée : injectée (à cette empreinte), lue, ou proposée en carte (à cette empreinte). */
+export type DejaDansLaSession = 'injectee' | 'lue' | 'proposee';
 
 /**
  * Ce que Mnemo a servi à une session (journal borné : les 200 dernières entrées par session). `demande` : la question
@@ -686,6 +707,11 @@ export interface EtatSessions {
 	battre(ids: string[], vuVivantMs: number): Promise<void>;
 	/** Garde les 200 dernières entrées par session. */
 	journaliser(entree: EntreeServie): Promise<void>;
+	/**
+	 * Remplace le classement de l'entrée de message de la session à cet horodatage (affinage en arrière-plan : mêmes candidates,
+	 * notes complétées) ; sans effet si l'entrée n'existe plus. Rend vrai si une entrée a été mise à jour.
+	 */
+	completerClassement(session: string, horodatageMs: number, classement: Classe[]): Promise<boolean>;
 	/** Les `limite` dernières entrées de la session, les plus récentes d'abord ; `moment` : celles de ce moment seulement. */
 	servis(session: string, limite: number, moment?: EntreeServie['moment']): Promise<EntreeServie[]>;
 	/**
