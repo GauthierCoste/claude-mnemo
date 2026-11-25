@@ -497,6 +497,42 @@ describe('Pilote : moteur de la session', () => {
 		expect(c.terminaux.lances).toHaveLength(1);
 		expect(await c.etat.lire(ID_B)).toMatchObject({ etat: 'a_relire', moteur: 'gemini' });
 	});
+
+	it('moteur et modèle du profil enregistrés au lancement (--model) ; la reprise garde ceux de la session après un changement du profil', async () => {
+		const c = await contexte();
+		await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmodele: opus\n---\n# Rédaction\n\nRédige les courriers.\n');
+		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
+		expect(s).toMatchObject({ moteur: 'claude-code', modele: 'opus' });
+		expect(c.terminaux.lances[0]!.options.args.slice(0, 5)).toEqual([...CLAUDE.avant, '--session-id', s.id, '--model', 'opus']);
+		// le profil change de modèle, puis de moteur : la session garde les siens
+		await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmoteur: codex\nmodele: gpt-6.2-sol\n---\n# Rédaction\n\nRédige les courriers.\n');
+		await c.pilote.pause(s.id);
+		await c.pilote.reprendre(s.id);
+		expect(c.terminaux.lances).toHaveLength(2);
+		expect(c.terminaux.lances[1]!.options.args.slice(0, 5)).toEqual([...CLAUDE.avant, '--resume', s.id, '--model', 'opus']);
+		expect(await c.etat.lire(s.id)).toMatchObject({ moteur: 'claude-code', modele: 'opus' });
+		expect(await c.pilote.ligneDeReprise(s.id)).toMatch(/'--resume' '[^']+' '--model' 'opus'/u);
+	});
+
+	it('ligne manuelle (claude introuvable) avec --model ; sans modèle, aucun --model', async () => {
+		const c = await contexte({ claude: null });
+		await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmodele: opus\n---\n# Rédaction\n\nRédige les courriers.\n');
+		const r = await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' });
+		if (!('manuel' in r)) throw new Error('manuel attendu');
+		expect(r.manuel).toMatch(/ claude '--session-id' '[^']+' '--model' 'opus' /u);
+		const sans = await c.pilote.lancer({ profil: 'travail', dossier: 'alpha' });
+		if (!('manuel' in sans)) throw new Error('manuel attendu');
+		expect(sans.manuel).not.toContain('--model');
+	});
+
+	it('profil d\'un moteur sans implémentation ici : lancement refusé avec la raison, aucune session créée', async () => {
+		const c = await contexte();
+		await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmoteur: codex\n---\n# Rédaction\n\nRédige les courriers.\n');
+		const r = await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' });
+		expect(r).toEqual({ refus: expect.stringMatching(/« codex »/u) });
+		expect(c.terminaux.lances).toHaveLength(0);
+		expect(await c.etat.lister()).toEqual([]);
+	});
 });
 
 describe('Pilote : redémarrage du service', () => {

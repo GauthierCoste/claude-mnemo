@@ -1,10 +1,10 @@
 // Gestion des profils par l'utilisateur (interface, route HTTP) : détail éditable, enregistrement, duplication, suppression.
-import type { Avatar } from '@mnemo/commun';
-import { COULEURS_AVATAR, DOSSIERS_FIXES, FORMES_AVATAR, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
+import type { Avatar, IdMoteur } from '@mnemo/commun';
+import { COULEURS_AVATAR, DOSSIERS_FIXES, estIdMoteur, estModele, FORMES_AVATAR, IDS_MOTEURS, MODELE_MAX, MOTEUR_PAR_DEFAUT, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { empreinte } from '../domaine/empreinte.ts';
 import { lireFiche, separerFrontmatter } from '../domaine/fiche.ts';
 import type { Fiche } from '../domaine/fiche.ts';
-import { CLES_GEREES_DU_PROFIL, donneesDeProfil, estConsigneParDefaut, estIdentifiantDePlugin, estNomDeProfil, EVENEMENTS_HOOK, MOTIF_NOM_DE_PROFIL, PROFILS_PAR_DEFAUT } from '../domaine/profil.ts';
+import { CLES_GEREES_DU_PROFIL, donneesDeProfil, estConsigneParDefaut, estIdentifiantDePlugin, estNomDeProfil, EVENEMENTS_HOOK, MOTIF_NOM_DE_PROFIL, MOTIF_PLUGINS_HORS_CLAUDE_CODE, PROFILS_PAR_DEFAUT } from '../domaine/profil.ts';
 import type { Profil } from '../domaine/profil.ts';
 import type { EvenementHook } from '../domaine/session.ts';
 import { ecrireEtCommiter, ficheVide, sousVerrou, texteDeFiche } from './commun.ts';
@@ -13,7 +13,10 @@ import type { Dependances, PluginInstalle, SkillInstallee } from './ports.ts';
 import { chargerProfil, cheminDeProfil, dossierSkillsDuProfil, profilParDefaut } from './profil.ts';
 import { reindexerApresEcriture } from './synchroniser.ts';
 
-/** Ce que l'utilisateur règle d'un profil. `consigne` : `null` = la consigne par défaut du code. */
+/**
+ * Ce que l'utilisateur règle d'un profil. `consigne` : `null` = la consigne par défaut du code ; `modele` : « » = le modèle par
+ * défaut du moteur ; `plugins` : vide pour un autre moteur que Claude Code.
+ */
 export type ProfilEditable = {
 	avatar: Avatar;
 	consigne: string | null;
@@ -21,6 +24,8 @@ export type ProfilEditable = {
 	hooks: EvenementHook[];
 	skillsMemoire: 'tous' | string[];
 	plugins: string[];
+	moteur: IdMoteur;
+	modele: string;
 };
 
 /**
@@ -80,6 +85,8 @@ const editableDe = (p: Profil): ProfilEditable => ({
 	hooks: [...p.hooks],
 	skillsMemoire: p.skillsMemoire === 'tous' ? 'tous' : [...p.skillsMemoire],
 	plugins: [...p.plugins],
+	moteur: p.moteur,
+	modele: p.modele,
 });
 
 /** Détail éditable du profil `nom` ; null s'il n'est ni un profil du paquet ni un dossier de `profils/`. */
@@ -121,6 +128,10 @@ async function motifsDe(dep: Dependances, nom: string, editable: ProfilEditable)
 	}
 	const malFormes = Array.isArray(editable.plugins) ? editable.plugins.filter((p) => typeof p !== 'string' || !estIdentifiantDePlugin(p)) : ['?'];
 	if (malFormes.length > 0) motifs.plugins = `identifiants de plugin mal formés (attendu nom@marketplace) : ${malFormes.join(', ')}`;
+	if (!estIdMoteur(editable.moteur)) motifs.moteur = `moteur inconnu : ${IDS_MOTEURS.map((m) => `« ${m} »`).join(' ou ')} attendu`;
+	else if (nom === PROFIL_ARCHIVISTE && editable.moteur !== MOTEUR_PAR_DEFAUT) motifs.moteur = 'l\'archiviste tourne sur Claude Code';
+	else if (editable.moteur !== 'claude-code' && Array.isArray(editable.plugins) && editable.plugins.length > 0 && motifs.plugins === undefined) motifs.plugins = MOTIF_PLUGINS_HORS_CLAUDE_CODE;
+	if (!estModele(editable.modele)) motifs.modele = `modèle refusé : vide (celui par défaut du moteur) ou un nom de ${MODELE_MAX} caractères au plus, sans caractère de contrôle, sans espace au début ni à la fin, sans « - » au début`;
 	if (editable.consigne !== null && typeof editable.consigne !== 'string') motifs.consigne = 'consigne attendue : un texte, ou null pour celle par défaut';
 	return motifs;
 }
@@ -136,6 +147,8 @@ function ficheAEcrire(dep: Dependances, nom: string, existante: Fiche | null, ed
 		hooks: EVENEMENTS_HOOK.filter((e) => editable.hooks.includes(e)),
 		skillsMemoire: editable.skillsMemoire === 'tous' ? 'tous' : sansDoublons(editable.skillsMemoire),
 		plugins: sansDoublons(editable.plugins),
+		moteur: editable.moteur,
+		modele: editable.modele,
 	};
 	const donnees = { ...fiche.donnees };
 	for (const cle of CLES_GEREES_DU_PROFIL) delete donnees[cle];

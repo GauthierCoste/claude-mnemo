@@ -22,6 +22,8 @@ const NOUVEAU_PROFIL: ProfilEditableVue = {
 	hooks: ['debut', 'message', 'outil', 'apres_outil', 'arret', 'fin'],
 	skillsMemoire: 'tous',
 	plugins: [],
+	moteur: 'claude-code',
+	modele: '',
 };
 
 export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {

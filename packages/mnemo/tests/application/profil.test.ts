@@ -70,13 +70,13 @@ describe('profil travail', () => {
 describe('profilsDisponibles', () => {
 	it('rend les profils par défaut et ceux de profils/, triés, chacun décrit par la première ligne de sa consigne', async () => {
 		const dep = fauxPorts();
-		dep.fichiers.set('profils/redaction/redaction.md', '---\ntype: profil\n---\n# Profil rédaction\n\nRédige les courriers.\nSuite de la consigne.\n');
+		dep.fichiers.set('profils/redaction/redaction.md', '---\ntype: profil\nmoteur: codex\nmodele: gpt-6.2-sol\n---\n# Profil rédaction\n\nRédige les courriers.\nSuite de la consigne.\n');
 		const r = await profilsDisponibles(dep);
 		expect(r.profils).toEqual([
-			{ nom: PROFIL_ARCHIVISTE, description: CONSIGNE_ARCHIVISTE_PAR_DEFAUT.split('\n')[0], lancement: 'memoire', lanceur: 'propre', avatar: { forme: 'chouette', couleur: 'violet' }, personnalise: false },
-			// profil de l'utilisateur sans avatar déclaré : celui de `travail` ; sa consigne n'est pas celle par défaut
-			{ nom: 'redaction', description: 'Rédige les courriers.', lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: true },
-			{ nom: PROFIL_TRAVAIL, description: CONSIGNE_TRAVAIL_PAR_DEFAUT.split('\n')[0], lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: false },
+			{ nom: PROFIL_ARCHIVISTE, description: CONSIGNE_ARCHIVISTE_PAR_DEFAUT.split('\n')[0], lancement: 'memoire', lanceur: 'propre', avatar: { forme: 'chouette', couleur: 'violet' }, personnalise: false, moteur: 'claude-code', modele: '' },
+			// profil de l'utilisateur sans avatar déclaré : celui de `travail` ; sa consigne n'est pas celle par défaut ; son moteur et son modèle
+			{ nom: 'redaction', description: 'Rédige les courriers.', lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: true, moteur: 'codex', modele: 'gpt-6.2-sol' },
+			{ nom: PROFIL_TRAVAIL, description: CONSIGNE_TRAVAIL_PAR_DEFAUT.split('\n')[0], lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: false, moteur: 'claude-code', modele: '' },
 		]);
 		expect(r.ignores).toEqual([]);
 		expect(r.avertissements).toEqual([]);

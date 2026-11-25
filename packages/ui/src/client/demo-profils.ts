@@ -35,12 +35,12 @@ type Etat = { editable: ProfilEditableVue; consigneParDefaut: string; ecrit: boo
 
 export function creerProfilsDemo() {
 	const profils = new Map<string, Etat>([
-		[PROFIL_TRAVAIL, { editable: { avatar: { forme: 'robot', couleur: 'vert' }, consigne: null, lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: 'tous', plugins: [] }, consigneParDefaut: CONSIGNE_TRAVAIL, ecrit: true, version: 1 }],
-		[PROFIL_ARCHIVISTE, { editable: { avatar: { forme: 'chouette', couleur: 'violet' }, consigne: null, lancement: 'memoire', hooks: ['debut', 'arret', 'fin'], skillsMemoire: [], plugins: [] }, consigneParDefaut: CONSIGNE_ARCHIVISTE, ecrit: false, version: 1 }],
+		[PROFIL_TRAVAIL, { editable: { avatar: { forme: 'robot', couleur: 'vert' }, consigne: null, lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: 'tous', plugins: [], moteur: 'claude-code', modele: '' }, consigneParDefaut: CONSIGNE_TRAVAIL, ecrit: true, version: 1 }],
+		[PROFIL_ARCHIVISTE, { editable: { avatar: { forme: 'chouette', couleur: 'violet' }, consigne: null, lancement: 'memoire', hooks: ['debut', 'arret', 'fin'], skillsMemoire: [], plugins: [], moteur: 'claude-code', modele: '' }, consigneParDefaut: CONSIGNE_ARCHIVISTE, ecrit: false, version: 1 }],
 		[
 			'redaction',
 			{
-				editable: { avatar: { forme: 'renard', couleur: 'ambre' }, consigne: 'Rédige les courriers aux clients, au ton de la maison.', lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: ['relecture'], plugins: ['superpowers@superpowers-marketplace', 'ancien@marketplace'] },
+				editable: { avatar: { forme: 'renard', couleur: 'ambre' }, consigne: 'Rédige les courriers aux clients, au ton de la maison.', lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: ['relecture'], plugins: ['superpowers@superpowers-marketplace', 'ancien@marketplace'], moteur: 'claude-code', modele: '' },
 				consigneParDefaut: CONSIGNE_TRAVAIL,
 				ecrit: true,
 				version: 1,
@@ -71,6 +71,8 @@ export function creerProfilsDemo() {
 						lanceur: nom === PROFIL_ARCHIVISTE ? 'propre' : 'dialogue',
 						avatar: e.editable.avatar,
 						personnalise: e.editable.consigne !== null,
+						moteur: e.editable.moteur,
+						modele: e.editable.modele,
 					})),
 				ignores: [],
 				avertissements: [],

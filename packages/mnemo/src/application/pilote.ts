@@ -471,6 +471,8 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		const objectif = d.objectif?.trim() ?? '';
 		if (objectif.length > OBJECTIF_MAX) return { refus: `Objectif trop long (${objectif.length} caractères, ${OBJECTIF_MAX} au plus).` };
 		const profil = await chargerProfil(dep, d.profil);
+		// le moteur du profil doit être implémenté ici ; introuvable sur le poste, la ligne à coller est rendue (mode dégradé)
+		if (moteurDe(profil) === null) return { refus: `Le profil « ${profil.nom} » utilise le moteur « ${profil.moteur} », pas encore pris en charge par ce service.` };
 		const memoire = profil.lancement === 'memoire';
 		// une session lancée dans la mémoire est à sa racine
 		const trouvee: PositionDuProjet = memoire ? { chemin: '', rattachement: null } : await positionNotee(dep, pil.etat, relatif);
@@ -493,8 +495,9 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			commitDebut: null,
 			branche: null,
 			pid: null,
-			moteur: MOTEUR_PAR_DEFAUT,
-			modele: '',
+			// moteur et modèle du profil au lancement : la reprise garde ceux-ci, même si le profil change ensuite
+			moteur: profil.moteur,
+			modele: profil.modele,
 		};
 		const liberer = marquer(session.id);
 		try {

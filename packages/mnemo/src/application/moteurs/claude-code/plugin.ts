@@ -1,4 +1,4 @@
-import { DOSSIERS_FIXES } from '@mnemo/commun';
+import { DOSSIERS_FIXES, estModele } from '@mnemo/commun';
 import { OUTILS_CLAUDE_CODE, PREFIXE_MCP } from '../../../domaine/moteurs/claude-code/outils.ts';
 import type { Profil } from '../../../domaine/profil.ts';
 import { EVENEMENTS_HOOK, skillPourProjet } from '../../../domaine/profil.ts';
@@ -181,13 +181,17 @@ function dans(dossier: string, nom: string): string {
 }
 
 /**
- * Arguments de `claude` : nouvelle session (`--session-id`) ou reprise (`--resume`), le plugin, ses réglages et sa consigne ;
+ * Arguments de `claude` : nouvelle session (`--session-id`) ou reprise (`--resume`), le modèle de la session (`--model`, s'il
+ * n'est pas vide : enregistré au lancement, gardé à la reprise), le plugin, ses réglages et sa consigne ;
  * un profil lancé dans la mémoire (`lancement: memoire`) reçoit la racine du dossier Mnemo par `--add-dir` (avant le plugin). L'objectif (nouvelle session seulement) est le dernier
  * argument : le prompt initial ; s'il commence par « - », une espace le précède pour qu'il ne soit jamais lu comme une option.
  */
 export function argumentsClaude(session: Session, profil: Pick<Profil, 'lancement'>, dossiers: { plugin: string; racine: string }, mode: 'nouvelle' | 'reprise', objectif?: string): string[] {
 	if (!estUuid(session.id)) throw new Error(`Identifiant de session invalide (uuid attendu) : « ${session.id} ».`);
 	const args = mode === 'nouvelle' ? ['--session-id', session.id] : ['--resume', session.id];
+	const modele = session.modele ?? '';
+	if (!estModele(modele)) throw new Error(`Modèle de session refusé : « ${modele} ».`);
+	if (modele !== '') args.push('--model', modele);
 	// `--add-dir` prend plusieurs valeurs : placé avant `--plugin-dir`, il n'avale jamais l'objectif.
 	if (profil.lancement === 'memoire') args.push('--add-dir', dossiers.racine);
 	args.push('--plugin-dir', dossiers.plugin, '--settings', dans(dossiers.plugin, 'settings.json'), '--append-system-prompt-file', dans(dossiers.plugin, 'consigne.md'));

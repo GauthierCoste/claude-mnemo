@@ -1,6 +1,6 @@
 import { parse } from 'yaml';
-import { LANCEURS_DE_PROFIL, lireAvatar, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
-import type { Avatar, LanceurDeProfil } from '@mnemo/commun';
+import { estIdMoteur, estModele, LANCEURS_DE_PROFIL, lireAvatar, MOTEUR_PAR_DEFAUT, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
+import type { Avatar, IdMoteur, LanceurDeProfil } from '@mnemo/commun';
 import type { Fiche } from './fiche.ts';
 import type { EvenementHook } from './session.ts';
 
@@ -9,7 +9,8 @@ import type { EvenementHook } from './session.ts';
  * fiche remplace la consigne par défaut du code (`estConsigneParDefaut`) ; `lancement` : dossier de lancement (`projet` : le
  * projet choisi ; `memoire` : `_mnemo/`, la racine ajoutée par `--add-dir`) ; `lanceur` : qui le lance (`LANCEURS_DE_PROFIL`) ;
  * `skillsMemoire` : skills de `_mnemo/skills/` retenues (`tous`, ou leurs noms) ; `plugins` : identifiants `nom@marketplace`
- * des plugins Claude Code activés ; `avatar` : forme et couleur affichées dans l'interface.
+ * des plugins Claude Code activés (seulement avec le moteur Claude Code) ; `avatar` : forme et couleur affichées dans l'interface ;
+ * `moteur` : l'agent de code qui fait tourner ses sessions ; `modele` : son modèle (« » : celui par défaut du moteur).
  */
 export type Profil = {
 	nom: string;
@@ -21,6 +22,8 @@ export type Profil = {
 	skillsMemoire: 'tous' | string[];
 	plugins: string[];
 	avatar: Avatar;
+	moteur: IdMoteur;
+	modele: string;
 };
 
 /** Ordre canonique des événements (celui du `hooks.json` assemblé). */
@@ -36,6 +39,8 @@ export const PROFILS_PAR_DEFAUT: Record<typeof PROFIL_TRAVAIL | typeof PROFIL_AR
 		skillsMemoire: 'tous',
 		plugins: [],
 		avatar: { forme: 'robot', couleur: 'vert' },
+		moteur: MOTEUR_PAR_DEFAUT,
+		modele: '',
 	},
 	[PROFIL_ARCHIVISTE]: {
 		nom: PROFIL_ARCHIVISTE,
@@ -46,11 +51,16 @@ export const PROFILS_PAR_DEFAUT: Record<typeof PROFIL_TRAVAIL | typeof PROFIL_AR
 		skillsMemoire: [],
 		plugins: [],
 		avatar: { forme: 'chouette', couleur: 'violet' },
+		moteur: MOTEUR_PAR_DEFAUT,
+		modele: '',
 	},
 };
 
 /** Clés du frontmatter d'une fiche `profil` réécrites (ou retirées, comme l'ancienne `skills`) à l'enregistrement. */
-export const CLES_GEREES_DU_PROFIL = ['avatar', 'plugins', 'skills_memoire', 'skills', 'hooks', 'lancement', 'lanceur'] as const;
+export const CLES_GEREES_DU_PROFIL = ['avatar', 'plugins', 'skills_memoire', 'skills', 'hooks', 'lancement', 'lanceur', 'moteur', 'modele'] as const;
+
+/** Motif d'un profil qui déclare des plugins avec un autre moteur que Claude Code. */
+export const MOTIF_PLUGINS_HORS_CLAUDE_CODE = 'les plugins Claude Code ne valent qu\'avec le moteur Claude Code : retire-les ou choisis ce moteur';
 
 const RE_PLUGIN = /^[^@\s]+@[^@\s]+$/u;
 
@@ -118,12 +128,12 @@ export function estConsigneParDefaut(synthese: string, anciennes: readonly strin
 
 /**
  * Profil tiré d'une fiche `profil` (frontmatter `lancement`, `lanceur`, `hooks`, `skills_memoire` ou l'ancienne `skills`,
- * `plugins`, `avatar` ; consigne = synthèse, sauf si `estConsigneParDefaut`). Ne lève jamais : fiche absente ou d'un autre
+ * `plugins`, `avatar`, `moteur`, `modele` ; consigne = synthèse, sauf si `estConsigneParDefaut`). Ne lève jamais : fiche absente ou d'un autre
  * type → `parDefaut` ; chaque champ absent ou invalide → celui de `parDefaut`.
  */
 export function lireProfil(fiche: Fiche | null, parDefaut: Profil, anciennesConsignes: readonly string[]): Profil {
 	if (fiche === null || fiche.type !== 'profil') return copie(parDefaut);
-	const { lancement, lanceur, hooks, skills, skills_memoire, plugins, avatar } = fiche.donnees;
+	const { lancement, lanceur, hooks, skills, skills_memoire, plugins, avatar, moteur, modele } = fiche.donnees;
 	const consigneParDefaut = estConsigneParDefaut(fiche.synthese, anciennesConsignes);
 	return {
 		nom: parDefaut.nom,
@@ -135,12 +145,15 @@ export function lireProfil(fiche: Fiche | null, parDefaut: Profil, anciennesCons
 		skillsMemoire: skillsMemoireDe(skills_memoire, skills) ?? copieSkills(parDefaut.skillsMemoire),
 		plugins: pluginsDe(plugins) ?? [...parDefaut.plugins],
 		avatar: lireAvatar(avatar) ?? { ...parDefaut.avatar },
+		moteur: estIdMoteur(moteur) ? moteur : parDefaut.moteur,
+		modele: estModele(modele) ? modele : parDefaut.modele,
 	};
 }
 
 /**
  * Clés gérées du frontmatter d'une fiche `profil`, dans un ordre stable : `avatar`, `plugins`, `skills_memoire`, `hooks`,
- * `lancement`, puis `lanceur` s'il diffère de `dialogue`. Jamais l'ancienne clé `skills`.
+ * `lancement`, puis `lanceur` s'il diffère de `dialogue`, `moteur` s'il diffère de Claude Code et `modele` s'il n'est pas
+ * vide (un profil d'avant les moteurs se réécrit à l'identique). Jamais l'ancienne clé `skills`.
  */
 export function donneesDeProfil(profil: Profil): Record<string, unknown> {
 	const donnees: Record<string, unknown> = {
@@ -151,6 +164,8 @@ export function donneesDeProfil(profil: Profil): Record<string, unknown> {
 		lancement: profil.lancement,
 	};
 	if (profil.lanceur !== 'dialogue') donnees.lanceur = profil.lanceur;
+	if (profil.moteur !== MOTEUR_PAR_DEFAUT) donnees.moteur = profil.moteur;
+	if (profil.modele !== '') donnees.modele = profil.modele;
 	return donnees;
 }
 

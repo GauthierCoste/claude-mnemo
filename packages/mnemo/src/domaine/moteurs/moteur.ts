@@ -1,12 +1,7 @@
 import type { ActionOutil } from '../regles-verifiees.ts';
 
-/** Agent de code qui fait tourner une session : Claude Code, ou Codex (à venir). */
-export type IdMoteur = 'claude-code' | 'codex';
-export const IDS_MOTEURS: readonly IdMoteur[] = ['claude-code', 'codex'];
-/** Moteur d'une session ou d'un profil qui n'en dit rien (état, profils et hooks d'avant les moteurs). */
-export const MOTEUR_PAR_DEFAUT: IdMoteur = 'claude-code';
-
-export const estIdMoteur = (v: unknown): v is IdMoteur => typeof v === 'string' && (IDS_MOTEURS as readonly string[]).includes(v);
+export { estIdMoteur, IDS_MOTEURS, MOTEUR_PAR_DEFAUT } from '@mnemo/commun';
+export type { IdMoteur } from '@mnemo/commun';
 
 /**
  * Outils d'un moteur, tels que ses hooks les nomment : ce que les consignes vérifiées (`chemins_interdits`,

@@ -15,13 +15,13 @@ import type { Reponse, Route } from './routes.ts';
 /** Message d'un conflit d'écriture (409). */
 export const MOTIF_CONFLIT_PROFIL = 'La fiche du profil a changé depuis son ouverture : rechargez-la.';
 
-const CLES_EDITABLES = ['avatar', 'consigne', 'lancement', 'hooks', 'skillsMemoire', 'plugins'] as const;
+const CLES_EDITABLES = ['avatar', 'consigne', 'lancement', 'hooks', 'skillsMemoire', 'plugins', 'moteur', 'modele'] as const;
 
 /** Profil réglé reçu au `PUT` : forme vérifiée ici, contenu validé par le cas d'usage. */
 function editableDe(brut: unknown): ProfilEditable {
 	if (!estObjet(brut)) throw new ErreurHttp(400, 'Champ « editable » : objet attendu.');
 	for (const cle of Object.keys(brut)) if (!(CLES_EDITABLES as readonly string[]).includes(cle)) throw new ErreurHttp(400, `Champ inconnu « editable.${cle} ».`);
-	const { avatar, consigne, lancement, hooks, skillsMemoire, plugins } = brut;
+	const { avatar, consigne, lancement, hooks, skillsMemoire, plugins, moteur, modele } = brut;
 	if (!estObjet(avatar) || typeof avatar['forme'] !== 'string' || typeof avatar['couleur'] !== 'string') throw new ErreurHttp(400, 'Champ « editable.avatar » : { forme, couleur } attendu.');
 	if (consigne !== null && typeof consigne !== 'string') throw new ErreurHttp(400, 'Champ « editable.consigne » : texte ou null attendu.');
 	if (typeof consigne === 'string' && consigne.length > 100_000) throw new ErreurHttp(400, 'Champ « editable.consigne » : 100 000 caractères au plus.');
@@ -30,7 +30,9 @@ function editableDe(brut: unknown): ProfilEditable {
 	if (!listeDeTextes(hooks)) throw new ErreurHttp(400, 'Champ « editable.hooks » : liste de textes attendue.');
 	if (skillsMemoire !== 'tous' && !listeDeTextes(skillsMemoire)) throw new ErreurHttp(400, 'Champ « editable.skillsMemoire » : « tous » ou liste de textes attendu.');
 	if (!listeDeTextes(plugins)) throw new ErreurHttp(400, 'Champ « editable.plugins » : liste de textes attendue.');
-	return { avatar, consigne, lancement, hooks, skillsMemoire, plugins } as ProfilEditable;
+	if (typeof moteur !== 'string') throw new ErreurHttp(400, 'Champ « editable.moteur » : texte attendu.');
+	if (typeof modele !== 'string' || modele.length > 1000) throw new ErreurHttp(400, 'Champ « editable.modele » : texte attendu (« » : le modèle par défaut du moteur).');
+	return { avatar, consigne, lancement, hooks, skillsMemoire, plugins, moteur, modele } as ProfilEditable;
 }
 
 /**

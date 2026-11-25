@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { avertissementIndex } from '../../src/application/synchroniser.ts';
 import { ENTETE_REMPLACEMENT, ROUTES } from '@mnemo/contrat';
-import type { FicheVue, ReponseProfils, SessionVue } from '@mnemo/contrat';
+import type { FicheVue, ProfilDetailVue, RefusProfil, ReponseProfils, SessionVue } from '@mnemo/contrat';
 import { PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import type { Session } from '../../src/domaine/session.ts';
@@ -111,6 +111,23 @@ describe('routes : sessions', () => {
 		expect(corps.profils.map((p) => [p.nom, p.lancement])).toEqual([[PROFIL_ARCHIVISTE, 'memoire'], ['redaction', 'projet'], [PROFIL_TRAVAIL, 'projet']]);
 		expect(corps.profils[1]!.description).toBe('Rédige les courriers.');
 		expect(corps.ignores.map((x) => x.nom)).toEqual(['A b']);
+	});
+
+	it('profils : moteur et modèle dans la liste, le détail et l\'enregistrement ; refus motivés ; champs absents refusés', async () => {
+		const c = await serviceFaux();
+		const { port, jeton } = c.service;
+		const detail = (await api(c).get(chemin(ROUTES.profil, PROFIL_TRAVAIL))).corps as ProfilDetailVue;
+		expect(detail.editable).toMatchObject({ moteur: 'claude-code', modele: '' });
+		const put = (editable: unknown, empreinte = detail.empreinte) => appeler(port, 'PUT', chemin(ROUTES.profil, PROFIL_TRAVAIL), { jeton, corps: { editable, empreinte } });
+		const refus = await put({ ...detail.editable, moteur: 'codex', plugins: ['superpowers@superpowers-marketplace'], modele: '-x' });
+		expect(refus.statut).toBe(400);
+		expect(Object.keys((refus.corps as RefusProfil).motifs).sort()).toEqual(['modele', 'plugins']);
+		const { moteur: _moteur, ...sansMoteur } = detail.editable;
+		expect((await put(sansMoteur)).statut).toBe(400);
+		expect((await put({ ...detail.editable, modele: 'opus' })).statut).toBe(200);
+		const liste = (await api(c).get(ROUTES.profils)).corps as ReponseProfils;
+		expect(liste.profils.find((p) => p.nom === PROFIL_TRAVAIL)).toMatchObject({ moteur: 'claude-code', modele: 'opus' });
+		expect(((await api(c).get(chemin(ROUTES.profil, PROFIL_TRAVAIL))).corps as ProfilDetailVue).editable.modele).toBe('opus');
 	});
 
 	it('POST sessions sans profil : PROFIL_TRAVAIL ; avec un profil de profils/ : ce profil', async () => {

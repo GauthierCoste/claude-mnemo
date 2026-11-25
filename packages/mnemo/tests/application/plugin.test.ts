@@ -342,6 +342,20 @@ describe('argumentsClaude', () => {
 	it('identifiant de session qui n\'est pas un uuid : refusé', () => {
 		expect(() => argumentsClaude(session({ id: 'pas-un-uuid' }), TRAVAIL, dossiers, 'nouvelle')).toThrow(/uuid/i);
 	});
+
+	it('modèle de la session : --model juste après l\'identifiant, au lancement et à la reprise ; vide ou absent : aucun --model', () => {
+		const avecModele = session({ modele: 'opus' });
+		expect(argumentsClaude(avecModele, TRAVAIL, dossiers, 'nouvelle', 'Corriger la facture')).toEqual(['--session-id', ID, '--model', 'opus', ...communs, 'Corriger la facture']);
+		expect(argumentsClaude(avecModele, TRAVAIL, dossiers, 'reprise')).toEqual(['--resume', ID, '--model', 'opus', ...communs]);
+		expect(argumentsClaude(session({ profil: 'archiviste', modele: 'opus' }), ARCHIVISTE, dossiers, 'nouvelle')).toEqual(['--session-id', ID, '--model', 'opus', '--add-dir', '/m', ...communs]);
+		expect(argumentsClaude(session({ modele: '' }), TRAVAIL, dossiers, 'nouvelle')).not.toContain('--model');
+		expect(argumentsClaude(session(), TRAVAIL, dossiers, 'reprise')).not.toContain('--model');
+	});
+
+	it('modèle de session invalide (option, contrôle) : refusé', () => {
+		expect(() => argumentsClaude(session({ modele: '--dangerously-skip-permissions' }), TRAVAIL, dossiers, 'nouvelle')).toThrow(/Modèle/u);
+		expect(() => argumentsClaude(session({ modele: 'op\nus' }), TRAVAIL, dossiers, 'reprise')).toThrow(/Modèle/u);
+	});
 });
 
 describe('environnementClaude', () => {

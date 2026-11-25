@@ -219,9 +219,9 @@ async function ficheDeProfil(dep: Dependances, nom: string): Promise<Fiche | nul
 /**
  * Un profil qui peut être lancé : `description`, première ligne de sa consigne ; `lancement` : dans le dossier choisi ou
  * dans la mémoire ; `lanceur` : par le dialogue Nouvelle session ou par son propre chemin ; `avatar` ; `personnalise` : sa
- * consigne remplace celle par défaut.
+ * consigne remplace celle par défaut ; `moteur` et `modele` (« » : celui par défaut du moteur) de ses sessions.
  */
-export type ProfilDisponible = { nom: string; description: string; lancement: Profil['lancement']; lanceur: Profil['lanceur']; avatar: Profil['avatar']; personnalise: boolean };
+export type ProfilDisponible = { nom: string; description: string; lancement: Profil['lancement']; lanceur: Profil['lanceur']; avatar: Profil['avatar']; personnalise: boolean; moteur: Profil['moteur']; modele: string };
 
 /**
  * Profils qui peuvent être lancés, triés par nom : ceux du paquet et chaque dossier de `profils/`, lus par `chargerProfil`.
@@ -237,7 +237,7 @@ export async function profilsDisponibles(
 	const avertissements: { nom: string; motif: string }[] = [];
 	for (const nom of noms) {
 		const profil = await chargerProfil(dep, nom);
-		profils.push({ nom, description: profil.consigne.split('\n')[0]!.trim(), lancement: profil.lancement, lanceur: profil.lanceur, avatar: profil.avatar, personnalise: profil.consignePersonnalisee });
+		profils.push({ nom, description: profil.consigne.split('\n')[0]!.trim(), lancement: profil.lancement, lanceur: profil.lanceur, avatar: profil.avatar, personnalise: profil.consignePersonnalisee, moteur: profil.moteur, modele: profil.modele });
 		const fiche = await ficheDeProfil(dep, nom).catch(() => null);
 		if (lanceurPropreSansChemin(fiche, profilParDefaut(nom))) avertissements.push({ nom, motif: MOTIF_LANCEUR_PROPRE });
 	}
