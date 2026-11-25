@@ -1,4 +1,5 @@
 import type {
+	AppelDeclaration,
 	CommandeMoteur,
 	DeclarationMcp,
 	Executer,
@@ -147,11 +148,14 @@ export async function lireDeclarationMcp(executer: Executer, cheminMain: string,
 	}
 }
 
+/** L'exécuteur de l'appel, avec son délai (`delaiMs`) s'il en a un. */
+const executeurDe = (a: AppelDeclaration): Executer => (a.delaiMs === undefined ? a.executer : (commande, args, o) => a.executer(commande, args, { ...o, delaiMs: a.delaiMs }));
+
 /** Claude Code : `claude mcp get | add-json --scope user | remove --scope user mnemo`. */
 export const DECLARATION_MCP_CLAUDE_CODE: DeclarationMcp = {
 	manuelle: commandeManuelle,
-	lire: (a) => lireDeclarationMcp(a.executer, a.main, a.commande, a.plateforme),
-	declarer: (a) => declarerServeurMcp(a.executer, a.main, a.commande, a.plateforme),
-	remplacer: (a) => redeclarerServeurMcp(a.executer, a.main, a.commande, a.plateforme),
-	retirer: (a) => retirerServeurMcp(a.executer, a.main, a.commande, a.plateforme),
+	lire: (a) => lireDeclarationMcp(executeurDe(a), a.main, a.commande, a.plateforme),
+	declarer: (a) => declarerServeurMcp(executeurDe(a), a.main, a.commande, a.plateforme),
+	remplacer: (a) => redeclarerServeurMcp(executeurDe(a), a.main, a.commande, a.plateforme),
+	retirer: (a) => retirerServeurMcp(executeurDe(a), a.main, a.commande, a.plateforme),
 };

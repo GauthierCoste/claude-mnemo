@@ -11,7 +11,7 @@ const gitRepond = (code: number, sortie: string, erreur = ''): Executer => async
 const gitAbsent: Executer = async () => Promise.reject(Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' }));
 const claude = () => ({ commande: '/opt/outils/claude', avant: [] });
 /** Sans Codex : rien d'autre n'est lancé que `git`. */
-const sansCodex = { codex: () => null, main: '/chemin/absolu/main.ts', plateforme: 'darwin' };
+const sansCodex = { codex: () => null, main: '/chemin/absolu/main.ts', plateforme: 'darwin', env: {} };
 const CODEX_ABSENT = { ok: false, motif: expect.stringMatching(/^Codex introuvable/u) };
 
 describe('verifierPoste', () => {
@@ -68,13 +68,15 @@ describe('verifier-poste : Codex', () => {
 	const MAIN = '/chemin/absolu/main.ts';
 	const CODEX = { commande: '/opt/outils/codex', avant: [] };
 	/** `git --version` répond ; `codex mcp get mnemo --json` rend `get`. */
-	const repond = (get: { code: number; sortie: string; erreur: string }): Executer => async (commande, args) => {
+	const repond = (get: { code: number; sortie: string; erreur: string }): Executer => async (commande, args, options) => {
 		if (commande === 'git') return { code: 0, sortie: 'git version 2.50.1', erreur: '' };
 		expect([commande, ...args]).toEqual(['/opt/outils/codex', 'mcp', 'get', 'mnemo', '--json']);
+		// délai court dédié, comme `git --version`
+		expect(options).toEqual({ delaiMs: 10_000 });
 		return get;
 	};
 	const declaration = (command: string, args: string[]) => ({ code: 0, sortie: JSON.stringify({ name: 'mnemo', enabled: true, transport: { type: 'stdio', command, args } }), erreur: '' });
-	const deps = (executer: Executer) => ({ executer, claude, codex: () => CODEX, versionNode: '26.13.1', main: MAIN, plateforme: 'darwin' });
+	const deps = (executer: Executer) => ({ executer, claude, codex: () => CODEX, versionNode: '26.13.1', main: MAIN, plateforme: 'darwin', env: {} });
 
 	it('trouvé : son chemin et l’état de sa déclaration MCP, lue sans rien changer', async () => {
 		const cas: [{ code: number; sortie: string; erreur: string }, string][] = [
@@ -84,6 +86,8 @@ describe('verifier-poste : Codex', () => {
 			[declaration('/usr/bin/python3', ['/opt/serveur.py']), 'autre'],
 		];
 		for (const [get, etat] of cas) expect((await verifierPoste(deps(repond(get)))).codex, etat).toEqual({ ok: true, chemin: '/opt/outils/codex', mcp: { etat } });
+		const desactivee = JSON.stringify({ name: 'mnemo', enabled: false, transport: { type: 'stdio', command: process.execPath, args: [MAIN, 'mcp'] } });
+		expect((await verifierPoste(deps(repond({ code: 0, sortie: desactivee, erreur: '' })))).codex.mcp).toEqual({ etat: 'desactive', motif: expect.stringContaining('enabled = false') });
 		const illisible = await verifierPoste(deps(repond({ code: 0, sortie: 'pas du JSON', erreur: '' })));
 		expect(illisible.codex.mcp).toEqual({ etat: 'echec', motif: expect.any(String) });
 	});

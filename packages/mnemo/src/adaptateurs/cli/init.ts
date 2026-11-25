@@ -68,7 +68,7 @@ export type OptionsInit = {
 const actionsReelles: ActionsInit = {
 	declarerMcp: () => declarerServeurMcp(executeurReel(), MAIN, trouverClaude(process.env, process.platform)),
 	declarerCodex: () =>
-		MOTEUR_CODEX.declarationMcp.declarer({ executer: executeurReel(), main: MAIN, commande: MOTEUR_CODEX.trouver(process.env, process.platform), plateforme: process.platform }),
+		MOTEUR_CODEX.declarationMcp.declarer({ executer: executeurReel(), main: MAIN, commande: MOTEUR_CODEX.trouver(process.env, process.platform), plateforme: process.platform, env: process.env }),
 	installerModeles: async (racine, suivi) => (await import('./modeles.ts')).commandeModeles(['installer'], { racine, ...suivi }),
 	creerLanceur: async (racine, ecrire) => (await import('./lanceur.ts')).commandeLanceur([], racine, ecrire),
 	installerCommande: async (ecrire) => (await import('./commande.ts')).commandeCommande([], ecrire === undefined ? {} : { ecrire }),

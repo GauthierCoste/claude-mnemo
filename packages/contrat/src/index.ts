@@ -808,10 +808,12 @@ export type LigneInit = EvenementInit | ProgressionInit | FinInit;
 
 /**
  * Déclaration du serveur MCP `mnemo` chez un moteur, lue sans rien changer : `deja` (elle lance ce Node et ce Mnemo),
- * `absent`, `perime` (une déclaration de Mnemo qui lance un autre Node ou un autre Mnemo : `mnemo declarer --remplacer`),
- * `autre` (une déclaration `mnemo` qui ne lance pas Mnemo : laissée), `echec` (illisible ; `motif` dit pourquoi).
+ * `absent`, `perime` (une déclaration de Mnemo qui lance un autre Node ou un autre Mnemo : `mnemo declarer --moteur codex
+ * --remplacer`), `autre` (une déclaration `mnemo` qui ne lance pas Mnemo : laissée), `desactive` (désactivée chez le
+ * moteur, `enabled = false` : ni déclarée, ni réactivée par Mnemo ; `motif` le dit), `echec` (illisible ; `motif` dit
+ * pourquoi).
  */
-export type EtatMcpVerifie = { etat: 'deja' | 'absent' | 'perime' | 'autre' | 'echec'; motif?: string };
+export type EtatMcpVerifie = { etat: 'deja' | 'absent' | 'perime' | 'autre' | 'desactive' | 'echec'; motif?: string };
 
 /**
  * `mnemo verifier-poste --json` : ce dont Mnemo a besoin sur le poste, un bloc par moteur. `git.version` : « 2.50.1 » ;

@@ -1,37 +1,11 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import type { CommandeMoteur } from '../../../application/ports.ts';
 import { variable } from '../../environnement.ts';
 import { dossiersDuPath, estExecutable, estFichier } from '../executables.ts';
+import { cibleDuShim, SHIM } from '../shim-npm.ts';
 
-const SHIM = /\.(?:cmd|bat)$/iu;
-
-/** Cibles citées par un shim npm : `"%dp0%\chemin\cli.js"` (ou `%~dp0`), chemins relatifs au dossier du shim. */
-function ciblesDuShim(texte: string): string[] {
-	return [...texte.matchAll(/"%~?dp0%?[\\/]*([^"%*]+?\.(?:mjs|cjs|js|exe))"/giu)].map((m) => m[1]!);
-}
-
-/**
- * Windows : un `claude.cmd` (shim npm) ne se lance pas sans shell. On lance sa cible à la place : un script Node par le Node
- * courant, un exécutable natif directement (jamais `node.exe`, l'interpréteur du shim) ; à défaut le `cli.js` du paquet
- * `@anthropic-ai/claude-code` à côté du shim. Rien de trouvé : null (mode dégradé, ligne de commande manuelle).
- */
-function cibleDuShim(shim: string): CommandeMoteur | null {
-	const dossier = dirname(shim);
-	let texte = '';
-	try {
-		texte = readFileSync(shim, 'utf8');
-	} catch {
-		texte = '';
-	}
-	const cibles = ciblesDuShim(texte).map((relatif) => join(dossier, ...relatif.split(/[\\/]/u).filter((s) => s !== '')));
-	const scripts = cibles.filter((c) => /\.(?:mjs|cjs|js)$/iu.test(c));
-	const natifs = cibles.filter((c) => /\.exe$/iu.test(c) && !/(?:^|[\\/])node\.exe$/iu.test(c));
-	for (const script of scripts) if (estFichier(script)) return { commande: process.execPath, avant: [script] };
-	for (const natif of natifs) if (estFichier(natif)) return { commande: natif, avant: [] };
-	const paquet = join(dossier, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js');
-	return estFichier(paquet) ? { commande: process.execPath, avant: [paquet] } : null;
-}
+/** Script du paquet npm de Claude Code, à côté de son shim. */
+const PAQUET_CLAUDE = ['node_modules', '@anthropic-ai', 'claude-code', 'cli.js'];
 
 /**
  * `claude<extension>` dans `dossier`, l'extension telle que `PATHEXT` l'écrit puis en minuscules : Windows ignore la casse,
@@ -57,7 +31,7 @@ export function trouverClaude(env: NodeJS.ProcessEnv, plateforme: NodeJS.Platfor
 	if (force !== undefined && force !== '') {
 		if (!estFichier(force)) return null;
 		if (/\.(?:mjs|js)$/iu.test(force)) return { commande: process.execPath, avant: [force] };
-		if (plateforme === 'win32' && SHIM.test(force)) return cibleDuShim(force);
+		if (plateforme === 'win32' && SHIM.test(force)) return cibleDuShim(force, PAQUET_CLAUDE);
 		return { commande: force, avant: [] };
 	}
 	const dossiers = dossiersDuPath(env, plateforme);
@@ -82,7 +56,7 @@ export function trouverClaude(env: NodeJS.ProcessEnv, plateforme: NodeJS.Platfor
 			const candidat = fichierClaude(dossier, extension);
 			if (candidat === null) continue;
 			if (!SHIM.test(candidat)) return { commande: candidat, avant: [] };
-			const cible = cibleDuShim(candidat);
+			const cible = cibleDuShim(candidat, PAQUET_CLAUDE);
 			if (cible !== null) return cible;
 		}
 	}

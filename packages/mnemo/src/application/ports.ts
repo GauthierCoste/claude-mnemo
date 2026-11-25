@@ -777,12 +777,17 @@ export type ResultatRetraitMcp = 'absent' | 'retire' | 'autre' | { echec: string
 /**
  * Déclaration lue, sans rien changer : `deja` : elle lance ce Node et ce `main.ts` ; `perime` : une déclaration de Mnemo de
  * portée utilisateur qui lance un autre Node ou un autre `main.ts` (`remplacer` la refait) ; `autre` : une déclaration
- * `mnemo` qui ne lance pas Mnemo, ou d'une autre portée.
+ * `mnemo` qui ne lance pas Mnemo, ou d'une autre portée ; `desactive` : désactivée chez le moteur (Codex : `enabled =
+ * false`), jamais réactivée par Mnemo.
  */
-export type LectureDeclaration = 'absent' | 'deja' | 'perime' | 'autre' | { echec: string };
+export type LectureDeclaration = 'absent' | 'deja' | 'perime' | 'autre' | 'desactive' | { echec: string };
 
-/** Ce que reçoit la déclaration : l'exécuteur, le `main.ts` de Mnemo, la commande du moteur (null : introuvable), la plateforme. */
-export type AppelDeclaration = { executer: Executer; main: string; commande: CommandeMoteur | null; plateforme: string };
+/**
+ * Ce que reçoit la déclaration : l'exécuteur, le `main.ts` de Mnemo, la commande du moteur (null : introuvable), la
+ * plateforme, l'environnement de l'utilisateur (où le moteur garde sa configuration : `CODEX_HOME`) et `delaiMs`, le délai
+ * de chaque commande du moteur (absent : celui de l'exécuteur).
+ */
+export type AppelDeclaration = { executer: Executer; main: string; commande: CommandeMoteur | null; plateforme: string; env: Record<string, string | undefined>; delaiMs?: number };
 
 /**
  * Le serveur MCP `mnemo` déclaré au niveau de l'utilisateur chez un moteur, par sa propre ligne de commande : toute session

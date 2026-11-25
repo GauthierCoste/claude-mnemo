@@ -12,11 +12,16 @@ const MAIN = fileURLToPath(new URL('./main.ts', import.meta.url));
 
 /**
  * Ce que lit la vérification ; remplaçable (tests : ni vrai `git`, ni vrai `claude`, ni vrai `codex`). `main` : le `main.ts`
- * que la déclaration MCP doit lancer ; `plateforme` : celle du poste (Node durable de la déclaration).
+ * que la déclaration MCP doit lancer ; `plateforme` : celle du poste (Node durable de la déclaration) ; `env` : celui de
+ * l'utilisateur (`CODEX_HOME`).
  */
-export type DependancesPoste = { executer: Executer; claude: () => CommandeMoteur | null; codex: () => CommandeMoteur | null; versionNode: string; main: string; plateforme: string };
+export type DependancesPoste = { executer: Executer; claude: () => CommandeMoteur | null; codex: () => CommandeMoteur | null; versionNode: string; main: string; plateforme: string; env: Record<string, string | undefined> };
 
-const ETATS_MCP: Record<Exclude<EtatMcpVerifie['etat'], 'echec'>, string> = {
+/** Délai de `codex mcp get` (lecture seule de la configuration), comme celui de `git --version`. */
+const DELAI_CODEX_MS = 10_000;
+const MOTIF_DESACTIVE = 'désactivée dans Codex (enabled = false) : Mnemo ne la réactive pas ; réactivez-la dans Codex pour que ses sessions lisent la mémoire.';
+
+const ETATS_MCP: Record<Exclude<EtatMcpVerifie['etat'], 'echec' | 'desactive'>, string> = {
 	deja: 'serveur MCP déclaré',
 	absent: 'serveur MCP non déclaré (mnemo init --codex)',
 	perime: 'serveur MCP déclaré pour un autre Node ou un autre Mnemo (mnemo declarer --moteur codex --remplacer)',
@@ -27,8 +32,8 @@ const ETATS_MCP: Record<Exclude<EtatMcpVerifie['etat'], 'echec'>, string> = {
 async function verifierCodex(d: DependancesPoste): Promise<PosteVerifie['codex']> {
 	const commande = d.codex();
 	if (commande === null) return { ok: false, motif: 'Codex introuvable (commande codex absente du PATH et de ChatGPT.app, ou MNEMO_CODEX invalide).' };
-	const lu = await MOTEUR_CODEX.declarationMcp.lire({ executer: d.executer, main: d.main, commande, plateforme: d.plateforme });
-	const mcp: EtatMcpVerifie = typeof lu === 'string' ? { etat: lu } : { etat: 'echec', motif: lu.echec };
+	const lu = await MOTEUR_CODEX.declarationMcp.lire({ executer: d.executer, main: d.main, commande, plateforme: d.plateforme, env: d.env, delaiMs: DELAI_CODEX_MS });
+	const mcp: EtatMcpVerifie = typeof lu !== 'string' ? { etat: 'echec', motif: lu.echec } : lu === 'desactive' ? { etat: lu, motif: MOTIF_DESACTIVE } : { etat: lu };
 	return { ok: true, chemin: commande.avant[0] ?? commande.commande, mcp };
 }
 
@@ -74,6 +79,7 @@ export async function commandeVerifierPoste(args: string[], partiel: Partial<Dep
 		versionNode: partiel.versionNode ?? process.versions.node,
 		main: partiel.main ?? MAIN,
 		plateforme: partiel.plateforme ?? process.platform,
+		env: partiel.env ?? process.env,
 	});
 	if (args.includes('--json')) {
 		ecrire(JSON.stringify(poste));
@@ -82,7 +88,7 @@ export async function commandeVerifierPoste(args: string[], partiel: Partial<Dep
 	ecrire(poste.git.ok ? `git : ${poste.git.version}` : `git : absent — ${poste.git.motif}`);
 	ecrire(poste.claude.ok ? `Claude Code : ${poste.claude.chemin}` : `Claude Code : absent — ${poste.claude.motif}`);
 	const { codex } = poste;
-	const mcp = codex.mcp === undefined ? '' : ` — ${codex.mcp.etat === 'echec' ? `déclaration MCP illisible : ${codex.mcp.motif ?? ''}` : ETATS_MCP[codex.mcp.etat]}`;
+	const mcp = codex.mcp === undefined ? '' : ` — ${codex.mcp.etat === 'echec' ? `déclaration MCP illisible : ${codex.mcp.motif ?? ''}` : codex.mcp.etat === 'desactive' ? `serveur MCP ${MOTIF_DESACTIVE}` : ETATS_MCP[codex.mcp.etat]}`;
 	ecrire(codex.ok ? `Codex : ${codex.chemin}${mcp}` : `Codex : absent (facultatif) — ${codex.motif}`);
 	ecrire(`Node : ${poste.node.version}`);
 	if (!poste.git.ok || !poste.claude.ok) throw new ErreurCli('Poste incomplet : installez ce qui manque, puis relancez « mnemo verifier-poste ».', 1);

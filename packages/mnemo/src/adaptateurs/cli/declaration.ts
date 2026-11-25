@@ -15,7 +15,7 @@ const USAGE = `Usage : mnemo declarer (--remplacer | --retirer) [--moteur <${IDS
 const MAIN = fileURLToPath(new URL('./main.ts', import.meta.url));
 
 /** Ce que lit la commande ; remplaçable (tests : aucun vrai `claude` ni vrai `codex`). */
-export type DependancesDeclarer = { executer: Executer; claude: () => CommandeMoteur | null; codex: () => CommandeMoteur | null; main: string };
+export type DependancesDeclarer = { executer: Executer; claude: () => CommandeMoteur | null; codex: () => CommandeMoteur | null; main: string; env: Record<string, string | undefined> };
 
 const MESSAGES: Record<Exclude<SortieDeclarer['resultat'], 'echec'>, string> = {
 	absent: 'Aucune déclaration MCP « mnemo » : rien à faire.',
@@ -54,6 +54,7 @@ export async function commandeDeclarer(args: string[], partiel: Partial<Dependan
 		main: partiel.main ?? MAIN,
 		commande: (trouver ?? (() => moteur.trouver(process.env, process.platform)))(),
 		plateforme: process.platform,
+		env: partiel.env ?? process.env,
 	};
 	const r = remplacer ? await moteur.declarationMcp.remplacer(appel) : await moteur.declarationMcp.retirer(appel);
 	const prefixe = id === MOTEUR_PAR_DEFAUT ? '' : `${moteur.nom} : `;
