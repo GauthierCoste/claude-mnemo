@@ -1,6 +1,6 @@
-import { cp, mkdtemp, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir, userInfo } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chercherSansSynchro } from '../../src/application/chercher.ts';
@@ -8,7 +8,9 @@ import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 import type { Variante } from '../../src/application/chercher.ts';
 import { synchroniser } from '../../src/application/synchroniser.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
+import { piecesPourPlateforme } from '../../src/infra/modeles/catalogue.ts';
 import { dossierModeles, dossierServeurs } from '../../src/infra/modeles/dossier.ts';
+import { dossierPiece } from '../../src/infra/modeles/installer.ts';
 import { arreterServeurs, lireEtatServeurs, pidVivant } from '../../src/infra/modeles/serveurs.ts';
 import { dependancesReelles } from '../../src/infra/systeme.ts';
 
@@ -16,8 +18,8 @@ import { dependancesReelles } from '../../src/infra/systeme.ts';
  * Avec les vrais modèles installés (`mnemo modeles installer`), facultatif : `MNEMO_MODELES_REELS=1 pnpm exec vitest run
  * tests/integration`. Lance de vrais `llama-server` (≈ 1,3 Go de mémoire), arrêtés à la fin. Les pièces sont lues dans le
  * dossier de modèles de l'utilisateur (vitest en désigne un vide pour tous les autres tests), ou dans
- * `MNEMO_MODELES_REELS_DOSSIER`. Son `serveurs/` est celui de la machine : le gardien de l'utilisateur, s'il tourne, est
- * réutilisé puis arrêté (le prochain usage le relance).
+ * `MNEMO_MODELES_REELS_DOSSIER`, par des liens depuis un cache temporaire : son `serveurs/` est propre au test, le gardien de
+ * l'utilisateur n'est ni réutilisé ni arrêté.
  */
 const REELS = process.env['MNEMO_MODELES_REELS'] === '1';
 const CORPUS = fileURLToPath(new URL('../../banc/corpus/', import.meta.url));
@@ -27,12 +29,21 @@ const SENS: Variante = { ...MOTS, sens: true };
 describe.skipIf(!REELS)('modèles réels (bge-m3, bge-reranker-v2-m3, llama.cpp)', () => {
 	const modelesDeTest = process.env['MNEMO_MODELES'];
 	let racine = '';
+	let cache = '';
 	const serveurs = () => dossierServeurs(process.env, process.platform, userInfo().homedir);
 
 	beforeAll(async () => {
 		const { MNEMO_MODELES: _, ...sansDossierDeTest } = process.env;
 		// le vrai HOME (userInfo, pas $HOME, que la garde des tests remplace) : ce test, facultatif, lit les vrais modèles
-		process.env['MNEMO_MODELES'] = process.env['MNEMO_MODELES_REELS_DOSSIER'] ?? dossierModeles(sansDossierDeTest, process.platform, userInfo().homedir);
+		const reel = process.env['MNEMO_MODELES_REELS_DOSSIER'] ?? dossierModeles(sansDossierDeTest, process.platform, userInfo().homedir);
+		// cache temporaire fait de liens vers les pièces réelles : `serveurs/` (gardien, état) propre au test
+		cache = await mkdtemp(join(tmpdir(), 'mnemo-modeles-reels-cache-'));
+		for (const piece of piecesPourPlateforme(process.platform, process.arch) ?? []) {
+			const lien = dossierPiece(cache, piece);
+			await mkdir(dirname(lien), { recursive: true });
+			await symlink(dossierPiece(reel, piece), lien, process.platform === 'win32' ? 'junction' : 'dir');
+		}
+		process.env['MNEMO_MODELES'] = cache;
 		// un seul dossier pour toute la suite (dossierTemporaire le supprimerait après chaque test, gardien en marche)
 		racine = await mkdtemp(join(tmpdir(), 'mnemo-modeles-reels-'));
 		await cp(CORPUS, racine, { recursive: true });
@@ -43,6 +54,8 @@ describe.skipIf(!REELS)('modèles réels (bge-m3, bge-reranker-v2-m3, llama.cpp)
 			await arreterServeurs(serveurs());
 			await rm(racine, { recursive: true, force: true });
 		}
+		// les liens seulement : les pièces réelles restent
+		if (cache !== '') await rm(cache, { recursive: true, force: true });
 		if (modelesDeTest === undefined) delete process.env['MNEMO_MODELES'];
 		else process.env['MNEMO_MODELES'] = modelesDeTest;
 	});
