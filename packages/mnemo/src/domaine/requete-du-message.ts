@@ -53,12 +53,14 @@ export type EntreePourLePrecedent = { moment: string; horodatageMs: number; dema
 /**
  * Le message porteur d'avant de l'utilisateur, pour un message à `instantMs` (spec § 3.2) : parmi les `ENTREES_DU_PRECEDENT`
  * entrées du journal qui le précèdent, la demande de la plus récente entrée `message` porteuse (non muette, non vide), à
- * `ECART_MAX_DU_PRECEDENT_MS` au plus ; la recherche s'arrête à une remise à zéro journalisée (entrée `debut`) : après un
- * `/clear`, Claude ne voit plus l'échange d'avant. Null s'il n'y en a pas. Jamais une réponse de Claude : le journal n'en a pas.
+ * `ECART_MAX_DU_PRECEDENT_MS` au plus ; la recherche s'arrête à une remise à zéro : le dernier `/clear` ou `/compact`
+ * (`dernierDebutMs`, gardé dans la session ; null : inconnu), ou une entrée `debut` du journal. Après eux, Claude ne voit plus
+ * l'échange d'avant. Null s'il n'y en a pas. Jamais une réponse de Claude : le journal n'en a pas.
  */
-export function messagePrecedent(entrees: readonly EntreePourLePrecedent[], instantMs: number): string | null {
+export function messagePrecedent(entrees: readonly EntreePourLePrecedent[], instantMs: number, dernierDebutMs: number | null = null): string | null {
 	const avant = entrees
-		.filter((e) => e.horodatageMs < instantMs)
+		// un /clear venu après ce message (le banc rejoue des messages passés) ne le borne pas
+		.filter((e) => e.horodatageMs < instantMs && (dernierDebutMs === null || dernierDebutMs > instantMs || e.horodatageMs > dernierDebutMs))
 		.sort((a, b) => b.horodatageMs - a.horodatageMs)
 		.slice(0, ENTREES_DU_PRECEDENT);
 	for (const e of avant) {

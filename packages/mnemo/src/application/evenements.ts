@@ -293,7 +293,7 @@ async function servirEvenement(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 			// rien n'est servi à l'ouverture ; la position est tenue (rattachement du dossier, plugin réécrit)
 			await positionDe(dep, pil, session, entree, reglages);
 			// /clear, /compact : Claude n'a plus les fiches injectées, elles redeviennent à servir
-			if (session !== null && (entree.source === 'clear' || entree.source === 'compact')) await pil.etat.oublierInjections(session.id).catch(() => {});
+			if (session !== null && (entree.source === 'clear' || entree.source === 'compact')) await pil.etat.oublierInjections(session.id, entree.horodatageMs).catch(() => {});
 			return {};
 		case 'apres_outil':
 			// rien n'est calculé ni servi après un outil : seule la fiche lue ou écrite est notée
@@ -336,8 +336,9 @@ async function noterFicheTouchee(dep: Dependances, pil: Pick<Pilotage, 'etat'>, 
  * Le message porteur d'avant de la session (le message en cours n'est pas encore journalisé), par la règle que le banc applique
  * aussi (`messagePrecedent`) ; null s'il n'y en a pas, ou si l'état ne répond pas.
  */
-async function messagePorteurPrecedent(etat: Pick<Pilotage['etat'], 'servis'>, session: string, instantMs: number): Promise<string | null> {
-	return messagePrecedent(await etat.servis(session, ENTREES_DU_PRECEDENT, undefined, { classement: 'dernier' }).catch(() => []), instantMs);
+async function messagePorteurPrecedent(etat: Pick<Pilotage['etat'], 'servis'>, session: Session, instantMs: number): Promise<string | null> {
+	const entrees = await etat.servis(session.id, ENTREES_DU_PRECEDENT, undefined, { classement: 'dernier' }).catch(() => []);
+	return messagePrecedent(entrees, instantMs, session.dernierDebutMs ?? null);
 }
 
 /**
@@ -360,7 +361,7 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 	const exclusDefinitivement = await exclusionDefinitive(pil.etat, reglages.apriori);
 	// requête du classement : le message seul, ou joint au message porteur d'avant (variante jointe, message court ou anaphorique)
 	const variante = reglages.varianteRequete ?? VARIANTE_DE_LA_REQUETE;
-	const precedent = session !== null && muet === null && precedentUtile(message, variante) ? await messagePorteurPrecedent(pil.etat, session.id, entree.horodatageMs) : null;
+	const precedent = session !== null && muet === null && precedentUtile(message, variante) ? await messagePorteurPrecedent(pil.etat, session, entree.horodatageMs) : null;
 	const requete = requeteDuMessage(message, precedent, variante);
 	const apriori = reglages.apriori;
 	// les gestes de la session courante passent par le signal de session et l'écart, pas par l'a priori

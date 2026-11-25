@@ -605,6 +605,11 @@ describe('traiterEvenement : contexte sobre au message', () => {
 		vus.length = 0;
 		await traiterEvenement(dep, pil, message(13, 'et pour les factures annulées ?'), local);
 		expect(vus).toEqual(['et pour les factures annulées ?']);
+		// après un /clear, Claude ne voit plus l'échange d'avant : le message seul
+		await traiterEvenement(dep, pil, entree('debut', 14, { source: 'clear' }), local);
+		vus.length = 0;
+		await traiterEvenement(dep, pil, message(15, 'et pour les factures annulées ?'), { ...local, varianteRequete: 'jointe' });
+		expect(vus).toEqual(['et pour les factures annulées ?']);
 	});
 
 	it('hook local sans service : une écartée toujours (active) sort des candidates, une rétablie y revient ; a priori 0', async () => {

@@ -184,7 +184,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 	perimetre_propose_ms INTEGER,
 	messages_porteurs INTEGER NOT NULL DEFAULT 0,
 	niveau_modeles TEXT,
-	dernier_message TEXT
+	dernier_message TEXT,
+	dernier_debut_ms INTEGER
 );
 CREATE TABLE IF NOT EXISTS servis (
 	rang INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -278,6 +279,7 @@ function ligneVersSession(l: Ligne): Session {
 		dossierNonRattache: l.dossier_non_rattache === 1,
 		// une valeur qui n'est pas un niveau est ignorée : la session suit le niveau de la machine
 		...(estNiveauModeles(l.niveau_modeles) ? { niveauModeles: l.niveau_modeles } : {}),
+		...(typeof l.dernier_debut_ms === 'number' ? { dernierDebutMs: l.dernier_debut_ms } : {}),
 	};
 }
 
@@ -438,14 +440,17 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				// 12 → 13 : le journal durable des gestes, le dernier message porteur des sessions, le rang du message des entrées servies
 				base.exec(SCHEMA_GESTES);
 				if (!colonnesSessions.includes('dernier_message')) base.exec('ALTER TABLE sessions ADD COLUMN dernier_message TEXT');
+				if (!colonnesSessions.includes('dernier_debut_ms')) base.exec('ALTER TABLE sessions ADD COLUMN dernier_debut_ms INTEGER');
 				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesServis.includes('rang_message')) base.exec('ALTER TABLE servis ADD COLUMN rang_message INTEGER');
 				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
 				if (!colonnesServis.includes('ms_service')) base.exec('ALTER TABLE servis ADD COLUMN ms_service INTEGER');
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
 			} else if (version === VERSION_ETAT) {
-				// 13 non publiée : un état déjà en 13 (développement) reçoit l'état d'affinage du classement, la durée vue du service
-				// et les écartées toujours
+				// 13 non publiée : un état déjà en 13 (développement) reçoit l'état d'affinage du classement, la durée vue du service,
+				// l'instant du dernier /clear et les écartées toujours
+				const colonnesSessions = (base.prepare('PRAGMA table_info(sessions)').all() as Ligne[]).map((c) => c.name);
+				if (!colonnesSessions.includes('dernier_debut_ms')) base.exec('ALTER TABLE sessions ADD COLUMN dernier_debut_ms INTEGER');
 				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
 				if (!colonnesServis.includes('ms_service')) base.exec('ALTER TABLE servis ADD COLUMN ms_service INTEGER');
@@ -822,8 +827,9 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 			);
 		},
 
-		async oublierInjections(session) {
+		async oublierInjections(session, instantMs) {
 			ecrire(() => {
+				if (instantMs !== undefined) base.prepare('UPDATE sessions SET dernier_debut_ms = MAX(COALESCE(dernier_debut_ms, 0), ?) WHERE id = ?').run(instantMs, session);
 				base.prepare('UPDATE fiches_servies_lues_ecrites SET empreinte_injectee = NULL WHERE session = ?').run(session);
 				base.prepare('DELETE FROM cartes_proposees WHERE session = ?').run(session);
 				base.prepare('UPDATE sessions SET perimetre_propose_ms = NULL WHERE id = ?').run(session);

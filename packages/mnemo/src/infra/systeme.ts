@@ -133,7 +133,7 @@ export function etatParesseux(racineDossier: string): EtatSessions {
 		ecartes: (session) => etat().ecartes(session),
 		noterFicheServieLueOuEcrite: (session, f) => etat().noterFicheServieLueOuEcrite(session, f),
 		fichesServiesLuesOuEcrites: (session) => etat().fichesServiesLuesOuEcrites(session),
-		oublierInjections: (session) => etat().oublierInjections(session),
+		oublierInjections: (session, instantMs) => etat().oublierInjections(session, instantMs),
 		noterMessagePorteur: (session, texte) => etat().noterMessagePorteur(session, texte),
 		noterInjectionManuelle: (session, chemin) => etat().noterInjectionManuelle(session, chemin),
 		injectionsManuelles: (session) => etat().injectionsManuelles(session),

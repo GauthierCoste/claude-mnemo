@@ -55,14 +55,23 @@ export function ouvrirJournalEnLecture(chemin: string): JournalEnLecture {
 		const sessions = colonnes('sessions');
 		const manquantes = [...COLONNES_SERVIS.filter((c) => !servis.has(c)).map((c) => `servis.${c}`), ...COLONNES_SESSIONS.filter((c) => !sessions.has(c)).map((c) => `sessions.${c}`)];
 		if (manquantes.length > 0) throw new Error(`L'état des sessions (${chemin}, version ${version}) n'a pas ${manquantes.join(', ')} : le banc ne peut pas le lire.`);
-		const session = (l: Ligne): SessionDuJournal => ({ id: String(l.id), profil: String(l.profil), dossier: String(l.dossier), position: String(l.position) });
+		// l'instant du dernier /clear, si la base le porte (sinon : rien de plus qu'avant)
+		const avecDebut = sessions.has('dernier_debut_ms');
+		const champsSession = `id, profil, dossier, position${avecDebut ? ', dernier_debut_ms' : ''}`;
+		const session = (l: Ligne): SessionDuJournal => ({
+			id: String(l.id),
+			profil: String(l.profil),
+			dossier: String(l.dossier),
+			position: String(l.position),
+			...(typeof l.dernier_debut_ms === 'number' ? { dernierDebutMs: l.dernier_debut_ms } : {}),
+		});
 		return {
 			version,
 			async sessions() {
-				return (base.prepare('SELECT id, profil, dossier, position FROM sessions ORDER BY creee_ms, id').all() as Ligne[]).map(session);
+				return (base.prepare(`SELECT ${champsSession} FROM sessions ORDER BY creee_ms, id`).all() as Ligne[]).map(session);
 			},
 			async session(id) {
-				const l = base.prepare('SELECT id, profil, dossier, position FROM sessions WHERE id = ?').get(id) as Ligne | undefined;
+				const l = base.prepare(`SELECT ${champsSession} FROM sessions WHERE id = ?`).get(id) as Ligne | undefined;
 				return l === undefined ? null : session(l);
 			},
 			async messages(id, limite) {

@@ -758,9 +758,9 @@ export interface EtatSessions {
 	fichesServiesLuesOuEcrites(session: string): Promise<FicheServieLueOuEcrite[]>;
 	/**
 	 * Après /clear ou /compact, Claude n'a plus les fiches injectées : elles redeviennent à servir, et les fiches injectées à la main
-	 * ne pèsent plus sur leurs voisines.
+	 * ne pèsent plus sur leurs voisines. `instantMs` : celui du /clear ou /compact, gardé dans la session (`dernierDebutMs`).
 	 */
-	oublierInjections(session: string): Promise<void>;
+	oublierInjections(session: string, instantMs?: number): Promise<void>;
 	/**
 	 * Un message porteur (non muet) de la session : les fiches injectées à la main vieillissent d'un message ; son texte (coupé à
 	 * `DEMANDE_MAX`) et son rang sont gardés comme dernier message porteur (gestes). Rend son rang ; null pour une session inconnue.

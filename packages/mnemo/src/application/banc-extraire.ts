@@ -30,7 +30,8 @@ export const HORS_PILE = 2;
 export type RequeteJointe = (message: string, precedent: string | null) => string | null;
 
 /** Ce que le banc lit d'une session et de son journal. */
-export type SessionDuJournal = { id: string; profil: string; dossier: string; position: string };
+/** `dernierDebutMs` : instant du dernier /clear ou /compact, si la base le porte. */
+export type SessionDuJournal = { id: string; profil: string; dossier: string; position: string; dernierDebutMs?: number };
 export type EntreeDuJournal = Pick<EntreeServie, 'moment' | 'horodatageMs' | 'demande' | 'muet' | 'position' | 'ids'>;
 /**
  * Lecture du journal des sessions, **sans jamais l'écrire ni le migrer** : la base est celle du service en marche, peut-être
@@ -88,7 +89,7 @@ export async function messagesDuJournal(journal: LectureDuJournal, session?: str
 				message: e.demande!,
 				position: e.position ?? s.position,
 				// le message d'avant par la règle du hook (écart, remise à zéro, fenêtre)
-				precedent: messagePrecedent(journalise, e.horodatageMs),
+				precedent: messagePrecedent(journalise, e.horodatageMs, s.dernierDebutMs ?? null),
 				injectionsDuJournal,
 			});
 		});

@@ -605,6 +605,11 @@ describe('etat.sqlite', () => {
 		await etat.oublierInjections('s1');
 		expect(await etat.perimetrePropose('s1')).toBeNull();
 		expect(await etat.cartesProposees('s1')).toEqual(new Map());
+		// l'instant du /clear, s'il est donné, est gardé dans la session (jamais reculé)
+		expect((await etat.lire('s1'))?.dernierDebutMs).toBeUndefined();
+		await etat.oublierInjections('s1', 50);
+		await etat.oublierInjections('s1', 40);
+		expect((await etat.lire('s1'))?.dernierDebutMs).toBe(50);
 		await etat.noterCarteProposee('s1', { chemin: 'b.md', empreinte: 'e2', horodatageMs: 11 });
 		await etat.modifier('s1', { etat: 'terminee' });
 		expect(await etat.supprimer('s1')).toBe('supprimee');
