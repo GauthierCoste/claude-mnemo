@@ -124,7 +124,7 @@ are masked before anything is written or indexed. What the web interface does an
 
 ## Status
 
-Version 1.5.0. Mnemo runs on macOS (Apple silicon and Intel) and is being adapted to Windows, where it has not been
+Version 1.5.1. Mnemo runs on macOS (Apple silicon and Intel) and is being adapted to Windows, where it has not been
 tried in real use yet; Linux has not been used. The CI runs the type check and the tests at each push on Linux and
 Windows with Node.js 24, and on macOS with Node.js 26. The interface runs in the browser for now.
 
