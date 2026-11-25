@@ -164,8 +164,16 @@ describe('routes : sessions', () => {
 		const r = await api(c).get(chemin(ROUTES.servis, UUID));
 		expect(r.statut).toBe(200);
 		// la demande reste dans l'état (trace des écartés) : la vue ne la montre pas
-		expect(r.corps).toEqual({ servis: [{ session: UUID, moment: 'debut', horodatageMs: 5, ids: ['projets/alpha/alpha.md'], texte: 'Contexte', ms: 12, sens: false, classement, muet: null, cartes: [], titres: { 'projets/alpha/alpha.md': 'alpha' } }], lues: [], coupures: [] });
+		expect(r.corps).toEqual({ servis: [{ session: UUID, moment: 'debut', horodatageMs: 5, ids: ['projets/alpha/alpha.md'], texte: 'Contexte', ms: 12, sens: false, classement, muet: null, cartes: [], titres: { 'projets/alpha/alpha.md': 'alpha' } }], lues: [], coupures: [], injections: [] });
 		expect((await api(c).get(chemin(ROUTES.servis, '22222222-2222-4333-8444-555555555555'))).statut).toBe(404);
+		// injections à la main et par Mnemo de la session, d'après le journal des gestes (les plus récentes d'abord)
+		await c.etat.noterGeste({ geste: 'injectee_main', session: UUID, fiche: 'projets/alpha/a.md', empreinte: null, horodatageMs: 6 });
+		await c.etat.noterGeste({ geste: 'injectee_auto', session: UUID, fiche: 'projets/alpha/b.md', empreinte: null, horodatageMs: 7, note: { p: 0.94, niveau: 'sens' } });
+		await c.etat.noterGeste({ geste: 'ecartee_ici', session: UUID, fiche: 'projets/alpha/c.md', empreinte: null, horodatageMs: 8 });
+		expect(((await api(c).get(chemin(ROUTES.servis, UUID))).corps as { injections: unknown }).injections).toEqual([
+			{ chemin: 'projets/alpha/b.md', mode: 'auto', horodatageMs: 7, p: 0.94 },
+			{ chemin: 'projets/alpha/a.md', mode: 'main', horodatageMs: 6 },
+		]);
 	});
 
 	it('GET servis : lues non vide, la plus récente d’abord, sans doublon, avec l’heure de la dernière lecture ; titre des cartes à défaut d’index : nom du fichier', async () => {

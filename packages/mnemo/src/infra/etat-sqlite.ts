@@ -1049,6 +1049,10 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 				conditions.push('fiche = ?');
 				parametres.push(filtre.fiche);
 			}
+			if (filtre.session !== undefined) {
+				conditions.push('session = ?');
+				parametres.push(filtre.session);
+			}
 			if (filtre.depuisRang !== undefined) {
 				conditions.push('rang >= ?');
 				parametres.push(filtre.depuisRang);

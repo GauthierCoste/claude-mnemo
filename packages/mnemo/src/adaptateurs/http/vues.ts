@@ -1,7 +1,7 @@
-import type { CoupureInjectionVue, EcarteeToujoursVue, EcarteVue, EntreeServieVue, SessionTermineeVue, SessionVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
+import type { ClassementVue, CoupureInjectionVue, EcarteeToujoursVue, EcarteVue, EntreeServieVue, InjectionVue, SessionTermineeVue, SessionVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
 import { estMinimal } from '../../application/episode.ts';
 import type { SessionTerminee } from '../../application/historique.ts';
-import type { Ecarte, EcarteeToujours, EntreeServie } from '../../application/ports.ts';
+import type { Classe, Ecarte, EcarteeToujours, EntreeServie, GesteNote } from '../../application/ports.ts';
 import type { SuggestionEcarteeToujours } from '../../domaine/apriori-gestes.ts';
 import type { CoupuresDInjection } from '../../domaine/suivi-injection.ts';
 import { nomDeLaFiche } from '../../domaine/chemin.ts';
@@ -87,13 +87,7 @@ export function vueServie(e: EntreeServie, titres: ReadonlyMap<string, string> =
 		ms: e.ms,
 		sens: e.sens,
 		// classement vivant (une ligne a des signaux) : pas de % tant qu'aucune note apprise ne donne `p` (ordre seul) ; titre relu dans l'index
-		classement: e.classement.slice(0, CLASSEMENT_VU_MAX).map((c) => ({
-			id: c.id,
-			titre: c.titre ?? titreDeFiche(c.id.split('#')[0]!, titres),
-			note: c.signaux === undefined ? c.note : (c.p ?? null),
-			servi: c.servi,
-			rang: c.rang,
-		})),
+		classement: e.classement.slice(0, CLASSEMENT_VU_MAX).map((c) => vueClasse(c, titres)),
 		muet: e.muet,
 		cartes: e.cartes.map((c) => ({
 			id: c.chemin,
@@ -103,8 +97,53 @@ export function vueServie(e: EntreeServie, titres: ReadonlyMap<string, string> =
 			...(c.note === undefined ? {} : { note: c.note }),
 		})),
 		...(e.affinage === undefined ? {} : { affinage: e.affinage }),
+		...(e.calibree === undefined ? {} : { calibree: e.calibree, mesure: mesureDe(e) }),
 		titres: Object.fromEntries(e.ids.map((id) => id.split('#')[0]!).map((chemin) => [chemin, titreDeFiche(chemin, titres)])),
 	};
+}
+
+/** Une ligne du classement : les champs du classement vivant seulement s'ils sont là (une entrée ancienne n'en a aucun). */
+function vueClasse(c: Classe, titres: ReadonlyMap<string, string>): ClassementVue {
+	const s = c.signaux;
+	return {
+		id: c.id,
+		titre: c.titre ?? titreDeFiche(c.id.split('#')[0]!, titres),
+		note: s === undefined ? c.note : (c.p ?? null),
+		servi: c.servi,
+		rang: c.rang,
+		...(s === undefined
+			? {}
+			: {
+					p: c.p ?? null,
+					signaux: {
+						...(s.logit === undefined ? {} : { logit: s.logit }),
+						cosinus: s.cosinus,
+						cosinusRelatif: s.cosinusRelatif,
+						...(s.cosinusZ === undefined ? {} : { cosinusZ: s.cosinusZ }),
+						bm25Relatif: s.bm25Relatif,
+						...(s.apriori === undefined ? {} : { apriori: s.apriori }),
+						signalSession: s.signalSession,
+					},
+				}),
+		...(c.auto === true ? { auto: true as const } : {}),
+		...(c.piste === true ? { piste: true as const } : {}),
+		...(c.raison === undefined ? {} : { raison: c.raison }),
+	};
+}
+
+/**
+ * Ce qui a noté un classement : ordre seul s'il n'est pas calibré ; sinon Complets si une ligne notée (`p`) l'a été avec le logit
+ * du reranker, Sens seul autrement.
+ */
+function mesureDe(e: EntreeServie): 'complets' | 'sens' | 'ordre' {
+	if (e.calibree !== true) return 'ordre';
+	return e.classement.some((c) => typeof c.p === 'number' && c.signaux?.logit !== undefined) ? 'complets' : 'sens';
+}
+
+/** Une injection à la main ou par Mnemo, d'après son geste (`injectee_main`, `injectee_auto` avec `p` dans sa note). */
+export function vueInjection(g: GesteNote): InjectionVue {
+	const p = g.note?.['p'];
+	return { chemin: g.fiche, mode: g.geste === 'injectee_auto' ? 'auto' : 'main', horodatageMs: g.horodatageMs, ...(g.geste === 'injectee_auto' && typeof p === 'number' ? { p } : {}) };
 }
 
 /** Ce que l'API montre d'un écarté. */

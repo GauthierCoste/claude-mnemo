@@ -21,6 +21,8 @@ import { proposer } from '../../application/proposer.ts';
 import { cartesDuJournal, dejaLuesDe } from '../../application/cartes.ts';
 import { exclusionDefinitive } from '../../application/apriori.ts';
 import { servir } from '../../application/servir.ts';
+import { modelesActifs } from '../../application/note-du-classement.ts';
+import { modelesSuivis } from '../../application/suivi-injection.ts';
 import { phraseDesTypes } from '../../application/types-du-coffre.ts';
 import { demandeDEntretien, TABLES_ARGUMENTS, TABLES_DEMANDE, validerArguments, validerDemande, validerRequete } from '../../application/validation.ts';
 import type { OutilSimple, Sorte, Table, Valide } from '../../application/validation.ts';
@@ -227,7 +229,12 @@ function outils(dep: Dependances, positionCourante: () => Promise<Position>, phr
 				const serviesLuesEcrites = suivie === null ? [] : await suivie.etat.fichesServiesLuesOuEcrites(suivie.session).catch(() => []);
 				// le poids encore actif des fiches injectées à la main s'ajoute à la note de leurs voisines
 				const injectees = suivie === null ? [] : await suivie.etat.injectionsManuelles(suivie.session).catch(() => []);
+				// la note de confiance comme au hook : coupures du suivi appliquées (un niveau coupé garde ses %, seule l'injection
+				// automatique s'arrête ; l'outil n'injecte jamais), % seulement d'un modèle accepté
+				const gestes = dep.sessions?.gestes;
+				const modeles = gestes === undefined ? undefined : await modelesSuivis({ gestes: (f) => gestes(f) }, modelesActifs(dep));
 				const servi = await servir(dep, {
+					...(modeles === undefined ? {} : { modeles }),
 					position: (await positionCourante()).chemin,
 					message: question,
 					dejaServies: new Map(serviesLuesEcrites.map((f) => [f.chemin, f.empreinteInjectee])),
@@ -260,6 +267,8 @@ function outils(dep: Dependances, positionCourante: () => Promise<Position>, phr
 								sens: servi.calcul.mesure !== 'aucune',
 								demande: question === '' ? null : question.slice(0, 20_000),
 								classement: [],
+								// les notes des cartes ne sont des % que d'un modèle accepté : le panneau le lit ici
+								calibree: servi.calcul.calibree,
 								muet: null,
 								cartes: cartesDuJournal(servi.calcul.cartes),
 								position: null,

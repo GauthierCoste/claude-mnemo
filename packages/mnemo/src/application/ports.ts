@@ -276,9 +276,9 @@ export type Dependances = {
 	indicateur: IndicateurConsignes;
 	/** Écriture venue d'une session Mnemo : sa session et son dossier d'épisodes. */
 	origine?: { session: string; projet: string };
-	/** État des sessions : l'épisode d'une session (`origine`) y prend son début, son profil, sa branche ; l'outil `contexte` y lit ses fiches servies et injectées à la main, note les cartes proposées et journalise son appel ; les écartées toujours n'y sont jamais proposées. */
+	/** État des sessions : l'épisode d'une session (`origine`) y prend son début, son profil, sa branche ; l'outil `contexte` y lit ses fiches servies et injectées à la main, note les cartes proposées et journalise son appel ; les écartées toujours n'y sont jamais proposées ; le suivi des injections (`gestes`) y dit les niveaux coupés. */
 	sessions?: Pick<EtatSessions, 'lire' | 'fichesServiesLuesOuEcrites' | 'noterFicheServieLueOuEcrite' | 'noterCarteProposee' | 'journaliser' | 'injectionsManuelles'> &
-		Partial<Pick<EtatSessions, 'ecarteesToujours'>>;
+		Partial<Pick<EtatSessions, 'ecarteesToujours' | 'gestes'>>;
 	/** Extraction des documents en arrière-plan (processus qui durent : service, serveur MCP) ; la recherche la réveille. */
 	extractionDifferee?: ExtractionDifferee;
 	/** Plugins Claude Code installés et skills personnelles de l'utilisateur, en lecture seule. */
@@ -820,12 +820,13 @@ export interface EtatSessions {
 	/** Nombre de gestes par sorte et par fiche, sans lire messages ni vecteurs. */
 	comptesGestes(): Promise<GesteCompte[]>;
 	/**
-	 * Gestes du journal durable, les plus récents d'abord : ceux de `fiche`, depuis `depuisMs` (inclus), de rang `depuisRang` ou
+	 * Gestes du journal durable, les plus récents d'abord : ceux de `fiche`, de `session`, depuis `depuisMs` (inclus), de rang `depuisRang` ou
 	 * plus (ordre d'écriture), de ces `sortes` seulement, dont la note porte ce `niveau` (`note.niveau` : injections
 	 * automatiques et réactivations), `limite` au plus (null : tous) ; `sansVecteur` : sans lire les vecteurs (rendus null).
 	 */
 	gestes(filtre: {
 		fiche?: string;
+		session?: string;
 		depuisMs?: number;
 		depuisRang?: number;
 		sortes?: readonly Geste[];

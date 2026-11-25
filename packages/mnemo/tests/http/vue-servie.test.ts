@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EntreeServie } from '../../src/application/ports.ts';
-import { CLASSEMENT_VU_MAX, vueServie } from '../../src/adaptateurs/http/vues.ts';
+import { CLASSEMENT_VU_MAX, vueInjection, vueServie } from '../../src/adaptateurs/http/vues.ts';
 
 const entree = (classement: EntreeServie['classement'], extra: Partial<EntreeServie> = {}): EntreeServie => ({
 	session: 's1',
@@ -29,9 +29,31 @@ describe('vueServie : classement', () => {
 			new Map([['a.md', 'Avoirs']]),
 		);
 		expect(vue.classement).toEqual([
-			{ id: 'a.md', titre: 'Avoirs', note: null, servi: false, rang: 1 },
-			{ id: 'b.md', titre: 'b', note: 0.93, servi: true, rang: 2 },
+			{ id: 'a.md', titre: 'Avoirs', note: null, servi: false, rang: 1, p: null, signaux },
+			{ id: 'b.md', titre: 'b', note: 0.93, servi: true, rang: 2, p: 0.93, signaux },
 		]);
+	});
+
+	it('champs du classement vivant : injectée par Mnemo, piste, raison, logit ; calibrée et mesure de l’entrée', () => {
+		const vue = vueServie(
+			entree(
+				[
+					{ id: 'a.md', note: 0.8, servi: true, rang: 1, signaux: { ...signaux, logit: 2.5, apriori: 0.1, cosinusZ: 1.2 }, p: 0.94, pSansApriori: 0.93, auto: true, raison: 'proche' },
+					{ id: 'b.md', note: 0.7, servi: false, rang: 2, signaux, p: 0.4, piste: true, raison: 'perimetre', deja: 'proposee', rangHook: 3 },
+				],
+				{ calibree: true },
+			),
+		);
+		expect(vue.calibree).toBe(true);
+		expect(vue.mesure).toBe('complets');
+		expect(vue.classement[0]).toEqual({ id: 'a.md', titre: 'a', note: 0.94, servi: true, rang: 1, p: 0.94, signaux: { ...signaux, logit: 2.5, apriori: 0.1, cosinusZ: 1.2 }, auto: true, raison: 'proche' });
+		// ni `pSansApriori`, ni `deja`, ni `rangHook` : internes au service
+		expect(vue.classement[1]).toEqual({ id: 'b.md', titre: 'b', note: 0.4, servi: false, rang: 2, p: 0.4, signaux, piste: true, raison: 'perimetre' });
+		expect(vueServie(entree([{ id: 'a.md', note: 0.8, servi: false, rang: 1, signaux, p: 0.9 }], { calibree: true })).mesure).toBe('sens');
+		expect(vueServie(entree([{ id: 'a.md', note: 0.8, servi: false, rang: 1, signaux }], { calibree: false })).mesure).toBe('ordre');
+		// entrée ancienne : ni calibrée ni mesure
+		expect(vueServie(entree([])).calibree).toBeUndefined();
+		expect(vueServie(entree([])).mesure).toBeUndefined();
 	});
 
 	it('entrée ancienne : sa note (reranker) et son titre gardés', () => {
@@ -43,5 +65,14 @@ describe('vueServie : classement', () => {
 		const vue = vueServie(entree(lignes, { affinage: 'en_cours' }));
 		expect(vue.classement).toHaveLength(CLASSEMENT_VU_MAX);
 		expect(vue.affinage).toBe('en_cours');
+	});
+});
+
+describe('vueInjection', () => {
+	const geste = (g: 'injectee_main' | 'injectee_auto', note: Record<string, unknown> | null) => ({ rang: 1, horodatageMs: 5, geste: g, origine: 'utilisateur' as const, session: 's1', dossier: '', position: null, fiche: 'a.md', empreinte: null, message: null, rangMessage: 1, note, vecteur: null });
+	it('à la main sans %, par Mnemo avec son p', () => {
+		expect(vueInjection(geste('injectee_main', { note: 0.5, p: 0.6 }))).toEqual({ chemin: 'a.md', mode: 'main', horodatageMs: 5 });
+		expect(vueInjection(geste('injectee_auto', { p: 0.94, niveau: 'sens' }))).toEqual({ chemin: 'a.md', mode: 'auto', horodatageMs: 5, p: 0.94 });
+		expect(vueInjection(geste('injectee_auto', null))).toEqual({ chemin: 'a.md', mode: 'auto', horodatageMs: 5 });
 	});
 });

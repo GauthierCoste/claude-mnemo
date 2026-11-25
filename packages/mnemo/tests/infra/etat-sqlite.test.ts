@@ -1032,6 +1032,8 @@ describe('etat.sqlite', () => {
 		expect(new DataView(brut.vecteur.buffer, brut.vecteur.byteOffset).getFloat32(4, true)).toBe(-0.5);
 		// filtres : par fiche, depuis un instant, limite ; comptes par sorte et par fiche
 		expect((await etat.gestes({ fiche: 'b.md', limite: null })).map((g) => g.horodatageMs)).toEqual([20]);
+		expect((await etat.gestes({ session: 'inconnue', limite: null })).length).toBe(0);
+		expect((await etat.gestes({ session: 's1', sortes: ['injectee_main'], limite: null })).map((g) => g.fiche)).toEqual(['d.md']);
 		expect((await etat.gestes({ depuisMs: 22, limite: null })).map((g) => g.horodatageMs)).toEqual([23, 22]);
 		expect((await etat.gestes({ limite: 1 })).map((g) => g.horodatageMs)).toEqual([23]);
 		await etat.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche: 'b.md', empreinte: 'e1', horodatageMs: 25 });

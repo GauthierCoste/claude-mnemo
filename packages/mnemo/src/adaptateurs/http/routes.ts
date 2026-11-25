@@ -1,5 +1,5 @@
 import { ENTETE_REMPLACEMENT, ROUTES } from '@mnemo/contrat';
-import type { BilanAmorceVue, ReponseEcarteesToujours, ReponseInjectionAutomatique, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseArretModeles, ReponseNiveauModeles, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
+import type { BilanAmorceVue, ReponseEcarteesToujours, ReponseInjectionAutomatique, DossierVue, FilVue, GitDossierVue, MessageServeur, NiveauDossiersVue, ReponseDepot, ReponseDepotTraiter, ReponseDocuments, ReponseLancement, ReponseMarquerTraite, FenetreVue, LueVue, ReponseAServir, ReponseArretModeles, ReponseNiveauModeles, ReponseFenetres, ReponseProfils, ReponseQuotas, ReponseRecherche, ReponseServis, ReponseTraiter, ResultatEcriture, SanteVue, SessionTermineeVue } from '@mnemo/contrat';
 import { avertissementsDe, CARACTERES_INVISIBLES, CHEMINS_LOT_MAX, demandeTout, estNiveauModeles, modelesPermis, NIVEAUX_MODELES, nomAffichable, OBJECTIF_MAX, PROFIL_TRAVAIL, SAUF_MAX } from '@mnemo/commun';
 import type { AvecAvertissements, NiveauModeles } from '@mnemo/commun';
 import { amorcer, marquerTraitees } from '../../application/amorcer.ts';
@@ -51,7 +51,7 @@ import type { EvenementHook, Session } from '../../domaine/session.ts';
 import { deposerFichier, ErreurEspaceInsuffisant, ErreurTropVolumineux, tropVolumineux, verifierDepot } from '../../infra/fichiers-dossier.ts';
 import { vueModeles } from './diffusion-modeles.ts';
 import { cheminDeVue, vueFiche, vueGraphe } from './memoire-vues.ts';
-import { estTraceDeDebut, titreDeFiche, titresDeLIndex as titresIndex, vueCoupures, vueEcarte, vueEcarteeToujours, vueServie, vueSession, vueSessionTerminee } from './vues.ts';
+import { estTraceDeDebut, titreDeFiche, titresDeLIndex as titresIndex, vueCoupures, vueEcarte, vueEcarteeToujours, vueInjection, vueServie, vueSession, vueSessionTerminee } from './vues.ts';
 
 /** Chemin d'un dépôt (`?vers=`) selon `cheminDeDepot` du domaine ; refus lisible (400). */
 function cheminDuDepot(vers: string | null): string {
@@ -297,6 +297,8 @@ const ATTENTE_HOOK_SANS_ECHEANCE_MS = 300;
  */
 /** Au-delà, un horodatage de hook n'est pas l'instant où son processus a démarré (horloge décalée, événement rejoué). */
 const DUREE_HOOK_MAX_MS = 10_000;
+/** Injections (à la main ou par Mnemo) d'une session rendues au panneau Contexte, les plus récentes. */
+const INJECTIONS_VUES_MAX = 200;
 
 /**
  * Début du hook : l'horodatage de l'événement est l'instant où le processus du hook a démarré ; le journal mesure depuis lui la
@@ -559,7 +561,14 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				// le panneau n'affiche que le dernier classement : les autres entrées partent sans le leur, que la base ne lit même pas
 				const lues = await luesDe(r.id);
 				const titres = await titresDeLIndex();
-				return ok({ servis: (await pil.etat.servis(r.id, 200, undefined, { classement: 'dernier' })).filter((e) => !estTraceDeDebut(e)).map((e) => vueServie(e, titres)), lues, coupures: await coupures() });
+				// fiches injectées à la main ou par Mnemo (avec leur %), d'après le journal des gestes ; illisible : rien de plus
+				const injections = (await pil.etat.gestes({ session: r.id, sortes: ['injectee_main', 'injectee_auto'], sansVecteur: true, limite: INJECTIONS_VUES_MAX }).catch(() => [])).map(vueInjection);
+				return ok({
+					servis: (await pil.etat.servis(r.id, 200, undefined, { classement: 'dernier' })).filter((e) => !estTraceDeDebut(e)).map((e) => vueServie(e, titres)),
+					lues,
+					coupures: await coupures(),
+					injections,
+				} satisfies ReponseServis);
 			},
 		},
 		{ methode: 'GET', chemin: ROUTES.modeles, action: async () => ok(vueModeles(await ctx.modeles.etat())) },

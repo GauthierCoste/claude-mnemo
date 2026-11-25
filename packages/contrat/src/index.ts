@@ -176,8 +176,29 @@ export type ReponseDocuments = {
  * Une fiche du classement d'un message (une ligne par fiche ; `id` : son chemin) : `rang` à partir de 1 ; `note` : la note
  * provisoire qui ordonne (sens du message plus poids ; dans une entrée ancienne, celle du reranker), null sans modèle ;
  * `servi` : elle (ou un de ses éléments) est déjà injectée dans la session (sinon seulement classée).
+ *
+ * Classement vivant (champs absents des entrées anciennes) : `p`, la note de confiance calibrée (null : ordre seul, sans %) ;
+ * `signaux`, les signaux bruts qui l'ont donnée ; `auto`, injectée entière par Mnemo à ce message ; `piste`, envoyée en piste
+ * (titre et résumé) à ce message ; `raison`, pourquoi elle est candidate.
  */
-export type ClassementVue = { id: string; titre: string; note: number | null; servi: boolean; rang: number };
+export type ClassementVue = {
+	id: string;
+	titre: string;
+	note: number | null;
+	servi: boolean;
+	rang: number;
+	p?: number | null;
+	signaux?: SignauxClassementVue;
+	auto?: true;
+	piste?: true;
+	raison?: RaisonCarteVue;
+};
+
+/**
+ * Signaux bruts d'une candidate : `logit` du reranker (absent : non rerankée), cosinus, cosinus relatif (à la médiane de la
+ * mémoire), cosinus en z-score, bm25 relatif, a priori des gestes, signal de session.
+ */
+export type SignauxClassementVue = { logit?: number; cosinus: number | null; cosinusRelatif: number | null; cosinusZ?: number | null; bm25Relatif: number | null; apriori?: number; signalSession: number };
 
 /** Sous cette note, un candidat noté n'est pas affiché. */
 export const SEUIL_NOTE_CLASSEMENT = 0.05;
@@ -216,7 +237,23 @@ export type EntreeServieVue = {
 	titres?: Record<string, string>;
 	/** Affinage du classement en arrière-plan : en cours, ou fait (l'entrée est rediffusée) ; absent : pas d'affinage. */
 	affinage?: 'en_cours' | 'fait';
+	/**
+	 * Le classement est-il noté par des modèles acceptés (`p` en %) ? Faux : ordre seul. Absent : pas de classement, ou entrée
+	 * ancienne (ordre seul aussi).
+	 */
+	calibree?: boolean;
+	/** Ce qui a noté le classement : modèle Complets (reranker), Sens seul, ou l'ordre seul (sans %) ; absent comme `calibree`. */
+	mesure?: 'complets' | 'sens' | 'ordre';
 };
+
+/**
+ * Une fiche injectée entière dans la session par un geste ou par Mnemo (journal des gestes) : `mode` `main` (➤ de
+ * l'utilisateur) ou `auto` (Mnemo, avec `p`, sa note de confiance au message) ; `horodatageMs` : le message où elle est partie.
+ */
+export type InjectionVue = { chemin: string; mode: 'main' | 'auto'; horodatageMs: number; p?: number };
+
+/** Réponse de `servis` (GET). */
+export type ReponseServis = { servis: EntreeServieVue[]; lues: LueVue[]; coupures?: CoupureInjectionVue[]; injections?: InjectionVue[] };
 
 /** Une fiche lue par la session (outil `lire`) : son chemin et l'heure de sa dernière lecture. */
 export type LueVue = { chemin: string; horodatageMs: number };
@@ -327,7 +364,7 @@ export type MessageClient =
  * - `reprise` POST → `{ session }` ;
  * - `bilan` POST → `{ session }` : Claude rédige l'épisode ;
  * - `abandon` POST → `{ session }` : terminée sans bilan ;
- * - `servis` GET → `{ servis: EntreeServieVue[]; lues: LueVue[]; coupures?: CoupureInjectionVue[] }` (panneau Contexte ; seule la plus récente porte son classement d'une entrée ancienne ; `lues` : fiches que la session a lues, avec l'heure de leur dernière lecture, la plus récente d'abord ; un service plus ancien envoie des chemins seuls ; `coupures` : l'injection automatique coupée par le suivi, absente d'un service plus ancien) ;
+ * - `servis` GET → `ReponseServis` (panneau Contexte ; seule la plus récente porte son classement d'une entrée ancienne ; `injections` (`InjectionVue[]`, absent d'un service plus ancien) : les fiches injectées à la main ou par Mnemo dans la session, plus récentes d'abord ; `lues` : fiches que la session a lues, avec l'heure de leur dernière lecture, la plus récente d'abord ; un service plus ancien envoie des chemins seuls ; `coupures` : l'injection automatique coupée par le suivi, absente d'un service plus ancien) ;
  * - `injectionAutomatique` GET → `ReponseInjectionAutomatique` ; POST `{ session?, niveau? }` (`session` : celle du geste, 404
  *   inconnue ; absente : hors session ; `niveau` : `complets` ou `sens`, absent : tous) réactive l'injection automatique des
  *   niveaux coupés (geste `injection_reactivee` noté par niveau réactivé) → `ReponseInjectionAutomatique` ;

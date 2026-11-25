@@ -15,6 +15,8 @@ import { proposer } from '../../src/application/proposer.ts';
 import { lireConsigne } from '../../src/domaine/consigne.ts';
 import { lireFiche } from '../../src/domaine/fiche.ts';
 import { AVERTISSEMENT } from '../../src/domaine/contexte.ts';
+import { echelleDesSignaux, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
+import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
 import { preparerDossierLocal } from '../../src/infra/systeme.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
@@ -431,6 +433,34 @@ describe('serveur mnemo mcp', () => {
 		expect(journalisees[0]).toMatchObject({ session: 's1', moment: 'contexte', ids: [], position: null, demande: 'inventaire' });
 		expect(journalisees[0]!.cartes.map((c) => c.chemin)).toContain(FICHE_PROPOSABLE);
 		expect(journalisees[0]!.cartes.every((c) => c.raison === 'question')).toBe(true);
+	});
+
+	it('session lancée par Mnemo : contexte lit les coupures du suivi quand un modèle de note est accepté, et journalise si ses notes sont calibrées', async () => {
+		const dep = await memoire();
+		await dep.coffre.ecrire(FICHE_PROPOSABLE, `${entete('sujet')}# Inventaire des machines\n\nL'inventaire des machines est fait chaque mois.\n`);
+		const installes = { sens: 'sens.gguf@aaaaaaaaaaaa', reranker: 'reranker.gguf@bbbbbbbbbbbb' };
+		const accepte = { ...modeleNonAppris(), apprisLe: '2026-11-25', refus: [], accepte: true, gguf: installes, echelle: echelleDesSignaux(REGLAGES_PAR_DEFAUT.contexte), biais: -1, poids: { cosinusRelatif: 2 } };
+		dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens: accepte }, installes });
+		const lus: string[][] = [];
+		const journalisees: EntreeServie[] = [];
+		dep.sessions = {
+			fichesServiesLuesOuEcrites: async () => [],
+			noterFicheServieLueOuEcrite: async () => {},
+			noterCarteProposee: async () => {},
+			journaliser: async (e) => void journalisees.push(e),
+			injectionsManuelles: async () => [],
+			gestes: async (f) => {
+				lus.push([...(f.sortes ?? [])]);
+				return [];
+			},
+			lire: async (id) => ({ id, profil: 'travail', dossier: 'h1', position: '', projet: 'divers', objectif: null, etat: 'travaille', creeeMs: 1, majMs: 1, arretAttendu: null, bilanDemandeMs: null, commitDebut: null, branche: null, pid: null }),
+		};
+		const client = await connecter({ racineDossier: RACINE, dossierProjet: resolve(RACINE, 'h1'), dep, origine: { session: 's1', projet: 'divers' } });
+		await appeler(client, 'contexte', { question: 'inventaire' });
+		// le suivi est lu comme au hook (réactivations, puis injections du niveau accepté)
+		expect(lus[0]).toEqual(['injection_reactivee']);
+		expect(journalisees).toHaveLength(1);
+		expect(typeof journalisees[0]!.calibree).toBe('boolean');
 	});
 
 	it('session lancée par Mnemo : contexte suit la position de l’état, relue à chaque appel (dossier rattaché en cours de route)', async () => {
