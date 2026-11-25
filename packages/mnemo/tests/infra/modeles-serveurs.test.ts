@@ -127,6 +127,15 @@ async function portLibre(): Promise<number> {
 	});
 }
 
+/**
+ * Un gardien mort en plein démarrage bloque les relances une minute (comme un échec) : son état est vieilli d'une minute,
+ * comme si ce temps avait passé.
+ */
+async function apresLaPause(b: Banc): Promise<void> {
+	const etat = (await lireEtatServeurs(b.serveurs))!;
+	await ecrireEtatServeurs(b.serveurs, { ...etat, gardien: { ...etat.gardien, depuis: new Date(Date.now() - 61_000).toISOString() } });
+}
+
 async function pidMort(): Promise<number> {
 	const enfant = spawn(process.execPath, ['-e', '0']);
 	await new Promise((r) => enfant.once('exit', r));
@@ -394,6 +403,29 @@ describe('gardien : arrêt', () => {
 		expect((await lireEtatServeurs(b.serveurs))?.gardien.pid).toBe(etat.gardien.pid);
 	}, 30_000);
 
+	it('un hook (sans démarrer) qui trouve un échec récent ne relance rien', async () => {
+		const b = await banc();
+		await ecrireEtat(b, { gardien: { pid: await pidMort(), depuis: new Date().toISOString(), etat: 'echec' } });
+		expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 400, demarrer: false })).toBeNull();
+		expect(await rerankerLlama(b.racine, { env: b.env }).noter('q', ['a'], { budgetMs: 400, demarrer: false })).toBeNull();
+		await attendre(500);
+		expect(await lancements(b)).toHaveLength(0);
+		expect((await lireEtatServeurs(b.serveurs))!.gardien.etat).toBe('echec');
+	});
+
+	it('un gardien mort en plein démarrage compte comme un échec : rien relancé pendant une minute, puis relancé', async () => {
+		const b = await banc();
+		const mort = await pidMort();
+		await ecrireEtat(b, { gardien: { pid: mort, depuis: new Date().toISOString(), etat: 'demarrage' } });
+		expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 400, demarrer: false })).toBeNull();
+		expect(await sensLlama(b.racine, { env: b.env }).vecteurs(['a'], { budgetMs: 1000, demarrer: true })).toBeNull();
+		await attendre(500);
+		expect(await lancements(b)).toHaveLength(0);
+		expect((await lireEtatServeurs(b.serveurs))!.gardien.pid).toBe(mort);
+		await apresLaPause(b);
+		expect((await demarrer(b)).gardien.pid).not.toBe(mort);
+	}, 30_000);
+
 	it('un modèle qui ne charge pas : l’autre est publié et sert ; le premier rend null sans relance', async () => {
 		const b = await banc({ rerankerReglages: { defaut: 'echoue' } });
 		const etat = await demarrer(b);
@@ -533,6 +565,7 @@ describe('identité stricte, arrêt sûr, orphelins', () => {
 		const enChargement = (await lireEtatServeurs(b.serveurs))!;
 		process.kill(enChargement.gardien.pid, 'SIGKILL');
 		await attendre(2000);
+		await apresLaPause(b);
 		await demarrer(b);
 		await attendreQue(() => !pidVivant(enChargement.sens!.pid) && !pidVivant(enChargement.reranker!.pid), 6000);
 	}, 30_000);
@@ -590,6 +623,7 @@ describe('registre des serveurs lancés', () => {
 	it('gardien tué en plein chargement puis démarrage aussitôt : les anciens serveurs sont arrêtés dès qu’ils répondent', async () => {
 		const b = await banc({ sens: LENT, rerankerReglages: LENT, env: ENV_COURT });
 		const ancien = await tuerPendantLeChargement(b);
+		await apresLaPause(b);
 		const nouveau = await demarrer(b);
 		expect(nouveau.gardien.pid).not.toBe(ancien.gardien.pid);
 		await attendreQue(() => !pidVivant(ancien.sens!.pid) && !pidVivant(ancien.reranker!.pid), 4000 + 6000);
@@ -718,6 +752,17 @@ describe('migration : ancien gardien d’un dossier', () => {
 		expect(pidVivant(machine.gardien.pid) && pidVivant(machine.sens!.pid)).toBe(true);
 		expect((await readdir(join(b.racine, '.mnemo'))).filter((f) => f.startsWith('modeles'))).toEqual([]);
 	}, 30_000);
+
+	it('restes seuls (journal, activité, temporaire, clé) : migration déclenchée, restes retirés, rien d’autre', async () => {
+		const b = await banc();
+		const local = join(b.racine, '.mnemo');
+		for (const nom of ['modeles.log', 'modeles.actif', 'modeles.json.tmp-abc123', 'modeles-lances.json.tmp-def456', 'modeles-sens-0a1b.cle', 'autre.json']) {
+			await writeFile(join(local, nom), 'x');
+		}
+		expect(await migrerAncienGardien(b.racine, b.env)).toBe('rien');
+		expect((await readdir(local)).filter((f) => f !== 'etat.sqlite').sort()).toEqual(['autre.json']);
+		expect(await migrerAncienGardien(b.racine, b.env)).toBeNull();
+	});
 
 	it('un ancien état qui nomme un processus étranger : laissé en vie, état retiré', async () => {
 		const b = await banc();

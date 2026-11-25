@@ -311,13 +311,15 @@ const age = (depuis: string) => Date.now() - (Date.parse(depuis) || 0);
 
 /**
  * Faut-il laisser faire le gardien nommé (plutôt qu'en lancer un) ? Oui s'il démarre (récemment), s'il est prêt mais sans ce
- * modèle (pièce absente à son lancement), ou si le dernier démarrage a échoué il y a moins d'une minute.
+ * modèle (pièce absente à son lancement), ou si le dernier démarrage a échoué il y a moins d'une minute. Un gardien mort en
+ * plein démarrage (sans avoir pu écrire `echec`) compte comme un échec : pas de relance pendant une minute, sinon chaque
+ * hook relancerait un gardien voué à mourir.
  */
 function gardienEnCharge(etat: EtatServeurs | null, type: TypeServeur): boolean {
 	if (etat === null) return false;
 	const { pid, depuis, etat: phase } = etat.gardien;
 	if (phase === 'echec') return age(depuis) < PAUSE_APRES_ECHEC_MS;
-	if (!pidVivant(pid)) return false;
+	if (!pidVivant(pid)) return phase === 'demarrage' && age(depuis) < PAUSE_APRES_ECHEC_MS;
 	if (phase === 'demarrage') return age(depuis) < AGE_MAX_DEMARRAGE_MS;
 	return etat[type] === undefined;
 }
