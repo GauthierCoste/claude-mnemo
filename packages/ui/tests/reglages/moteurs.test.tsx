@@ -28,6 +28,9 @@ async function choisirProfil(nom: string): Promise<HTMLElement> {
 const moteur = (editeur: HTMLElement) => within(editeur).getByRole('radiogroup', { name: 'Moteur' });
 const modele = (editeur: HTMLElement) => within(editeur).getByRole('combobox', { name: 'Modèle' }) as HTMLInputElement;
 
+/** Les lignes de description d'un choix, dans l'ordre de son `aria-describedby`. */
+const lignes = (choix: HTMLElement): HTMLElement[] => (choix.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)!);
+
 describe('Réglages › Profils : moteur et modèle', () => {
 	it('profil Codex : Codex coché avec sa version, son modèle, ses modèles proposés ; pas de plugins Claude Code ; aperçu avec les skills dans la consigne', async () => {
 		const editeur = await choisirProfil('revue-code');
@@ -42,26 +45,29 @@ describe('Réglages › Profils : moteur et modèle', () => {
 		expect(within(editeur).getByText('Skills de la mémoire (listées dans la consigne, lues par l’outil lire)')).toBeTruthy();
 	});
 
-	it('chaque choix : son nom seul comme libellé, sa ligne d’état et d’effet comme description (lue une fois)', async () => {
+	it('chaque choix : son nom seul comme libellé, sa ligne d’état puis sa ligne d’effet comme description (aria-describedby : les deux, lues une fois)', async () => {
 		const editeur = await choisirProfil('revue-code');
 		const codex = within(moteur(editeur)).getByRole('radio', { name: 'Codex' });
 		// la description se complète quand les moteurs sont chargés (version) : attendue, sans course
-		const description = () => document.getElementById(codex.getAttribute('aria-describedby')!)!;
-		await waitFor(() => expect(description().firstElementChild?.textContent).toBe('version 0.171.0-alpha.13'));
-		expect(description().lastElementChild?.textContent).toMatch(/^skills listées dans la consigne/u);
-		expect(description().textContent).not.toMatch(/[—·]/u);
-		expect(description().closest('label')).toBeNull();
+		const description = () => lignes(codex);
+		await waitFor(() => expect(description()[0]?.textContent).toBe('version 0.171.0-alpha.13'));
+		expect(description()).toHaveLength(2);
+		expect(description()[1]?.textContent).toMatch(/^skills listées dans la consigne/u);
+		for (const l of description()) {
+			expect(l.textContent).not.toMatch(/[—·]/u);
+			expect(l.closest('label')).toBeNull();
+		}
 	});
 
 	it('Mistral Vibe et GitHub Copilot CLI : leur version, leurs effets (ce qui leur manque compris), leurs modèles proposés ; un profil Vibe les montre', async () => {
 		const editeur = await choisirProfil('veille-technique');
 		const groupe = moteur(editeur);
 		expect((within(groupe).getByRole('radio', { name: 'Mistral Vibe' }) as HTMLInputElement).checked).toBe(true);
-		const description = (nom: string) => document.getElementById(within(groupe).getByRole('radio', { name: nom }).getAttribute('aria-describedby')!)!;
-		await waitFor(() => expect(description('Mistral Vibe').firstElementChild?.textContent).toBe('version 3.1.5'));
-		expect(description('Mistral Vibe').lastElementChild?.textContent).toMatch(/ni plugins, ni quotas de l’abonnement$/u);
-		expect(description('GitHub Copilot CLI').firstElementChild?.textContent).toBe('version 1.0.116');
-		expect(description('GitHub Copilot CLI').lastElementChild?.textContent).toMatch(/^pose sa question de confiance dans le terminal à chaque lancement, puis attend ton premier message/u);
+		const description = (nom: string) => lignes(within(groupe).getByRole('radio', { name: nom }));
+		await waitFor(() => expect(description('Mistral Vibe')[0]?.textContent).toBe('version 3.1.5'));
+		expect(description('Mistral Vibe')[1]?.textContent).toMatch(/ni plugins, ni quotas de l’abonnement$/u);
+		expect(description('GitHub Copilot CLI')[0]?.textContent).toBe('version 1.0.116');
+		expect(description('GitHub Copilot CLI')[1]?.textContent).toMatch(/^pose sa question de confiance dans le terminal à chaque lancement, puis attend ton premier message/u);
 		expect(modele(editeur).value).toBe('mistral-medium-3.5');
 		const proposes = await within(editeur).findByRole('group', { name: 'Modèles proposés par Mistral Vibe' });
 		expect(within(proposes).getAllByRole('button').map((b) => b.textContent)).toEqual(['mistral-large-4-0', 'mistral-medium-3.5']);

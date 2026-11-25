@@ -54,7 +54,7 @@ export function ChoixMoteur(p: { profil: string; moteur: IdMoteur; modele: strin
 						// la description hors du libellé : lue une fois, comme description (aria-describedby), pas aussi dans le nom
 						<div key={m} className={s.choix} data-desactive={reserve || undefined}>
 							<label className={s.case}>
-								<input type="radio" name={`${id}-moteur`} checked={p.moteur === m} disabled={reserve} aria-describedby={`${id}-${m}`} onChange={() => p.surMoteur(m)} />
+								<input type="radio" name={`${id}-moteur`} checked={p.moteur === m} disabled={reserve} aria-describedby={reserve ? `${id}-${m}` : `${id}-${m}-etat ${id}-${m}-effet`} onChange={() => p.surMoteur(m)} />
 								<span>
 									{NOMS_MOTEURS[m]} {etat.manque && <span className={s.inactif}>indisponible</span>}
 								</span>
@@ -64,10 +64,14 @@ export function ChoixMoteur(p: { profil: string; moteur: IdMoteur; modele: strin
 									Réservé : l’archiviste reste sur Claude Code.
 								</span>
 							) : (
-								// l'état sur ce poste, puis l'effet : deux lignes, lues ensemble comme description
-								<span id={`${id}-${m}`}>
-									<span className={s.detailChoix}>{etat.texte}</span>
-									<span className={s.detailChoix}>{EFFETS[m]}</span>
+								// l'état sur ce poste, puis l'effet : deux lignes, lues l'une après l'autre comme description
+								<span>
+									<span id={`${id}-${m}-etat`} className={s.detailChoix}>
+										{etat.texte}
+									</span>
+									<span id={`${id}-${m}-effet`} className={s.detailChoix}>
+										{EFFETS[m]}
+									</span>
 								</span>
 							)}
 						</div>
