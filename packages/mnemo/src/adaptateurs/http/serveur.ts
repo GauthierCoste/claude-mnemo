@@ -57,6 +57,8 @@ const SANS_CASSE = process.platform === 'darwin' || process.platform === 'win32'
 /** Réglages (tests surtout) : intervalles du ping et du sondage, battement du pilote, journal (stderr par défaut). */
 /** Relecture du verrou du dossier (toujours le nôtre ?). */
 const SURVEILLANCE_VERROU_MS = 1000;
+/** Délai avant un nouvel essai de la première lecture de l'a priori des gestes. */
+const RELANCE_APRIORI_MS = 2000;
 
 export type ReglagesService = {
 	pingMs?: number;
@@ -325,7 +327,16 @@ export async function demarrerService(options: {
 	relireIdentiteReranker();
 	// a priori des gestes entre sessions : lu une fois en arrière-plan, puis seulement les gestes nouveaux
 	const apriori = aprioriDesGestes(pil.etat, { chemins: async () => (await dep.index.titres()).map((t) => t.chemin), journal });
-	enFond(apriori.actualiser({ ecartees: true }));
+	// première lecture en échec : relancée en fond jusqu'à ce qu'elle réussisse (sans elle, aucune note qui pèse l'a priori n'est calibrée)
+	const chargerApriori = (): void => {
+		enFond(
+			apriori.actualiser({ ecartees: true }).catch((erreur: unknown) => {
+				journal(`a priori des gestes : lecture impossible (${erreur instanceof Error ? erreur.message : String(erreur)}), nouvel essai.`);
+				if (!arrete && !apriori.charge()) setTimeout(chargerApriori, RELANCE_APRIORI_MS).unref();
+			}),
+		);
+	};
+	chargerApriori();
 	// injection automatique coupée par le suivi : tenue ici, lue au démarrage (après la création du hub), puis en fond après
 	// chaque geste et à chaque nouvel apprentissage ; la vue des sessions en cours est rediffusée quand elle change
 	const suivi = suiviDesInjections(
@@ -476,7 +487,8 @@ export async function demarrerService(options: {
 		res.on('close', () => {
 			if (!res.writableFinished) abandon.abort();
 		});
-		// la réponse livrée (écrite en entier avant que la connexion se ferme) : vrai ; connexion fermée avant : faux
+		// la réponse livrée (écrite en entier avant que la connexion se ferme) : vrai ; connexion fermée avant : faux. Limite :
+		// `finish` dit que la réponse est remise au système, pas que le hook l'a lue (un hook qui abandonne juste après la perd).
 		const livree = new Promise<boolean>((resoudre) => {
 			res.once('finish', () => resoudre(!abandon.signal.aborted));
 			res.once('close', () => resoudre(res.writableFinished && !abandon.signal.aborted));

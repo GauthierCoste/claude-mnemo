@@ -452,7 +452,9 @@ async function demandeDe(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session:
 		modeles,
 		// session inconnue : une fiche injectée n'y serait ni notée servie ni suivie
 		...(session === null ? { injectionAutomatique: false } : {}),
-		...(apriori === undefined ? {} : { aprioris: (vecteur: VecteurDuMessage | null) => apriori.aprioris({ ...contexte, vecteur }) }),
+		// l'a priori n'est connu qu'une fois chargé par le service : avant (démarrage, lecture en échec), une note qui le pèse
+		// n'est pas calibrée pour ce message, donc rien n'est injecté par elle
+		...(apriori === undefined || !apriori.charge() ? {} : { aprioris: (vecteur: VecteurDuMessage | null) => apriori.aprioris({ ...contexte, vecteur }) }),
 	};
 }
 
@@ -571,15 +573,20 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 	// noter prend du temps : il faut qu'il en reste assez pour noter puis répondre avant que le hook cesse d'attendre
 	const aTempsPourNoter = auto || aTemps(reglages, MARGE_ECRITURE_MS);
 	let injecte = servi.texte !== '' && aTempsPourNoter;
+	let texte = servi.texte;
 	// un message porteur est journalisé même sans texte injecté : son classement en est la trace (panneau, apprentissage)
 	if (session !== null && (injecte || (rang !== null && aTempsPourNoter))) {
 		await noterInjection(dep, pil, session, entree, demande, servi, debut, reglages.appelMs, rang, classement, (chemin) => noteDuPorteur(precedent, chemin));
-		// après les écritures : le hook attend-il encore ? Sinon, la réponse ne lui parviendrait pas (les fiches demandées sont remises)
-		if (!aTemps(reglages)) injecte = false;
-		// sans service, les traces des fiches injectées par Mnemo s'écrivent avant de répondre : il faut encore le temps de les
-		// écrire, sinon rien ne part (elles restent injectables, les fiches demandées sont remises)
-		if (auto && injecte && reglages.aLaReponse === undefined && !aTemps(reglages, MARGE_ECRITURE_MS)) injecte = false;
-		if (auto && injecte) {
+		// après les écritures : ce qui est noté servi (position, fiches demandées) part toujours, le hook l'attend jusqu'à son
+		// échéance (le service garde une marge) et ne recalcule pas une réponse reçue. Seules les fiches injectées par Mnemo, dont
+		// les traces restent à écrire, sont retirées si le temps manque (sans service, il faut encore le temps de les écrire) :
+		// elles restent injectables à un message suivant
+		const autoPart = auto && injecte && (reglages.aLaReponse !== undefined ? aTemps(reglages) : aTemps(reglages, MARGE_ECRITURE_MS));
+		if (auto && !autoPart) {
+			texte = sansInjectionsAutomatiques(servi).texte;
+			injecte = texte !== '';
+		}
+		if (autoPart) {
 			// la trace « servie » et le geste des fiches injectées par Mnemo : le service les écrit une fois la réponse livrée par la
 			// route (jamais si elle ne l'est pas) ; sans lui, juste avant de répondre, après le dernier contrôle
 			const s = session;
@@ -610,7 +617,7 @@ async function servirAuMessage(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
 		const aMesurer = servi.calcul.aMesurer;
 		if (aMesurer !== undefined && reglages.enFond !== undefined) reglages.enFond(mesurerLeReranker(dep, aMesurer));
 	}
-	return injecte ? { contexte: servi.texte } : {};
+	return injecte ? { contexte: texte } : {};
 }
 
 /** Tailles des appels de mesure successifs : les 8 premières, puis 5, puis 8 (deux tailles : la pente et le fixe). */
