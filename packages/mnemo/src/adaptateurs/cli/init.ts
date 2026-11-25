@@ -164,10 +164,13 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 		const decider = async (explicite: ChoixExplicite, question: string, defaut: boolean, siFin: boolean = defaut): Promise<boolean> =>
 			explicite ?? (await ouiNon(question, defaut, siFin));
 		/** Une étape hors mémoire : son échec est dit (texte : `libelle : échec — …`), compté, et la suite continue. */
-		const mener = async (etape: EtapeInit, libelle: string, debut: string, action: () => Promise<string>): Promise<boolean> => {
+		// une action qui rend `{ laisse }` a laissé les choses telles quelles, à dessein : ni fait, ni échec
+		const mener = async (etape: EtapeInit, libelle: string, debut: string, action: () => Promise<string | { laisse: string }>): Promise<boolean> => {
 			j.evenement(etape, 'debut', debut);
 			try {
-				j.evenement(etape, 'fait', await action());
+				const r = await action();
+				if (typeof r === 'string') j.evenement(etape, 'fait', r);
+				else j.evenement(etape, 'laisse', r.laisse);
 				return true;
 			} catch (erreur) {
 				echecs.push(etape);
@@ -218,6 +221,7 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 				const message = messagesInit(racine, resultat, declaration)[1]!;
 				// en JSON, une déclaration à refaire à la main est un échec ; en texte, elle est dite seulement
 				// (déclarée pour une autre installation de Mnemo, de portée utilisateur : `perime`, que `mnemo declarer --remplacer` reprend)
+				if (declaration === 'desactive') return { laisse: message };
 				if (json && declaration !== 'declare' && declaration !== 'deja') throw 'perime' in declaration && declaration.remplacable === true ? new EchecMotive(message, 'perime') : new Error(message);
 				return message;
 			});
@@ -241,6 +245,7 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 			await mener('codex', 'Serveur MCP (Codex)', 'Déclaration du serveur MCP à Codex.', async () => {
 				const declarationCodex = await actions.declarerCodex();
 				ligne = messageCodex(declarationCodex);
+				if (declarationCodex === 'desactive') return { laisse: ligne };
 				if (json && declarationCodex !== 'declare' && declarationCodex !== 'deja')
 					throw 'perime' in declarationCodex && declarationCodex.remplacable === true ? new EchecMotive(ligne, 'perime') : new Error(ligne);
 				return ligne;
@@ -388,6 +393,7 @@ export function messagesInit(racine: string, resultat: ResultatInitialisation, d
 	if (declaration === null) return lignes;
 	if (declaration === 'declare') lignes.push('Serveur MCP déclaré pour toutes les sessions Claude Code.');
 	else if (declaration === 'deja') lignes.push('Serveur MCP déjà déclaré.');
+	else if (declaration === 'desactive') lignes.push('Serveur MCP : déclaration désactivée, laissée telle quelle.');
 	else if ('perime' in declaration) lignes.push(`Serveur MCP déclaré avec un autre chemin${declaration.portee === undefined ? '' : ` (portée : ${declaration.portee})`} : lancez \`claude mcp remove mnemo --scope ${declaration.scope ?? 'user'}\` puis : ${declaration.manuel}`);
 	else if (declaration.introuvable) lignes.push(`Claude Code introuvable : lancez vous-même : ${declaration.manuel}`);
 	else lignes.push(`Déclaration automatique impossible (${declaration.raison}) : lancez vous-même : ${declaration.manuel}`);
@@ -398,6 +404,7 @@ export function messagesInit(racine: string, resultat: ResultatInitialisation, d
 export function messageCodex(declaration: ResultatDeclaration): string {
 	if (declaration === 'declare') return 'Serveur MCP déclaré pour toutes les sessions Codex.';
 	if (declaration === 'deja') return 'Serveur MCP déjà déclaré à Codex.';
+	if (declaration === 'desactive') return 'Serveur MCP : déclaration désactivée dans Codex (enabled = false), laissée telle quelle.';
 	if ('perime' in declaration)
 		return declaration.remplacable === true
 			? 'Serveur MCP déclaré à Codex pour un autre Node ou un autre Mnemo : lancez « mnemo declarer --moteur codex --remplacer ».'

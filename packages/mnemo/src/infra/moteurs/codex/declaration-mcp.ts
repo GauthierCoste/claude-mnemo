@@ -7,7 +7,6 @@ import { nodeDurable } from '../../node-durable.ts';
 import { dossierCodex } from './dossier-codex.ts';
 
 const INTROUVABLE = '`codex` introuvable (PATH, MNEMO_CODEX, ou ChatGPT.app).';
-const DESACTIVEE = 'déclaration MCP « mnemo » désactivée dans Codex (enabled = false) : Mnemo ne la réactive pas.';
 
 /** `config.toml` de Codex : `$CODEX_HOME`, sinon `~/.codex`. */
 const cheminConfig = (env: Record<string, string | undefined>): string => join(dossierCodex(env), 'config.toml');
@@ -77,7 +76,8 @@ async function declarer(a: AppelDeclaration): Promise<ResultatDeclaration> {
 		const e = await existante();
 		if (e !== 'absent' && 'echec' in e) return { manuel, introuvable: false, raison: e.echec };
 		if (e !== 'absent') {
-			if (!e.declaration.active) return { manuel, introuvable: false, raison: DESACTIVEE };
+			// désactivée par l'utilisateur : laissée telle quelle (`codex mcp add` la réactiverait)
+			if (!e.declaration.active) return 'desactive';
 			if (lanceCeMnemo(e.declaration, node, a.main)) return 'deja';
 			return { perime: true, manuel, remplacable: estDeclarationMnemo(e.declaration) };
 		}

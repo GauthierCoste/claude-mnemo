@@ -763,9 +763,10 @@ export type PorteeMcp = 'user' | 'local' | 'project';
  * Déclaration du serveur `mnemo` (`declarer`). `deja` : déclaré avec cette commande ; `perime` : déclaré avec un autre Node
  * ou un autre `main.ts` (mise à jour de Node, dépôt déplacé) — jamais retiré d'office (`remplacable` : c'est une
  * déclaration de Mnemo de portée utilisateur, que `mnemo declarer --remplacer` refait ; `portee`, `scope` : Claude Code) ;
- * sinon : échec, commande manuelle.
+ * `desactive` : déclarée mais désactivée chez le moteur (Codex : `enabled = false`), laissée telle quelle ; sinon : échec,
+ * commande manuelle.
  */
-export type ResultatDeclaration = 'declare' | 'deja' | { perime: true; manuel: string; portee?: string; scope?: PorteeMcp; remplacable?: boolean } | { manuel: string; introuvable: boolean; raison: string };
+export type ResultatDeclaration = 'declare' | 'deja' | 'desactive' | { perime: true; manuel: string; portee?: string; scope?: PorteeMcp; remplacable?: boolean } | { manuel: string; introuvable: boolean; raison: string };
 
 /**
  * `absent` : aucune déclaration `mnemo` (rien n'est déclaré) ; `deja` : elle lance déjà ce Node et ce `main.ts` ; `remplace` :

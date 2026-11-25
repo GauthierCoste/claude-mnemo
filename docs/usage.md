@@ -43,7 +43,8 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   ```
 
   `etape` is `memoire`, `mcp`, `codex`, `codex_hooks`, `modeles`, `commande` or `lanceur` (`codex` and `codex_hooks`
-  only with `--codex`). A step that runs gives `debut` then `fait` or `echec`;
+  only with `--codex`). A step that runs gives `debut` then `fait` or `echec`, or `laisse` when it deliberately leaves
+  things as they are (a declaration turned off in Codex with `enabled = false`: not a failure, no exit code 1);
   a step left aside gives a single `saute` line. Download progress (`piece`: `moteur`, `sens` or `reranker`; `total` is
   `null` when the size is unknown) comes at most once per second and per piece. The last line is `fin`; `ok` is false
   when a step failed (exit code 1). In JSON, a declaration that must be done by hand (Claude Code not found, declared

@@ -323,6 +323,20 @@ describe('mnemo init --codex', () => {
 		}
 	});
 
+	it('déclaration désactivée dans Codex : laissée telle quelle, étape « laisse » (ni échec ni code 1), aucun conseil codex mcp add', async () => {
+		avecMcpFactice();
+		const racine = await dossierTemporaire();
+		const sortie = capture();
+		await commandeInit([racine, '--json', '--sans-mcp', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: avecCodex('desactive') });
+		const lignes = lignesJson(sortie.texte());
+		expect(lignes).toContainEqual({ etape: 'codex', etat: 'laisse', message: 'Serveur MCP : déclaration désactivée dans Codex (enabled = false), laissée telle quelle.' });
+		expect(lignes).toContainEqual({ fin: true, racine, ok: true });
+		const texte = capture();
+		await commandeInit([racine, '--sans-mcp', '--codex'], { sortie: texte.flux, interactif: false, plateforme: 'linux', actions: avecCodex('desactive') });
+		expect(texte.texte()).toContain('déclaration désactivée dans Codex (enabled = false), laissée telle quelle.');
+		expect(texte.texte()).not.toContain('codex mcp add');
+	});
+
 	it('hooks d’une autre installation de Mnemo chez Codex : étape codex_hooks en échec de motif « perime »', async () => {
 		avecMcpFactice();
 		const racine = await dossierTemporaire();

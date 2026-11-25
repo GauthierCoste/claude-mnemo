@@ -243,7 +243,7 @@ describe('déclaration MCP chez Codex', () => {
 		const desactivee = { code: 0, sortie: JSON.stringify({ name: 'mnemo', enabled: false, transport: { type: 'stdio', command: process.execPath, args: [MAIN, 'mcp'] } }), erreur: '' };
 		expect(await DECLARATION_MCP_CODEX.lire(simule([desactivee]).appel())).toBe('desactive');
 		const s = simule([desactivee]);
-		expect(await DECLARATION_MCP_CODEX.declarer(s.appel())).toMatchObject({ introuvable: false, raison: expect.stringContaining('désactivée') });
+		expect(await DECLARATION_MCP_CODEX.declarer(s.appel())).toBe('desactive');
 		expect(s.appels).toHaveLength(1);
 	});
 
