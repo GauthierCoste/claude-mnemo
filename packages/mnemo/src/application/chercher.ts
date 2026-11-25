@@ -2,7 +2,7 @@ import { classer, fusionner } from '../domaine/classement.ts';
 import { sigmoide } from '../domaine/contexte-score.ts';
 import type { Candidat, Classe } from '../domaine/classement.ts';
 import { dossiersAscendants, ficheDeDossier } from '../domaine/chemin.ts';
-import { estContenuDeDocument } from '../domaine/elements.ts';
+import { estContenuDeDocument, estExpire } from '../domaine/elements.ts';
 import type { ElementIndexe, GenreElement, Lien, StatutElement } from '../domaine/elements.ts';
 import { dedoublonner } from '../domaine/dedoublonner.ts';
 import type { EntreeADedoublonner } from '../domaine/dedoublonner.ts';
@@ -381,8 +381,9 @@ export async function chercherDetaille(dep: Dependances, requete: Requete, optio
 	const poids: PoidsRecherche = { position: reglages.poidsPosition, confiance: reglages.poidsConfiance, memoire: reglages.poidsMemoire, fraicheur: reglages.poidsFraicheur };
 	const jour = aujourdhui(dep);
 	const fichesLues = new Map<string, Promise<string | null>>();
-	// Le seuil porte sur la pertinence (échelle inchangée) : un poids ne fait jamais entrer un résultat.
-	const retenus = classes.filter((c) => c.pertinence >= seuil);
+	// Le seuil porte sur la pertinence (échelle inchangée) : un poids ne fait jamais entrer un résultat. Un élément expiré
+	// (validité passée, fiche périmée) ne revient qu'avec les invalides, comme un fait barré.
+	const retenus = classes.filter((c) => c.pertinence >= seuil && (requete.inclureInvalides === true || !estExpire(c.element, jour)));
 	const notes: (Classe & { note: NoteRecherche })[] = [];
 	for (const c of retenus) {
 		const e = c.element;

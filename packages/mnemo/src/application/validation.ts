@@ -134,6 +134,11 @@ export const TABLES_DEMANDE = {
 			description: `Fiche de lieu (ni consigne, ni profil, ni source, ni episode) : le dossier de projet Claude Code (relatif à la racine du dossier Mnemo) que ce lieu couvre, sous-dossiers compris ; vide pour le retirer.`,
 		},
 		portee: { sorte: 'chaine', requis: false, description: `Portée que ce lieu déclare (${GENRES_DE_PORTEE.map((g) => `« ${g}:nom »`).join(', ')}) ; vide pour la retirer.` },
+		perime_le: {
+			sorte: 'chaine',
+			requis: false,
+			description: 'Fiche temporaire (un état d\'avancement) : jour AAAA-MM-JJ où elle cesse d\'être vraie ; ensuite elle n\'est plus injectée ni cherchée par défaut, et `diagnostiquer` propose de la supprimer. Vide pour le retirer.',
+		},
 		appliquerProposition: { sorte: 'booleen', requis: false, description: 'Applique la modification proposée par une session (utilisateur seulement).' },
 		retirerProposition: { sorte: 'booleen', requis: false, description: 'Rejette la modification proposée par une session (utilisateur seulement).' },
 		source: { sorte: SOURCE, requis: true },

@@ -126,6 +126,15 @@ mailbox grows, its known threads keep their passages, and `mnemo index` lists "D
 complete). Running `mnemo source` (or `extraire_source`) again on the same path references the new threads, without
 touching anything else.
 
+## Temporary notes
+
+A progress status (where a piece of work stands) belongs in a temporary note, never in a durable one: its frontmatter
+key `perime_le` gives the day it stops being true (`proposer`, genre `fiche` with `donnees: { perime_le }`, or genre
+`modification`). From that day on, the note, its information and its passages are no longer injected into sessions nor
+returned by `chercher` (they come back with `tout`, like struck-through facts), and `diagnostiquer` lists them in the
+`perimees` rubric, with the information whose validity (`valide [début,fin)`) has passed: the archivist deletes them,
+or moves the date if they are still true.
+
 ## Search by meaning
 
 Search first finds by words. With local models, it also finds an answer worded differently: "How often do the vehicles

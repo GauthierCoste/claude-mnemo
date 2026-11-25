@@ -21,6 +21,8 @@ function titreDe(rubrique: Rubrique, seuilRappel: number): string {
 			return 'Informations à confirmer';
 		case 'barrees':
 			return 'Informations barrées';
+		case 'perimees':
+			return 'Fiches temporaires et informations périmées (plus injectées : supprimer, ou prolonger si elles restent vraies)';
 		case 'doublons':
 			return 'Doublons probables (même fiche)';
 		case 'fiches_chargees':

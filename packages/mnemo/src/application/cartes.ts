@@ -14,12 +14,14 @@ import { deverrouiller, perimetreDe, TYPES_NON_PROPOSABLES } from '../domaine/pe
 import type { Arete, FicheDuGraphe } from '../domaine/perimetre.ts';
 import { signalInjection } from '../domaine/signal-injection.ts';
 import type { InjectionManuelle } from '../domaine/signal-injection.ts';
+import { estExpire } from '../domaine/elements.ts';
 import type { ElementIndexe } from '../domaine/elements.ts';
 import { estDocument } from '../domaine/regles.ts';
 import { expressionFts } from '../domaine/requete.ts';
 import { sansFaitsBarres } from '../domaine/sans-faits-barres.ts';
 import { normaliser } from '../domaine/sens.ts';
 import { ficheDePosition } from './chercher.ts';
+import { aujourdhui } from './commun.ts';
 import { resolveurDeLiens } from './liens.ts';
 import type { CarteJournalisee, Dependances, FicheServieLueOuEcrite, RaisonCarte } from './ports.ts';
 
@@ -190,8 +192,15 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 		);
 	};
 	const demandees = new Set(d.demandees ?? []);
+	const jour = aujourdhui(dep);
+	// une fiche périmée (`perime_le` passé) n'est plus proposée
 	const proposable = (chemin: string): boolean =>
-		elementDe.has(chemin) && !TYPES_NON_PROPOSABLES.has(type(chemin)) && chemin !== positionFiche && !demandees.has(chemin) && !dejaVue(chemin);
+		elementDe.has(chemin) &&
+		!TYPES_NON_PROPOSABLES.has(type(chemin)) &&
+		!estExpire(elementDe.get(chemin)!, jour) &&
+		chemin !== positionFiche &&
+		!demandees.has(chemin) &&
+		!dejaVue(chemin);
 
 	// Fiche de position : servie entière, sauf trop longue (première carte).
 	let position: FicheDePositionServie | null = null;
@@ -200,7 +209,7 @@ export async function calculerCartes(dep: Dependances, d: DemandeCartes): Promis
 	if (d.servirPosition && positionFiche !== null && !d.ecartes.includes(positionFiche) && d.dejaServies.get(positionFiche) !== (empreintes.get(positionFiche) ?? null)) {
 		const brut = await dep.coffre.lire(positionFiche);
 		// les faits barrés restent dans la fiche mais ne sont pas injectés
-		const texte = brut === null ? null : sansFaitsBarres(brut);
+		const texte = brut === null ? null : sansFaitsBarres(brut, jour);
 		if (texte !== null) {
 			if (texte.length <= TAILLE_POSITION_MAX) {
 				position = { chemin: positionFiche, titre: titre(positionFiche), texte, empreinte: empreintes.get(positionFiche) ?? '', encadree: false };

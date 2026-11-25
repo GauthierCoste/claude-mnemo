@@ -4,6 +4,7 @@ import { estTypeFiche, FORME_TYPE_FICHE } from '../domaine/fiche.ts';
 import type { Fiche, TypeFiche } from '../domaine/fiche.ts';
 import type { Niveau } from '../domaine/consigne.ts';
 import type { Fait } from '../domaine/fait.ts';
+import { estExpire } from '../domaine/elements.ts';
 import type { ElementIndexe } from '../domaine/elements.ts';
 import { estTypeSource, TYPES_PERSONNELS, typeSourceOuInconnue, typeSourcePersonnel } from '../domaine/regles.ts';
 import type { TypeSource } from '../domaine/regles.ts';
@@ -330,5 +331,6 @@ export async function sousVerrou<T>(dep: Dependances, action: () => Promise<T>):
 /** Consignes indexées (servies, toutes portées) de ces niveaux. */
 export async function consignesIndexees(dep: Dependances, niveaux: Niveau[]): Promise<ElementIndexe[]> {
 	const toutes = await dep.index.elements({ genres: ['consigne'], statuts: ['servi'] });
-	return toutes.filter((e) => e.niveau !== null && niveaux.includes(e.niveau));
+	const jour = aujourdhui(dep);
+	return toutes.filter((e) => e.niveau !== null && niveaux.includes(e.niveau) && !estExpire(e, jour));
 }

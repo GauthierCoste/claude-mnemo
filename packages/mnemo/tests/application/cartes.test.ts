@@ -85,6 +85,17 @@ describe('calculerCartes : premier message', () => {
 		expect(c.mesure).toBe('aucune');
 	});
 
+	it('une fiche temporaire périmée (perime_le passé) n\'est plus proposée ; avant ce jour, elle l\'est', async () => {
+		const dep = await memoire();
+		const outil = (jour: string) => fiche('entite', 'Outil Parcs', 'État du chantier Outil Parcs.', `perime_le: ${jour}\n`, '', '2026-11-05');
+		await dep.coffre.ecrire(OUTIL, outil('2026-11-22'));
+		await synchroniser(dep, SANS_EXTRACTION);
+		expect(chemins(await calculerCartes(dep, demande()))).toEqual([GIT, SOUS, YSALINE]);
+		await dep.coffre.ecrire(OUTIL, outil('2026-11-23'));
+		await synchroniser(dep, SANS_EXTRACTION);
+		expect(chemins(await calculerCartes(dep, demande()))).toEqual([OUTIL, GIT, SOUS, YSALINE]);
+	});
+
 	it('une carte porte titre, première phrase de la synthèse, type et raison ; sans modèle du sens, pas de note', async () => {
 		const c = await calculerCartes(await memoire(), demande());
 		expect(c.cartes.find((x) => x.chemin === OUTIL)).toEqual({

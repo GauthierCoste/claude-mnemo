@@ -113,7 +113,7 @@ describe('consignes par défaut qui suivent le code', () => {
 
 	it('rappel : une consigne par défaut modifiée doit rejoindre ANCIENNES_CONSIGNES', () => {
 		const message = 'consigne par défaut modifiée : ajoutez l\'ancienne à ANCIENNES_CONSIGNES puis mettez à jour cette empreinte';
-		expect(empreinte(CONSIGNE_TRAVAIL_PAR_DEFAUT), message).toBe('587433e2182281aa');
-		expect(empreinte(CONSIGNE_ARCHIVISTE_PAR_DEFAUT), message).toBe('ae48c7ed2c24280d');
+		expect(empreinte(CONSIGNE_TRAVAIL_PAR_DEFAUT), message).toBe('07b9ed22a023cfee');
+		expect(empreinte(CONSIGNE_ARCHIVISTE_PAR_DEFAUT), message).toBe('859db6c57a51c105');
 	});
 });

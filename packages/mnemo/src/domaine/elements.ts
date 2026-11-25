@@ -35,7 +35,7 @@ export type ElementIndexe = {
 	statut: StatutElement;
 	/** Fait : date d'apprentissage ; sinon `updated`. */
 	date: string | null;
-	/** Fait : fin de validité (`valide [début,fin)` ou `…fin]`) ; sinon null. */
+	/** Fait : fin de validité (`valide [début,fin)` ou `…fin]`), ou péremption de sa fiche si elle vient avant ; autre élément : `perime_le` de sa fiche ; sinon null. */
 	valideFin: string | null;
 	/** Vrai si la fin de validité est incluse (`]`) ; faux sinon (`)`, ou pas de fin). */
 	finIncluse: boolean;
@@ -146,6 +146,19 @@ function contexteDe(chemin: string, titre: string, alias: string[]): string {
 	return [...segments, ...alias].join(SEPARATEUR_CONTEXTE);
 }
 
+/**
+ * Clé du frontmatter d'une fiche temporaire (un état d'avancement) : le jour où elle cesse d'être vraie (`AAAA-MM-JJ`, exclu de
+ * sa validité). Ses éléments (fiche, informations, passages) portent cette fin : périmés, ils ne sont plus injectés ni
+ * cherchés par défaut, et `diagnostiquer` propose de supprimer la fiche.
+ */
+export const CLE_PERIME_LE = 'perime_le';
+
+/** Jour de péremption d'une fiche (`perime_le`, date valide), sinon null. */
+export function perimeLeDe(fiche: Pick<Fiche, 'donnees'>): string | null {
+	const valeur = fiche.donnees[CLE_PERIME_LE];
+	return typeof valeur === 'string' && estDate(valeur) ? valeur : null;
+}
+
 function dateDe(fiche: Fiche): string | null {
 	return estDate(fiche.updated) ? fiche.updated : null;
 }
@@ -166,7 +179,7 @@ function base(fiche: Fiche, genre: GenreElement, id: string, texte: string, cont
 		contexte,
 		statut: 'servi',
 		date: dateDe(fiche),
-		valideFin: null,
+		valideFin: perimeLeDe(fiche),
 		finIncluse: false,
 		confiance: null,
 		source,
@@ -252,6 +265,12 @@ function idUnique(id: string, pris: Set<string>): string {
 }
 
 /** Texte cherché d'un fait : son énoncé, sa citation, puis la citation de chaque corroboration (rien n'est écrit sans être cherchable). */
+/** Fin de validité d'un fait : la sienne, ou la péremption de sa fiche si elle vient avant (ou le même jour). */
+function finDuFait(fait: Fait, perimeLe: string | null): { valideFin: string | null; finIncluse: boolean } {
+	if (perimeLe !== null && (fait.valideFin === undefined || perimeLe <= fait.valideFin)) return { valideFin: perimeLe, finIncluse: false };
+	return { valideFin: fait.valideFin ?? null, finIncluse: fait.valideFin !== undefined && fait.finIncluse };
+}
+
 function texteDeFait(fait: Fait): string {
 	const citations = [fait.citation, ...(fait.corroborations ?? []).map((c) => c.citation)].filter((c) => c !== undefined);
 	return [fait.texte, ...citations].join('\n');
@@ -268,8 +287,7 @@ function elementDeFait(fiche: Fiche, fait: Fait, id: string, contexte: string): 
 		contexte,
 		statut: fait.barre ? 'invalide' : fait.aConfirmer ? 'a_confirmer' : 'servi',
 		date: fait.appris ?? null,
-		valideFin: fait.valideFin ?? null,
-		finIncluse: fait.valideFin !== undefined && fait.finIncluse,
+		...finDuFait(fait, perimeLeDe(fiche)),
 		confiance: fait.confiance === undefined ? null : fait.confiance / 100,
 		source,
 		typeSource: source === null ? null : typeSourcePersonnel(source),

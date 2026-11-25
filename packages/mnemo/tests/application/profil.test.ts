@@ -57,7 +57,7 @@ describe('profil travail', () => {
 
 	it('chaque nom entre accents graves est un outil, un champ de la validation ou une valeur connue', () => {
 		const outils = ['chercher', 'lister', 'lire', 'voisins', 'chronologie', 'contexte', 'proposer', 'deplacer', 'extraire_source'];
-		const champs = new Set([...Object.keys(TABLES_DEMANDE.fait), ...Object.keys(TABLES_DEMANDE.consigne), 'ref', 'type']);
+		const champs = new Set([...Object.keys(TABLES_DEMANDE.fait), ...Object.keys(TABLES_DEMANDE.consigne), ...Object.keys(TABLES_DEMANDE.modification), 'ref', 'type']);
 		const genres = Object.keys(TABLES_DEMANDE);
 		const valeurs = [...genres, 'declare', 'utilisateur', 'proches', 'true', '<donnees>', 'deplacer(id, dossier)', '{ref, type: utilisateur}'];
 		const cites = [...CONSIGNE_TRAVAIL_PAR_DEFAUT.matchAll(/`([^`]+)`/gu)].map((m) => m[1]!);

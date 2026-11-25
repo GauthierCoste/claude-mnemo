@@ -498,7 +498,7 @@ describe('serveur mnemo mcp', () => {
 
 	it('chaque outil cité par la consigne du profil existe, et chaque outil y est cité', () => {
 		// mots entre accents graves qui ne sont pas des outils : champs et valeurs de `proposer`
-		const pasDesOutils = new Set(['nature', 'declare', 'source', 'proches', 'remplace', 'fiche', 'apresProches', 'true', 'relation']);
+		const pasDesOutils = new Set(['nature', 'declare', 'source', 'proches', 'remplace', 'fiche', 'apresProches', 'true', 'relation', 'perime_le']);
 		const cites = [...CONSIGNE_TRAVAIL_PAR_DEFAUT.matchAll(/`([a-zA-Z_]+)(?:\(|`)/gu)].map((m) => m[1]!);
 		const outils = new Set<string>(NOMS_OUTILS);
 		for (const nom of cites) expect(outils.has(nom) || pasDesOutils.has(nom), nom).toBe(true);

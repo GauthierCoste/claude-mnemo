@@ -90,11 +90,12 @@ describe('chercher', () => {
 		expect(trouves.find((t) => t.id === 'sources/mail.md')!.source).toBe('sources/mail.md');
 	});
 
-	it('expose validité, catégorie, type de fiche et portée ; un fait expiré reste trouvable', async () => {
+	it('expose validité, catégorie, type de fiche et portée ; un fait expiré se trouve avec les invalides', async () => {
 		const dep = fauxPorts();
 		await dep.coffre.ecrire('a.md', `${entete()}# A\n\n## Faits\n- [montant] Tarif expiré de 100 euros | declare | src: utilisateur oral | valide [2026-01-01,2026-06-30] ^f-0001\n`);
 		await dep.coffre.ecrire('consignes/c.md', `${entete('consigne', 'portee: projet:vela\nniveau: toujours\n')}# C\n\nLe tarif se discute.\n`);
-		const [fait] = await chercher(dep, { texte: 'tarif expiré', genres: ['fait'] });
+		expect(await chercher(dep, { texte: 'tarif expiré', genres: ['fait'] })).toEqual([]);
+		const [fait] = await chercher(dep, { texte: 'tarif expiré', genres: ['fait'], inclureInvalides: true });
 		expect(fait).toMatchObject({ id: 'a.md#^f-0001', valideFin: '2026-06-30', finIncluse: true, categorie: 'montant', typeFiche: 'sujet', portee: null });
 		const [c] = await chercher(dep, { texte: 'tarif discute', genres: ['consigne'] });
 		expect(c).toMatchObject({ typeFiche: 'consigne', portee: 'projet:vela', valideFin: null });

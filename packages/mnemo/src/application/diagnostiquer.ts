@@ -3,6 +3,7 @@ import { diagnostiquer as calculer, RUBRIQUES } from '../domaine/diagnostic.ts';
 import type { FicheLue, Rubrique } from '../domaine/diagnostic.ts';
 import { analyserFiche } from '../domaine/fiche.ts';
 import { LIMITE_PAR_RUBRIQUE, rapportDeDiagnostic } from '../domaine/rapport-diagnostic.ts';
+import { aujourdhui } from './commun.ts';
 import { lireLaMemoire } from './entretien/memoire-lue.ts';
 import type { Dependances } from './ports.ts';
 import { LIMITE_SORTIE } from './presenter.ts';
@@ -41,7 +42,7 @@ export async function diagnostiquer(dep: Dependances, demande: DemandeDiagnostic
 	const [memoire, dossiers, regles, empreintesSources, lots] = await Promise.all([lireLaMemoire(dep), tousLesDossiers(dep), chargerRegles(dep), empreintesDesSources(dep), dep.lots.enAttente()]);
 	const fiches: FicheLue[] = [...memoire.textes].map(([chemin, texte]) => ({ chemin, texte, fiche: analyserFiche(chemin, texte).fiche }));
 	const d = calculer(
-		{ fiches, dossiers, designee: memoire.designee, empreintesSources, seuilRappel: regles.seuilRappel, categoriesAEnjeu: regles.categoriesAEnjeu, lots },
+		{ fiches, dossiers, designee: memoire.designee, empreintesSources, seuilRappel: regles.seuilRappel, categoriesAEnjeu: regles.categoriesAEnjeu, lots, aujourdhui: aujourdhui(dep) },
 		demande.rubriques === undefined || demande.rubriques.length === 0 ? RUBRIQUES : demande.rubriques,
 	);
 	return rapportDeDiagnostic(d, regles.seuilRappel, demande.limite ?? LIMITE_PAR_RUBRIQUE, LIMITE_SORTIE - MARGE);

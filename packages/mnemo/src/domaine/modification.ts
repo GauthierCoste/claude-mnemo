@@ -3,7 +3,8 @@ import { suivreBlocsDeCode } from './blocs-de-code.ts';
 import { estTitreDesInformations, estTypeFiche, FORME_TYPE_FICHE } from './fiche.ts';
 import type { Fiche, TypeFiche } from './fiche.ts';
 import { masquerSecrets } from './secrets.ts';
-import { CLE_DOSSIER_PROJET } from './elements.ts';
+import { CLE_DOSSIER_PROJET, CLE_PERIME_LE } from './elements.ts';
+import { estDate } from './fait.ts';
 import { CLE_PORTEE } from './portee.ts';
 import { dossierProjetPropose, porteeDeLieuProposee } from './rattachement.ts';
 import { CLE_A_TRAITER } from './source.ts';
@@ -14,9 +15,9 @@ import { motifTitre } from './titre.ts';
 /**
  * Ce qu'une modification change. `sections` : titre → texte (texte vide : la section est retirée ; absente : créée).
  * `traitee` : retire le marqueur `a_traiter` (la fiche a été traitée par l'archiviste). `dossier_projet` et `portee` : le
- * lien d'un dossier de projet vers ce lieu et la portée qu'il déclare (« » les retire). Jamais la section des informations
- * ni celle des relations (elles ont leurs propres propositions), jamais le frontmatter hors de `type`, `alias`, du titre, de
- * ce marqueur et de ces deux clés.
+ * lien d'un dossier de projet vers ce lieu et la portée qu'il déclare (« » les retire). `perime_le` : le jour où la fiche
+ * temporaire cesse d'être vraie (« » le retire). Jamais la section des informations ni celle des relations (elles ont leurs
+ * propres propositions), jamais le frontmatter hors de `type`, `alias`, du titre, de ce marqueur et de ces trois clés.
  */
 export type Cibles = {
 	synthese?: string;
@@ -27,6 +28,7 @@ export type Cibles = {
 	traitee?: true;
 	dossier_projet?: string;
 	portee?: string;
+	perime_le?: string;
 };
 
 /** Modification venue d'une session sur une fiche protégée, en attente de l'utilisateur (frontmatter). */
@@ -73,8 +75,14 @@ export function validerCibles(brut: {
 	traitee?: unknown;
 	dossier_projet?: unknown;
 	portee?: unknown;
+	perime_le?: unknown;
 }): Cibles | string {
 	const cibles: Cibles = {};
+	if (brut.perime_le !== undefined) {
+		const jour = typeof brut.perime_le === 'string' ? brut.perime_le.trim() : null;
+		if (jour === null || (jour !== '' && !estDate(jour))) return `« ${CLE_PERIME_LE} » est une date AAAA-MM-JJ (le jour où la fiche cesse d'être vraie), ou « » pour la retirer.`;
+		cibles.perime_le = jour;
+	}
 	if (brut.dossier_projet !== undefined) {
 		const lu = dossierProjetPropose(brut.dossier_projet);
 		if ('motif' in lu) return lu.motif;
@@ -137,7 +145,7 @@ export function validerCibles(brut: {
 		cibles.alias = alias;
 	}
 	return Object.keys(cibles).length === 0
-		? `Rien à modifier : donne « synthese », « sections », « type », « titre », « alias », « traitee », « ${CLE_DOSSIER_PROJET} » ou « ${CLE_PORTEE} ».`
+		? `Rien à modifier : donne « synthese », « sections », « type », « titre », « alias », « traitee », « ${CLE_DOSSIER_PROJET} », « ${CLE_PORTEE} » ou « ${CLE_PERIME_LE} ».`
 		: cibles;
 }
 
@@ -152,6 +160,7 @@ export function nomsDesCibles(cibles: Cibles): string[] {
 	if (cibles.traitee !== undefined) noms.push('traitee');
 	if (cibles.dossier_projet !== undefined) noms.push(CLE_DOSSIER_PROJET);
 	if (cibles.portee !== undefined) noms.push(CLE_PORTEE);
+	if (cibles.perime_le !== undefined) noms.push(CLE_PERIME_LE);
 	return noms;
 }
 
@@ -213,7 +222,7 @@ export function appliquerCibles(fiche: Fiche, cibles: Cibles): { fiche: Fiche; c
 		delete nouvelle.donnees[CLE_A_TRAITER];
 		changements.push('à traiter : marqueur retiré');
 	}
-	for (const cle of [CLE_DOSSIER_PROJET, CLE_PORTEE] as const) {
+	for (const cle of [CLE_DOSSIER_PROJET, CLE_PORTEE, CLE_PERIME_LE] as const) {
 		const vise = cibles[cle];
 		if (vise === undefined) continue;
 		const actuel = typeof fiche.donnees[cle] === 'string' ? (fiche.donnees[cle] as string) : '';

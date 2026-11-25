@@ -1,5 +1,6 @@
 import { CLES_DE_CONSIGNE } from '../../domaine/consigne.ts';
-import { CLE_DOSSIER_PROJET, estTypeDeLieu, TYPES_DE_LIEU_EN_CLAIR } from '../../domaine/elements.ts';
+import { CLE_DOSSIER_PROJET, CLE_PERIME_LE, estTypeDeLieu, TYPES_DE_LIEU_EN_CLAIR } from '../../domaine/elements.ts';
+import { estDate } from '../../domaine/fait.ts';
 import { CLE_PORTEE } from '../../domaine/portee.ts';
 import { dossierProjetPropose, porteeDeLieuProposee } from '../../domaine/rattachement.ts';
 import { CLES_RESERVEES, ecrireFiche, lireFiche } from '../../domaine/fiche.ts';
@@ -15,7 +16,7 @@ const TYPES_PROTEGES: readonly string[] = ['consigne', 'profil'];
 /** Données qui désignent un épisode (`session`, `projet`) ou une note amorcée (`origine`), où qu'ils soient rangés : écrites par Mnemo seul. */
 const CLES_D_IDENTIFICATION: readonly string[] = ['session', 'projet', 'origine'];
 
-/** Motif de refus du lien de lieu donné dans les données (`dossier_projet`, `portee` : mêmes valeurs qu'une modification), sinon null. */
+/** Motif de refus des clés données dans les données (`dossier_projet`, `portee`, `perime_le` : mêmes valeurs qu'une modification), sinon null. */
 function motifDuLien(type: TypeFiche, donnees: Record<string, unknown>): string | null {
 	if (Object.hasOwn(donnees, CLE_DOSSIER_PROJET)) {
 		const lu = dossierProjetPropose(donnees[CLE_DOSSIER_PROJET]);
@@ -27,6 +28,10 @@ function motifDuLien(type: TypeFiche, donnees: Record<string, unknown>): string 
 		const lue = porteeDeLieuProposee(donnees[CLE_PORTEE]);
 		if ('motif' in lue) return lue.motif;
 		if (lue.valeur !== donnees[CLE_PORTEE]) return `« ${CLE_PORTEE} » : écris-la « ${lue.valeur} ».`;
+	}
+	if (Object.hasOwn(donnees, CLE_PERIME_LE)) {
+		const jour = donnees[CLE_PERIME_LE];
+		if (typeof jour !== 'string' || !estDate(jour)) return `« ${CLE_PERIME_LE} » est une date AAAA-MM-JJ : le jour où la fiche temporaire cesse d'être vraie.`;
 	}
 	return null;
 }

@@ -5,6 +5,7 @@
  */
 import { DOSSIERS_FIXES, EXTENSIONS_EXTRAITES, extensionDe, plier } from '@mnemo/commun';
 import { cleDeCasse, ficheDeDossier, nomDeLaFiche, positionDeFiche } from './chemin.ts';
+import { estExpire, perimeLeDe } from './elements.ts';
 import { empreinte } from './empreinte.ts';
 import type { Fait } from './fait.ts';
 import type { Fiche } from './fiche.ts';
@@ -21,6 +22,7 @@ export const RUBRIQUES = [
 	'sous_seuil',
 	'a_confirmer',
 	'barrees',
+	'perimees',
 	'doublons',
 	'fiches_chargees',
 	'sources_en_double',
@@ -87,6 +89,8 @@ export type EntreeDiagnostic = {
 	categoriesAEnjeu: readonly string[];
 	/** Lots d'informations proposés, en attente de l'utilisateur (état local) ; absent : aucun. */
 	lots?: readonly Lot[];
+	/** Jour du diagnostic (`AAAA-MM-JJ`) : fiches temporaires et informations dont la validité est passée ; absent : aucune. */
+	aujourdhui?: string;
 };
 
 export type Diagnostic = {
@@ -294,6 +298,23 @@ function barrees(c: Contexte): string[] {
 	return faitsEntretenus(c).filter(({ fait }) => fait.barre).map((f) => `${idDe(f)} « ${extrait(f.fait.texte)} »`);
 }
 
+/**
+ * Fiches temporaires dont `perime_le` est passé (à supprimer, ou à prolonger si elles restent vraies), puis informations non
+ * barrées dont la validité est passée (à barrer ou à supprimer).
+ */
+function perimees(c: Contexte): string[] {
+	const jour = c.aujourdhui;
+	if (jour === undefined) return [];
+	const fiches = c.entretenues.flatMap((f) => {
+		const perimeLe = perimeLeDe(f.fiche);
+		return perimeLe !== null && estExpire({ valideFin: perimeLe, finIncluse: false }, jour) ? [`${f.chemin} : fiche temporaire, périmée depuis le ${perimeLe}`] : [];
+	});
+	const informations = faitsEntretenus(c)
+		.filter(({ fait }) => !fait.barre && fait.valideFin !== undefined && estExpire({ valideFin: fait.valideFin, finIncluse: fait.finIncluse }, jour))
+		.map((f) => `${idDe(f)} « ${extrait(f.fait.texte)} » : valide jusqu'au ${f.fait.valideFin}${f.fait.finIncluse ? ' inclus' : ' exclu'}`);
+	return [...fiches, ...informations];
+}
+
 function doublons(c: Contexte): string[] {
 	const entrees: string[] = [];
 	for (const f of c.entretenues) {
@@ -402,6 +423,7 @@ const CALCULS: Record<Rubrique, (c: Contexte) => string[]> = {
 	sous_seuil: sousSeuil,
 	a_confirmer: aConfirmer,
 	barrees,
+	perimees,
 	doublons,
 	fiches_chargees: fichesChargees,
 	sources_en_double: sourcesEnDouble,

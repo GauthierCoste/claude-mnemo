@@ -89,8 +89,9 @@ export const SKILLS_PAR_DEFAUT: Record<string, readonly SkillParDefaut[]> = {
 			'5. Un lien cassé ou faux (dans une source aussi) : `entretenir`, action `corriger_lien`, `ancien` → `nouveau` ; sans `nouveau`, le lien perd ses crochets.',
 			'6. Une fiche mal nommée ou mal rangée : `deplacer` (`nom` pour renommer) ; les liens suivent.',
 			'7. Les informations barrées restent : elles gardent l\'historique.',
-			'8. Plusieurs suppressions, fusions ou confirmations d\'informations : propose un lot (`entretenir`, action `proposer_lot`) que l\'utilisateur valide dans « À arbitrer », au lieu de les lui demander une par une. Une information faible : `corroborer` avec une seconde source ; une fiche de plus de 40 informations : `deplacer_informations`. Une faute de frappe, un nom mal écrit, une catégorie à reprendre (hors catégories à fort enjeu comme `montant`) : `retoucher_information` ; pour changer le sens d\'une information, `proposer` avec `remplace`.',
-			'9. Dis à l\'utilisateur ce que tu as fusionné ou supprimé : chaque action est un commit, que git peut défaire.',
+			'8. Une fiche temporaire ou une information périmée (rubrique `perimees` de `diagnostiquer`) : supprime la fiche (`entretenir`, action `supprimer`) ou barre l\'information, sauf si elle reste vraie : prolonge alors `perime_le` (`proposer`, genre `modification`). Dans le doute, demande à l\'utilisateur.',
+			'9. Plusieurs suppressions, fusions ou confirmations d\'informations : propose un lot (`entretenir`, action `proposer_lot`) que l\'utilisateur valide dans « À arbitrer », au lieu de les lui demander une par une. Une information faible : `corroborer` avec une seconde source ; une fiche de plus de 40 informations : `deplacer_informations`. Une faute de frappe, un nom mal écrit, une catégorie à reprendre (hors catégories à fort enjeu comme `montant`) : `retoucher_information` ; pour changer le sens d\'une information, `proposer` avec `remplace`.',
+			'10. Dis à l\'utilisateur ce que tu as fusionné ou supprimé : chaque action est un commit, que git peut défaire.',
 		]),
 	],
 };
@@ -128,25 +129,37 @@ export const ANCIENNES_SKILLS: Record<string, readonly SkillParDefaut[]> = {
 			'8. Dis à l\'utilisateur ce que tu as fusionné ou supprimé : chaque action est un commit, que git peut défaire.',
 		]),
 		// avant la répartition d'une source par destination (chantier « écriture de la mémoire »)
-			skill('emails', 'Ranger un email ou un fil d\'emails (.eml, .mbox) dans la mémoire Mnemo.', [
-				'1. `extraire_source` sur le fichier, avec `type` `email`. Un `.mbox` donne une fiche par fil.',
-				'2. Lis chaque fil : qui écrit, à qui, quand, à propos de quel projet ou client.',
-				'3. Ne garde que ce qui dure : décisions, engagements, montants, échéances, coordonnées, rôles. Laisse les politesses et le texte cité.',
-				'4. Pour chaque information, `chercher` d\'abord, puis `proposer` avec la citation exacte et la source du fil.',
-				'5. Une pièce jointe utile a sa propre fiche source : traite-la avec la skill de son type.',
-			]),
-			skill('specs', 'Ranger une spécification, un cahier des charges ou un document de conception dans la mémoire Mnemo.', [
-				'1. `extraire_source` sur le document ; `type` `spec_validee` seulement si l\'utilisateur confirme qu\'elle est validée.',
-				'2. Repère le projet et le module concernés ; range la fiche du projet dans l\'arbre s\'il le faut.',
-				'3. Extrais le périmètre, les exigences, les choix techniques et les échéances, une information par ligne, chacune avec sa citation.',
-				'4. Une nouvelle version d\'une spec : passe la fiche source de la précédente dans `version_de`, et signale ce qui change.',
-			]),
-			skill('comptes-rendus', 'Ranger un compte rendu de réunion dans la mémoire Mnemo.', [
-				'1. `extraire_source` sur le compte rendu, avec `type` `compte_rendu`.',
-				'2. Note la date, les participants (fiches de personnes, alias compris) et les projets abordés.',
-				'3. Extrais les décisions, les actions (qui, quoi, pour quand) et les points ouverts, chacun avec sa citation.',
-				'4. Une décision qui en contredit une plus ancienne : propose-la avec `remplace` et signale la contradiction.',
-			]),
+		skill('emails', 'Ranger un email ou un fil d\'emails (.eml, .mbox) dans la mémoire Mnemo.', [
+			'1. `extraire_source` sur le fichier, avec `type` `email`. Un `.mbox` donne une fiche par fil.',
+			'2. Lis chaque fil : qui écrit, à qui, quand, à propos de quel projet ou client.',
+			'3. Ne garde que ce qui dure : décisions, engagements, montants, échéances, coordonnées, rôles. Laisse les politesses et le texte cité.',
+			'4. Pour chaque information, `chercher` d\'abord, puis `proposer` avec la citation exacte et la source du fil.',
+			'5. Une pièce jointe utile a sa propre fiche source : traite-la avec la skill de son type.',
+		]),
+		skill('specs', 'Ranger une spécification, un cahier des charges ou un document de conception dans la mémoire Mnemo.', [
+			'1. `extraire_source` sur le document ; `type` `spec_validee` seulement si l\'utilisateur confirme qu\'elle est validée.',
+			'2. Repère le projet et le module concernés ; range la fiche du projet dans l\'arbre s\'il le faut.',
+			'3. Extrais le périmètre, les exigences, les choix techniques et les échéances, une information par ligne, chacune avec sa citation.',
+			'4. Une nouvelle version d\'une spec : passe la fiche source de la précédente dans `version_de`, et signale ce qui change.',
+		]),
+		skill('comptes-rendus', 'Ranger un compte rendu de réunion dans la mémoire Mnemo.', [
+			'1. `extraire_source` sur le compte rendu, avec `type` `compte_rendu`.',
+			'2. Note la date, les participants (fiches de personnes, alias compris) et les projets abordés.',
+			'3. Extrais les décisions, les actions (qui, quoi, pour quand) et les points ouverts, chacun avec sa citation.',
+			'4. Une décision qui en contredit une plus ancienne : propose-la avec `remplace` et signale la contradiction.',
+		]),
+		// avant les fiches temporaires (`perime_le`)
+		skill('menage', 'Faire le ménage dans la mémoire Mnemo : doublons, fiches inutiles, liens cassés ou faux, fiches mal nommées.', [
+			'1. Si la mémoire a une fiche de ménage (« Ménage de la mémoire »), lis-la d\'abord pour t\'en aider : elle dit ce que l\'utilisateur veut garder, fusionner ou retirer.',
+			'2. Commence le ménage par `diagnostiquer` : liens cassés, doublons probables, fiches isolées ou mal nommées, chemins et ancres. Puis repère ce qui cite une fiche : `chercher` signale les copies, `voisins` montre les liens entrants.',
+			'3. Deux fiches qui décrivent la même chose : `entretenir`, action `fusionner`, la moins complète `dans` l\'autre. Informations, sections, relations et alias sont versés, les liens réécrits, la fiche absorbée supprimée.',
+			'4. Une fiche inutile : `entretenir`, action `supprimer`. Si d\'autres fiches la citent, le refus les liste : donne une `redirection` vers la fiche qui la remplace, ou corrige ces liens d\'abord. Une note importée de Claude Code (propriété `origine` en `claude-code/…`) supprimée sans `redirection` revient au prochain import tant qu\'elle existe dans Claude Code : donne une `redirection` (ou fusionne-la) ; l\'import la tient alors pour connue tant qu\'elle ne change pas.',
+			'5. Un lien cassé ou faux (dans une source aussi) : `entretenir`, action `corriger_lien`, `ancien` → `nouveau` ; sans `nouveau`, le lien perd ses crochets.',
+			'6. Une fiche mal nommée ou mal rangée : `deplacer` (`nom` pour renommer) ; les liens suivent.',
+			'7. Les informations barrées restent : elles gardent l\'historique.',
+			'8. Plusieurs suppressions, fusions ou confirmations d\'informations : propose un lot (`entretenir`, action `proposer_lot`) que l\'utilisateur valide dans « À arbitrer », au lieu de les lui demander une par une. Une information faible : `corroborer` avec une seconde source ; une fiche de plus de 40 informations : `deplacer_informations`. Une faute de frappe, un nom mal écrit, une catégorie à reprendre (hors catégories à fort enjeu comme `montant`) : `retoucher_information` ; pour changer le sens d\'une information, `proposer` avec `remplace`.',
+			'9. Dis à l\'utilisateur ce que tu as fusionné ou supprimé : chaque action est un commit, que git peut défaire.',
+		]),
 	],
 };
 

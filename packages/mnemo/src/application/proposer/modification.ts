@@ -27,6 +27,7 @@ export type DemandeModification = {
 	traitee?: boolean;
 	dossier_projet?: string;
 	portee?: string;
+	perime_le?: string;
 	appliquerProposition?: boolean;
 	retirerProposition?: boolean;
 	source: SourceProposee;

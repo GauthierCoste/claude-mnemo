@@ -184,7 +184,7 @@ describe('assemblerPlugin', () => {
 
 	it('rappel : une skill par défaut modifiée doit rejoindre ANCIENNES_SKILLS', () => {
 		const message = 'skill par défaut modifiée : ajoutez l\'ancienne à ANCIENNES_SKILLS puis mettez à jour cette empreinte';
-		expect(empreinte(SKILLS_PAR_DEFAUT.archiviste!.map((s) => s.texte).join('\n')), message).toBe('c6c0eaef5f6ea8cc');
+		expect(empreinte(SKILLS_PAR_DEFAUT.archiviste!.map((s) => s.texte).join('\n')), message).toBe('dbfb3da3905f2842');
 	});
 
 	it('enabledPlugins : vrai pour les plugins du profil installés, faux pour tous les autres installés', async () => {
