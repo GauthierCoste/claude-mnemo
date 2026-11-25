@@ -9,7 +9,7 @@ import { serviceVivant } from './service.ts';
 const USAGE = `Usage :
   mnemo sessions                                              sessions en cours
   mnemo session lancer <dossier> [--profil p] [--objectif t]  lance une session (dossier relatif à la racine)
-  mnemo session terminer <id> [--sans-bilan]                  bilan (Claude écrit l'épisode), ou abandon
+  mnemo session terminer <id> [--sans-bilan]                  bilan (l'agent écrit l'épisode), ou abandon
   mnemo session voir <id>                                     terminal de la session (Ctrl-] pour quitter)
 <id> : l'identifiant de la session, ou son début (8 caractères suffisent).`;
 
@@ -110,7 +110,7 @@ async function terminer(args: string[]): Promise<void> {
 	const route = (sansBilan ? ROUTES.abandon : ROUTES.bilan).replace(':id', session.id);
 	const r = await appeler<{ session: SessionVue }>(s, route, {}, DELAI_BILAN_MS);
 	console.log(ligne(r.session));
-	if (!sansBilan && r.session.etat !== 'terminee') console.log('Bilan demandé : Claude écrit l’épisode, puis la session s’arrête.');
+	if (!sansBilan && r.session.etat !== 'terminee') console.log('Bilan demandé : l’agent écrit l’épisode, puis la session s’arrête.');
 }
 
 /** Terminal de la session dans ce terminal (mode brut), par le WebSocket du service ; Ctrl-] quitte. */

@@ -35,12 +35,21 @@ type Etat = { editable: ProfilEditableVue; consigneParDefaut: string; ecrit: boo
 
 export function creerProfilsDemo() {
 	const profils = new Map<string, Etat>([
-		[PROFIL_TRAVAIL, { editable: { avatar: { forme: 'robot', couleur: 'vert' }, consigne: null, lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: 'tous', plugins: [] }, consigneParDefaut: CONSIGNE_TRAVAIL, ecrit: true, version: 1 }],
-		[PROFIL_ARCHIVISTE, { editable: { avatar: { forme: 'chouette', couleur: 'violet' }, consigne: null, lancement: 'memoire', hooks: ['debut', 'arret', 'fin'], skillsMemoire: [], plugins: [] }, consigneParDefaut: CONSIGNE_ARCHIVISTE, ecrit: false, version: 1 }],
+		[PROFIL_TRAVAIL, { editable: { avatar: { forme: 'robot', couleur: 'vert' }, consigne: null, lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: 'tous', plugins: [], moteur: 'claude-code', modele: '' }, consigneParDefaut: CONSIGNE_TRAVAIL, ecrit: true, version: 1 }],
+		[PROFIL_ARCHIVISTE, { editable: { avatar: { forme: 'chouette', couleur: 'violet' }, consigne: null, lancement: 'memoire', hooks: ['debut', 'arret', 'fin'], skillsMemoire: [], plugins: [], moteur: 'claude-code', modele: '' }, consigneParDefaut: CONSIGNE_ARCHIVISTE, ecrit: false, version: 1 }],
 		[
 			'redaction',
 			{
-				editable: { avatar: { forme: 'renard', couleur: 'ambre' }, consigne: 'Rédige les courriers aux clients, au ton de la maison.', lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: ['relecture'], plugins: ['superpowers@superpowers-marketplace', 'ancien@marketplace'] },
+				editable: { avatar: { forme: 'renard', couleur: 'ambre' }, consigne: 'Rédige les courriers aux clients, au ton de la maison.', lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: ['relecture'], plugins: ['superpowers@superpowers-marketplace', 'ancien@marketplace'], moteur: 'claude-code', modele: '' },
+				consigneParDefaut: CONSIGNE_TRAVAIL,
+				ecrit: true,
+				version: 1,
+			},
+		],
+		[
+			'revue-code',
+			{
+				editable: { avatar: { forme: 'chat', couleur: 'bleu' }, consigne: 'Relis le code proposé et signale les risques avant toute fusion.', lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: 'tous', plugins: [], moteur: 'codex', modele: 'gpt-6.2-sol' },
 				consigneParDefaut: CONSIGNE_TRAVAIL,
 				ecrit: true,
 				version: 1,
@@ -71,6 +80,8 @@ export function creerProfilsDemo() {
 						lanceur: nom === PROFIL_ARCHIVISTE ? 'propre' : 'dialogue',
 						avatar: e.editable.avatar,
 						personnalise: e.editable.consigne !== null,
+						moteur: e.editable.moteur,
+						modele: e.editable.modele,
 					})),
 				ignores: [],
 				avertissements: [],
@@ -100,6 +111,8 @@ export function creerProfilsDemo() {
 			const e = profils.get(nom);
 			if ((e === undefined ? null : empreinte(nom, e)) !== lue) throw new ErreurApi('La fiche du profil a changé depuis son ouverture : rechargez-la.', 409);
 			if (editable.hooks.length === 0) throw new ErreurApi('Profil refusé : au moins un événement, parmi ceux de Mnemo', 400);
+			if (editable.moteur !== 'claude-code' && editable.plugins.length > 0) throw new ErreurApi('Profil refusé : les plugins ne valent que pour Claude Code', 400);
+			if (editable.moteur !== 'claude-code' && nom === PROFIL_ARCHIVISTE) throw new ErreurApi('Profil refusé : l’archiviste reste sur Claude Code', 400);
 			const garde = editable.consigne !== null && editable.consigne.trim() === (e?.consigneParDefaut ?? CONSIGNE_TRAVAIL).trim() ? { ...editable, consigne: null } : editable;
 			if (e !== undefined && JSON.stringify(e.editable) === JSON.stringify(garde) && e.ecrit) return { commit: null };
 			profils.set(nom, { editable: structuredClone(garde), consigneParDefaut: e?.consigneParDefaut ?? CONSIGNE_TRAVAIL, ecrit: true, version: (e?.version ?? 0) + 1 });
@@ -126,13 +139,35 @@ export function creerProfilsDemo() {
 			const e = etat(nom);
 			const d = e.editable;
 			const retenue = (s: string) => d.skillsMemoire === 'tous' || d.skillsMemoire.includes(s);
+			const codex = d.moteur === 'codex';
+			const titreConsigne = d.consigne === null ? 'Consigne du profil (par défaut)' : 'Consigne du profil (personnalisée)';
+			// Codex : la consigne reçue porte la liste des skills, lues par l'outil `lire` (comme le service)
+			const listeSkills = SKILLS_MEMOIRE.filter((s) => retenue(s.nom)).map((s) => `- ${s.nom} : ${s.description} (\`skills/${s.nom}/SKILL.md\`)`);
+			const texteCodex = [consigne(e).trim(), '', '## Skills de Mnemo', '', 'Ces skills sont dans la mémoire Mnemo, pas sur le disque du projet. Quand l’une s’applique à ta tâche, lis d’abord son `SKILL.md` avec l’outil `lire` de Mnemo (identifiant entre parenthèses), puis suis-la.', '', ...listeSkills, ''].join('\n');
 			const blocs: BlocApercuVue[] = [
-				{ origine: 'profil', titre: d.consigne === null ? 'Consigne du profil (par défaut)' : 'Consigne du profil (personnalisée)', reglable: true, texte: `${consigne(e)}\n` },
+				codex
+					? { origine: 'profil', titre: `${titreConsigne}, avec la liste des skills`, reglable: true, texte: texteCodex }
+					: { origine: 'profil', titre: titreConsigne, reglable: true, texte: `${consigne(e)}\n` },
 				{ origine: 'mnemo', titre: 'Instructions du serveur MCP Mnemo', reglable: false, texte: 'Consigne et contexte injectés par la session Mnemo.' },
 				{ origine: 'mnemo', titre: 'Hooks de Mnemo', reglable: true, elements: d.hooks.map((h) => ({ nom: h, detail: '', actif: true })) },
-				{ origine: 'memoire', titre: 'Skills de la mémoire', reglable: true, elements: SKILLS_MEMOIRE.map((s) => ({ nom: s.nom, detail: retenue(s.nom) ? s.description : `${s.description} — non retenue par le profil`, actif: retenue(s.nom) })) },
-				{ origine: 'plugin', titre: 'Plugins Claude Code', reglable: true, elements: PLUGINS.map((p) => ({ nom: p.id, detail: `version ${p.version}`, actif: d.plugins.includes(p.id) })) },
-				{ origine: 'hors_mnemo', titre: 'Hors Mnemo', reglable: false, elements: [{ nom: 'CLAUDE.md', detail: 'instructions de l’utilisateur et du projet, lues par Claude Code', actif: true }] },
+				{
+					origine: 'memoire',
+					titre: codex ? 'Skills de la mémoire (listées dans la consigne, lues par l’outil lire)' : 'Skills de la mémoire',
+					reglable: true,
+					elements: SKILLS_MEMOIRE.map((s) => ({ nom: s.nom, detail: retenue(s.nom) ? s.description : `${s.description} — non retenue par le profil`, actif: retenue(s.nom) })),
+				},
+				...(codex ? [] : [{ origine: 'plugin', titre: 'Plugins Claude Code', reglable: true, elements: PLUGINS.map((p) => ({ nom: p.id, detail: `version ${p.version}`, actif: d.plugins.includes(p.id) })) } satisfies BlocApercuVue]),
+				{
+					origine: 'hors_mnemo',
+					titre: 'Hors Mnemo',
+					reglable: false,
+					elements: codex
+						? [
+								{ nom: 'AGENTS.md', detail: 'instructions de l’utilisateur et du projet, lues par Codex', actif: true },
+								{ nom: 'Skills de Codex', detail: 'skills du dépôt et de l’utilisateur (~/.agents/skills/), lues par Codex', actif: true },
+							]
+						: [{ nom: 'CLAUDE.md', detail: 'instructions de l’utilisateur et du projet, lues par Claude Code', actif: true }],
+				},
 				{ origine: 'systeme', titre: 'Consigne du bilan', reglable: false, texte: 'Mnemo : bilan de fin de session. Rédige l’épisode de cette session avec l’outil proposer, genre « episode »…' },
 			];
 			const absents = d.plugins.filter((id) => !PLUGINS.some((p) => p.id === id));

@@ -11,10 +11,18 @@ import type { Session } from '../../domaine/session.ts';
 
 /**
  * Ce que l'API montre d'une session : les champs du contrat, rien de plus (ni pid, ni trace du processus, ni arrêt attendu).
- * `terminal` : un terminal de ce service est attaché à la session. `suggestions` : fiches écartées par la session que la règle
- * des 3 sessions propose d'écarter toujours (champ absent s'il n'y en a pas).
+ * `terminal` : un terminal de ce service est attaché à la session ; `sansReprise` : pourquoi son moteur ne peut ni la mettre
+ * en pause ni la reprendre (`Pilote.motifSansReprise`), ignoré pour une session terminée. `moteur` et `modele` : seulement
+ * s'ils sont enregistrés (absents : Claude Code, modèle par défaut). `suggestions` : fiches écartées par la session que la
+ * règle des 3 sessions propose d'écarter toujours (champ absent s'il n'y en a pas).
  */
-export function vueSession(s: Session, terminal: boolean, suggestions: readonly SuggestionEcarteeToujours[] = [], coupures: readonly CoupureInjectionVue[] = []): SessionVue {
+export function vueSession(
+	s: Session,
+	terminal: boolean,
+	sansReprise: string | null = null,
+	suggestions: readonly SuggestionEcarteeToujours[] = [],
+	coupures: readonly CoupureInjectionVue[] = [],
+): SessionVue {
 	return {
 		id: s.id,
 		profil: s.profil,
@@ -32,6 +40,9 @@ export function vueSession(s: Session, terminal: boolean, suggestions: readonly 
 		terminal,
 		dialogueOuvert: dialogueOuvert(s),
 		niveauModeles: s.niveauModeles ?? null,
+		...(s.moteur === undefined ? {} : { moteur: s.moteur }),
+		...(s.modele === undefined || s.modele === '' ? {} : { modele: s.modele }),
+		...(sansReprise === null || s.etat === 'terminee' ? {} : { sansReprise }),
 		...(suggestions.length === 0 ? {} : { suggestionsEcarteeToujours: suggestions.map(vueSuggestion) }),
 		...(coupures.length === 0 ? {} : { injectionCoupee: [...coupures] }),
 	};

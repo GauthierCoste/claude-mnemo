@@ -7,13 +7,15 @@ import type { Passage, PassageCompact } from '../domaine/passages.ts';
 import type { Reglages } from '../domaine/reglages.ts';
 import type { InjectionManuelle } from '../domaine/signal-injection.ts';
 import type { DecisionLot, Lot, LotDecide } from '../domaine/lot.ts';
-import type { EtatIndicateur } from '../domaine/refus-outil.ts';
+import type { CauseNonVerifiee, EtatIndicateur } from '../domaine/refus-outil.ts';
 import type { Geste, GesteCompte, NoteDuGeste, OrigineGeste } from '../domaine/gestes.ts';
 import type { SignauxBruts } from '../domaine/signaux-de-note.ts';
 import type { CoefficientsNote, IdentiteDesModeles } from '../domaine/modele-de-note.ts';
 import type { TypeSource } from '../domaine/regles.ts';
-import type { FichierPlugin } from './plugin.ts';
-import type { AppelPlugin } from './plugin.ts';
+import type { FenetreDeContexte, IdMoteur, OutilsDuMoteur, TouchesDuMoteur } from '../domaine/moteurs/moteur.ts';
+import type { Profil } from '../domaine/profil.ts';
+import type { Quotas } from '../domaine/quotas.ts';
+import type { EntreeHook, ReponseHook } from './evenements.ts';
 
 export interface Coffre {
 	/** Contenu du fichier, ou null s'il n'existe pas. */
@@ -726,13 +728,14 @@ export interface EtatSessions {
 	/**
 	 * Applique l'événement seulement si `horodatageMs` > `majMs` ; rend la session après (inchangée si ignoré), null si inconnue.
 	 * Le premier `message` après `bilanDemandeMs` d'une session en bilan note `bilanLuMs`. `arret` note `dernierArret`
-	 * (`complement.arret`, `stop` par défaut) ; `debut`, `message` et `outil` l'effacent.
+	 * (`complement.arret`, `stop` par défaut) ; `debut`, `message` et `outil` l'effacent. `complement.fil` (identifiant de la
+	 * session chez son moteur) est noté au premier événement qui le porte, même ignoré par ailleurs, et jamais écrasé ensuite.
 	 */
 	appliquer(
 		id: string,
 		e: EvenementHook,
 		horodatageMs: number,
-		complement?: { objectif?: string; commitDebut?: string | null; branche?: string | null; arret?: CauseArret },
+		complement?: { objectif?: string; commitDebut?: string | null; branche?: string | null; arret?: CauseArret; fil?: string },
 	): Promise<Session | null>;
 	/**
 	 * Une session `terminee` garde son `etat` et son `arretAttendu` (les autres champs restent modifiables). `niveauModeles` :
@@ -878,8 +881,11 @@ export interface Depot {
 	statuts(dossier: string, limite: number): Promise<{ fichiers: { chemin: string; statut: 'M' | 'A' | 'D' }[]; total: number } | null>;
 }
 
-/** Lancement d'un processus dans un pseudo-terminal : jamais par un shell. `dossier` : absolu. */
-export type OptionsTerminal = { commande: string; args: string[]; dossier: string; env: Record<string, string>; colonnes: number; lignes: number };
+/**
+ * Lancement d'un processus dans un pseudo-terminal : jamais par un shell. `dossier` : absolu. `touches` : celles du moteur
+ * lancé (arrêt, Échap) ; absentes : celles de Claude Code.
+ */
+export type OptionsTerminal = { commande: string; args: string[]; dossier: string; env: Record<string, string>; colonnes: number; lignes: number; touches?: TouchesDuMoteur };
 
 /** Un processus dans un pseudo-terminal (il mène son groupe de processus sous POSIX). */
 export interface Terminal {
@@ -891,17 +897,13 @@ export interface Terminal {
 	/** `code` : null si le processus a été tué par un signal. Appelée aussitôt s'il est déjà fini. */
 	surFin(f: (code: number | null) => void): void;
 	/**
-	 * Ctrl-U puis `/exit`, puis SIGTERM au groupe après `delaiMs`, puis SIGKILL 3 s plus tard ; résout quand le processus est
-	 * mort. `echap` (un dialogue de permission est peut-être ouvert) : Échap d'abord, puis `PAUSE_APRES_ECHAP_MS`.
+	 * Touche d'arrêt du moteur (`touches.arret` du lancement, puis `entree`), puis SIGTERM au groupe après `delaiMs`, puis
+	 * SIGKILL 3 s plus tard ; résout quand le processus est mort. `echap` (un dialogue de permission est peut-être ouvert) :
+	 * Échap d'abord, puis `touches.pauseApresEchapMs`. `sansTouche` : aucune touche (l'écran du moteur pose peut-être une
+	 * question à l'utilisateur, à laquelle une Entrée répondrait) : SIGTERM au groupe aussitôt, puis SIGKILL.
 	 */
-	arreter(delaiMs?: number, options?: { echap?: boolean }): Promise<void>;
+	arreter(delaiMs?: number, options?: { echap?: boolean; sansTouche?: boolean }): Promise<void>;
 }
-
-/**
- * Après un Échap envoyé pour fermer un dialogue de Claude Code (permission), avant toute autre touche. Un seul Échap, et
- * seulement quand le dernier arrêt est une `Notification` : deux Échap de suite ouvrent le retour arrière de Claude Code.
- */
-export const PAUSE_APRES_ECHAP_MS = 150;
 
 export interface Terminaux {
 	/** `ok: false` : mode dégradé (node-pty absent ou illoadable), avec le motif lisible. */
@@ -909,10 +911,250 @@ export interface Terminaux {
 	lancer(o: OptionsTerminal): Terminal;
 }
 
+/** Commande qui lance un moteur, jamais par un shell : `commande`, puis `avant`, puis les arguments de la session. */
+export type CommandeMoteur = { commande: string; avant: string[] };
+
 /**
- * Ce que le service pilote. `plugin` : écriture du plugin d'une session (rend son dossier absolu), son retrait (session
- * retirée de l'historique ; absent : rien à faire), appel des hooks
- * (`<node> <main.ts> hook …`), commande de `claude` (null : introuvable), racine absolue du dossier Mnemo. `hote` : ce que
+ * Réglages d'une exécution : dossier courant, environnement complet (remplace celui du processus), délai avant de tuer,
+ * signal d'abandon (levé : le processus est tué, la promesse rejette).
+ */
+export type OptionsExecution = { cwd?: string; env?: Record<string, string>; delaiMs?: number; signal?: AbortSignal };
+/** Lance un programme sans shell : rend son code de sortie ; rejette s'il ne se lance pas, ne répond pas à temps ou est abandonné. */
+export type Executer = (commande: string, args: string[], options?: OptionsExecution) => Promise<{ code: number; sortie: string; erreur: string }>;
+
+/** Portée d'une déclaration MCP chez Claude Code (Codex n'en a qu'une : l'utilisateur). */
+export type PorteeMcp = 'user' | 'local' | 'project';
+
+/**
+ * Déclaration du serveur `mnemo` (`declarer`). `deja` : déclaré avec cette commande ; `perime` : déclaré avec un autre Node
+ * ou un autre `main.ts` (mise à jour de Node, dépôt déplacé) — jamais retiré d'office (`remplacable` : c'est une
+ * déclaration de Mnemo de portée utilisateur, que `mnemo declarer --remplacer` refait ; `portee`, `scope` : Claude Code) ;
+ * `desactive` : déclarée mais désactivée chez le moteur (Codex : `enabled = false`), laissée telle quelle ; sinon : échec,
+ * commande manuelle.
+ */
+export type ResultatDeclaration = 'declare' | 'deja' | 'desactive' | { perime: true; manuel: string; portee?: string; scope?: PorteeMcp; remplacable?: boolean } | { manuel: string; introuvable: boolean; raison: string };
+
+/**
+ * `absent` : aucune déclaration `mnemo` (rien n'est déclaré) ; `deja` : elle lance déjà ce Node et ce `main.ts` ; `remplace` :
+ * une déclaration de Mnemo de portée utilisateur qui lançait un autre Node ou un autre `main.ts`, refaite ;
+ * `autre` : une déclaration `mnemo` qui ne lance pas Mnemo, ou d'une autre portée : laissée.
+ */
+export type ResultatRedeclaration = 'absent' | 'deja' | 'remplace' | 'autre' | { echec: string };
+/** `retire` : retirée ; `autre` : elle ne lance pas ce Mnemo (ou d'une autre portée) : laissée. */
+export type ResultatRetraitMcp = 'absent' | 'retire' | 'autre' | { echec: string };
+/**
+ * Déclaration lue, sans rien changer : `deja` : elle lance ce Node et ce `main.ts` ; `perime` : une déclaration de Mnemo de
+ * portée utilisateur qui lance un autre Node ou un autre `main.ts` (`remplacer` la refait) ; `autre` : une déclaration
+ * `mnemo` qui ne lance pas Mnemo, ou d'une autre portée ; `desactive` : désactivée chez le moteur (Codex : `enabled =
+ * false`), jamais réactivée par Mnemo.
+ */
+export type LectureDeclaration = 'absent' | 'deja' | 'perime' | 'autre' | 'desactive' | { echec: string };
+
+/**
+ * Ce que reçoit la déclaration : l'exécuteur, le `main.ts` de Mnemo, la commande du moteur (null : introuvable), la
+ * plateforme, l'environnement de l'utilisateur (où le moteur garde sa configuration : `CODEX_HOME`) et `delaiMs`, le délai
+ * de chaque commande du moteur (absent : celui de l'exécuteur).
+ */
+export type AppelDeclaration = { executer: Executer; main: string; commande: CommandeMoteur | null; plateforme: string; env: Record<string, string | undefined>; delaiMs?: number };
+
+/**
+ * Le serveur MCP `mnemo` déclaré au niveau de l'utilisateur chez un moteur, par sa propre ligne de commande : toute session
+ * de ce moteur, lancée ou non par Mnemo, lit et écrit la mémoire. Une déclaration existante n'est jamais remplacée par
+ * `declarer` ; `remplacer` ne refait qu'une déclaration de Mnemo, `retirer` ne retire que celle de ce Node et ce `main.ts`.
+ */
+export type DeclarationMcp = {
+	/** Ligne à copier-coller pour déclarer à la main (chemins cités pour POSIX ou PowerShell). */
+	manuelle(node: string, main: string, plateforme: string): string;
+	lire(a: AppelDeclaration): Promise<LectureDeclaration>;
+	declarer(a: AppelDeclaration): Promise<ResultatDeclaration>;
+	remplacer(a: AppelDeclaration): Promise<ResultatRedeclaration>;
+	retirer(a: AppelDeclaration): Promise<ResultatRetraitMcp>;
+};
+
+/** Ce que reçoivent les hooks du poste : le Node et le `main.ts` que les hooks lancent, l'environnement de l'utilisateur (`CODEX_HOME`). */
+export type AppelHooksDuPoste = { node: string; main: string; env: Record<string, string | undefined> };
+
+/** Approbation des hooks par l'utilisateur chez le moteur (Codex : `/hooks`), lue sans rien changer. */
+export type ApprobationHooksDuPoste = { etat: 'approuves' | 'a_approuver' | 'inconnu'; motif: string };
+
+/**
+ * Hooks de Mnemo lus : `a_jour` (ceux de ce Node et ce `main.ts`), `perime` (des hooks de Mnemo, mais pas ceux-là), `absent` ;
+ * `chemin` : le fichier lu ; `approbation` : seulement s'ils sont à jour.
+ */
+export type LectureHooksDuPoste = { etat: 'a_jour' | 'perime' | 'absent'; chemin: string; approbation?: ApprobationHooksDuPoste } | { echec: string };
+/**
+ * `installe` : il n'y en avait pas ; `mis_a_jour` : ceux de cette installation complétés ou refaits ; `deja` : rien à changer ;
+ * échec `perime` : des hooks d'une autre installation de Mnemo, laissés (`remplacer` les reprend).
+ */
+export type ResultatInstallationHooks = 'installe' | 'mis_a_jour' | 'deja' | { echec: string; perime?: true };
+/** Comme `ResultatInstallationHooks`, sans jamais installer : `absent` s'il n'y a aucun hook de Mnemo. */
+export type ResultatRemplacementHooks = 'absent' | 'mis_a_jour' | 'deja' | { echec: string };
+/** `autre` : des hooks de Mnemo d'une autre installation (autre Node, autre Mnemo) : laissés. */
+export type ResultatRetraitHooks = 'absent' | 'retire' | 'autre' | { echec: string };
+
+/**
+ * Hooks de Mnemo installés pour tout le poste chez un moteur qui ne les prend pas d'un plugin de session (Codex :
+ * `~/.codex/hooks.json`). Jamais une autre entrée touchée ; un fichier illisible n'est jamais réécrit. `installer` et
+ * `remplacer` refont les hooks de Mnemo (`installer` : seulement ceux de cette installation) ; `retirer` ne retire que ceux
+ * de ce Node et ce `main.ts`.
+ */
+export type HooksDuPoste = {
+	lire(a: AppelHooksDuPoste): Promise<LectureHooksDuPoste>;
+	installer(a: AppelHooksDuPoste): Promise<ResultatInstallationHooks>;
+	remplacer(a: AppelHooksDuPoste): Promise<ResultatRemplacementHooks>;
+	retirer(a: AppelHooksDuPoste): Promise<ResultatRetraitHooks>;
+};
+
+/** Un fichier de session du moteur (plugin de Claude Code) ; `chemin` relatif à son dossier, séparé par « / ». */
+export type FichierPlugin = { chemin: string; texte: string };
+
+/** Comment les fichiers de session appellent Mnemo (`node`, `main`) et la version de Mnemo écrite dans leur manifeste. */
+export type AppelPlugin = { node: string; main: string; version: string };
+
+/** Nouvelle session, ou reprise d'une session existante. */
+export type ModeLancement = 'nouvelle' | 'reprise';
+
+/**
+ * Ce que le pilote donne au moteur pour lancer une session : son profil, le mode, l'objectif (premier message ; à la reprise,
+ * la consigne tapée d'emblée), le dossier absolu où ses fichiers de session sont écrits et ces fichiers (`fichiersDeSession`),
+ * la racine absolue du dossier Mnemo, l'appel de Mnemo (`node`, `main`) et l'environnement de l'utilisateur.
+ */
+export type ContextePreparation = {
+	session: Session;
+	profil: Profil;
+	mode: ModeLancement;
+	objectif?: string;
+	dossierFichiers: string;
+	fichiers: readonly FichierPlugin[];
+	racine: string;
+	appel: AppelPlugin;
+	env: Record<string, string | undefined>;
+};
+
+/**
+ * Lancement préparé par le moteur : `args` (après `CommandeMoteur.avant`), `env` complet du processus ; pour la ligne de
+ * commande à coller, `ajouts` (variables posées) et `retirees` (variables de l'utilisateur à retirer).
+ */
+export type Lancement = { args: string[]; env: Record<string, string>; ajouts: Record<string, string>; retirees: string[] };
+
+/** Entrée d'un hook sur stdin : son texte, ou la cause qui l'a empêchée d'être lue. */
+export type LectureHook = { texte: string } | { nonLue: CauseNonVerifiee };
+
+/**
+ * Ce que `traduire` reçoit : l'événement et ses options, l'entrée lue, l'environnement du hook, l'instant de l'événement, le
+ * dossier courant du processus et `reel` (chemin réel d'un dossier, liens résolus).
+ */
+export type AppelHook = {
+	evenement: EvenementHook;
+	options: Set<string>;
+	lecture: LectureHook;
+	env: Record<string, string | undefined>;
+	maintenantMs: number;
+	cwdProcessus: string;
+	reel: (chemin: string) => string;
+};
+
+/** Hooks d'un moteur : arguments de `mnemo hook`, entrée du moteur traduite en événement Mnemo, réponse traduite en sortie. */
+export type HooksDuMoteur = {
+	/** `<événement> [options]` (nom Mnemo ou nom du moteur), options permises une fois chacune ; null sinon. */
+	lireArguments(args: string[]): { evenement: EvenementHook; options: Set<string> } | null;
+	/**
+	 * Vrai : le hook ne fait rien dans cet environnement — entrée lue puis écartée, sortie vide, code 0, aucun appel au
+	 * service, aucun effet (Codex : hooks installés pour tout le poste, hors d'une session Mnemo).
+	 */
+	inerte(env: Record<string, string | undefined>): boolean;
+	/** Entrée traduite (et le chemin de la transcription, hors de l'entrée) ; null si elle est à ignorer. */
+	traduire(appel: AppelHook): { entree: EntreeHook; transcription?: string } | null;
+	/**
+	 * Échéance de chaque événement depuis le démarrage du processus du hook : lecture de stdin, service, état et `servir` s'y
+	 * bornent ; sous le délai que le moteur laisse à chaque hook.
+	 */
+	echeancesMs: Record<EvenementHook, number>;
+	/**
+	 * Vrai : un `fin` reçu pendant que le processus de la session tourne encore dans ce service est ignoré, la fin est traitée à
+	 * la sortie du processus (Codex : `/new` et `/resume` envoient `SessionEnd` sans quitter).
+	 */
+	finIgnoreeSiVivante: boolean;
+	/** Sortie attendue par le moteur pour la réponse (stdout), ou « ». */
+	sortie(evenement: EvenementHook, reponse: ReponseHook): string;
+};
+
+/**
+ * Où trouver la transcription d'une session : `chemin` donné par les hooks (refusé hors du dossier des transcriptions du
+ * moteur) ; `fil`, l'identifiant de la session chez le moteur, pour la chercher à défaut ; `dossier` du projet.
+ */
+export type SourceTranscription = { chemin?: string; fil?: string; dossier?: string | null };
+
+/**
+ * Lecture de la transcription d'une session : sa fenêtre de contexte, et les quotas de l'abonnement si le moteur les y écrit
+ * (Codex ; Claude Code jamais, ils viennent de sa ligne d'état) ; chacun absent s'il n'y est pas encore ; null : transcription
+ * introuvable, refusée ou illisible.
+ */
+export type LectureFenetre = { lire(source: SourceTranscription): Promise<{ fenetre?: FenetreDeContexte; quotas?: Quotas } | null> };
+
+/** Télémétrie d'un moteur : transcription, et quotas du compte tirés de ce que le moteur en dit ailleurs (null : illisibles). */
+export type TelemetrieDuMoteur = {
+	fenetre: LectureFenetre;
+	/** Événements de hook après lesquels la transcription est relue (ceux qui suivent une écriture utile du moteur). */
+	evenementsLus: ReadonlySet<EvenementHook>;
+	quotas(brut: unknown): Quotas | null;
+};
+
+/**
+ * Un agent de code sur le poste, hors des sessions : `commandeParDefaut`, le nom écrit dans une ligne à coller quand il est
+ * introuvable ; `trouver` : sa commande (null : introuvable) ; `declarationMcp` : le serveur `mnemo` déclaré chez lui.
+ */
+export type MoteurDuPoste = {
+	id: IdMoteur;
+	nom: string;
+	commandeParDefaut: string;
+	trouver(env: Record<string, string | undefined>, plateforme: string): CommandeMoteur | null;
+	declarationMcp: DeclarationMcp;
+	/** Hooks installés pour tout le poste (Codex) ; absent : le moteur les prend des fichiers de chaque session (Claude Code). */
+	hooksDuPoste?: HooksDuPoste;
+	/** Version du moteur (`--version`, en cache ; `relire` : sans le cache) ; null : illisible. Absent : non lue. */
+	version?(commande: CommandeMoteur, env: Record<string, string | undefined>, executer?: Executer, options?: { relire?: boolean }): Promise<string | null>;
+	/** Motif de refus d'une version trop ancienne pour lancer des sessions ; null : elle convient, ou elle est illisible. */
+	refusDeVersion?(version: string | null): string | null;
+};
+
+/** Ce que reçoit la liste des modèles : l'exécuteur, la commande du moteur (null : introuvable) et l'environnement de l'utilisateur. */
+export type AppelModeles = { executer: Executer; commande: CommandeMoteur | null; env: Record<string, string | undefined> };
+
+/**
+ * Un agent de code qui fait tourner les sessions (Claude Code, Codex) : tout ce qui en diffère. `modeles` : liste indicative
+ * (saisie libre permise ; vide : le modèle par défaut du moteur seulement) ; `fichiersDeSession` : ce qu'il faut écrire pour
+ * la session (plugin, réglages, consigne, skills), puis `preparer` : arguments et environnement. `sansCommande` : moteur
+ * introuvable sur le poste, la session est rendue en ligne à coller (`manuel`) ou refusée (`refus`).
+ */
+export type Moteur = MoteurDuPoste & {
+	modeles(a: AppelModeles): Promise<readonly string[]>;
+	sansCommande: 'manuel' | 'refus';
+	/** Ce que la ligne de commande d'un processus lancé pour la session `uuid` contient : de quoi le reconnaître vivant. */
+	marqueDeSession(uuid: string): string;
+	/**
+	 * Réglages de la déclaration MCP `mnemo` de l'utilisateur chez ce moteur, en plus de la commande (Codex : clés de
+	 * `[mcp_servers.mnemo]` dans `config.toml`, lu seulement) ; absent : le moteur n'en garde pas qui comptent pour une session.
+	 */
+	reglagesMcp?(env: Record<string, string | undefined>): Promise<string[]>;
+	/** Pourquoi la session ne peut pas être reprise par ce moteur (Codex : son `fil` encore inconnu) ; null : elle le peut. */
+	motifSansReprise(session: Session): string | null;
+	fichiersDeSession(dep: Dependances, session: Session, profil: Profil, appel: AppelPlugin): Promise<FichierPlugin[]>;
+	/** Lève si la session ne peut pas être lancée ainsi (identifiant, modèle ou `fil` refusés). */
+	preparer(contexte: ContextePreparation): Lancement;
+	touches: TouchesDuMoteur;
+	hooks: HooksDuMoteur;
+	outils: OutilsDuMoteur;
+	telemetrie: TelemetrieDuMoteur;
+};
+
+/** Un moteur connu du service, et sa commande trouvée au démarrage (null : introuvable, mode dégradé). */
+export type MoteurDuService = { moteur: Moteur; commande: CommandeMoteur | null };
+
+/**
+ * Ce que le service pilote. `plugin` : écriture des fichiers de session (rend leur dossier absolu), leur retrait (session
+ * retirée de l'historique ; absent : rien à faire), appel des hooks (`<node> <main.ts> hook …`), racine absolue du dossier
+ * Mnemo. `moteurs` : les moteurs du service et leur commande. `hote` : ce que
  * l'application ne peut pas lire elle-même — l'environnement de l'utilisateur, la plateforme (ligne de commande manuelle),
  * un dossier relatif à la racine (`absolu`, et `reel` : son chemin réel, liens résolus, relatif à la racine réelle, en « / » ;
  * null s'il n'existe pas ou sort de la racine), l'état d'un pid enregistré (`mort`, `session` : vivant et lancé pour cette
@@ -929,14 +1171,15 @@ export type Pilotage = {
 		ecrire(session: string, f: FichierPlugin[]): Promise<string>;
 		retirer(session: string): Promise<void>;
 		appel: AppelPlugin;
-		claude: { commande: string; avant: string[] } | null;
 		racine: string;
 	};
+	moteurs: Partial<Record<IdMoteur, MoteurDuService>>;
 	hote: {
 		env: Record<string, string | undefined>;
 		plateforme: string;
 		dossier(relatif: string): Promise<{ absolu: string; reel: string } | null>;
-		processus(pid: number, session: string): Promise<'mort' | 'session' | 'autre'>;
+		/** `marque` : la marque de la session dans la ligne de commande du processus (`Moteur.marqueDeSession`). */
+		processus(pid: number, marque: string): Promise<'mort' | 'session' | 'autre'>;
 		/** Démarrage de la machine (ms, à la seconde) : enregistré au lancement, comparé au nettoyage. */
 		demarrageMachineMs(): number;
 		/**

@@ -5,24 +5,25 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it, vi } from 'vitest';
 import { avertissementIndex } from '../../src/application/synchroniser.ts';
 import { ENTETE_REMPLACEMENT, ROUTES } from '@mnemo/contrat';
-import type { FicheVue, ReponseProfils, SessionVue } from '@mnemo/contrat';
-import { PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
+import type { FicheVue, ProfilDetailVue, RefusProfil, ReponseProfils, SessionVue } from '@mnemo/contrat';
+import { MODELE_MAX, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
 import { vectoriser } from '../../src/application/vectoriser.ts';
 import type { GesteANoter, Sens } from '../../src/application/ports.ts';
 import { echelleDesSignaux, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { texteDuRefus } from '../../src/domaine/refus-outil.ts';
-import { ecrirePlugin } from '../../src/infra/claude.ts';
+import { ecrirePlugin } from '../../src/infra/plugin-fichiers.ts';
 import { appeler, jusqua, serviceFaux } from '../aides/service-faux.ts';
 import { traiterEvenement } from '../../src/application/evenements.ts';
 import { DEPOT_ABSENT } from '../aides/faux-ports.ts';
 import { fauxSens } from '../aides/faux-sens.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import type { ContexteService } from '../aides/service-faux.ts';
+import { MOTEUR_CODEX } from '../../src/infra/moteurs/codex.ts';
 
 const chemin = (route: string, id: string) => route.replace(':id', id);
-const CLES_VUE = ['bilanDemandeMs', 'branche', 'commitDebut', 'creeeMs', 'dialogueOuvert', 'dossier', 'dossierNonRattache', 'etat', 'id', 'majMs', 'niveauModeles', 'objectif', 'position', 'profil', 'projet', 'terminal'];
+const CLES_VUE = ['bilanDemandeMs', 'branche', 'commitDebut', 'creeeMs', 'dialogueOuvert', 'dossier', 'dossierNonRattache', 'etat', 'id', 'majMs', 'moteur', 'niveauModeles', 'objectif', 'position', 'profil', 'projet', 'terminal'];
 
 function api(c: ContexteService) {
 	const { port, jeton } = c.service;
@@ -114,6 +115,37 @@ describe('routes : sessions', () => {
 		expect(corps.profils.map((p) => [p.nom, p.lancement])).toEqual([[PROFIL_ARCHIVISTE, 'memoire'], ['redaction', 'projet'], [PROFIL_TRAVAIL, 'projet']]);
 		expect(corps.profils[1]!.description).toBe('Rédige les courriers.');
 		expect(corps.ignores.map((x) => x.nom)).toEqual(['A b']);
+	});
+
+	it('profils : moteur et modèle dans la liste, le détail et l\'enregistrement ; refus motivés ; mal typés refusés', async () => {
+		const c = await serviceFaux();
+		const { port, jeton } = c.service;
+		const detail = (await api(c).get(chemin(ROUTES.profil, PROFIL_TRAVAIL))).corps as ProfilDetailVue;
+		expect(detail.editable).toMatchObject({ moteur: 'claude-code', modele: '' });
+		const put = (editable: unknown, empreinte = detail.empreinte) => appeler(port, 'PUT', chemin(ROUTES.profil, PROFIL_TRAVAIL), { jeton, corps: { editable, empreinte } });
+		const refus = await put({ ...detail.editable, moteur: 'codex', plugins: ['superpowers@superpowers-marketplace'], modele: '-x' });
+		expect(refus.statut).toBe(400);
+		expect(Object.keys((refus.corps as RefusProfil).motifs).sort()).toEqual(['modele', 'plugins']);
+		expect((await put({ ...detail.editable, moteur: 3 })).statut).toBe(400);
+		const long = await put({ ...detail.editable, modele: 'a'.repeat(MODELE_MAX + 1) });
+		expect(long.statut).toBe(400);
+		expect((long.corps as { erreur: string }).erreur).toContain(`${MODELE_MAX} caractères au plus`);
+		expect((await put({ ...detail.editable, modele: 'opus' })).statut).toBe(200);
+		const liste = (await api(c).get(ROUTES.profils)).corps as ReponseProfils;
+		expect(liste.profils.find((p) => p.nom === PROFIL_TRAVAIL)).toMatchObject({ moteur: 'claude-code', modele: 'opus' });
+		expect(((await api(c).get(chemin(ROUTES.profil, PROFIL_TRAVAIL))).corps as ProfilDetailVue).editable.modele).toBe('opus');
+	});
+
+	it('profil PUT sans moteur ni modèle (client d\'avant les moteurs) : ceux enregistrés sont gardés', async () => {
+		const c = await serviceFaux();
+		const { port, jeton } = c.service;
+		await c.dep.coffre.ecrire('profils/revue/revue.md', '---\ntype: profil\nmoteur: codex\nmodele: gpt-6.2-sol\n---\n# Revue\n\nRelis.\n');
+		const detail = (await api(c).get(chemin(ROUTES.profil, 'revue'))).corps as ProfilDetailVue;
+		const { moteur: _moteur, modele: _modele, ...ancien } = detail.editable;
+		const r = await appeler(port, 'PUT', chemin(ROUTES.profil, 'revue'), { jeton, corps: { editable: { ...ancien, consigne: 'Relis le code.' }, empreinte: detail.empreinte } });
+		expect(r.statut).toBe(200);
+		const relu = (await api(c).get(chemin(ROUTES.profil, 'revue'))).corps as ProfilDetailVue;
+		expect(relu.editable).toMatchObject({ moteur: 'codex', modele: 'gpt-6.2-sol', consigne: 'Relis le code.' });
 	});
 
 	it('POST sessions sans profil : PROFIL_TRAVAIL ; avec un profil de profils/ : ce profil', async () => {
@@ -744,6 +776,52 @@ describe('routes : hook', () => {
 		await c.service.arreter();
 		expect(c.dep.commits.map((x) => x.message).join('\n')).toMatch(/episode/u);
 		expect(await c.etat.lire(UUID)).toMatchObject({ etat: 'a_relire' });
+	});
+
+	it('POST hook d’un autre moteur que la session (codex lancé depuis Claude Code) : rien, ni état ni épisode', async () => {
+		const c = await serviceFaux();
+		await c.etat.creer(sessionFixe(UUID));
+		const r = await api(c).post(ROUTES.hook, { evenement: 'fin', session: UUID, horodatageMs: Date.now(), cwd: null, moteur: 'codex', fil: 'fil-codex' });
+		expect(r).toMatchObject({ statut: 200, corps: {} });
+		await c.service.arreter();
+		expect(c.dep.commits).toEqual([]);
+		expect(await c.etat.lire(UUID)).toMatchObject({ etat: 'attend', majMs: 1000 });
+	});
+
+	it('POST hook fin d’une session Codex dont le processus tourne ici (/new, /resume) : ignoré ; la fin est traitée à la sortie du processus', async () => {
+		const maison = join(await dossierTemporaire(), 'codex');
+		const c = await serviceFaux({}, {
+			pil: (pil) => {
+				pil.moteurs = { ...pil.moteurs, codex: { moteur: { ...MOTEUR_CODEX, version: async () => '0.171.0' }, commande: { commande: process.execPath, avant: ['/aides/faux-codex.mjs'] } } };
+				pil.hote.env = { ...pil.hote.env, CODEX_HOME: maison };
+			},
+		});
+		await c.dep.coffre.ecrire('profils/revue/revue.md', '---\ntype: profil\nmoteur: codex\n---\n# Revue\n\nRelis.\n');
+		const vue = await lancer(c, { profil: 'revue', dossier: 'alpha' });
+		const hook = (evenement: string) => api(c).post(ROUTES.hook, { evenement, session: vue.id, horodatageMs: Date.now(), cwd: null, moteur: 'codex', fil: 'fil-a' });
+		expect((await hook('arret')).statut).toBe(200);
+		expect(await c.etat.lire(vue.id)).toMatchObject({ etat: 'attend', fil: 'fil-a' });
+		expect((await hook('fin')).statut).toBe(200);
+		expect((await c.etat.lire(vue.id))?.etat).toBe('attend');
+		// sortie du processus : a_relire, avec son épisode minimal
+		c.terminaux.lances[0]!.finir(0);
+		expect(await jusqua(async () => (await c.etat.lire(vue.id))?.etat === 'a_relire', 2000)).toBe(true);
+		expect(await jusqua(async () => c.dep.commits.some((x) => /episode/u.test(x.message)), 2000)).toBe(true);
+	});
+
+	it('POST hook outil d’un autre moteur que la session : vérifié tout de même (refus), état inchangé', async () => {
+		const c = await serviceFaux();
+		await c.dep.coffre.ecrire(
+			'consignes/env.md',
+			'---\nid: C1\ntype: consigne\nupdated: 2026-11-01\nportee: globale\nniveau: verifiee\nrepetitions: []\nregle: { type: chemins_interdits, motifs: ["**/.env"] }\n---\n# Env\n\nNe touche jamais aux .env.\n',
+		);
+		await synchroniser(c.dep, SANS_EXTRACTION);
+		await c.etat.creer(sessionFixe(UUID));
+		const patch = '*** Begin Patch\n*** Add File: .env\n+x\n*** End Patch';
+		const r = await api(c).post(ROUTES.hook, { evenement: 'outil', session: UUID, horodatageMs: Date.now(), cwd: join(c.racine, 'alpha'), moteur: 'codex', fil: 'fil-codex', outil: { nom: 'apply_patch', entree: { command: patch } } });
+		expect(r.statut).toBe(200);
+		expect((r.corps as { refus?: string }).refus).toMatch(/consigne vérifiée/u);
+		expect(await c.etat.lire(UUID)).toMatchObject({ etat: 'attend', majMs: 1000 });
 	});
 
 	it('POST hook : horodatage hors bornes (négatif, au-delà de maintenant + 60 s) → 400, état intact', async () => {

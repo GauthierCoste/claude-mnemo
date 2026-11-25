@@ -1,10 +1,12 @@
 /**
- * Carte d'une session dans la grille : barre compacte (point d'état, ⌥n, objectif, durée,
+ * Carte d'une session dans la grille : barre compacte (point d'état, ⌥n, objectif, moteur s'il n'est pas Claude Code avec son
+ * modèle par défaut, durée,
  * ⤢, × « Fermer la session »), la même pour la carte agrandie, puis le terminal ; sans terminal dans le service, un encart avec « Reprendre ici ». Clic → session choisie ;
  * double-clic sur la barre → zoom.
  */
 import type { SessionVue } from '@mnemo/contrat';
 import type { ReactNode } from 'react';
+import { moteurEtModele, moteurParticulier } from '../../moteurs/noms.ts';
 import { Terminal } from '../../terminal/Terminal.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
 import { cx } from '../commun/classes.ts';
@@ -36,6 +38,11 @@ export function CarteSession(p: PropsCarte): ReactNode {
 				<AvatarSession session={session} taille="barre" />
 				{p.rang <= 9 && <kbd>⌥{p.rang}</kbd>}
 				<span className={s.objectif}>{session.objectif ?? 'Sans objectif'}</span>
+				{moteurParticulier(session) !== null && (
+					<span className={s.moteur} title={`Moteur : ${moteurEtModele(session)}`}>
+						{moteurParticulier(session)}
+					</span>
+				)}
 				<span>{p.duree}</span>
 				<button
 					type="button"
@@ -59,11 +66,19 @@ export function CarteSession(p: PropsCarte): ReactNode {
 			) : (
 				<div className={s.sansTerminal}>
 					<p>Session suivie sans terminal dans Mnemo</p>
-					{p.terminauxDisponibles && (
-						<Bouton petit onClick={() => p.surReprendre(session.id)}>
-							Reprendre ici
-						</Bouton>
-					)}
+					{p.terminauxDisponibles &&
+						(session.sansReprise === undefined ? (
+							<Bouton petit onClick={() => p.surReprendre(session.id)}>
+								Reprendre ici
+							</Bouton>
+						) : (
+							<>
+								<Bouton petit indisponible={{ raison: `reprise-${session.id}` }}>
+									Reprendre ici
+								</Bouton>
+								<p id={`reprise-${session.id}`}>Reprise impossible : {session.sansReprise}.</p>
+							</>
+						))}
 				</div>
 			)}
 		</div>

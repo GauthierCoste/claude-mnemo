@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import type { Executer, OptionsExecution } from './declarer.ts';
+import type { Executer, OptionsExecution } from '../application/ports.ts';
 
 type Lancer = (
 	commande: string,

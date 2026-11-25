@@ -4,10 +4,11 @@
 import { creerPilote } from '../../src/application/pilote.ts';
 import { dependancesReelles, pilotageReel } from '../../src/infra/systeme.ts';
 import { terminauxPty } from '../../src/infra/terminaux-pty.ts';
+import { commandeClaude } from './moteurs.ts';
 
 const [racine, fauxClaude, hook] = process.argv.slice(2) as [string, string, string];
 const pil = await pilotageReel(racine, { terminaux: await terminauxPty({ delaiArretMs: 300 }) });
-pil.plugin.claude = { commande: process.execPath, avant: [fauxClaude, '--tetu', '--enfant'] };
+commandeClaude(pil, { commande: process.execPath, avant: [fauxClaude, '--tetu', '--enfant'] });
 pil.plugin.appel = { node: process.execPath, main: hook, version: '0.0.0-essai' };
 // battement serré : la fenêtre des restes reconnus couvre tout ce qui est né avant le plantage
 const pilote = creerPilote(dependancesReelles(racine), pil, { battementMs: 100 });

@@ -1,3 +1,5 @@
+import type { FenetreDeContexte } from '../moteur.ts';
+
 /**
  * Remplissage de la fenêtre de contexte d'une session Claude Code, lu dans sa transcription : l'usage de la dernière réponse
  * de Claude (hors sous-agents) dit combien de tokens la conversation occupe.
@@ -7,8 +9,6 @@
 export const FENETRE_STANDARD = 200_000;
 export const FENETRE_ETENDUE = 1_000_000;
 
-/** `avantResume` : le maximum est le seuil de résumé automatique de Claude Code, non la taille de la fenêtre. */
-export type FenetreDeContexte = { utilises: number; max: number; avantResume?: true };
 
 type Usage = { input_tokens?: unknown; cache_creation_input_tokens?: unknown; cache_read_input_tokens?: unknown; output_tokens?: unknown };
 

@@ -96,7 +96,7 @@ describe('ouvrirJournalEnLecture', () => {
 		expect(versionDe(chemin).v).toBe(10);
 	});
 
-	it('gestes (version 13) : journal des gestes, vecteurs, écartées toujours actives et dossiers, sans un octet changé', async () => {
+	it('gestes (version 14) : journal des gestes, vecteurs, écartées toujours actives et dossiers, sans un octet changé', async () => {
 		const chemin = join(await dossierTemporaire(), 'etat.sqlite');
 		const etat = ouvrirEtat(chemin);
 		await etat.creer(session('s1'));
@@ -119,7 +119,7 @@ describe('ouvrirJournalEnLecture', () => {
 		expect(readFileSync(chemin).equals(avant)).toBe(true);
 	});
 
-	it('sans journal des gestes (version 12) : null, l’a priori du banc vaut 0', async () => {
+	it('sans journal des gestes (version 13 ou moins) : null, l’a priori du banc vaut 0', async () => {
 		const chemin = await etatEnVersion(12);
 		const base = new DatabaseSync(chemin);
 		base.exec('DROP TABLE gestes');

@@ -16,6 +16,7 @@ import { DEPOT_ABSENT, fauxPorts } from '../aides/faux-ports.ts';
 import { fauxTerminaux } from '../aides/faux-terminaux.ts';
 import type { FauxTerminaux } from '../aides/faux-terminaux.ts';
 import { jusqua } from '../aides/service-faux.ts';
+import { moteursDeTest } from '../aides/moteurs.ts';
 
 const RACINE = '/racine';
 const CONSIGNE = 'Traite la fiche source « à traiter » (a_traiter) « sources/x.md »';
@@ -42,9 +43,9 @@ async function contexte(): Promise<Contexte> {
 			ecrire: async (session) => `${RACINE}/.mnemo/plugins/${session}`,
 			retirer: async () => {},
 			appel: { node: '/usr/bin/node', main: '/opt/mnemo/main.ts', version: '0.0.0-essai' },
-			claude: { commande: '/usr/bin/node', avant: ['/aides/faux-claude.mjs'] },
 			racine: RACINE,
 		},
+		moteurs: moteursDeTest({ commande: '/usr/bin/node', avant: ['/aides/faux-claude.mjs'] }),
 		hote: {
 			env: { PATH: '/bin' },
 			plateforme: 'darwin',

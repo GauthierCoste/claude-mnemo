@@ -1,7 +1,8 @@
 import { access, chmod, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ecrirePlugin, retirerPlugin, trouverClaude } from '../../src/infra/claude.ts';
+import { trouverClaude } from '../../src/infra/moteurs/claude-code/trouver-claude.ts';
+import { ecrirePlugin, retirerPlugin } from '../../src/infra/plugin-fichiers.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
 const ID = '0f1e2d3c-4b5a-4968-8776-655443322110';

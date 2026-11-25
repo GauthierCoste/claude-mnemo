@@ -15,8 +15,9 @@ Commandes :
   init [dossier]    crée la mémoire (dossier ${DOSSIER_MEMOIRE}/) ; dans un terminal, guide pas à pas (dossier, projets,
                     déclaration MCP à Claude Code, modèles, commande, lanceur) [--oui : les défauts, sans question]
                     [--mcp|--sans-mcp] [--modeles|--sans-modeles] [--commande|--sans-commande] [--lanceur|--sans-lanceur] :
-                    l'étape faite ou sautée sans question ; [--json] : une ligne JSON par événement, sans question
-  verifier-poste    git, Claude Code et Node sur ce poste [--json]
+                    l'étape faite ou sautée sans question ; [--codex] : déclare aussi le serveur MCP à Codex et y installe les hooks ;
+                    [--json] : une ligne JSON par événement, sans question
+  verifier-poste    git, Claude Code, Codex (facultatif, avec sa déclaration MCP et ses hooks) et Node sur ce poste [--json]
   lit <chemin>      affiche une fiche, chemin relatif à ${DOSSIER_MEMOIRE}/
   liste [dossier]   liste le contenu d'un dossier de la mémoire
   cherche <texte>   cherche dans la mémoire [--dossier <chemin>] [--tout] [--limite N] [--contexte]
@@ -36,9 +37,10 @@ Commandes :
   arreter [dossier] arrête le service du dossier (comme Ctrl-C ; pour un service démarré par « ouvrir »)
   lanceur           crée ~/Applications/Mnemo.app (macOS), qui fait « mnemo ouvrir » pour ce dossier [--retirer]
   commande          installe la commande « mnemo » dans ~/.local/bin (macOS, Linux) [--retirer]
-  declarer          déclaration MCP à Claude Code existante : --remplacer (sur ce Node et ce Mnemo) | --retirer [--json]
-  mcp               serveur MCP pour Claude Code (stdio)
-  hook <événement>  hook de session Claude Code (debut, message, outil, arret, fin), entrée JSON sur stdin
+  declarer          déclaration MCP existante (Codex : et ses hooks) : --remplacer (sur ce Node et ce Mnemo) | --retirer
+                    [--moteur claude-code|codex] (claude-code par défaut) [--json]
+  mcp               serveur MCP pour Claude Code et Codex (stdio)
+  hook <événement>  hook de session (debut, message, outil, apres_outil, arret, fin) [--moteur claude-code|codex], entrée JSON sur stdin
   ligne-etat        ligne d'état des sessions Mnemo : transmet les quotas du compte au service, entrée JSON sur stdin
   sessions          sessions en cours (service lancé)
   session <action>  lancer <dossier> [--profil p] [--objectif t] | terminer <id> [--sans-bilan] | voir <id>

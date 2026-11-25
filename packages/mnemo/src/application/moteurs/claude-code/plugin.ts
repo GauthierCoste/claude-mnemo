@@ -1,14 +1,14 @@
-import { DOSSIERS_FIXES } from '@mnemo/commun';
-import type { Profil } from '../domaine/profil.ts';
-import { EVENEMENTS_HOOK, skillPourProjet } from '../domaine/profil.ts';
-import { consignesVerifieesPossibles } from '../domaine/refus-outil.ts';
-import { estUuid } from '../domaine/session.ts';
-import type { EvenementHook, Session } from '../domaine/session.ts';
-import type { Dependances, PluginInstalle } from './ports.ts';
-import { deposerSkillsParDefaut, dossierSkillsDuProfil } from './profil.ts';
-
-/** Un fichier du plugin assemblé ; `chemin` relatif au dossier du plugin, séparé par « / ». */
-export type FichierPlugin = { chemin: string; texte: string };
+import { DOSSIERS_FIXES, estModele } from '@mnemo/commun';
+import { OUTILS_CLAUDE_CODE, PREFIXE_MCP } from '../../../domaine/moteurs/claude-code/outils.ts';
+import { effetDuHook } from '../../../domaine/moteurs/hooks-du-profil.ts';
+import { OUTILS_MNEMO_PERMIS } from '../../../domaine/moteurs/outils-permis.ts';
+import type { Profil } from '../../../domaine/profil.ts';
+import { EVENEMENTS_HOOK } from '../../../domaine/profil.ts';
+import { consignesVerifieesPossibles } from '../../../domaine/refus-outil.ts';
+import { estUuid } from '../../../domaine/session.ts';
+import type { EvenementHook, Session } from '../../../domaine/session.ts';
+import type { AppelPlugin, ContextePreparation, Dependances, FichierPlugin, Lancement, PluginInstalle } from '../../ports.ts';
+import { skillsDeSession } from '../skills-de-session.ts';
 
 /**
  * Variables que `claude` ne reçoit jamais : seul l'abonnement de l'utilisateur sert, jamais une clé d'API ni un autre
@@ -37,12 +37,9 @@ export function estInterdite(majuscules: string): boolean {
 	return majuscules.startsWith(SELECTEUR_FOURNISSEUR) && majuscules !== OUTIL_GARDE;
 }
 
-/** Outils après lesquels Mnemo note ce que Claude a lu ou écrit : un fichier, une fiche lue ou écrite par Mnemo (rien n'est injecté). */
-export const MATCHER_APRES_OUTIL = 'Read|Edit|MultiEdit|Write|NotebookEdit|mcp__mnemo__.*';
-
 /**
  * Événements Claude Code de chaque événement Mnemo, avec leur délai (secondes) et leurs options. `PreToolUse` porte le matcher
- * `*` (tous les outils), `PostToolUse` le matcher `MATCHER_APRES_OUTIL` (outils qui lisent ou écrivent un fichier ou une fiche) ;
+ * `*` (tous les outils), `PostToolUse` le matcher `motifApresOutil` des outils de Claude Code (outils qui lisent ou écrivent un fichier ou une fiche) ;
  * les autres n'en ont pas (`UserPromptSubmit`, `Stop` l'ignorent ; sans matcher, `SessionStart`, `Notification` et `SessionEnd`
  * se déclenchent dans tous les cas). `Notification` passe `--notification` : l'état distingue un dialogue ouvert (permission)
  * d'un tour fini (`Stop`). `bloquantSiConsignes` : voir `hooksJson`.
@@ -51,7 +48,7 @@ const EVENEMENTS_CLAUDE: Record<EvenementHook, readonly { nom: string; timeout: 
 	debut: [{ nom: 'SessionStart', timeout: 10 }],
 	message: [{ nom: 'UserPromptSubmit', timeout: 5 }],
 	outil: [{ nom: 'PreToolUse', timeout: 3, matcher: '*', bloquantSiConsignes: true }],
-	apres_outil: [{ nom: 'PostToolUse', timeout: 3, matcher: MATCHER_APRES_OUTIL }],
+	apres_outil: [{ nom: 'PostToolUse', timeout: 3, matcher: OUTILS_CLAUDE_CODE.motifApresOutil }],
 	arret: [
 		{ nom: 'Stop', timeout: 3 },
 		{ nom: 'Notification', timeout: 3, options: ['--notification'] },
@@ -59,19 +56,8 @@ const EVENEMENTS_CLAUDE: Record<EvenementHook, readonly { nom: string; timeout: 
 	fin: [{ nom: 'SessionEnd', timeout: 15 }],
 };
 
-/** Hooks qui tiennent l'état de la session (pilote, bilan, interface) : toujours déclarés, quel que soit le profil. */
-const HOOKS_D_ETAT: readonly EvenementHook[] = ['debut', 'message', 'arret', 'fin'];
-/** Hooks qui servent un contexte : déclarés `--sans-contexte` quand le profil ne les demande pas. */
-const HOOKS_DE_CONTEXTE: readonly EvenementHook[] = ['debut', 'message', 'apres_outil'];
-
-/**
- * Outils de Mnemo permis d'avance dans une session (`permissions.allow` du `settings.json`) : `proposer`, que le bilan
- * demande, et la lecture (`diagnostiquer` compris). Sans eux, le bilan s'arrêterait sur une demande de permission. Ni `deplacer`, ni `entretenir`, ni `extraire_source`.
- */
-export const OUTILS_PERMIS = ['proposer', 'chercher', 'lire', 'lister', 'voisins', 'chronologie', 'contexte', 'diagnostiquer'].map((nom) => `mcp__mnemo__${nom}`);
-
-/** Comment le plugin appelle Mnemo (`node`, `main`) et la version de Mnemo écrite dans son manifeste. */
-export type AppelPlugin = { node: string; main: string; version: string };
+/** Outils de Mnemo permis d'avance dans une session (`permissions.allow` du `settings.json`) : `OUTILS_MNEMO_PERMIS`. */
+export const OUTILS_PERMIS = OUTILS_MNEMO_PERMIS.map((nom) => `${PREFIXE_MCP}${nom}`);
 
 const json = (valeur: unknown): string => `${JSON.stringify(valeur, null, 2)}\n`;
 
@@ -91,9 +77,9 @@ function verifierAppel(appel: { node: string; main: string }): void {
 function hooksJson(profil: Profil, appel: { node: string; main: string }, consignesVerifiees: boolean): string {
 	const hooks: Record<string, unknown[]> = {};
 	for (const evenement of EVENEMENTS_HOOK) {
-		const demande = profil.hooks.includes(evenement);
-		if (!demande && !HOOKS_D_ETAT.includes(evenement)) continue;
-		const sansContexte = !demande && HOOKS_DE_CONTEXTE.includes(evenement) ? ['--sans-contexte'] : [];
+		const effet = effetDuHook(evenement, profil.hooks);
+		if (effet === 'absent') continue;
+		const sansContexte = effet === 'sans_contexte' ? ['--sans-contexte'] : [];
 		for (const { nom, timeout, matcher, options, bloquantSiConsignes } of EVENEMENTS_CLAUDE[evenement]) {
 			// `onFailure: 'block'` (Claude Code ≥ 2.1.295) : un hook en échec ou hors délai bloque l'outil. Décidé au lancement de la
 			// session : une consigne vérifiée ajoutée en cours de session ne le pose qu'à la session suivante.
@@ -127,25 +113,6 @@ async function copierDossier(dep: Dependances, dossier: string, prefixe: string)
 }
 
 /**
- * Skills copiées dans le plugin : chaque sous-dossier de `dossier` dont le `SKILL.md` est une fiche listée (fichier ordinaire :
- * un lien symbolique n'est pas listé, donc jamais suivi) et que `garder` accepte (nom du sous-dossier, texte du `SKILL.md`).
- * Rend les fichiers copiés et les noms des skills retenues.
- */
-async function skills(dep: Dependances, dossier: string, garder: (nom: string, texteSkill: string) => boolean): Promise<{ fichiers: FichierPlugin[]; noms: Set<string> }> {
-	const fichiers: FichierPlugin[] = [];
-	const noms = new Set<string>();
-	for (const sous of (await dep.coffre.lister(dossier)).dossiers) {
-		if (!(await dep.coffre.lister(sous)).fiches.includes(`${sous}/SKILL.md`)) continue;
-		const nom = sous.slice(sous.lastIndexOf('/') + 1);
-		const texte = await dep.coffre.lire(`${sous}/SKILL.md`);
-		if (texte === null || !garder(nom, texte)) continue;
-		noms.add(nom);
-		fichiers.push(...(await copierDossier(dep, sous, `${DOSSIERS_FIXES.skills}/${nom}`)));
-	}
-	return { fichiers, noms };
-}
-
-/**
  * `enabledPlugins` du `settings.json` de session : `true` pour chaque plugin installé que le profil liste, `false` pour tout
  * autre plugin installé (il serait sinon actif s'il l'est dans les réglages de l'utilisateur). Un plugin listé mais non
  * installé n'y figure pas.
@@ -161,8 +128,7 @@ export function enabledPluginsDe(profil: Pick<Profil, 'plugins'>, installes: rea
  * `consigne.md` (passée par `--append-system-prompt-file`), `settings.json` (auto-mémoire coupée, outils de Mnemo du bilan
  * permis d'avance, ligne d'état qui transmet les quotas du compte, plugins Claude Code du profil allumés et tous les autres installés éteints ; passé par `--settings` : un
  * plugin ne peut pas les régler lui-même), skills. Aucun serveur MCP : celui que `mnemo init` déclare à Claude Code suffit.
- * Skills : celles du profil (`profils/<nom>/skills/`, ses skills par défaut manquantes d'abord déposées, un commit), puis
- * celles de `_mnemo/skills/` retenues par `skillsMemoire` et par leur champ `projets` ; à nom égal, celle du profil gagne.
+ * Skills : celles de `skillsDeSession`, chacune copiée avec tous les `.md` de son dossier.
  */
 export async function assemblerPlugin(dep: Dependances, session: Session, profil: Profil, appel: AppelPlugin): Promise<FichierPlugin[]> {
 	verifierAppel(appel);
@@ -174,11 +140,7 @@ export async function assemblerPlugin(dep: Dependances, session: Session, profil
 		{ chemin: 'consigne.md', texte: `${profil.consigne.trim()}\n` },
 		{ chemin: 'settings.json', texte: json(reglages) },
 	];
-	await deposerSkillsParDefaut(dep, profil.nom);
-	const duProfil = await skills(dep, dossierSkillsDuProfil(profil.nom), () => true);
-	const retenue = (nom: string) => profil.skillsMemoire === 'tous' || profil.skillsMemoire.includes(nom);
-	const deLaMemoire = await skills(dep, DOSSIERS_FIXES.skills, (nom, texte) => !duProfil.noms.has(nom) && retenue(nom) && skillPourProjet(texte, session.projet));
-	fichiers.push(...duProfil.fichiers, ...deLaMemoire.fichiers);
+	for (const skill of await skillsDeSession(dep, session, profil)) fichiers.push(...(await copierDossier(dep, skill.dossier, `${DOSSIERS_FIXES.skills}/${skill.nom}`)));
 	return fichiers;
 }
 
@@ -189,13 +151,17 @@ function dans(dossier: string, nom: string): string {
 }
 
 /**
- * Arguments de `claude` : nouvelle session (`--session-id`) ou reprise (`--resume`), le plugin, ses réglages et sa consigne ;
+ * Arguments de `claude` : nouvelle session (`--session-id`) ou reprise (`--resume`), le modèle de la session (`--model`, s'il
+ * n'est pas vide : enregistré au lancement, gardé à la reprise), le plugin, ses réglages et sa consigne ;
  * un profil lancé dans la mémoire (`lancement: memoire`) reçoit la racine du dossier Mnemo par `--add-dir` (avant le plugin). L'objectif (nouvelle session seulement) est le dernier
  * argument : le prompt initial ; s'il commence par « - », une espace le précède pour qu'il ne soit jamais lu comme une option.
  */
 export function argumentsClaude(session: Session, profil: Pick<Profil, 'lancement'>, dossiers: { plugin: string; racine: string }, mode: 'nouvelle' | 'reprise', objectif?: string): string[] {
 	if (!estUuid(session.id)) throw new Error(`Identifiant de session invalide (uuid attendu) : « ${session.id} ».`);
 	const args = mode === 'nouvelle' ? ['--session-id', session.id] : ['--resume', session.id];
+	const modele = session.modele ?? '';
+	if (!estModele(modele)) throw new Error(`Modèle de session refusé : « ${modele} ».`);
+	if (modele !== '') args.push('--model', modele);
 	// `--add-dir` prend plusieurs valeurs : placé avant `--plugin-dir`, il n'avale jamais l'objectif.
 	if (profil.lancement === 'memoire') args.push('--add-dir', dossiers.racine);
 	args.push('--plugin-dir', dossiers.plugin, '--settings', dans(dossiers.plugin, 'settings.json'), '--append-system-prompt-file', dans(dossiers.plugin, 'consigne.md'));
@@ -211,10 +177,11 @@ export function premierMessage(objectif?: string): string[] {
 
 /**
  * Environnement de `claude` : celui de l'utilisateur, sans les variables interdites (comparées sans la casse, comme sous
- * Windows), plus la session Mnemo (lue par `mnemo hook` et `mnemo mcp`) et l'auto-mémoire coupée.
+ * Windows), plus la session Mnemo (lue par `mnemo hook` et `mnemo mcp`), son moteur (`MNEMO_MOTEUR` : les hooks d'un autre
+ * moteur lancé depuis la session, qui hérite de `MNEMO_SESSION`, restent inertes) et l'auto-mémoire coupée.
  */
 export function environnementClaude(env: Record<string, string | undefined>, session: Session, racine: string): Record<string, string> {
-	const ajouts: Record<string, string> = { MNEMO_SESSION: session.id, MNEMO_PROJET: session.projet, MNEMO_RACINE: racine, CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' };
+	const ajouts: Record<string, string> = { MNEMO_SESSION: session.id, MNEMO_MOTEUR: 'claude-code', MNEMO_PROJET: session.projet, MNEMO_RACINE: racine, CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' };
 	const resultat: Record<string, string> = {};
 	for (const [cle, valeur] of Object.entries(env)) {
 		const majuscules = cle.toUpperCase();
@@ -222,4 +189,18 @@ export function environnementClaude(env: Record<string, string | undefined>, ses
 		resultat[cle] = valeur;
 	}
 	return { ...resultat, ...ajouts };
+}
+
+/**
+ * Lancement de `claude` : arguments (`argumentsClaude`, puis à la reprise la consigne tapée d'emblée), environnement ; pour la
+ * ligne à coller, les variables de la session et les variables interdites présentes chez l'utilisateur.
+ */
+export function preparerClaudeCode(c: ContextePreparation): Lancement {
+	const args = [...argumentsClaude(c.session, c.profil, { plugin: c.dossierFichiers, racine: c.racine }, c.mode, c.objectif), ...(c.mode === 'reprise' ? premierMessage(c.objectif) : [])];
+	return {
+		args,
+		env: environnementClaude(c.env, c.session, c.racine),
+		ajouts: environnementClaude({}, c.session, c.racine),
+		retirees: Object.keys(c.env).filter((cle) => c.env[cle] !== undefined && estInterdite(cle.toUpperCase())),
+	};
 }

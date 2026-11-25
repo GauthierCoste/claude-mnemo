@@ -1,15 +1,18 @@
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { creerPilote, ligneManuelle } from '../../src/application/pilote.ts';
+import { creerPilote, ErreurMoteurIndisponible, ErreurRepriseImpossible, ErreurSessionNonCommencee, ligneManuelle } from '../../src/application/pilote.ts';
 import type { Pilote } from '../../src/application/pilote.ts';
-import type { FichierPlugin } from '../../src/application/plugin.ts';
-import type { EtatSessions, Pilotage } from '../../src/application/ports.ts';
+import type { CommandeMoteur, EtatSessions, FichierPlugin, Pilotage } from '../../src/application/ports.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
+import { MOTEUR_CODEX } from '../../src/infra/moteurs/codex.ts';
+import { HOOKS_DU_POSTE_CODEX } from '../../src/infra/moteurs/codex/hooks-json.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { DEPOT_ABSENT, fauxPorts } from '../aides/faux-ports.ts';
 import { fauxTerminaux } from '../aides/faux-terminaux.ts';
 import type { FauxTerminaux } from '../aides/faux-terminaux.ts';
+import { moteursDeTest } from '../aides/moteurs.ts';
 
 const RACINE = '/racine';
 const DEMARRAGE = 1_700_000_000_000;
@@ -41,7 +44,7 @@ type Contexte = {
 };
 
 async function contexte(
-	options: { claude?: Pilotage['plugin']['claude']; plateforme?: string; sessions?: Session[]; ecrire?: (session: string, f: FichierPlugin[]) => Promise<string> } = {},
+	options: { claude?: CommandeMoteur | null; plateforme?: string; sessions?: Session[]; ecrire?: (session: string, f: FichierPlugin[]) => Promise<string> } = {},
 ): Promise<Contexte> {
 	const dep = fauxPorts();
 	await dep.coffre.ecrire('projets/alpha/alpha.md', `${entete('dossier', 'dossier_projet: alpha\nportee: projet:alpha\n')}# Alpha\n`);
@@ -71,9 +74,9 @@ async function contexte(
 				plugins.delete(session);
 			},
 			appel: APPEL,
-			claude: options.claude === undefined ? CLAUDE : options.claude,
 			racine: RACINE,
 		},
+		moteurs: moteursDeTest(options.claude === undefined ? CLAUDE : options.claude),
 		hote: {
 			env: { PATH: '/bin', HOME: '/home/u', ANTHROPIC_API_KEY: 'sk-secret', CLAUDECODE: '1' },
 			plateforme: options.plateforme ?? 'darwin',
@@ -173,6 +176,11 @@ describe('Pilote.lancer', () => {
 		expect(await lancee(c, { profil: 'travail', dossier: '' })).toMatchObject({ dossier: '', position: '', projet: 'divers' });
 		// séparateurs Windows et « / » final normalisés
 		expect(await lancee(c, { profil: 'travail', dossier: 'travaux\\acme\\' })).toMatchObject({ dossier: 'travaux/acme' });
+	});
+
+	it('la session lancée enregistre son moteur (Claude Code) et un modèle vide', async () => {
+		const c = await contexte();
+		expect(await lancee(c, { profil: 'travail', dossier: 'alpha' })).toMatchObject({ moteur: 'claude-code', modele: '' });
 	});
 
 	it('Projets/Lumen couvert par projets/Lumen/Lumen.md (dossier_projet) : position et projet Lumen, rattaché', async () => {
@@ -291,6 +299,11 @@ describe('Pilote.lancer', () => {
 		expect(ligne).toBe(
 			"Set-Location -LiteralPath 'C:\\Users\\Jean\\projet'; Remove-Item -ErrorAction SilentlyContinue Env:ANTHROPIC_API_KEY; $env:MNEMO_SESSION = 'x'; & 'C:\\Program Files\\claude.exe' '--session-id' 'x' 'l''objectif'",
 		);
+	});
+
+	it('ligne manuelle PowerShell : les apostrophes typographiques (’ ‘ ‚ ‛), lues comme « \' » par PowerShell, sont doublées', () => {
+		const ligne = ligneManuelle({ commande: 'claude.exe', avant: [] }, ['l’objectif‘; Remove-Item x; ‚‛'], 'C:\\d’a', {}, [], 'win32');
+		expect(ligne).toBe("Set-Location -LiteralPath 'C:\\d’’a'; & 'claude.exe' 'l’’objectif‘‘; Remove-Item x; ‚‚‛‛'");
 	});
 
 	it('dossier qui est un lien vers _mnemo/ ou .mnemo/ (chemin réel revalidé) : refusé', async () => {
@@ -476,6 +489,243 @@ describe('Pilote : pause et reprise', () => {
 		expect(await c.pilote.reprendre(ID_A)).toMatchObject({ etat: 'terminee' });
 		expect(c.terminaux.lances).toHaveLength(0);
 		expect(await c.pilote.reprendre('inconnue')).toBeNull();
+	});
+});
+
+describe('Pilote : moteur de la session', () => {
+	it('moteur sans implémentation ici, ou inconnu : jamais relancé (ni par Claude Code), refus avec la raison ; Claude Code sans moteur enregistré', async () => {
+		const c = await contexte({
+			sessions: [session(ID_A, { etat: 'en_pause', moteur: 'codex' }), session(ID_B, { etat: 'a_relire', moteur: 'gemini' }), session(ID_C, { etat: 'a_relire' })],
+		});
+		await expect(c.pilote.reprendre(ID_A)).rejects.toThrow(ErreurMoteurIndisponible);
+		await expect(c.pilote.reprendre(ID_B)).rejects.toThrow(/« gemini » sans implémentation/u);
+		expect(c.terminaux.lances).toHaveLength(0);
+		expect(await c.pilote.ligneDeReprise(ID_A).catch((e: Error) => e.message)).toMatch(/« codex »/u);
+		expect(await c.pilote.reprendreAuDemarrage()).toEqual([ID_C]);
+		expect(c.terminaux.lances).toHaveLength(1);
+		expect(await c.etat.lire(ID_B)).toMatchObject({ etat: 'a_relire', moteur: 'gemini' });
+		// pause et reprise impossibles, dit par le motif (l'interface grise ses boutons) ; pause refusée même sans rien qui tourne
+		expect(c.pilote.motifSansReprise((await c.etat.lire(ID_B))!)).toBe('moteur « gemini » sans implémentation dans ce service : la session ne peut pas être relancée');
+		await expect(c.pilote.pause(ID_B)).rejects.toThrow(/^Pause impossible : moteur « gemini »/u);
+		expect(c.pilote.motifSansReprise((await c.etat.lire(ID_C))!)).toBeNull();
+	});
+
+	it('moteur et modèle du profil enregistrés au lancement (--model) ; la reprise garde ceux de la session après un changement du profil', async () => {
+		const c = await contexte();
+		await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmodele: opus\n---\n# Rédaction\n\nRédige les courriers.\n');
+		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
+		expect(s).toMatchObject({ moteur: 'claude-code', modele: 'opus' });
+		expect(c.terminaux.lances[0]!.options.args.slice(0, 5)).toEqual([...CLAUDE.avant, '--session-id', s.id, '--model', 'opus']);
+		// le profil change de modèle, puis de moteur : la session garde les siens
+		await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmoteur: codex\nmodele: gpt-6.2-sol\n---\n# Rédaction\n\nRédige les courriers.\n');
+		await c.pilote.pause(s.id);
+		await c.pilote.reprendre(s.id);
+		expect(c.terminaux.lances).toHaveLength(2);
+		expect(c.terminaux.lances[1]!.options.args.slice(0, 5)).toEqual([...CLAUDE.avant, '--resume', s.id, '--model', 'opus']);
+		expect(await c.etat.lire(s.id)).toMatchObject({ moteur: 'claude-code', modele: 'opus' });
+		expect(await c.pilote.ligneDeReprise(s.id)).toMatch(/'--resume' '[^']+' '--model' 'opus'/u);
+	});
+
+	it('ligne manuelle (claude introuvable) avec --model ; sans modèle, aucun --model', async () => {
+		const c = await contexte({ claude: null });
+		await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmodele: opus\n---\n# Rédaction\n\nRédige les courriers.\n');
+		const r = await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' });
+		if (!('manuel' in r)) throw new Error('manuel attendu');
+		expect(r.manuel).toMatch(/ claude '--session-id' '[^']+' '--model' 'opus' /u);
+		const sans = await c.pilote.lancer({ profil: 'travail', dossier: 'alpha' });
+		if (!('manuel' in sans)) throw new Error('manuel attendu');
+		expect(sans.manuel).not.toContain('--model');
+	});
+
+	it('profil écrit à la main que l\'éditeur refuserait (plugins hors Claude Code, archiviste hors Claude Code, moteur inconnu) : lancement refusé avec la raison, aucune session créée', async () => {
+		const c = await contexte();
+		await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmoteur: codex\nplugins: [superpowers@superpowers-marketplace]\n---\n# Rédaction\n\nRédige les courriers.\n');
+		await c.dep.coffre.ecrire('profils/archiviste/archiviste.md', '---\ntype: profil\nmoteur: codex\n---\n# Archiviste\n');
+		expect(await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' })).toEqual({ refus: expect.stringMatching(/plugins Claude Code/u) });
+		expect(await c.pilote.lancer({ profil: 'archiviste', dossier: 'alpha' })).toEqual({ refus: expect.stringMatching(/archiviste tourne sur Claude Code/u) });
+		// moteur inconnu de ce Mnemo : refusé, jamais lancé comme Claude Code avec son modèle
+		await c.dep.coffre.ecrire('profils/revue/revue.md', '---\ntype: profil\nmoteur: gemini\nmodele: gemini-3\n---\n# Revue\n\nRelis.\n');
+		expect(await c.pilote.lancer({ profil: 'revue', dossier: 'alpha' })).toEqual({ refus: expect.stringMatching(/^Le profil « revue » ne peut pas être lancé : moteur « gemini » inconnu de ce Mnemo/u) });
+		expect(c.terminaux.lances).toHaveLength(0);
+		expect(await c.etat.lister()).toEqual([]);
+	});
+
+	it('profil d\'un moteur sans implémentation ici : lancement refusé avec la raison, aucune session créée', async () => {
+		const c = await contexte();
+		await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmoteur: codex\n---\n# Rédaction\n\nRédige les courriers.\n');
+		const r = await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' });
+		expect(r).toEqual({ refus: expect.stringMatching(/« codex »/u) });
+		expect(c.terminaux.lances).toHaveLength(0);
+		expect(await c.etat.lister()).toEqual([]);
+	});
+});
+
+const CODEX = { commande: '/usr/bin/node', avant: ['/aides/faux-codex.mjs'] };
+const APPEL_CODEX = { ...APPEL, main: '/opt/mnemo/src/adaptateurs/cli/main.ts' };
+
+/**
+ * Codex dans le pilotage du test (commande donnée, null : introuvable ; `version` : celle que donnerait `codex --version`,
+ * jamais lancé), sa configuration dans un dossier jetable.
+ */
+async function avecCodex(c: Contexte, commande: CommandeMoteur | null = CODEX, version: string | null = '0.171.0-alpha.13'): Promise<string> {
+	const maison = join(await dossierTemporaire(), 'codex');
+	c.pil.moteurs = { ...c.pil.moteurs, codex: { moteur: { ...MOTEUR_CODEX, version: async () => version }, commande } };
+	// un `main.ts` de Mnemo, que les hooks installés lancent
+	c.pil.plugin.appel = APPEL_CODEX;
+	c.pil.hote.env = { ...c.pil.hote.env, CODEX_HOME: maison, OPENAI_API_KEY: 'sk-passerelle', CODEX_API_KEY: 'sk-secret' };
+	await c.dep.coffre.ecrire('profils/redaction/redaction.md', '---\ntype: profil\nmoteur: codex\nmodele: gpt-6.2-sol\nhooks: [debut, message, arret, fin]\n---\n# Rédaction\n\nRédige les courriers.\n');
+	return maison;
+}
+
+/** Hooks de Mnemo installés dans ce `CODEX_HOME`, et approuvés si `approuves` (clés de `hooks.state` comme Codex les écrit). */
+async function hooksCodex(maison: string, approuves: boolean): Promise<void> {
+	await HOOKS_DU_POSTE_CODEX.installer({ node: APPEL_CODEX.node, main: APPEL_CODEX.main, env: { CODEX_HOME: maison } });
+	if (!approuves) return;
+	const fichier = join(maison, 'hooks.json');
+	const cles = ['session_start', 'user_prompt_submit', 'pre_tool_use', 'post_tool_use', 'stop', 'permission_request', 'session_end'];
+	await writeFile(join(maison, 'config.toml'), cles.map((cle) => `[hooks.state."${fichier}:${cle}:0:0"]\ntrusted_hash = "sha256:0"\n`).join('\n'));
+}
+
+describe('Pilote : sessions Codex', () => {
+	it('lancement : codex avec la marque, le modèle, la consigne et l’objectif ; MNEMO_MOTEUR=codex et hooks du profil ; arrêt par /quit', async () => {
+		const c = await contexte();
+		const maison = await avecCodex(c);
+		await hooksCodex(maison, true);
+		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha', objectif: 'Écris au client' });
+		expect(s).toMatchObject({ moteur: 'codex', modele: 'gpt-6.2-sol' });
+		const t = c.terminaux.lances[0]!;
+		expect(t.options.commande).toBe(CODEX.commande);
+		expect(t.options.args.slice(0, 9)).toEqual([...CODEX.avant, '-c', `mnemo_session='${s.id}'`, '--no-daemon', '--no-alt-screen', '--disable', 'memories', '-m', 'gpt-6.2-sol']);
+		expect(t.options.args.slice(-2)).toEqual(['--', 'Écris au client']);
+		expect(t.options.args.find((a) => a.startsWith('developer_instructions='))).toMatch(/^developer_instructions='''Rédige les courriers\./u);
+		expect(t.options.args).toContain('mcp_servers.mnemo.enabled=true');
+		expect(t.options.dossier).toBe(`${RACINE}/alpha`);
+		expect(t.options.env).toMatchObject({ MNEMO_SESSION: s.id, MNEMO_MOTEUR: 'codex', MNEMO_HOOKS: 'debut,message,arret,fin', CODEX_HOME: maison });
+		// seule la clé d'API propre à Codex est retirée ; celle d'OpenAI sert aux passerelles
+		expect(t.options.env).not.toHaveProperty('CODEX_API_KEY');
+		expect(t.options.env).toHaveProperty('OPENAI_API_KEY', 'sk-passerelle');
+		expect(t.options.touches).toMatchObject({ arret: '\x15/quit', pauseAvantEntreeMs: 100 });
+		expect(c.plugins.get(s.id)!.map((f) => f.chemin)).toEqual(['consigne.md']);
+		// hooks installés et approuvés : aucun avertissement dans le terminal
+		expect(c.pilote.abonner(s.id, () => {})!.relecture).toBe('');
+	});
+
+	it('hooks absents ou non approuvés : la session se lance quand même, une ligne le dit en tête du terminal', async () => {
+		const c = await contexte();
+		const maison = await avecCodex(c);
+		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
+		c.terminaux.lances[0]!.emettre('codex> ');
+		const relecture = c.pilote.abonner(s.id, () => {})!.relecture;
+		expect(relecture).toMatch(/^\r\n\[Mnemo\] Hooks de Mnemo pour Codex non installés .*mnemo init --codex.*\r\n\r\ncodex> $/su);
+		await hooksCodex(maison, false);
+		const t = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
+		expect(c.pilote.abonner(t.id, () => {})!.relecture).toMatch(/Hooks de Mnemo pour Codex non approuvés : .*\(\/hooks\)/su);
+	});
+
+	it('Codex introuvable : lancement refusé avec la raison, aucune session ; terminaux indisponibles : la ligne à coller', async () => {
+		const c = await contexte();
+		await avecCodex(c, null);
+		const r = await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' });
+		expect(r).toEqual({ refus: expect.stringMatching(/Codex, introuvable sur ce poste/u) });
+		expect(await c.etat.lister()).toEqual([]);
+		await avecCodex(c);
+		c.terminaux.indisponible = 'node-pty absent';
+		const m = await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' });
+		if (!('manuel' in m)) throw new Error('manuel attendu');
+		expect(m.manuel).toMatch(/MNEMO_MOTEUR='codex' .*'\/usr\/bin\/node' '\/aides\/faux-codex\.mjs' '-c' 'mnemo_session='\\''/u);
+		expect(m.manuel).toMatch(/^cd '\/racine\/alpha' && env -u CODEX_API_KEY /u);
+	});
+
+	it('Codex trop ancien : lancement refusé avec sa version ; version illisible : lancé', async () => {
+		const c = await contexte();
+		await avecCodex(c, CODEX, '0.170.2');
+		expect(await c.pilote.lancer({ profil: 'redaction', dossier: 'alpha' })).toEqual({ refus: 'Le profil « redaction » ne peut pas être lancé : Codex 0.170.2 trop ancien, 0.171 ou plus requis.' });
+		expect(await c.etat.lister()).toEqual([]);
+		await avecCodex(c, CODEX, null);
+		await lancee(c, { profil: 'redaction', dossier: 'alpha' });
+		expect(c.terminaux.lances).toHaveLength(1);
+	});
+
+	it('ligne PowerShell : sans guillemet double, telle quelle ; avec, passage « Standard » des arguments (PowerShell 7.3 ou plus)', () => {
+		const sans = ligneManuelle({ commande: 'codex.exe', avant: [] }, ['-c', "mnemo_session='x'", '-c', "developer_instructions='''l'agent\n'''"], 'D:\\p', {}, [], 'win32');
+		expect(sans).toBe("Set-Location -LiteralPath 'D:\\p'; & 'codex.exe' '-c' 'mnemo_session=''x''' '-c' 'developer_instructions=''''''l''agent\n'''''''");
+		const avec = ligneManuelle({ commande: 'codex.exe', avant: [] }, ['-c', 'developer_instructions="a\\"b"'], 'D:\\p', {}, [], 'win32');
+		expect(avec).toBe("$PSNativeCommandArgumentPassing = 'Standard'; Set-Location -LiteralPath 'D:\\p'; & 'codex.exe' '-c' 'developer_instructions=\"a\\\"b\"'  # PowerShell 7.3 ou plus");
+	});
+
+	it('déclaration MCP « mnemo » de l’utilisateur avec env ou une liste d’outils : une ligne le dit en tête du terminal', async () => {
+		const c = await contexte();
+		const maison = await avecCodex(c);
+		await hooksCodex(maison, true);
+		await writeFile(join(maison, 'config.toml'), `${await readFile(join(maison, 'config.toml'), 'utf8')}\n[mcp_servers.mnemo]\ncommand = "node"\ndisabled_tools = ["proposer"]\n\n[mcp_servers.mnemo.env]\nCLE = "v"\n`);
+		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
+		expect(c.pilote.abonner(s.id, () => {})!.relecture).toMatch(/^\r\n\[Mnemo\] La déclaration du serveur MCP « mnemo » chez Codex porte (disabled_tools, env|env, disabled_tools) : ces réglages valent aussi pour cette session/u);
+	});
+
+	it('pas encore commencée (aucun debut, fil inconnu) : arrêt sans aucune touche, bilan, consigne et pause refusés, abandon possible', async () => {
+		const c = await contexte();
+		await avecCodex(c);
+		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
+		const t = c.terminaux.lances[0]!;
+		await expect(c.pilote.confier(s.id, 'Fais ceci')).rejects.toThrow(ErreurSessionNonCommencee);
+		await expect(c.pilote.terminer(s.id, { bilan: true })).rejects.toThrow(/Bilan impossible : la session n'a pas encore commencé/u);
+		await expect(c.pilote.pause(s.id)).rejects.toThrow(ErreurRepriseImpossible);
+		await expect(c.pilote.pause(s.id)).rejects.toThrow(/^Pause impossible : .*identifiant chez Codex est inconnu.*abandonne-la/u);
+		expect(c.pilote.motifSansReprise((await c.etat.lire(s.id))!)).toMatch(/identifiant chez Codex est inconnu/u);
+		expect(t.ecrits).toEqual([]);
+		expect(await c.etat.lire(s.id)).toMatchObject({ arretAttendu: null, bilanDemandeMs: null });
+		c.terminaux.arretFinit = true;
+		expect(await c.pilote.terminer(s.id, { bilan: false })).toMatchObject({ etat: 'terminee' });
+		expect(t.optionsArret).toEqual([{ sansTouche: true }]);
+		expect(t.ecrits).toEqual([]);
+	});
+
+	it('commencée (fil connu) : la consigne tapée, puis son Entrée à part ; arrêt par les touches', async () => {
+		const c = await contexte();
+		await avecCodex(c);
+		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
+		const t = c.terminaux.lances[0]!;
+		await c.etat.appliquer(s.id, 'debut', Date.now() + 1000, { fil: 'fil-a' });
+		expect(c.pilote.motifSansReprise((await c.etat.lire(s.id))!)).toBeNull();
+		await c.pilote.confier(s.id, 'Fais ceci');
+		expect(t.ecrits).toEqual(['Fais ceci', '\r']);
+		c.terminaux.arretFinit = true;
+		await c.pilote.terminer(s.id, { bilan: false });
+		expect(t.optionsArret).toEqual([{ echap: false }]);
+	});
+
+	it('reprise : codex resume <fil> une fois le fil appris ; sans fil, refusée avec la raison (rien lancé), et laissée au redémarrage', async () => {
+		const c = await contexte({ sessions: [session(ID_A, { etat: 'en_pause', profil: 'redaction', moteur: 'codex', modele: '' }), session(ID_B, { etat: 'a_relire', profil: 'redaction', moteur: 'codex', modele: '', fil: 'fil-b' })] });
+		await avecCodex(c);
+		await expect(c.pilote.reprendre(ID_A)).rejects.toThrow(ErreurRepriseImpossible);
+		await expect(c.pilote.reprendre(ID_A)).rejects.toThrow(/identifiant chez Codex est inconnu/u);
+		await expect(c.pilote.ligneDeReprise(ID_A)).rejects.toThrow(ErreurRepriseImpossible);
+		await expect(c.pilote.terminer(ID_A, { bilan: true })).rejects.toThrow(ErreurRepriseImpossible);
+		await c.etat.modifier(ID_A, { etat: 'a_relire' });
+		await expect(c.pilote.pause(ID_A)).rejects.toThrow(/^Pause impossible : .*identifiant chez Codex est inconnu/u);
+		expect(await c.etat.lire(ID_A)).toMatchObject({ etat: 'a_relire' });
+		await c.etat.modifier(ID_A, { etat: 'en_pause' });
+		expect(c.terminaux.lances).toHaveLength(0);
+		expect(await c.pilote.reprendreAuDemarrage()).toEqual([ID_B]);
+		const t = c.terminaux.lances[0]!;
+		expect(t.options.args.slice(0, 2)).toEqual([...CODEX.avant, 'resume']);
+		expect(t.options.args.slice(-2)).toEqual(['--', 'fil-b']);
+		expect(await c.etat.lire(ID_A)).toMatchObject({ etat: 'en_pause' });
+		// abandon d'une session sans fil : possible (rien à reprendre)
+		expect(await c.pilote.terminer(ID_A, { bilan: false })).toMatchObject({ etat: 'terminee' });
+	});
+});
+
+describe('Pilote : redémarrage, session Codex sans fil', () => {
+	it('reprise impossible au redémarrage : à relire, sans arrêt attendu ni pid, avec son épisode minimal ; jamais relancée', async () => {
+		const c = await contexte({ sessions: [session(ID_A, { etat: 'attend', profil: 'redaction', moteur: 'codex', modele: '', pid: 4242, arretAttendu: 'service' })] });
+		await avecCodex(c);
+		expect(await c.pilote.reprendreAuDemarrage()).toEqual([]);
+		expect(c.terminaux.lances).toHaveLength(0);
+		expect(await c.etat.lire(ID_A)).toMatchObject({ etat: 'a_relire', arretAttendu: null, pid: null });
+		const episodes = [...c.dep.fichiers.entries()].filter(([chemin]) => chemin.startsWith('episodes/'));
+		expect(episodes.filter(([, texte]) => texte.includes(ID_A) && texte.includes('minimal: true'))).toHaveLength(1);
+		expect(c.pilote.enCours(ID_A)).toBe(false);
 	});
 });
 

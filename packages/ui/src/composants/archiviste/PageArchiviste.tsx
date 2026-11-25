@@ -5,7 +5,7 @@
  *   place ; groupes vides masqués, « Rien à faire. » sinon. Le service n'expose pas de contradictions : pas de groupe ;
  * - le terminal de l'archiviste (le même flux que le tiroir, un seul affichage à la fois : voir `CentreArchiviste`) et les
  *   suggestions ; sans archiviste, « Lancer l'archiviste » ou « Reprendre » ;
- * - « Enrichir » : déposer des fichiers, importer la mémoire de Claude, documents récents, puis « Appris aujourd'hui ».
+ * - « Enrichir » : déposer des fichiers, importer la mémoire de Claude Code, documents récents, puis « Appris aujourd'hui ».
  */
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useAujourdhui, useDocuments, useFil, useSessions } from '../../client/hooks.ts';

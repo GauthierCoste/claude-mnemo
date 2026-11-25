@@ -3,7 +3,7 @@
  * l'importe pas ; seuls l'adaptateur HTTP du service et ses clients (interface web) s'y réfèrent, et, pour les sorties
  * `--json` de `mnemo init`, `mnemo verifier-poste` et `mnemo declarer`, la CLI et les programmes qui les lisent.
  */
-import type { AvancementModele, AvecAvertissements, Avatar, GroupeReglage, LanceurDeProfil, NiveauModeles, OperationModele, RaisonCarte } from '@mnemo/commun';
+import type { AvancementModele, AvecAvertissements, Avatar, GroupeReglage, IdMoteur, LanceurDeProfil, NiveauModeles, OperationModele, RaisonCarte } from '@mnemo/commun';
 
 export type EtatSessionVue = 'travaille' | 'attend' | 'a_relire' | 'en_pause' | 'terminee';
 
@@ -40,6 +40,18 @@ export type SessionVue = {
 	 * écart la coupe ou qu'une réactivation la lève. Absent : rien de coupé (ou un service plus ancien).
 	 */
 	injectionCoupee?: CoupureInjectionVue[];
+	/**
+	 * Moteur enregistré au lancement (`IdMoteur`, ou un identifiant inconnu de ce service gardé tel quel) ; absent : Claude Code
+	 * (session d'avant les moteurs).
+	 */
+	moteur?: string;
+	/** Modèle enregistré au lancement ; absent ou « » : le modèle par défaut du moteur. */
+	modele?: string;
+	/**
+	 * Pourquoi la session ne peut être ni mise en pause ni reprise (Codex : son identifiant chez Codex est encore inconnu),
+	 * rédigé par le service ; absent : elle le peut (session non terminée seulement).
+	 */
+	sansReprise?: string;
 };
 
 /** Une fiche écartée dans `sessions` sessions distinctes, sur `jours` jours, sans geste positif depuis. */
@@ -48,11 +60,15 @@ export type SuggestionEcarteeToujoursVue = { chemin: string; sessions: number; j
 /**
  * Un profil de session qui peut être lancé : `description`, première ligne de sa consigne ; `lancement` : `projet` (dans le
  * dossier choisi) ou `memoire` (dans `_mnemo/`, quel que soit le dossier) ; `lanceur` : `dialogue` (choix de Nouvelle
- * session) ou `propre` (son propre chemin, montré à part).
+ * session) ou `propre` (son propre chemin, montré à part) ; `moteur` et `modele` (« » : celui par défaut du moteur) de ses
+ * sessions.
  */
-export type ProfilVue = { nom: string; description: string; lancement: 'projet' | 'memoire'; lanceur: LanceurDeProfil; avatar: Avatar; personnalise: boolean };
+export type ProfilVue = { nom: string; description: string; lancement: 'projet' | 'memoire'; lanceur: LanceurDeProfil; avatar: Avatar; personnalise: boolean; moteur: IdMoteur; modele: string };
 
-/** Ce qui se règle d'un profil dans Réglages › Profils ; `consigne` : `null` = la consigne par défaut du code. */
+/**
+ * Ce qui se règle d'un profil dans Réglages › Profils ; `consigne` : `null` = la consigne par défaut du code ; `moteur` : l'agent
+ * de code de ses sessions ; `modele` : « » = le modèle par défaut du moteur ; `plugins` (Claude Code) : vide avec un autre moteur.
+ */
 export type ProfilEditableVue = {
 	avatar: Avatar;
 	consigne: string | null;
@@ -60,6 +76,8 @@ export type ProfilEditableVue = {
 	hooks: EvenementHookVue[];
 	skillsMemoire: 'tous' | string[];
 	plugins: string[];
+	moteur: IdMoteur;
+	modele: string;
 };
 
 /** Événement de hook de Mnemo qu'un profil peut déclarer. */
@@ -89,8 +107,14 @@ export type ProfilDetailVue = {
 	avertissements: string[];
 };
 
+/**
+ * Ce qu'un `profil` PUT envoie : `ProfilEditableVue`, avec `moteur` et `modele` facultatifs (un client d'avant les moteurs ne
+ * les envoie pas) ; absents, ceux déjà enregistrés sont gardés.
+ */
+export type ProfilEditableEntreeVue = Omit<ProfilEditableVue, 'moteur' | 'modele'> & { moteur?: IdMoteur; modele?: string };
+
 /** Corps de `profil` PUT : le profil réglé et l'empreinte de la fiche lue. */
-export type EnregistrementProfil = { editable: ProfilEditableVue; empreinte: string | null };
+export type EnregistrementProfil = { editable: ProfilEditableEntreeVue; empreinte: string | null };
 
 /** Réponse d'une écriture de profil réussie ; `commit` null quand rien n'a changé. */
 export type ReponseEcritureProfil = { commit: string | null };
@@ -107,24 +131,32 @@ export type BlocApercuVue = {
 	elements?: { nom: string; detail: string; actif: boolean }[];
 };
 
-/** Remplissage de la fenêtre de contexte de Claude Code d'une session (tokens), lu dans sa transcription. */
-/** `avantResume` : `max` est le seuil de résumé automatique de Claude Code. */
+/** Remplissage de la fenêtre de contexte du moteur d'une session (tokens), lu dans sa transcription (Claude Code, Codex). */
+/** `avantResume` : `max` est le seuil de résumé automatique du moteur (Claude Code). */
 export type FenetreVue = { utilises: number; max: number; avantResume?: true };
 
 /** Réponse de `fenetres` GET : la fenêtre connue de chaque session (id → fenêtre), depuis le démarrage du service. */
 export type ReponseFenetres = { fenetres: Record<string, FenetreVue> };
 
-/** Une fenêtre de quota du compte Claude : part consommée (0 à 100) et instant de sa remise à zéro (ms depuis l'époque). */
+/** Une fenêtre de quota d'un abonnement : part consommée (0 à 100) et instant de sa remise à zéro (ms depuis l'époque). */
 export type QuotaVue = { pourcentage: number; remiseMs: number };
 
 /**
- * Quotas du compte Claude (abonnement Pro, Max ou Ultra), tels que la dernière ligne d'état d'une session les a transmis :
- * communs à toutes les sessions. Une fenêtre absente est inconnue (pas encore de réponse de Claude, ou compte sans quota).
+ * Quotas de l'abonnement d'un moteur, communs à toutes ses sessions : compte Claude (Pro, Max ou Ultra) pour Claude Code,
+ * transmis par la ligne d'état d'une session ; compte ChatGPT pour Codex, lus dans la transcription d'une session. Une
+ * fenêtre absente est inconnue (pas encore de réponse, ou compte sans ce quota). `releveMs` : instant du relevé (ms depuis
+ * l'époque ; absent d'un service plus ancien).
  */
-export type QuotasVue = { cinqHeures?: QuotaVue; semaine?: QuotaVue };
+export type QuotasVue = { cinqHeures?: QuotaVue; semaine?: QuotaVue; releveMs?: number };
 
-/** Réponse de `quotas` GET : les derniers quotas reçus depuis le démarrage du service, null avant. */
-export type ReponseQuotas = { quotas: QuotasVue | null };
+/** Quotas de chaque abonnement relevé, par moteur ; un moteur absent n'a encore rien relevé. */
+export type QuotasDesMoteursVue = Partial<Record<IdMoteur, QuotasVue>>;
+
+/**
+ * Réponse de `quotas` GET : les derniers quotas reçus depuis le démarrage du service. `quotas` : ceux de Claude Code (null
+ * avant), gardé pour les clients qui ne lisent que lui ; `moteurs` : ceux de chaque moteur (absent d'un service plus ancien).
+ */
+export type ReponseQuotas = { quotas: QuotasVue | null; moteurs?: QuotasDesMoteursVue };
 
 /** Fiches demandées à injecter dans une session (« Injecter dans la session »), injectées au prochain message de la session. */
 export type ReponseAServir = { chemins: string[] };
@@ -333,7 +365,10 @@ export type MessageServeur =
 	/** Fiches lues par la session (après un outil qui en a lu une) : la liste entière, comme `lues` de la route `servis`. */
 	| { type: 'lues'; session: string; lues: LueVue[] }
 	| { type: 'fenetre'; session: string; fenetre: FenetreVue }
+	/** Les quotas de Claude Code ont changé (gardé pour les clients qui ne lisent que lui ; voir `quotasMoteurs`). */
 	| { type: 'quotas'; quotas: QuotasVue }
+	/** Les quotas d'un abonnement ont changé : ceux de tous les moteurs, comme `moteurs` de `GET quotas`. */
+	| { type: 'quotasMoteurs'; moteurs: QuotasDesMoteursVue }
 	/** L'état des modèles locaux a changé (niveau, gardien, appels en cours) : la vue entière, comme `GET modeles`. */
 	| { type: 'modeles'; modeles: EtatModelesVue }
 	| { type: 'memoire'; modifieeMs: number }
@@ -360,9 +395,9 @@ export type MessageClient =
  * - `profils` GET → `ReponseProfils` : les profils du paquet et ceux de `profils/` ;
  * - `profil` GET → `ProfilDetailVue` (404 inconnu) ; PUT `EnregistrementProfil` → `ReponseEcritureProfil` (400 `RefusProfil`, 409 la fiche a changé) ; DELETE → `ReponseEcritureProfil` ;
  * - `profilDupliquer` POST `{ nom }` → `ReponseEcritureProfil` (201) ; `profilApercu` GET `?projet=` → `ApercuProfilVue` ;
- * - `pause` POST → `{ session }` ;
- * - `reprise` POST → `{ session }` ;
- * - `bilan` POST → `{ session }` : Claude rédige l'épisode ;
+ * - `pause` POST → `{ session }` (409 : la session ne peut pas être reprise, `SessionVue.sansReprise`) ;
+ * - `reprise` POST → `{ session }` (409 : de même) ;
+ * - `bilan` POST → `{ session }` : l'agent de la session rédige l'épisode ;
  * - `abandon` POST → `{ session }` : terminée sans bilan ;
  * - `servis` GET → `ReponseServis` (panneau Contexte ; seule la plus récente porte son classement d'une entrée ancienne ; `injections` (`InjectionVue[]`, absent d'un service plus ancien) : les fiches injectées à la main ou par Mnemo dans la session, plus récentes d'abord ; `lues` : fiches que la session a lues, avec l'heure de leur dernière lecture, la plus récente d'abord ; un service plus ancien envoie des chemins seuls ; `coupures` : l'injection automatique coupée par le suivi, absente d'un service plus ancien) ;
  * - `injectionAutomatique` GET → `ReponseInjectionAutomatique` ; POST `{ session?, niveau? }` (`session` : celle du geste, 404
@@ -378,7 +413,8 @@ export type MessageClient =
  * - `aServir` GET → `ReponseAServir` ; POST `{ chemin }` (une fiche indexée : 404 sinon ; 409 session terminée) → `ReponseAServir` ; DELETE `?chemin=` → `ReponseAServir` : fiches injectées entières au prochain message de la session (message `aServir` diffusé) ;
  * - `fenetres` GET → `ReponseFenetres` : la fenêtre de contexte connue de chaque session (message `fenetre` à chaque changement) ;
  * - `quotas` GET → `ReponseQuotas` ; POST `{ rate_limits }` (de `mnemo ligne-etat`, tel que Claude Code le donne à sa ligne
- *   d'état) → `ReponseQuotas` : les quotas du compte, diffusés (message `quotas`) quand ils changent ; 400 sans fenêtre lisible ;
+ *   d'état) → `ReponseQuotas` : les quotas du compte Claude, diffusés (messages `quotas` et `quotasMoteurs`) quand ils changent ;
+ *   400 sans fenêtre lisible. Ceux de Codex sont relevés par le service à chaque hook (transcription), diffusés par `quotasMoteurs` ;
  * - `modeles` GET → `EtatModelesVue` (envoyée aussi, message `modeles`, à l'accueil d'un client WebSocket et à chaque
  *   changement : niveau, gardien, appels en cours) ;
  * - `modelesDemarrer` POST → `EtatModelesVue` : lance les modèles installés et permis par le niveau (geste de l'utilisateur ;
@@ -437,6 +473,8 @@ export type MessageClient =
  *   qui demande à l'archiviste de poser leur `dossier_projet` part comme celle de `sourcesTraiter` ; 409 si aucun n'est à rattacher ;
  * - `sourcesMarquerTraite` POST `{ chemins }` → `ReponseMarquerTraite` : retire la marque « à traiter » sans rien créer
  *   (un commit par fiche ; celles déjà traitées sont ignorées) ;
+ * - `moteurs` GET (`?poste=1` : avec les points vérifiés du poste, plus lent) → `ReponseMoteurs` : chaque moteur, sa commande
+ *   trouvée au démarrage du service, sa version et ses modèles (en cache, quelques secondes au plus à la première lecture) ;
  * - `reglages` GET → `ReglagesVue` ; PUT `{ valeurs: { "<cle>": valeur | null } }` → `ReglagesVue` (voir `ReglagesVue`) ;
  * - `claudeDesktop` GET → `ClaudeDesktopVue` : la configuration de l'app Claude (Claude Desktop), sans valeur de variable ;
  * - `claudeDesktopMnemo` PUT (sans corps) → `ClaudeDesktopVue` : branche ou met à jour l'entrée `mnemo` ; DELETE → `ClaudeDesktopVue` : la retire ;
@@ -508,6 +546,7 @@ export const ROUTES = {
 	sourcesTraiterToutes: '/api/memoire/sources/traiter-toutes',
 	sourcesMarquerTraite: '/api/memoire/sources/marquer-traite',
 	dossiersTraiter: '/api/memoire/dossiers-non-rattaches/traiter',
+	moteurs: '/api/moteurs',
 	reglages: '/api/reglages',
 	claudeDesktop: '/api/claude-desktop',
 	claudeDesktopMnemo: '/api/claude-desktop/mnemo',
@@ -518,6 +557,36 @@ export const ROUTES = {
 	lotRejeter: '/api/lots/:id/rejeter',
 	ws: '/ws',
 } as const;
+
+/**
+ * Un point vérifié d'un moteur sur le poste (`moteurs?poste=1`) : `cle` ; `libelle` à montrer ; `ok` (null : inconnu, à
+ * vérifier) ; `etat`, court ; `detail`, le motif ; `remede` : la commande qui y remédie, `dans` un terminal ou dans le moteur, et celle à lancer `puis` (redémarrage du service).
+ */
+export type PointMoteurVue = {
+	cle: 'commande' | 'version' | 'mcp' | 'hooks' | 'approbation';
+	libelle: string;
+	ok: boolean | null;
+	etat: string;
+	detail?: string;
+	remede?: { texte: string; dans: 'terminal' | 'moteur'; puis?: string };
+};
+
+/**
+ * Un moteur (agent de code) connu du service : `nom` à montrer ; `indisponible` : pourquoi ses sessions ne se lancent pas ici
+ * (introuvable, version trop ancienne), null sinon ; `manuel` : introuvable, ses sessions se lancent par une ligne à coller
+ * (Claude Code) au lieu d'être refusées ; `version` (null : non lue ou illisible) ; `modeles` : liste indicative (saisie
+ * libre permise ; vide : seulement le modèle par défaut) ; `poste` : les points vérifiés, avec `poste=1` seulement.
+ */
+export type MoteurVue = {
+	id: IdMoteur;
+	nom: string;
+	indisponible: string | null;
+	manuel: boolean;
+	version: string | null;
+	modeles: string[];
+	poste?: PointMoteurVue[];
+};
+export type ReponseMoteurs = { moteurs: MoteurVue[] };
 
 /** Fichiers d'un genre importés par `amorce` : nouveaux, modifiés (réécrits), inchangés. */
 export type CompteAmorceVue = { nouvelles: number; modifiees: number; inchangees: number };
@@ -861,14 +930,17 @@ export type ReponseRejetLot = { id: string };
 
 /**
  * `mnemo init --json` (lu par un programme qui pilote l'installation) : une ligne JSON par événement sur la sortie
- * standard, et rien d'autre. Une étape menée s'annonce (`debut`) puis finit (`fait` ou `echec`) ; une étape laissée de
- * côté ne donne qu'une ligne `saute`. `lanceur` : macOS seulement. `motif` (étape `mcp`, `echec` seulement) : `perime`,
- * une déclaration de Mnemo de portée utilisateur existe déjà et lance un autre Node ou un autre `main.ts` (autre
- * installation de Mnemo), que `mnemo declarer --remplacer` reprend. Absent : tout autre échec.
+ * standard, et rien d'autre. Une étape menée s'annonce (`debut`) puis finit (`fait`, `echec`, ou `laisse` : ce qui existe est
+ * laissé tel quel à dessein, sans échec ni code 1 — étape `codex`, déclaration désactivée dans Codex) ; une étape laissée de
+ * côté ne donne qu'une ligne `saute`. `lanceur` : macOS seulement. `codex` et `codex_hooks` : seulement avec `--codex`
+ * (déclaration MCP chez Codex ; hooks de Mnemo dans `~/.codex/hooks.json`, à approuver une fois dans Codex), aucune ligne
+ * sans. `motif` (étapes `mcp`, `codex` et `codex_hooks`, `echec` seulement) : `perime`, une déclaration (ou des hooks) de
+ * Mnemo de portée utilisateur existe déjà et lance un autre Node ou un autre `main.ts` (autre installation de Mnemo), que
+ * `mnemo declarer --remplacer` (`--moteur codex` pour Codex) reprend. Absent : tout autre échec.
  */
-export type EtapeInit = 'memoire' | 'mcp' | 'modeles' | 'commande' | 'lanceur';
+export type EtapeInit = 'memoire' | 'mcp' | 'codex' | 'codex_hooks' | 'modeles' | 'commande' | 'lanceur';
 export type MotifEchecInit = 'perime';
-export type EvenementInit = { etape: EtapeInit; etat: 'debut' | 'fait' | 'saute' | 'echec'; message: string; motif?: MotifEchecInit };
+export type EvenementInit = { etape: EtapeInit; etat: 'debut' | 'fait' | 'saute' | 'echec' | 'laisse'; message: string; motif?: MotifEchecInit };
 /**
  * Progression du téléchargement d'une pièce de modèle, au plus une ligne par seconde et par pièce : `piece`, son nom
  * (`moteur`, `sens`, `reranker`) ; `libelle`, à montrer ; `total` : null si le serveur ne donne pas la taille.
@@ -879,19 +951,43 @@ export type FinInit = { fin: true; racine: string; ok: boolean };
 export type LigneInit = EvenementInit | ProgressionInit | FinInit;
 
 /**
- * `mnemo verifier-poste --json` : ce dont Mnemo a besoin sur le poste. `git.version` : « 2.50.1 » ; `claude.chemin` : le
- * `claude` que lanceront les sessions ; `motif` : pourquoi ce n'est pas utilisable ; `node.version` : celle qui exécute Mnemo.
+ * Déclaration du serveur MCP `mnemo` chez un moteur, lue sans rien changer : `deja` (elle lance ce Node et ce Mnemo),
+ * `absent`, `perime` (une déclaration de Mnemo qui lance un autre Node ou un autre Mnemo : `mnemo declarer --moteur codex
+ * --remplacer`), `autre` (une déclaration `mnemo` qui ne lance pas Mnemo : laissée), `desactive` (désactivée chez le
+ * moteur, `enabled = false` : ni déclarée, ni réactivée par Mnemo ; `motif` le dit), `echec` (illisible ; `motif` dit
+ * pourquoi).
+ */
+export type EtatMcpVerifie = { etat: 'deja' | 'absent' | 'perime' | 'autre' | 'desactive' | 'echec'; motif?: string };
+
+/**
+ * Hooks de Mnemo de `~/.codex/hooks.json`, lus sans rien changer : `a_jour` (ceux de ce Node et ce Mnemo), `perime` (d'une
+ * autre installation : `mnemo declarer --moteur codex --remplacer`), `absent` (`mnemo init --codex`), `echec` (fichier
+ * illisible, `motif`). `approbation` (à jour seulement), lue dans `hooks.state` de `config.toml` : `approuves`,
+ * `a_approuver` (dans Codex, `/hooks` ; désactivés compris), `inconnu` ; Mnemo ne recalcule pas l'empreinte de Codex, une
+ * approbation périmée n'est donc pas vue (`motif` le dit).
+ */
+export type EtatHooksVerifie = { etat: 'a_jour' | 'perime' | 'absent' | 'echec'; motif?: string; approbation?: { etat: 'approuves' | 'a_approuver' | 'inconnu'; motif: string } };
+
+/**
+ * `mnemo verifier-poste --json` : ce dont Mnemo a besoin sur le poste, un bloc par moteur. `git.version` : « 2.50.1 » ;
+ * `claude.chemin` : le `claude` que lanceront les sessions ; `codex.chemin` : le `codex` trouvé (facultatif : son absence
+ * n'est pas un manque), `codex.version` : celle que donne `codex --version` (absente : illisible), `codex.mcp` : sa déclaration MCP, lue quand il est trouvé, `codex.hooks` : ses hooks de Mnemo (`codex` toujours écrit depuis la 1.6, absent d'un Mnemo plus ancien) ; `motif` : pourquoi ce n'est pas
+ * utilisable ; `node.version` : celle qui exécute Mnemo.
  */
 export type PosteVerifie = {
 	git: { ok: boolean; version?: string; motif?: string };
 	claude: { ok: boolean; chemin?: string; motif?: string };
+	codex?: { ok: boolean; chemin?: string; version?: string; motif?: string; mcp?: EtatMcpVerifie; hooks?: EtatHooksVerifie };
 	node: { version: string };
 };
 
 /**
- * `mnemo declarer (--remplacer | --retirer) --json` : une ligne.
+ * `mnemo declarer (--remplacer | --retirer) [--moteur claude-code | codex] --json` : une ligne.
  * `absent` : aucune déclaration `mnemo` ; `deja` : elle lance déjà ce Node et ce Mnemo ; `remplace` : refaite sur eux ;
  * `retire` : retirée ; `autre` : laissée (elle ne lance pas ce Mnemo, ou n'est pas de portée utilisateur) ; `echec` : code
- * de sortie 1, `message` dit pourquoi.
+ * de sortie 1, `message` dit pourquoi. `hooks` (Codex seulement) : les hooks de Mnemo de `~/.codex/hooks.json`, traités de
+ * même après la déclaration MCP (`--remplacer` ne refait que des hooks de Mnemo existants ; `--retirer` ne retire que ceux
+ * de ce Node et ce Mnemo) ; leur échec donne aussi le code 1.
  */
-export type SortieDeclarer = { resultat: 'absent' | 'deja' | 'remplace' | 'autre' | 'retire' | 'echec'; message: string };
+export type SortieDeclarer = { resultat: ResultatDeclarer; message: string; hooks?: { resultat: ResultatDeclarer; message: string } };
+export type ResultatDeclarer = 'absent' | 'deja' | 'remplace' | 'autre' | 'retire' | 'echec';

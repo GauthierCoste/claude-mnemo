@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { argumentsClaude, assemblerPlugin, enabledPluginsDe, environnementClaude } from '../../src/application/plugin.ts';
+import { argumentsClaude, assemblerPlugin, enabledPluginsDe, environnementClaude } from '../../src/application/moteurs/claude-code/plugin.ts';
 import type { PluginInstalle } from '../../src/application/ports.ts';
-import type { FichierPlugin } from '../../src/application/plugin.ts';
+import type { FichierPlugin } from '../../src/application/ports.ts';
 import { empreinte } from '../../src/domaine/empreinte.ts';
 import { ANCIENNES_SKILLS, chargerProfil, cheminDeProfil, CONSIGNE_ARCHIVISTE_PAR_DEFAUT, CONSIGNE_TRAVAIL_PAR_DEFAUT, SKILLS_PAR_DEFAUT } from '../../src/application/profil.ts';
 import { PROFILS_PAR_DEFAUT } from '../../src/domaine/profil.ts';
@@ -342,6 +342,20 @@ describe('argumentsClaude', () => {
 	it('identifiant de session qui n\'est pas un uuid : refusé', () => {
 		expect(() => argumentsClaude(session({ id: 'pas-un-uuid' }), TRAVAIL, dossiers, 'nouvelle')).toThrow(/uuid/i);
 	});
+
+	it('modèle de la session : --model juste après l\'identifiant, au lancement et à la reprise ; vide ou absent : aucun --model', () => {
+		const avecModele = session({ modele: 'opus' });
+		expect(argumentsClaude(avecModele, TRAVAIL, dossiers, 'nouvelle', 'Corriger la facture')).toEqual(['--session-id', ID, '--model', 'opus', ...communs, 'Corriger la facture']);
+		expect(argumentsClaude(avecModele, TRAVAIL, dossiers, 'reprise')).toEqual(['--resume', ID, '--model', 'opus', ...communs]);
+		expect(argumentsClaude(session({ profil: 'archiviste', modele: 'opus' }), ARCHIVISTE, dossiers, 'nouvelle')).toEqual(['--session-id', ID, '--model', 'opus', '--add-dir', '/m', ...communs]);
+		expect(argumentsClaude(session({ modele: '' }), TRAVAIL, dossiers, 'nouvelle')).not.toContain('--model');
+		expect(argumentsClaude(session(), TRAVAIL, dossiers, 'reprise')).not.toContain('--model');
+	});
+
+	it('modèle de session invalide (option, contrôle) : refusé', () => {
+		expect(() => argumentsClaude(session({ modele: '--dangerously-skip-permissions' }), TRAVAIL, dossiers, 'nouvelle')).toThrow(/Modèle/u);
+		expect(() => argumentsClaude(session({ modele: 'op\nus' }), TRAVAIL, dossiers, 'reprise')).toThrow(/Modèle/u);
+	});
 });
 
 describe('environnementClaude', () => {
@@ -361,7 +375,7 @@ describe('environnementClaude', () => {
 			session(),
 			'/m',
 		);
-		expect(env).toEqual({ PATH: '/usr/bin', HOME: '/Users/x', MNEMO_SESSION: ID, MNEMO_PROJET: 'alpha', MNEMO_RACINE: '/m', CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' });
+		expect(env).toEqual({ PATH: '/usr/bin', HOME: '/Users/x', MNEMO_SESSION: ID, MNEMO_MOTEUR: 'claude-code', MNEMO_PROJET: 'alpha', MNEMO_RACINE: '/m', CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' });
 	});
 
 	it("retire les marques d'une session Claude Code parente (service lancé depuis Claude Code)", () => {

@@ -22,7 +22,7 @@ describe('mode démo', () => {
 		expect(await within(screen.getByRole('banner')).findByText('~/Developer')).toBeTruthy();
 		const nav = screen.getByRole('navigation');
 		await screen.findByText('service connecté');
-		expect(within(nav).getByRole('button', { name: /Sessions/ }).textContent).toContain('2');
+		expect(within(nav).getByRole('button', { name: /Sessions/ }).textContent).toContain('3');
 		expect(screen.getByText('données fictives')).toBeTruthy();
 	});
 
@@ -125,7 +125,7 @@ describe('mode démo', () => {
 	it('données cohérentes : sessions de chaque état, graphe, fiche, fil', async () => {
 		const { api } = creerClientDemo();
 		const { sessions } = await api.lire<{ sessions: SessionVue[] }>(ROUTES.sessions);
-		expect(sessions.map((s) => s.etat).sort()).toEqual(['a_relire', 'a_relire', 'attend', 'attend', 'en_pause', 'en_pause', 'terminee', 'travaille', 'travaille', 'travaille']);
+		expect(sessions.map((s) => s.etat).sort()).toEqual(['a_relire', 'a_relire', 'attend', 'attend', 'attend', 'en_pause', 'en_pause', 'terminee', 'travaille', 'travaille']);
 		expect(sessions.filter((s) => s.profil === 'archiviste')).toHaveLength(1);
 		// La grille de démonstration : 8 sessions sur 4 dossiers, erp-saas en premier (ordre de création).
 		const groupes = grouperSessions(sessions, 'Developer');

@@ -1,11 +1,10 @@
 /** Ce qu'un appel d'outil de la session dit pour le contexte servi : la fiche lue ou écrite, et l'outil Mnemo (sans préfixe). */
 import { cheminValide } from './chemin.ts';
+import type { OutilsDuMoteur } from './moteurs/moteur.ts';
 import { estObjet } from './valeurs.ts';
 
 export type AppelOutil = { nom: string; entree: Record<string, unknown> };
 export type FicheTouchee = { chemin: string; action: 'lue' | 'ecrite'; outil: 'lire' | 'voisins' | 'proposer' | 'entretenir' };
-
-const PREFIXE_MNEMO = 'mcp__mnemo__';
 
 const texte = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
 
@@ -15,9 +14,10 @@ function cheminDeFiche(brut: string | null): string | null {
 	return chemin !== null && chemin.endsWith('.md') ? chemin : null;
 }
 
-export function ficheTouchee(appel: AppelOutil): FicheTouchee | null {
-	if (!appel.nom.startsWith(PREFIXE_MNEMO)) return null;
-	const outil = appel.nom.slice(PREFIXE_MNEMO.length);
+/** `outils` : ceux du moteur de la session (préfixe de ses outils MCP). */
+export function ficheTouchee(appel: AppelOutil, outils: Pick<OutilsDuMoteur, 'prefixeMcp'>): FicheTouchee | null {
+	if (!appel.nom.startsWith(outils.prefixeMcp)) return null;
+	const outil = appel.nom.slice(outils.prefixeMcp.length);
 	if (outil === 'lire' || outil === 'voisins') {
 		const chemin = cheminDeFiche(texte(appel.entree.id));
 		return chemin === null ? null : { chemin, action: 'lue', outil };

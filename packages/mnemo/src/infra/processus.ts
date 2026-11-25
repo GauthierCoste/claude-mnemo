@@ -63,18 +63,19 @@ export function demarrageMachineMs(): number {
 }
 
 /**
- * Un pid enregistré pour la session `session` : `mort` ; `session` (vivant, et sa ligne de commande contient l'uuid de la
- * session : Mnemo la lance avec `--session-id`/`--resume <uuid>`) ; `autre` (vivant mais pas à nous : autre ligne de commande,
- * pas le droit de le voir, `ps` muet, ou Windows, où rien ne le vérifie à peu de frais).
+ * Un pid enregistré pour une session : `mort` ; `session` (vivant, et sa ligne de commande contient `marque`, la marque de la
+ * session chez son moteur : `Moteur.marqueDeSession`, l'uuid pour Claude Code lancé avec `--session-id`/`--resume <uuid>`) ;
+ * `autre` (vivant mais pas à nous : autre ligne de commande, pas le droit de le voir, `ps` muet, ou Windows, où rien ne le
+ * vérifie à peu de frais).
  */
-export async function etatProcessus(pid: number, session: string, plateforme: NodeJS.Platform = process.platform): Promise<'mort' | 'session' | 'autre'> {
+export async function etatProcessus(pid: number, marque: string, plateforme: NodeJS.Platform = process.platform): Promise<'mort' | 'session' | 'autre'> {
 	if (!Number.isInteger(pid) || pid <= 1) return 'mort';
 	const e = existenceProcessus(pid);
 	if (e === 'non') return 'mort';
 	if (e === 'interdit' || plateforme === 'win32') return 'autre';
 	const ligne = await ps(['-o', 'command=', '-p', String(pid)]);
 	if (ligne === null) return existenceProcessus(pid) === 'non' ? 'mort' : 'autre';
-	return session !== '' && ligne.includes(session) ? 'session' : 'autre';
+	return marque !== '' && ligne.includes(marque) ? 'session' : 'autre';
 }
 
 /** Instant de démarrage (à la seconde, tronqué) et ligne de commande d'un processus (`ps`) ; null : mort, `ps` muet, Windows. */

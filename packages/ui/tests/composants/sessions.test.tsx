@@ -256,6 +256,34 @@ describe('vue Sessions', () => {
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions/s1/pause', undefined);
 	});
 
+	it('moteur et modèle dans le panneau ; Codex sans identifiant : pause et bilan indisponibles avec la raison (focus gardé, clic sans effet), abandon possible', async () => {
+		const faux = await monter();
+		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
+		expect(within(contexte).getByText('Claude Code · modèle par défaut')).toBeTruthy();
+		expect(within(carte('s1')).queryByTitle(/^Moteur/u)).toBeNull();
+		const raison = 'session Codex dont l’identifiant chez Codex est inconnu : elle ne peut pas être reprise';
+		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'codex', modele: 'gpt-a', sansReprise: raison } }));
+		expect(within(contexte).getByText('Codex · gpt-a')).toBeTruthy();
+		expect(within(carte('s1')).getByTitle('Moteur : Codex · gpt-a').textContent).toBe('Codex · gpt-a');
+		const pause = within(contexte).getByRole('button', { name: 'Mettre en pause' }) as HTMLButtonElement;
+		expect(pause.disabled).toBe(false);
+		expect(pause.getAttribute('aria-disabled')).toBe('true');
+		const note = document.getElementById(pause.getAttribute('aria-describedby')!)!;
+		expect(note.textContent).toBe(`Pause, reprise et bilan impossibles pour l’instant : ${raison}. Abandonner reste possible.`);
+		pause.focus();
+		expect(document.activeElement).toBe(pause);
+		await act(async () => pause.click());
+		expect(faux.api.envoyer).not.toHaveBeenCalled();
+		expect(within(contexte).getByRole('button', { name: 'Terminer avec bilan' }).getAttribute('aria-disabled')).toBe('true');
+		expect(within(contexte).getByRole('button', { name: 'Abandonner' }).getAttribute('aria-disabled')).toBeNull();
+		await act(async () => within(carte('s1')).getByRole('button', { name: 'Fermer la session' }).click());
+		const bilan = within(carte('s1')).getByRole('menuitem', { name: /^Terminer avec bilan/u }) as HTMLButtonElement;
+		expect(bilan.getAttribute('aria-disabled')).toBe('true');
+		expect(bilan.textContent).toContain('impossible pour l’instant');
+		await act(async () => bilan.click());
+		expect(faux.api.envoyer).not.toHaveBeenCalled();
+	});
+
 	it('« Abandonner » demande une confirmation', async () => {
 		const faux = await monter({ '/api/sessions/s1/abandon': { statut: 'ok' } });
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
@@ -387,6 +415,33 @@ describe('vue Sessions', () => {
 		expect(within(dialogue).getByText('Rédige les courriers.')).toBeTruthy();
 		await act(async () => within(dialogue).getByRole('button', { name: 'Lancer' }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions', { profil: 'redaction', dossier: 'erp-saas' });
+	});
+
+	it('Nouvelle session : un profil dont le moteur ne lance pas ici (Codex introuvable) garde Lancer indisponible avec la raison ; rien n’est envoyé', async () => {
+		const profils = { ...PROFILS, profils: PROFILS.profils.map((x) => (x.nom === 'redaction' ? { ...x, moteur: 'codex', modele: '' } : { ...x, moteur: 'claude-code', modele: '' })) };
+		const moteurs = {
+			moteurs: [
+				{ id: 'claude-code', nom: 'Claude Code', indisponible: 'Claude Code introuvable sur ce poste (claude).', manuel: true, version: null, modeles: [] },
+				{ id: 'codex', nom: 'Codex', indisponible: 'Codex introuvable sur ce poste (codex).', manuel: false, version: null, modeles: [] },
+			],
+		};
+		const faux = await monter({ '/api/profils': profils, '/api/moteurs': moteurs, '/api/sessions': (_: unknown, corps: unknown) => (corps === undefined ? { sessions: SESSIONS } : { session: SESSIONS[0] }) });
+		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
+		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
+		const choix = within(dialogue).getByLabelText<HTMLSelectElement>('Profil');
+		await waitFor(() => expect(choix.options.length).toBe(3));
+		// Claude Code introuvable : la ligne à coller reste possible, Lancer aussi
+		await waitFor(() => expect(within(dialogue).getByRole('button', { name: 'Lancer' }).getAttribute('aria-disabled')).toBeNull());
+		fireEvent.change(choix, { target: { value: 'redaction' } });
+		const lancer = await waitFor(() => {
+			const b = within(dialogue).getByRole('button', { name: 'Lancer' });
+			expect(b.getAttribute('aria-disabled')).toBe('true');
+			return b;
+		});
+		const raison = document.getElementById(lancer.getAttribute('aria-describedby')!);
+		expect(raison?.textContent).toBe('Lancement impossible ici : Codex introuvable sur ce poste (codex).');
+		await act(async () => lancer.click());
+		expect(faux.api.envoyer).not.toHaveBeenCalledWith('/api/sessions', expect.anything());
 	});
 
 	it('Nouvelle session : un profil lancé dans la mémoire remplace l’arbre par une phrase et envoie la racine', async () => {

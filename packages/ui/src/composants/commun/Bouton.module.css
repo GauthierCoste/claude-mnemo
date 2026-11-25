@@ -6,10 +6,12 @@
 	cursor: pointer;
 }
 
-.bouton:hover {
+.bouton:hover:not([aria-disabled='true']) {
 	border-color: var(--ac);
 }
 
+/* désactivé, ou indisponible avec sa raison (aria-disabled : il garde le focus) */
+.bouton[aria-disabled='true'],
 .bouton:disabled {
 	opacity: 0.5;
 	cursor: default;
@@ -24,6 +26,7 @@
 }
 
 /* Bouton primaire désactivé : neutre, pour ne pas sembler prêt à agir. */
+.primaire[aria-disabled='true'],
 .primaire:disabled {
 	background: var(--s3);
 	border-color: var(--bd2);

@@ -1,11 +1,13 @@
 // Aperçu, en lecture seule, de tout ce qu'une session d'un profil reçoit, avec l'origine de chaque élément.
 import { consigneATraiter, DOSSIERS_FIXES } from '@mnemo/commun';
 import { separerFrontmatter } from '../domaine/fiche.ts';
-import { skillPourProjet } from '../domaine/profil.ts';
+import { refusDuMoteur, skillPourProjet } from '../domaine/profil.ts';
 import type { EvenementHook } from '../domaine/session.ts';
 import { INSTRUCTIONS_SESSION } from './consignes-par-defaut.ts';
 import { texteDuBilan } from './episode.ts';
-import { enabledPluginsDe } from './plugin.ts';
+import { consigneCodex } from './moteurs/codex/session.ts';
+import { skillsRetenues } from './moteurs/skills-de-session.ts';
+import { enabledPluginsDe } from './moteurs/claude-code/plugin.ts';
 import type { Dependances } from './ports.ts';
 import { chargerProfil, dossierSkillsDuProfil } from './profil.ts';
 
@@ -48,13 +50,19 @@ async function skillsAvecTexte(dep: Dependances, dossier: string): Promise<{ nom
 
 /**
  * Ce que reçoit une session du profil `nom`, dans l'ordre : consigne du profil, instructions du serveur MCP, hooks, skills de
- * la mémoire, plugins Claude Code, ce qui vient de Claude Code hors Mnemo, consignes système. Avec `projet`, les skills de
+ * la mémoire, plugins Claude Code, ce qui vient du moteur hors Mnemo, consignes système. Avec `projet`, les skills de
  * `_mnemo/skills/` sont filtrées par leur champ `projets` comme au lancement ; sans projet, ce filtre n'est pas appliqué.
+ * Codex : les skills actives (`skillsRetenues`, la source des sessions) sont listées dans la consigne (lues par l'outil
+ * `lire`), qui est montrée telle que la session la reçoit ; ni plugins ni skills personnelles de Claude Code.
  */
 export async function apercuProfil(dep: Dependances, nom: string, projet?: string): Promise<{ blocs: BlocApercu[]; avertissements: string[] }> {
 	const profil = await chargerProfil(dep, nom);
-	const { plugins: installes, avertissements: lus } = await dep.pluginsClaude.installes();
+	const codex = profil.moteur === 'codex';
+	const { plugins: installes, avertissements: lus } = codex ? { plugins: [], avertissements: [] } : await dep.pluginsClaude.installes();
 	const avertissements = [...lus];
+	// moteur inconnu de ce Mnemo : l'aperçu est celui de Claude Code, mais aucune session ne se lance
+	const refus = refusDuMoteur(profil);
+	if (refus !== null && profil.moteurInconnu !== undefined) avertissements.push(`Le profil « ${profil.nom} » ne peut pas être lancé : ${refus.motif}.`);
 
 	const duProfil = await skillsAvecTexte(dep, dossierSkillsDuProfil(profil.nom));
 	const nomsDuProfil = new Set(duProfil.map((s) => s.nom));
@@ -77,17 +85,25 @@ export async function apercuProfil(dep: Dependances, nom: string, projet?: strin
 		avertissements.push(`Le plugin « ${id} » est listé dans le profil « ${profil.nom} » mais n'est pas installé dans Claude Code.`);
 	}
 
-	const horsMnemo: ElementApercu[] = [
-		...(await dep.pluginsClaude.skillsPersonnelles()).map((s) => ({ nom: s, detail: 'skill personnelle de Claude Code (~/.claude/skills/)', actif: true })),
-		{ nom: 'CLAUDE.md', detail: 'instructions de l\'utilisateur et du projet, lues par Claude Code', actif: true },
-	];
+	const horsMnemo: ElementApercu[] = codex
+		? [
+				{ nom: 'AGENTS.md', detail: 'instructions de l\'utilisateur et du projet, lues par Codex', actif: true },
+				{ nom: 'Skills de Codex', detail: 'skills du dépôt et de l\'utilisateur (~/.agents/skills/), lues par Codex', actif: true },
+			]
+		: [
+				...(await dep.pluginsClaude.skillsPersonnelles()).map((s) => ({ nom: s, detail: 'skill personnelle de Claude Code (~/.claude/skills/)', actif: true })),
+				{ nom: 'CLAUDE.md', detail: 'instructions de l\'utilisateur et du projet, lues par Claude Code', actif: true },
+			];
 
+	const titreConsigne = profil.consignePersonnalisee ? 'Consigne du profil (personnalisée)' : 'Consigne du profil (par défaut)';
 	const blocs: BlocApercu[] = [
-		{ origine: 'profil', titre: profil.consignePersonnalisee ? 'Consigne du profil (personnalisée)' : 'Consigne du profil (par défaut)', reglable: true, texte: `${profil.consigne.trim()}\n` },
+		codex
+			? { origine: 'profil', titre: `${titreConsigne}, avec la liste des skills`, reglable: true, texte: consigneCodex(profil, await skillsRetenues(dep, projet, profil)) }
+			: { origine: 'profil', titre: titreConsigne, reglable: true, texte: `${profil.consigne.trim()}\n` },
 		{ origine: 'mnemo', titre: 'Instructions du serveur MCP Mnemo', reglable: false, texte: INSTRUCTIONS_SESSION },
 		{ origine: 'mnemo', titre: 'Hooks de Mnemo', reglable: true, elements: profil.hooks.map((h) => ({ nom: h, detail: DESCRIPTIONS_HOOKS[h], actif: true })) },
-		{ origine: 'memoire', titre: 'Skills de la mémoire', reglable: true, elements: skills },
-		{ origine: 'plugin', titre: 'Plugins Claude Code', reglable: true, elements: plugins },
+		{ origine: 'memoire', titre: codex ? 'Skills de la mémoire (listées dans la consigne, lues par l\'outil lire)' : 'Skills de la mémoire', reglable: true, elements: skills },
+		...(codex ? [] : [{ origine: 'plugin', titre: 'Plugins Claude Code', reglable: true, elements: plugins } satisfies BlocApercu]),
 		{ origine: 'hors_mnemo', titre: 'Hors Mnemo', reglable: false, elements: horsMnemo },
 		{ origine: 'systeme', titre: 'Consigne du bilan', reglable: false, texte: texteDuBilan({ objectif: null }) },
 		{ origine: 'systeme', titre: 'Consigne d\'import envoyée à l\'archiviste', reglable: false, texte: consigneATraiter(2) },

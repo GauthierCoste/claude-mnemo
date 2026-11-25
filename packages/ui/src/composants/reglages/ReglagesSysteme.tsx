@@ -1,6 +1,6 @@
 /**
- * Onglet Système de la vue Réglages, disposé comme l'onglet Profils (groupes à gauche, le groupe choisi à droite) : les
- * réglages du dossier (`.mnemo/reglages.json`), groupés par thème,
+ * Onglet Système de la vue Réglages, disposé comme l'onglet Profils (groupes à gauche, le groupe choisi à droite) : l'état
+ * des moteurs sur ce poste (groupe « Moteurs », en lecture seule), puis les réglages du dossier (`.mnemo/reglages.json`), groupés par thème,
  * chacun avec son explication, son défaut et « Rétablir le défaut » ; enregistrement explicite, validé par le service (tout
  * ou rien). Ce qui ne vaut qu'au redémarrage du service (ou au prochain démarrage des modèles) est signalé, comme un réglage
  * remplacé par une variable d'environnement. Quitter la vue avec des modifications non enregistrées est retenu : un
@@ -17,6 +17,7 @@ import { useReglages } from '../../client/hooks.ts';
 import { enSaisie, enValeur, egales, modifications, valeurLisible, type Saisie } from '../../reglages/brouillon.ts';
 import { useNavigation } from '../../navigation.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
+import { EtatMoteurs } from './EtatMoteurs.tsx';
 // disposition partagée avec l'onglet Profils : liste à gauche, carte à droite, pied collant
 import d from './profils/Profils.module.css';
 import s from './Reglages.module.css';
@@ -72,7 +73,8 @@ function Formulaire(p: { vue: ReglagesVue; enregistree: boolean; surEnregistree(
 	}
 	const [envoi, setEnvoi] = useState(false);
 	const [erreur, setErreur] = useState<string | null>(null);
-	const [choisi, setChoisi] = useState<GroupeReglageVue | null>(null);
+	// « moteurs » : l'état des moteurs, pas un groupe de réglages
+	const [choisi, setChoisi] = useState<GroupeReglageVue | 'moteurs' | null>(null);
 	const aEnvoyer = modifications(p.vue.champs, saisies);
 	const modifie = Object.keys(aEnvoyer).length > 0;
 	const libelles = (cles: string[]) => cles.map((c) => p.vue.champs.find((x) => x.cle === c)?.libelle ?? c).join(', ');
@@ -117,7 +119,8 @@ function Formulaire(p: { vue: ReglagesVue; enregistree: boolean; surEnregistree(
 
 	const modifiesParGroupe = new Set(Object.keys(aEnvoyer).map((cle) => p.vue.champs.find((c) => c.cle === cle)?.groupe));
 	const groupes = GROUPES.filter((g) => p.vue.champs.some((c) => c.groupe === g.cle));
-	const groupe = groupes.find((g) => g.cle === choisi) ?? groupes[0];
+	const voirMoteurs = choisi === 'moteurs';
+	const groupe = voirMoteurs ? undefined : (groupes.find((g) => g.cle === choisi) ?? groupes[0]);
 	const champs = groupe === undefined ? [] : p.vue.champs.filter((c) => c.groupe === groupe.cle);
 
 	return (
@@ -139,6 +142,14 @@ function Formulaire(p: { vue: ReglagesVue; enregistree: boolean; surEnregistree(
 							</button>
 						</li>
 					))}
+					<li>
+						<button type="button" className={d.ligneProfil} aria-current={voirMoteurs ? 'true' : undefined} onClick={() => setChoisi('moteurs')}>
+							<span className={d.identite}>
+								<span className={d.nomProfil}>Moteurs</span>
+								<span className={d.description}>État sur ce poste, en lecture seule</span>
+							</span>
+						</button>
+					</li>
 				</ul>
 				<p className={d.discret}>
 					Dans <code>.mnemo/reglages.json</code> ; Mémoire dans <code>SCHEMA.md</code> (un commit). Raccourci : <kbd>⌥,</kbd>
@@ -157,6 +168,7 @@ function Formulaire(p: { vue: ReglagesVue; enregistree: boolean; surEnregistree(
 						<p>Redémarrage du service requis pour : {libelles(p.vue.enAttente)} — « mnemo arreter » puis « mnemo ouvrir ».</p>
 					</div>
 				)}
+				{voirMoteurs && <EtatMoteurs />}
 				{groupe !== undefined && (
 					<fieldset className={d.section}>
 						<legend className={d.titreSection}>{groupe.titre}</legend>
@@ -165,42 +177,47 @@ function Formulaire(p: { vue: ReglagesVue; enregistree: boolean; surEnregistree(
 						))}
 					</fieldset>
 				)}
-				<footer className={d.pied}>
-					{nav.sortieRetenue && (
-						<div className={d.avis} role="alert">
-							<p>Modifications non enregistrées : les enregistrer avant de quitter les Réglages ?</p>
+				{/* Moteurs, en lecture seule : sans pied, sauf pour l'avertissement de sortie ou une erreur d'enregistrement */}
+				{(!voirMoteurs || nav.sortieRetenue || erreur !== null) && (
+					<footer className={d.pied}>
+						{nav.sortieRetenue && (
+							<div className={d.avis} role="alert">
+								<p>Modifications non enregistrées : les enregistrer avant de quitter les Réglages ?</p>
+								<div className={d.actions}>
+									<Bouton genre="primaire" disabled={envoi} onClick={() => void enregistrerPuisPartir()}>
+										Enregistrer
+									</Bouton>
+									<Bouton disabled={envoi} onClick={nav.poursuivreSortie}>
+										Abandonner
+									</Bouton>
+									<Bouton disabled={envoi} onClick={nav.annulerSortie}>
+										Rester
+									</Bouton>
+								</div>
+							</div>
+						)}
+						{!voirMoteurs && p.enregistree && !modifie && (
+							<p className={d.statut} role="status">
+								Enregistré.
+							</p>
+						)}
+						{erreur !== null && (
+							<p className={d.erreur} role="alert">
+								{erreur}
+							</p>
+						)}
+						{!voirMoteurs && (
 							<div className={d.actions}>
-								<Bouton genre="primaire" disabled={envoi} onClick={() => void enregistrerPuisPartir()}>
+								<Bouton genre="primaire" disabled={!modifie || envoi} onClick={() => void enregistrer()}>
 									Enregistrer
 								</Bouton>
-								<Bouton disabled={envoi} onClick={nav.poursuivreSortie}>
-									Abandonner
-								</Bouton>
-								<Bouton disabled={envoi} onClick={nav.annulerSortie}>
-									Rester
+								<Bouton disabled={!modifie || envoi} onClick={() => setSaisies(saisiesDe(p.vue))}>
+									Annuler les modifications
 								</Bouton>
 							</div>
-						</div>
-					)}
-					{p.enregistree && !modifie && (
-						<p className={d.statut} role="status">
-							Enregistré.
-						</p>
-					)}
-					{erreur !== null && (
-						<p className={d.erreur} role="alert">
-							{erreur}
-						</p>
-					)}
-					<div className={d.actions}>
-						<Bouton genre="primaire" disabled={!modifie || envoi} onClick={() => void enregistrer()}>
-							Enregistrer
-						</Bouton>
-						<Bouton disabled={!modifie || envoi} onClick={() => setSaisies(saisiesDe(p.vue))}>
-							Annuler les modifications
-						</Bouton>
-					</div>
-				</footer>
+						)}
+					</footer>
+				)}
 			</div>
 		</form>
 	);

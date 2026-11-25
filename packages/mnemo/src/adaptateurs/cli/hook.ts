@@ -1,51 +1,24 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { EntreeHook, ReponseHook } from '../../application/evenements.ts';
-import type { EtatSessions } from '../../application/ports.ts';
-import { estSourceDeDebut, estUuid } from '../../domaine/session.ts';
+import { HOOKS_CLAUDE_CODE } from '../../application/moteurs/claude-code/hooks.ts';
+import { hooksDuMoteur } from '../../application/moteurs/hooks.ts';
+import type { EtatSessions, HooksDuMoteur, LectureHook } from '../../application/ports.ts';
+import { estIdMoteur, IDS_MOTEURS, MOTEUR_PAR_DEFAUT } from '../../domaine/moteurs/moteur.ts';
+import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
 import type { EvenementHook } from '../../domaine/session.ts';
 import { appelerService, lireService, processusVivant } from '../../infra/service-local.ts';
 import { trouverRacine } from './racine.ts';
 import { DOSSIER_LOCAL, DOSSIER_MEMOIRE } from '../../domaine/dossier-memoire.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
 import { ENTREE_HOOK_MAX_OCTETS, refusDelai, refusSurErreur, reponseDe, selonIndicateur } from '../../domaine/refus-outil.ts';
-import type { CauseNonVerifiee, EtatIndicateur, RefusNonVerifie } from '../../domaine/refus-outil.ts';
+import type { EtatIndicateur, RefusNonVerifie } from '../../domaine/refus-outil.ts';
 import { lireIndicateur } from '../../infra/indicateur-consignes.ts';
 import { cheminReel } from '../../infra/chemin-reel.ts';
 import { messageDErreur } from '../../domaine/texte.ts';
 
-/** Événement Mnemo de l'argument : nom Mnemo (celui du plugin assemblé) ou nom Claude Code. */
-const EVENEMENTS: Record<string, EvenementHook> = {
-	debut: 'debut',
-	message: 'message',
-	outil: 'outil',
-	apres_outil: 'apres_outil',
-	arret: 'arret',
-	fin: 'fin',
-	SessionStart: 'debut',
-	UserPromptSubmit: 'message',
-	PreToolUse: 'outil',
-	PostToolUse: 'apres_outil',
-	Stop: 'arret',
-	Notification: 'arret',
-	SessionEnd: 'fin',
-};
-/** Options permises après l'événement (celles du plugin assemblé), une fois chacune. */
-const OPTIONS: Partial<Record<EvenementHook, readonly string[]>> = { arret: ['--notification'], debut: ['--sans-contexte'], message: ['--sans-contexte'], apres_outil: ['--sans-contexte'] };
-/**
- * Notifications qui ne montrent aucun dialogue : `idle_prompt` (Claude attend un message depuis un moment, après un `Stop`)
- * compte comme un `Stop`. Les autres (`permission_prompt`, `elicitation_dialog`, type absent…) : un dialogue peut être ouvert.
- */
-const NOTIFICATIONS_SANS_DIALOGUE = new Set(['idle_prompt']);
-
-/** Nom Claude Code de la sortie, pour les événements qui ajoutent un contexte. */
-const SORTIES: Partial<Record<EvenementHook, string>> = { debut: 'SessionStart', message: 'UserPromptSubmit', apres_outil: 'PostToolUse' };
-
-/**
- * Échéance de chaque événement depuis le démarrage du processus : lecture de stdin, service, état et `servir` s'y bornent. `fin` :
- * sous les 1,5 s que Claude Code laisse à `SessionEnd` ; `outil` : 1 s de marge avant les 3 s du `timeout` du plugin.
- */
-export const ECHEANCES_MS: Record<EvenementHook, number> = { debut: 900, message: 900, outil: 2000, apres_outil: 900, arret: 900, fin: 1400 };
+/** Échéances des hooks de Claude Code (celles de chaque moteur : `HooksDuMoteur.echeancesMs`). */
+export const ECHEANCES_MS: Record<EvenementHook, number> = HOOKS_CLAUDE_CODE.echeancesMs;
 /** Délai maximal de la réponse du service ; le calcul local garde au moins `RESERVE_LOCALE_MS` s'il faut s'y replier. */
 const DELAI_SERVICE_MS = 300;
 const RESERVE_LOCALE_MS = 400;
@@ -61,38 +34,20 @@ const ATTENTE_ETAT_MS = 150;
  */
 const DELAI_GIT_FIN_MS = 600;
 const ATTENTE_VERROU_FIN = { essais: 6, delaiMin: 25, facteur: 1.5, delaiMax: 100 };
-/** `SessionEnd` de `/clear` ou d'un `/resume` interactif : la conversation change dans le même processus, la session Mnemo continue. */
-const RAISONS_IGNOREES = new Set(['clear', 'resume']);
 
 /** Disques qui ne distinguent pas la casse par défaut : les chemins interdits s'y comparent sans casse. */
 const SANS_CASSE = process.platform === 'darwin' || process.platform === 'win32';
 
 /**
- * Sortie de Claude Code pour la réponse, ou « » : `additionalContext` (`debut`, `message`) ; pour `outil`, le refus `PreToolUse`
- * documenté (https://code.claude.com/docs/en/hooks : code 0, `permissionDecisionReason` pour Claude, `systemMessage` pour l'utilisateur).
- */
-export function sortieDe(evenement: EvenementHook, reponse: ReponseHook): string {
-	if (evenement === 'outil') {
-		const refus = reponse.refus;
-		if (refus === undefined || refus.trim() === '') return '';
-		return `${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: refus }, systemMessage: refus })}\n`;
-	}
-	const nom = SORTIES[evenement];
-	const contexte = reponse.contexte;
-	if (nom === undefined || contexte === undefined || contexte.trim() === '') return '';
-	return `${JSON.stringify({ hookSpecificOutput: { hookEventName: nom, additionalContext: contexte } })}\n`;
-}
-
-/**
  * stdin entier ; au-delà de `ENTREE_HOOK_MAX_OCTETS`, lu jusqu'au bout (l'écriture de Claude Code ne casse pas) puis écarté ;
  * pas fermé avant `delaiMs` (null : sans délai) : `delai_depasse`.
  */
-function lireEntree(delaiMs: number | null): Promise<{ texte: string } | { nonLue: CauseNonVerifiee }> {
+function lireEntree(delaiMs: number | null): Promise<LectureHook> {
 	return new Promise((resoudre) => {
 		const morceaux: Buffer[] = [];
 		let taille = 0;
 		let fini = false;
-		const terminer = (resultat: { texte: string } | { nonLue: CauseNonVerifiee }): void => {
+		const terminer = (resultat: LectureHook): void => {
 			if (fini) return;
 			fini = true;
 			clearTimeout(minuteur);
@@ -109,41 +64,6 @@ function lireEntree(delaiMs: number | null): Promise<{ texte: string } | { nonLu
 		process.stdin.once('end', () => terminer(taille > ENTREE_HOOK_MAX_OCTETS ? { nonLue: 'entree_trop_grosse' } : { texte: Buffer.concat(morceaux).toString('utf8') }));
 		process.stdin.once('error', () => terminer({ nonLue: 'erreur_interne' }));
 	});
-}
-
-function objetJson(texte: string): Record<string, unknown> | null {
-	try {
-		const lu: unknown = JSON.parse(texte);
-		return estObjet(lu) ? lu : null;
-	} catch {
-		return null;
-	}
-}
-
-/**
- * Entrée de Claude Code traduite ; null si elle est à ignorer (`SessionEnd` de `/clear`) ou illisible hors `outil`, qui doit
- * rendre une décision : son action est alors « non lue ». Session : `MNEMO_SESSION`, sinon `session_id` ; « » sans uuid valide.
- */
-function traduire(evenement: EvenementHook, options: Set<string>, lecture: { texte: string } | { nonLue: CauseNonVerifiee }, env: NodeJS.ProcessEnv, maintenant: number, cwdProcessus: string): { entree: EntreeHook; transcription?: string } | null {
-	const lu = 'texte' in lecture ? objetJson(lecture.texte) : null;
-	if (lu === null && evenement !== 'outil') return null;
-	const champs = lu ?? {};
-	if (evenement === 'fin' && typeof champs.reason === 'string' && RAISONS_IGNOREES.has(champs.reason)) return null;
-	const candidates = [env.MNEMO_SESSION, champs.session_id];
-	const session = candidates.find((c): c is string => typeof c === 'string' && estUuid(c)) ?? '';
-	// Claude Code lance le hook dans son dossier courant : la meilleure position connue quand l'entrée n'en donne pas
-	const entree: EntreeHook = { evenement, session, horodatageMs: maintenant, cwd: cheminReel(typeof champs.cwd === 'string' && champs.cwd !== '' ? champs.cwd : cwdProcessus) };
-	if (typeof champs.prompt === 'string') entree.prompt = champs.prompt;
-	if (evenement === 'debut' && estSourceDeDebut(champs.source)) entree.source = champs.source;
-	if (typeof champs.tool_name === 'string') entree.outil = { nom: champs.tool_name, entree: estObjet(champs.tool_input) ? champs.tool_input : {} };
-	else if (evenement === 'outil') entree.outil = { nonLue: 'nonLue' in lecture ? lecture.nonLue : 'entree_illisible' };
-	if (evenement === 'arret') {
-		const notification = options.has('--notification') && !(typeof champs.notification_type === 'string' && NOTIFICATIONS_SANS_DIALOGUE.has(champs.notification_type));
-		entree.arret = notification ? 'notification' : 'stop';
-	}
-	if (options.has('--sans-contexte')) entree.sansContexte = true;
-	// hors de l'entrée : le chemin de la transcription ne sert qu'à la jauge de la fenêtre de contexte, chez le service
-	return typeof champs.transcript_path === 'string' && champs.transcript_path !== '' ? { entree, transcription: champs.transcript_path } : { entree };
 }
 
 /** Dossier Mnemo : `MNEMO_RACINE` (session Mnemo) s'il en est un, sinon en remontant depuis `cwd` (celui de Claude Code). */
@@ -284,29 +204,36 @@ function terminer(sortie: string): void {
 }
 
 /**
- * `<événement> [options]` : l'événement (nom Mnemo ou Claude Code), puis ses options permises, une fois chacune ; null sinon.
- * `Notification` (nom Claude Code) vaut `arret --notification`.
+ * `[--moteur <id>]` (une fois, n'importe où ; Claude Code par défaut), puis les arguments de l'événement, lus par les hooks de
+ * ce moteur ; `inconnu` : identifiant inconnu (vrai) ou moteur sans implémentation dans cette version (faux).
  */
-function lireArguments(args: string[]): { evenement: EvenementHook; options: Set<string> } | null {
-	const [nom, ...reste] = args;
-	const evenement = nom === undefined ? undefined : EVENEMENTS[nom];
-	if (evenement === undefined) return null;
-	const options = new Set(reste);
-	if (options.size !== reste.length || !reste.every((o) => (OPTIONS[evenement] ?? []).includes(o))) return null;
-	if (nom === 'Notification') options.add('--notification');
-	return { evenement, options };
+function lireArguments(args: string[]): { moteur: IdMoteur; hooks: HooksDuMoteur; evenement: EvenementHook; options: Set<string> } | { moteur: string; inconnu: boolean } | null {
+	const position = args.indexOf('--moteur');
+	let moteur: string = MOTEUR_PAR_DEFAUT;
+	let reste = args;
+	if (position !== -1) {
+		moteur = args[position + 1] ?? '';
+		reste = [...args.slice(0, position), ...args.slice(position + 2)];
+		if (reste.includes('--moteur')) return null;
+	}
+	if (!estIdMoteur(moteur)) return { moteur, inconnu: true };
+	const hooks = hooksDuMoteur(moteur);
+	if (hooks === null) return { moteur, inconnu: false };
+	const lu = hooks.lireArguments(reste);
+	return lu === null ? null : { moteur, hooks, ...lu };
 }
 
 /**
  * `lectureBornee` faux : l'échéance de la lecture est tenue par l'appelant (`reponseAvantEcheance` pour `outil`) ; `lu.cwd` :
  * le `cwd` de l'entrée dès qu'elle est traduite, pour que l'appelant cherche la même racine.
  */
-async function reponse(evenement: EvenementHook, options: Set<string>, temps: { debutMs: number; echeance: number }, lectureBornee: boolean, lu: { cwd: string | null }): Promise<ReponseHook> {
+async function reponse(appel: Appel, temps: { debutMs: number; echeance: number }, lectureBornee: boolean, lu: { cwd: string | null }): Promise<ReponseHook> {
 	const lecture = await lireEntree(lectureBornee ? temps.echeance - Date.now() : null);
 	// horodatage : le démarrage du processus, au plus près de l'instant de l'événement (ordre des hooks rapprochés)
-	const traduite = traduire(evenement, options, lecture, process.env, temps.debutMs, process.cwd());
+	const traduite = appel.hooks.traduire({ evenement: appel.evenement, options: appel.options, lecture, env: process.env, maintenantMs: temps.debutMs, cwdProcessus: process.cwd(), reel: cheminReel });
 	if (traduite === null) return {};
-	const { entree, transcription } = traduite;
+	const { transcription } = traduite;
+	const entree: EntreeHook = { ...traduite.entree, moteur: appel.moteur };
 	lu.cwd = entree.cwd;
 	const racine = racineDe(entree.cwd ?? process.cwd(), process.env);
 	if (racine === null) return {};
@@ -325,10 +252,10 @@ async function reponse(evenement: EvenementHook, options: Set<string>, temps: { 
  * `outil` doit rendre une décision : une erreur ou l'échéance passée la font décider par l'indicateur (`sansReponse`). Les autres
  * événements vont au bout de leur calcul, déjà borné par l'échéance ; une erreur n'y rend rien.
  */
-async function reponseAvantEcheance(evenement: EvenementHook, options: Set<string>, temps: { debutMs: number; echeance: number }): Promise<ReponseHook> {
-	const decide = evenement === 'outil';
+async function reponseAvantEcheance(appel: Appel, temps: { debutMs: number; echeance: number }): Promise<ReponseHook> {
+	const decide = appel.evenement === 'outil';
 	const lu: { cwd: string | null } = { cwd: null };
-	const calcul = reponse(evenement, options, temps, !decide, lu).catch((erreur: unknown): ReponseHook => {
+	const calcul = reponse(appel, temps, !decide, lu).catch((erreur: unknown): ReponseHook => {
 		process.stderr.write(`mnemo hook : ${messageDErreur(erreur)}\n`);
 		return decide ? sansReponse(refusSurErreur(erreur), lu.cwd) : {};
 	});
@@ -344,23 +271,40 @@ async function reponseAvantEcheance(evenement: EvenementHook, options: Set<strin
 	}
 }
 
+/** Un appel de `mnemo hook`, lu : le moteur qui l'a lancé (et ses hooks), l'événement Mnemo et ses options. */
+type Appel = { moteur: IdMoteur; hooks: HooksDuMoteur; evenement: EvenementHook; options: Set<string> };
+
 /**
- * `mnemo hook <événement> [--notification | --sans-contexte]` : appelé par Claude Code (plugin d'une session Mnemo), entrée JSON
- * sur stdin. Le service d'abord (`POST /api/hook`), sinon le calcul ici. Code 0 ; sur stdout, seulement la réponse JSON de Claude
- * Code (`sortieDe`) ; un refus d'`outil` et un accord non vérifié sont écrits sur stderr, gardés par Claude Code dans son journal.
+ * `mnemo hook <événement> [--notification | --sans-contexte] [--moteur <id>]` : appelé par le moteur de la session (plugin
+ * d'une session Mnemo pour Claude Code ; `~/.codex/hooks.json` pour Codex, inerte hors d'une session Mnemo), entrée JSON sur stdin. Le service d'abord (`POST /api/hook`), sinon le calcul ici.
+ * Code 0 ; sur stdout, seulement la réponse JSON attendue par le moteur (`sortie` de ses hooks) ; un refus d'`outil` et un
+ * accord non vérifié sont écrits sur stderr, gardés par le moteur dans son journal.
  */
 export async function commandeHook(args: string[]): Promise<void> {
 	// le démarrage de Node et le chargement des modules comptent dans le budget
 	const debutMs = Math.floor(performance.timeOrigin);
 	const lu = lireArguments(args);
-	if (lu === null) {
-		process.stderr.write(`mnemo hook : événement ou option inconnus « ${args.join(' ')} » (debut, message, outil, arret, fin ; --notification, --sans-contexte).\n`);
+	if (lu !== null && 'inconnu' in lu) {
+		const disponibles = IDS_MOTEURS.filter((id) => hooksDuMoteur(id) !== null).join(', ');
+		process.stderr.write(lu.inconnu ? `mnemo hook : moteur inconnu « ${lu.moteur} » (${disponibles}).\n` : `mnemo hook : moteur sans implémentation dans cette version : « ${lu.moteur} » (${disponibles}).\n`);
 		terminer('');
 		return;
 	}
-	const { evenement, options } = lu;
-	const r = await reponseAvantEcheance(evenement, options, { debutMs, echeance: debutMs + ECHEANCES_MS[evenement] });
-	const sortie = sortieDe(evenement, r);
+	if (lu === null) {
+		process.stderr.write(`mnemo hook : événement ou option inconnus « ${args.join(' ')} » (debut, message, outil, arret, fin ; --notification, --sans-contexte, --moteur).\n`);
+		terminer('');
+		return;
+	}
+	const { evenement } = lu;
+	const echeance = debutMs + lu.hooks.echeancesMs[evenement];
+	if (lu.hooks.inerte(process.env)) {
+		// hors d'une session Mnemo : l'entrée est lue jusqu'au bout (l'écriture du moteur ne casse pas), puis rien
+		await lireEntree(echeance - Date.now());
+		terminer('');
+		return;
+	}
+	const r = await reponseAvantEcheance(lu, { debutMs, echeance });
+	const sortie = lu.hooks.sortie(evenement, r);
 	if (evenement === 'outil' && sortie !== '') process.stderr.write(`mnemo hook : action refusée : ${r.refus}\n`);
 	if (r.avis !== undefined) process.stderr.write(`mnemo hook : ${r.avis}\n`);
 	terminer(sortie);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { lireFiche } from '../../src/domaine/fiche.ts';
-import { CLES_GEREES_DU_PROFIL, donneesDeProfil, estConsigneParDefaut, estIdentifiantDePlugin, lanceurPropreSansChemin, lireProfil, PROFILS_PAR_DEFAUT, skillPourProjet } from '../../src/domaine/profil.ts';
+import { CLES_GEREES_DU_PROFIL, donneesDeProfil, moteurOuModeleInvalides, MOTIF_ARCHIVISTE_HORS_CLAUDE_CODE, MOTIF_PLUGINS_HORS_CLAUDE_CODE, refusDuMoteur, estConsigneParDefaut, estIdentifiantDePlugin, lanceurPropreSansChemin, lireProfil, PROFILS_PAR_DEFAUT, skillPourProjet } from '../../src/domaine/profil.ts';
 import type { Profil } from '../../src/domaine/profil.ts';
 
 const DEFAUT: Profil = { ...PROFILS_PAR_DEFAUT.archiviste, hooks: [...PROFILS_PAR_DEFAUT.archiviste.hooks], consigne: 'Consigne par défaut.' };
@@ -18,6 +18,8 @@ describe('profils par défaut', () => {
 			skillsMemoire: 'tous',
 			plugins: [],
 			avatar: { forme: 'robot', couleur: 'vert' },
+			moteur: 'claude-code',
+			modele: '',
 		});
 	});
 	it('archiviste : lancé dans la mémoire par son propre chemin, debut/arret/fin, aucune skill de la mémoire, aucun plugin, chouette violette', () => {
@@ -30,6 +32,8 @@ describe('profils par défaut', () => {
 			skillsMemoire: [],
 			plugins: [],
 			avatar: { forme: 'chouette', couleur: 'violet' },
+			moteur: 'claude-code',
+			modele: '',
 		});
 	});
 });
@@ -61,7 +65,19 @@ describe('lireProfil', () => {
 			skillsMemoire: ['revue', 'notes'],
 			plugins: ['superpowers@superpowers-marketplace'],
 			avatar: { forme: 'renard', couleur: 'ambre' },
+			moteur: 'claude-code',
+			modele: '',
 		});
+	});
+
+	it('moteur et modèle : lus du frontmatter ; absents → Claude Code et le modèle par défaut ; invalides → défaut champ par champ', () => {
+		expect(lireProfil(fiche('---\ntype: profil\nmoteur: codex\nmodele: gpt-6.2-sol\n---\n# A\n'), TRAVAIL, [])).toMatchObject({ moteur: 'codex', modele: 'gpt-6.2-sol' });
+		expect(lireProfil(fiche('---\ntype: profil\nmodele: opus\n---\n# A\n'), TRAVAIL, [])).toMatchObject({ moteur: 'claude-code', modele: 'opus' });
+		expect(lireProfil(fiche('---\ntype: profil\n---\n# A\n'), TRAVAIL, [])).toMatchObject({ moteur: 'claude-code', modele: '' });
+		expect(lireProfil(fiche('---\ntype: profil\nmoteur: gemini\nmodele: \'-x\'\n---\n# A\n'), TRAVAIL, [])).toMatchObject({ moteur: 'claude-code', modele: '', moteurInconnu: 'gemini' });
+		expect(lireProfil(fiche('---\ntype: profil\nmoteur: 3\nmodele: [opus]\n---\n# A\n'), TRAVAIL, [])).toMatchObject({ moteur: 'claude-code', modele: '', moteurInconnu: '3' });
+		expect(lireProfil(fiche('---\ntype: profil\nmoteur: codex\n---\n# A\n'), TRAVAIL, [])).not.toHaveProperty('moteurInconnu');
+		expect(lireProfil(fiche('---\ntype: profil\nmodele: " opus"\n---\n# A\n'), TRAVAIL, []).modele).toBe('');
 	});
 
 	it('ancienne clé skills (v1.0) : projet → toutes les skills de la mémoire, profil → aucune ; skills_memoire l\'emporte', () => {
@@ -127,6 +143,24 @@ describe('lireProfil', () => {
 	});
 });
 
+describe('moteur du profil', () => {
+	it('refusDuMoteur : archiviste hors Claude Code, plugins avec un autre moteur ; rien avec Claude Code', () => {
+		expect(refusDuMoteur({ nom: 'archiviste', moteur: 'codex', plugins: [] })).toEqual({ champ: 'moteur', motif: MOTIF_ARCHIVISTE_HORS_CLAUDE_CODE });
+		expect(refusDuMoteur({ nom: 'redaction', moteur: 'codex', plugins: ['a@b'] })).toEqual({ champ: 'plugins', motif: MOTIF_PLUGINS_HORS_CLAUDE_CODE });
+		expect(refusDuMoteur({ nom: 'redaction', moteur: 'codex', plugins: [] })).toBeNull();
+		expect(refusDuMoteur({ nom: 'archiviste', moteur: 'claude-code', plugins: ['a@b'] })).toBeNull();
+		// moteur inconnu de ce Mnemo (lu comme Claude Code) : refusé
+		expect(refusDuMoteur({ nom: 'redaction', moteur: 'claude-code', plugins: [], moteurInconnu: 'gemini' })).toEqual({ champ: 'moteur', motif: expect.stringContaining('« gemini » inconnu de ce Mnemo') });
+	});
+	it('moteurOuModeleInvalides : un avertissement par valeur présente et invalide ; absente ou valide, aucun', () => {
+		expect(moteurOuModeleInvalides(fiche('---\ntype: profil\nmoteur: Codex\nmodele: 4.5\n---\n# A\n'))).toEqual([expect.stringContaining('« Codex »'), expect.stringContaining('« 4.5 »')]);
+		expect(moteurOuModeleInvalides(fiche('---\ntype: profil\nmodele: [opus]\n---\n# A\n'))).toEqual([expect.stringContaining('["opus"]')]);
+		expect(moteurOuModeleInvalides(fiche('---\ntype: profil\nmoteur: codex\nmodele: gpt-6.2-sol\n---\n# A\n'))).toEqual([]);
+		expect(moteurOuModeleInvalides(fiche('---\ntype: profil\n---\n# A\n'))).toEqual([]);
+		expect(moteurOuModeleInvalides(null)).toEqual([]);
+	});
+});
+
 describe('estConsigneParDefaut', () => {
 	it('vide après trim → par défaut', () => {
 		expect(estConsigneParDefaut('  \n\t\n', [])).toBe(true);
@@ -171,6 +205,14 @@ describe('donneesDeProfil', () => {
 		expect(donnees.lanceur).toBe('propre');
 		expect(donnees.skills_memoire).toEqual([]);
 	});
+	it('moteur écrit seulement s\'il diffère de Claude Code, modèle seulement s\'il n\'est pas vide', () => {
+		expect(donneesDeProfil(TRAVAIL)).not.toHaveProperty('moteur');
+		expect(donneesDeProfil(TRAVAIL)).not.toHaveProperty('modele');
+		const donnees = donneesDeProfil({ ...TRAVAIL, moteur: 'codex', modele: 'gpt-6.2-sol' });
+		expect(Object.keys(donnees)).toEqual(['avatar', 'plugins', 'skills_memoire', 'hooks', 'lancement', 'moteur', 'modele']);
+		expect(donnees).toMatchObject({ moteur: 'codex', modele: 'gpt-6.2-sol' });
+		expect(Object.keys(donneesDeProfil({ ...TRAVAIL, modele: 'opus' }))).toEqual(['avatar', 'plugins', 'skills_memoire', 'hooks', 'lancement', 'modele']);
+	});
 	it('rend des copies : modifier les données ne touche pas le profil', () => {
 		const donnees = donneesDeProfil(DEFAUT);
 		(donnees.hooks as string[]).push('message');
@@ -179,8 +221,8 @@ describe('donneesDeProfil', () => {
 		expect(DEFAUT.avatar.forme).toBe('chouette');
 	});
 	it('CLES_GEREES_DU_PROFIL couvre les clés écrites et l\'ancienne clé skills', () => {
-		expect(CLES_GEREES_DU_PROFIL).toEqual(['avatar', 'plugins', 'skills_memoire', 'skills', 'hooks', 'lancement', 'lanceur']);
-		for (const cle of Object.keys(donneesDeProfil(DEFAUT))) expect(CLES_GEREES_DU_PROFIL).toContain(cle);
+		expect(CLES_GEREES_DU_PROFIL).toEqual(['avatar', 'plugins', 'skills_memoire', 'skills', 'hooks', 'lancement', 'lanceur', 'moteur', 'modele']);
+		for (const cle of Object.keys(donneesDeProfil({ ...DEFAUT, moteur: 'codex', modele: 'm' }))) expect(CLES_GEREES_DU_PROFIL).toContain(cle);
 	});
 });
 

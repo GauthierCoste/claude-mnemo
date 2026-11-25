@@ -25,6 +25,9 @@ import { lireReglagesMemoire, modifierReglagesMemoire } from '../../application/
 import { routesProfils } from './profils.ts';
 import { routesReglages } from './reglages.ts';
 import { routesClaudeDesktop } from './claude-desktop.ts';
+import { routesMoteurs } from './moteurs.ts';
+import type { PosteDesMoteurs } from './moteurs.ts';
+import { executeurReel } from '../../infra/executeur.ts';
 import type { AppClaude } from './claude-desktop.ts';
 import { fichierConfigClaudeDesktop } from '../../infra/config-claude-desktop.ts';
 import { nodeDurable } from '../../infra/node-durable.ts';
@@ -255,6 +258,8 @@ export async function demarrerService(options: {
 	 * défaut ceux de la machine (`fichierConfigClaudeDesktop`, `homedir()`, `nodeDurable()`, ce `main.ts`).
 	 */
 	appClaude?: Partial<Omit<AppClaude, 'racine'>>;
+	/** Moteurs vus par `GET moteurs` : par défaut ceux du pilotage, l'exécuteur réel, le Node durable, ce `main.ts`, ce processus. */
+	moteurs?: Partial<PosteDesMoteurs>;
 }): Promise<Service> {
 	const { racine, dep, pil } = options;
 	const dossierUi = options.interface ?? dossierInterface();
@@ -396,6 +401,14 @@ export async function demarrerService(options: {
 			node: options.appClaude?.node ?? nodeDurable(),
 			main: options.appClaude?.main ?? MAIN,
 			racine,
+		}),
+		...routesMoteurs({
+			moteurs: options.moteurs?.moteurs ?? pil.moteurs,
+			executer: options.moteurs?.executer ?? executeurReel(),
+			node: options.moteurs?.node ?? nodeDurable(),
+			main: options.moteurs?.main ?? MAIN,
+			plateforme: options.moteurs?.plateforme ?? pil.hote.plateforme,
+			env: options.moteurs?.env ?? pil.hote.env,
 		}),
 		...routesReglages(racine, options.portFixePar === undefined ? {} : { 'service.port': options.portFixePar }, (coches) => choixDesTypesAConfirmer(dep, coches), {
 			lire: () => lireReglagesMemoire(dep),

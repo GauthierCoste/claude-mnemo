@@ -1,5 +1,5 @@
 import type { CauseArret, EvenementHook, Session, SourceDeDebut } from '../domaine/session.ts';
-import { objectifDe } from '../domaine/session.ts';
+import { evenementEtranger, objectifDe } from '../domaine/session.ts';
 import { ecrireEpisodeMinimal } from './episode.ts';
 import type { Classe, Dependances, Pilotage, VecteurDuMessage } from './ports.ts';
 import { noteDeLigne } from '../domaine/gestes.ts';
@@ -11,6 +11,9 @@ import { ENTREES_DU_PRECEDENT, messagePrecedent, precedentUtile, requeteDuMessag
 import type { VarianteDeRequete } from '../domaine/requete-du-message.ts';
 import type { DureeDuReranker } from './duree-reranker.ts';
 import { ficheTouchee } from '../domaine/outil-de-session.ts';
+import { MOTEUR_PAR_DEFAUT } from '../domaine/moteurs/moteur.ts';
+import type { IdMoteur } from '../domaine/moteurs/moteur.ts';
+import { outilsDuMoteur } from '../domaine/moteurs/outils.ts';
 import { BUDGET_HOOK_MS } from './chercher.ts';
 import type { FichesDemandees } from './fiches-demandees.ts';
 import { cartesDuJournal, dejaLuesDe } from './cartes.ts';
@@ -32,8 +35,8 @@ import type { AccordNonVerifie } from '../domaine/refus-outil.ts';
 import type { ActionNonLue, ActionOutil, Verdict } from '../domaine/regles-verifiees.ts';
 
 /**
- * Un événement de hook Claude Code, traduit : `session` (uuid de la session, « » si inconnue), `horodatageMs` (instant de
- * l'événement : un plus ancien que le dernier appliqué ne change pas l'état), `cwd` (dossier courant de Claude Code, absolu),
+ * Un événement de hook du moteur, traduit : `session` (uuid de la session, « » si inconnue), `horodatageMs` (instant de
+ * l'événement : un plus ancien que le dernier appliqué ne change pas l'état), `cwd` (dossier courant du moteur, absolu),
  * `prompt` (`message`), `outil` (`outil` : nom et entrée de l'outil), `arret` (`arret` : `Stop` ou `Notification` ; `stop`
  * par défaut), `sansContexte` (`debut`, `message` d'un profil qui ne les demande pas : l'état seulement, rien de servi).
  */
@@ -48,6 +51,10 @@ export type EntreeHook = {
 	sansContexte?: boolean;
 	/** `SessionStart` : `clear` et `compact` vident le contexte de Claude, les fiches injectées redeviennent à servir. */
 	source?: SourceDeDebut;
+	/** Moteur qui a lancé le hook, dont les outils sont lus ; absent : Claude Code. */
+	moteur?: IdMoteur;
+	/** Identifiant de la session chez son moteur, quand il le donne (noté une fois dans l'état ; Claude Code reçoit l'uuid de Mnemo). */
+	fil?: string;
 };
 
 /**
@@ -218,8 +225,10 @@ async function verifierOutil(dep: Dependances, pil: Pick<Pilotage, 'etat'>, sess
 	const verdict = await avantEcheance<Verdict | AccordNonVerifie>(
 		(async () => {
 			try {
+				const outils = outilsDuMoteur(entree.moteur ?? MOTEUR_PAR_DEFAUT);
+				if (outils === null) throw new Error(`Moteur sans implémentation : « ${entree.moteur} ».`);
 				const position = await positionDe(dep, pil, session, entree, reglages, true);
-				return await verifierAction(dep, position, action, { racine, cwd: entree.cwd ?? racine, sansCasse: reglages.sansCasse ?? false });
+				return await verifierAction(dep, position, action, { racine, cwd: entree.cwd ?? racine, sansCasse: reglages.sansCasse ?? false, outils });
 			} catch (erreur) {
 				return selonIndicateur(refusSurErreur(erreur), indicateur);
 			}
@@ -240,6 +249,7 @@ async function appliquer(pil: Pick<Pilotage, 'etat'>, entree: EntreeHook): Promi
 	const complement = {
 		...(objectif === null ? {} : { objectif }),
 		...(entree.evenement === 'arret' && entree.arret !== undefined ? { arret: entree.arret } : {}),
+		...(entree.fil === undefined ? {} : { fil: entree.fil }),
 	};
 	try {
 		return await pil.etat.appliquer(entree.session, entree.evenement, entree.horodatageMs, Object.keys(complement).length === 0 ? undefined : complement);
@@ -286,14 +296,37 @@ async function finDeSession(dep: Dependances, pil: Pick<Pilotage, 'etat' | 'depo
 }
 
 /**
+ * La session de l'événement, s'il vient d'un autre moteur que celui de la session ou d'un autre fil (`evenementEtranger`) ; null
+ * sinon. Lu avant d'appliquer quoi que ce soit ; session inconnue ou illisible : null (rien ne sera appliqué à une session inconnue).
+ */
+async function sessionEtrangere(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil'>): Promise<Session | null> {
+	if (entree.session === '') return null;
+	const session = await pil.etat.lire(entree.session).catch(() => null);
+	return session !== null && evenementEtranger(session, entree) ? session : null;
+}
+
+/** L'événement est-il étranger à sa session (`sessionEtrangere`) ? */
+export async function estEtranger(pil: Pick<Pilotage, 'etat'>, entree: Pick<EntreeHook, 'session' | 'moteur' | 'fil'>): Promise<boolean> {
+	return (await sessionEtrangere(pil, entree)) !== null;
+}
+
+/**
  * Un événement de hook, par le service (`froid: 'permis'`) ou par `mnemo hook` sans service (`si-budget`) : l'état de la
  * session est mis à jour ; `debut` sert le contexte de début (question : l'objectif) et note branche et commit de départ,
  * `message` sert celui du prompt. Chaque contexte servi à une session connue est journalisé (durée, usage du sens). Session
  * inconnue de l'état : servie quand même, sans état ni journal. `outil` vérifie l'action contre les consignes vérifiées
  * (refus éventuel) ; `fin` écrit l'épisode minimal s'il le faut (`finDeSession`). Avec `enFond` (le service), git et
- * l'épisode ne retardent jamais la réponse.
+ * l'épisode ne retardent jamais la réponse. Un événement étranger à la session (`estEtranger` : agent imbriqué qui hérite de
+ * son environnement, `/new` de Codex) ne touche ni à l'état, ni au contexte, ni au fil, ni à l'objectif, et `fin` n'y termine
+ * rien ; mais un `outil` étranger est vérifié comme les autres, avec les consignes de la position de la session.
  */
 export async function traiterEvenement(dep: Dependances, pil: Pick<Pilotage, 'etat' | 'depot'>, entree: EntreeHook, reglages: ReglagesEvenement): Promise<ReponseHook> {
+	const etrangere = await sessionEtrangere(pil, entree);
+	if (etrangere !== null) {
+		if (entree.evenement !== 'outil') return {};
+		const { rattachee: _rattachee, ...sansRattachement } = reglages;
+		return verifierOutil(dep, pil, etrangere, entree, sansRattachement);
+	}
 	const session = await appliquer(pil, entree);
 	if (entree.evenement === 'fin') {
 		const tache = finDeSession(dep, pil, session, entree, reglages).catch(() => {});
@@ -343,7 +376,8 @@ async function servirEvenement(dep: Dependances, pil: Pick<Pilotage, 'etat'>, se
  */
 async function noterFicheTouchee(dep: Dependances, pil: Pick<Pilotage, 'etat'>, session: Session, entree: EntreeHook, reglages: ReglagesEvenement): Promise<void> {
 	const appel = entree.outil !== undefined && 'nom' in entree.outil ? entree.outil : null;
-	const touchee = appel === null ? null : ficheTouchee(appel);
+	const outils = outilsDuMoteur(entree.moteur ?? MOTEUR_PAR_DEFAUT);
+	const touchee = appel === null || outils === null ? null : ficheTouchee(appel, outils);
 	if (touchee === null) return;
 	const empreinte = touchee.action === 'lue' ? ((await dep.index.fiches().catch(() => [])).find((f) => f.chemin === touchee.chemin)?.empreinte ?? null) : null;
 	await pil.etat.noterFicheServieLueOuEcrite(session.id, { chemin: touchee.chemin, action: touchee.action, horodatageMs: entree.horodatageMs, empreinte }).catch(() => {});

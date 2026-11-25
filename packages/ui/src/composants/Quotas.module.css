@@ -1,4 +1,4 @@
-/* Quotas du compte : bouton discret de la barre de titre ; cercle à deux anneaux replié, barres déplié. */
+/* Quotas des abonnements : bouton discret de la barre de titre ; cercle à deux anneaux replié, barres déplié. */
 .quotas {
 	display: flex;
 	align-items: center;
@@ -42,6 +42,23 @@
 .arc {
 	stroke-linecap: round;
 	transition: stroke-dasharray 400ms ease-out, stroke 400ms;
+}
+
+/* Un abonnement par groupe (Claude, ChatGPT), côte à côte. */
+.abonnements {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.abonnement {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.libelle {
+	color: var(--dim);
 }
 
 .detail {

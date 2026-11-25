@@ -10,6 +10,7 @@ import { pilotageReel } from '../../src/infra/systeme.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
 import { fauxTerminaux } from '../aides/faux-terminaux.ts';
+import { commandeClaude } from '../aides/moteurs.ts';
 
 const POSIX = process.platform !== 'win32';
 const lances: ChildProcess[] = [];
@@ -137,7 +138,7 @@ describe.skipIf(!POSIX)('Pilote au démarrage : identité du pid', () => {
 		const terminaux = fauxTerminaux();
 		const pil = await pilotageReel(racine, { terminaux });
 		fermer.push(() => pil.etat.fermer());
-		pil.plugin.claude = { commande: process.execPath, avant: ['faux'] };
+		commandeClaude(pil, { commande: process.execPath, avant: ['faux'] });
 		const session = (id: string, pid: number): Session => ({
 			id,
 			profil: 'travail',

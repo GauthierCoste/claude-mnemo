@@ -36,7 +36,7 @@ function vecteurDe(octets: Uint8Array | null, modele: string | null): GesteDApri
 }
 
 /**
- * Lecture seule de l'état pour le banc : le journal (`LectureDuJournal`) et, si l'état en a (version 13), les gestes
+ * Lecture seule de l'état pour le banc : le journal (`LectureDuJournal`) et, si l'état en a (version 14), les gestes
  * (`gestes` : null sans journal des gestes).
  */
 export type JournalEnLecture = LectureDuJournal & { version: number; gestes(): Promise<GestesDuBanc | null>; fermer(): void };

@@ -15,7 +15,7 @@ export function derniereEntree(entrees: readonly EntreeServieVue[]): EntreeServi
  * Classement de l'entrée la plus récente, une ligne par fiche. Avec des notes : par note décroissante (le pourcentage est
  * l'ordre), les lignes sans note ensuite, par rang ; sans notes : par rang. Masqués : les écartés (le service ne les classe
  * plus ; l'entrée affichée a pu précéder le geste) et les fiches notées sous `SEUIL_NOTE_CLASSEMENT`, sauf si elles ont été
- * servies (ce que Claude a reçu reste toujours visible).
+ * servies (ce que l'agent a reçu reste toujours visible).
  */
 export function dernierClassement(entrees: readonly EntreeServieVue[], ecartes: readonly string[]): ClassementVue[] {
 	return classementTrie(entrees).filter((c) => auDessusDuSeuil(c) && !estEcarte(c.id, ecartes));

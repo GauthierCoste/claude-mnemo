@@ -9,8 +9,8 @@ Commands, messages and the interface are in French; this page gives their meanin
 
 Node 24 or later is required. The `mnemo` command (see [installation.md](installation.md) to make it available):
 
-- `mnemo init [folder] [--oui] [--json] [--mcp | --sans-mcp] [--modeles | --sans-modeles] [--commande | --sans-commande]
-  [--lanceur | --sans-lanceur]`: creates the memory (`_mnemo/`, with `SCHEMA.md`, the note of the `travail`
+- `mnemo init [folder] [--oui] [--json] [--mcp | --sans-mcp] [--codex] [--modeles | --sans-modeles]
+  [--commande | --sans-commande] [--lanceur | --sans-lanceur]`: creates the memory (`_mnemo/`, with `SCHEMA.md`, the note of the `travail`
   profile and a first git commit; no folder is imposed); does nothing if it already exists. In a terminal, on a fresh folder, it guides you step by step:
   folder (`~/…` accepted; absolute path shown and confirmed before creation), declaration to Claude Code, local models
   (no by default), the `mnemo` command and the macOS launcher (yes by default). `--oui` (yes): no question, MCP
@@ -22,7 +22,9 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   `--mcp` / `--sans-mcp` (declare to Claude Code or not; `MNEMO_SANS_MCP=1` wins over `--mcp`), `--modeles` /
   `--sans-modeles` (install the local models or not; `--modeles` also applies to an existing memory), `--commande` /
   `--sans-commande` (the `mnemo` command in `~/.local/bin`), `--lanceur` / `--sans-lanceur` (the macOS launcher). Giving
-  both options of a pair is a usage error (exit code 2). A failing step outside the memory (MCP, models, command,
+  both options of a pair is a usage error (exit code 2). `--codex` also declares the MCP server to Codex and installs
+  the Mnemo hooks in `~/.codex/hooks.json` (or `$CODEX_HOME`); without it Codex is never touched, and
+  `MNEMO_SANS_MCP=1` skips both (see [installation.md](installation.md#codex)). A failing step outside the memory (MCP, models, command,
   launcher) does not stop the next ones: it is reported, and the exit code is 1.
 
   `--json` (for a program that drives the installation): no question, and standard output carries only JSON lines,
@@ -40,7 +42,9 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   {"fin":true,"racine":"/path","ok":false}
   ```
 
-  `etape` is `memoire`, `mcp`, `modeles`, `commande` or `lanceur`. A step that runs gives `debut` then `fait` or `echec`;
+  `etape` is `memoire`, `mcp`, `codex`, `codex_hooks`, `modeles`, `commande` or `lanceur` (`codex` and `codex_hooks`
+  only with `--codex`). A step that runs gives `debut` then `fait` or `echec`, or `laisse` when it deliberately leaves
+  things as they are (a declaration turned off in Codex with `enabled = false`: not a failure, no exit code 1);
   a step left aside gives a single `saute` line. Download progress (`piece`: `moteur`, `sens` or `reranker`; `total` is
   `null` when the size is unknown) comes at most once per second and per piece. The last line is `fin`; `ok` is false
   when a step failed (exit code 1). In JSON, a declaration that must be done by hand (Claude Code not found, declared
@@ -48,15 +52,19 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   of Mnemo, the failure line also carries `"motif":"perime"` (`mnemo declarer --remplacer` then rewrites it). The
   types are `LigneInit` and `PosteVerifie` in `@mnemo/contrat`.
 - `mnemo verifier-poste [--json]` (check this computer): `git` (runs `git --version`), Claude Code (the `claude` the
-  sessions will run) and the Node version. Without `--json`, one line each, exit code 1 if git or Claude Code is
-  missing; with `--json`, one line, exit code 0:
-  `{"git":{"ok":true,"version":"2.50.1"},"claude":{"ok":false,"motif":"…"},"node":{"version":"26.13.1"}}`.
-- `mnemo declarer (--remplacer | --retirer) [--json]` (declare): looks after an existing MCP declaration of Mnemo to
-  Claude Code, of user scope; it never declares anew, which is
-  `mnemo init --mcp`. `--remplacer` (replace): a Mnemo declaration that runs another Node.js or another copy of Mnemo is
+  sessions will run), Codex (optional: where it is, its version, the MCP declaration, the Mnemo hooks and whether Codex
+  has approved them) and the Node version. Nothing is changed. Without `--json`, one line each, exit code 1 if git or
+  Claude Code is missing (never for Codex); with `--json`, one line, exit code 0:
+  `{"git":{"ok":true,"version":"2.50.1"},"claude":{"ok":false,"motif":"…"},"codex":{"ok":true,"chemin":"…","version":"…","mcp":{"etat":"deja"},"hooks":{"etat":"a_jour","approbation":{"etat":"a_approuver","motif":"…"}}},"node":{"version":"26.13.1"}}`.
+- `mnemo declarer (--remplacer | --retirer) [--moteur claude-code|codex] [--json]` (declare): looks after an existing MCP
+  declaration of Mnemo to Claude Code (default) or Codex, of user scope; it never declares anew, which is
+  `mnemo init --mcp` (or `--codex`). `--remplacer` (replace): a Mnemo declaration that runs another Node.js or another copy of Mnemo is
   removed and made again with this Node.js and this Mnemo; `--retirer` (remove): the declaration is removed only if it
   runs this Node.js and this Mnemo. A declaration named `mnemo` that does not run Mnemo, or of another scope, is left
-  alone. With `--json`, one line `{"resultat":"…","message":"…"}`, `resultat` being `absent` (nothing declared), `deja`
+  alone. With `--moteur codex`, the Mnemo hooks of `~/.codex/hooks.json` follow the same way (those of another
+  installation of Mnemo are left by `--retirer`), and a Codex declaration that is turned off or carries your own settings
+  is never rewritten: the message says what to change by hand. With `--json`, one line `{"resultat":"…","message":"…"}`
+  (plus `"hooks":{"resultat":"…","message":"…"}` for Codex), `resultat` being `absent` (nothing declared), `deja`
   (already up to date), `remplace`, `retire`, `autre` (left alone) or `echec` (type `SortieDeclarer` in
   `@mnemo/contrat`). Exit code 1 on a failure (`claude` not found, for example), 2 on a usage error.
 - `mnemo lit <path>` (read): prints a note (path relative to `_mnemo/`, for example `clients/acme/acme.md`).
@@ -66,7 +74,7 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   invalidated information; `--contexte` returns each result in full, a passage with its section or its neighbours (like
   the hooks and the `chercher` tool).
 - `mnemo index [--reconstruire]`: updates the search index, or deletes and rebuilds it.
-- `mnemo amorce [--dossier-claude <path>]` (or the "Importer la mémoire de Claude" button of the Memory view): imports
+- `mnemo amorce [--dossier-claude <path>]` (or the "Importer la mémoire de Claude Code" button of Mémoire › Archiviste): imports
   the native memory of Claude Code (all `.md` files of `projects/*/memory/`, subfolders and `MEMORY.md` included, and the
   global `CLAUDE.md`, in `CLAUDE_CONFIG_DIR` or `~/.claude`) as source notes under `sources/claude-code/`, attached to
   their project when it is inside the folder, and references the `CLAUDE.md`, `CLAUDE.local.md` and `.claude/*.md` files
@@ -97,7 +105,7 @@ The **App Claude** tab connects the memory to the Claude app (Claude Desktop) an
 
 A document of the folder (text `.pdf`, `.docx`, `.eml`, `.mbox`, and any text file: `.md`, `.txt`, `.csv`, `.yaml`…;
 UTF-8, UTF-16 only with a byte order mark, otherwise Windows-1252) is referenced, never copied: `mnemo source docs/specification.pdf` (or the
-`extraire_source` tool in Claude Code) writes a `source` note under `_mnemo/sources/` (path, hash, format) and indexes
+`extraire_source` tool in a session) writes a `source` note under `_mnemo/sources/` (path, hash, format) and indexes
 its passages, which `cherche` and `chercher` find with the document title, the heading path and the page. The path is
 relative to the root of the Mnemo folder (outside `_mnemo/` and `.mnemo/`; a hidden folder or file is a document like
 any other); recognised secrets are masked before indexing. A near copy of an existing source is not written, unless
@@ -258,8 +266,9 @@ at each start). If the port is taken by another program (or by Mnemo for another
 never another port silently. In a terminal it prints the first-opening address, `http://127.0.0.1:4747/#jeton=<token>`,
 and opens it in the browser when the interface is built (`MNEMO_SANS_NAVIGATEUR=1` prevents that). Ctrl-C (or SIGTERM,
 or closing the terminal, or `mnemo arreter [folder]` for a service without a terminal) stops the sessions cleanly; they
-resume with `claude --resume` at the next start. After a crash of the service, its sessions become "à relire" (to
-review, minimal episode written), then are relaunched.
+resume with `claude --resume` or `codex resume` at the next start. After a crash of the service, its sessions become
+"à relire" (to review, minimal episode written), then are relaunched (a Codex session that never reached its first
+message stays "à relire").
 
 **Token and browser.** The service token is created once and kept in `.mnemo/jeton` (readable by you only). At the first
 opening of the address with the token in a browser, the interface stores the token in the `localStorage` of its origin,
@@ -299,7 +308,7 @@ content of the memory, documents and terminals is displayed as text, never as HT
 
 Not protected: a **script injected into the interface itself** would read the stored token; **browser extensions** with
 access to `127.0.0.1` see and command the interface as you do; **local programs** running under your account can read
-`.mnemo/jeton`; the first-opening address stays in the history; Claude sessions have your permissions.
+`.mnemo/jeton`; the first-opening address stays in the history; agent sessions have your permissions.
 
 ## Interface
 
@@ -308,11 +317,16 @@ service; to redo after an update). To work on the interface: `MNEMO_DOSSIER=<Mne
 (service running in that folder), then the printed address.
 
 The title bar shows, left of the Archiviste button, the **Modèles** button (the local models: see
-[The Modèles button](#the-modèles-button)) and, left of it, the **quotas of the Claude account** (5-hour window and week),
-common to all sessions: a small circle with two rings (inner: 5 hours; outer: week), green, amber from 50 %, red from
-80 %. A click unfolds them into bars with the reset time; another click folds them. They come from Claude Code's
-status line in the sessions launched by Mnemo (`mnemo ligne-etat`, which shows nothing there), so they appear after a
-first answer of Claude, and only for a Pro, Max or Ultra subscription.
+[The Modèles button](#the-modèles-button)) and, left of it, the **quotas of the subscriptions** (5-hour window and
+week), common to all sessions: one group per subscription seen, « Claude » and « ChatGPT », side by side. Each is a small
+circle with two rings (inner: 5 hours; outer: week), green, amber from 50 %, red from 80 %. A click unfolds them into
+bars with the reset time; another click folds them.
+
+- **Claude** quotas come from Claude Code's status line in the sessions launched by Mnemo (`mnemo ligne-etat`, which
+  shows nothing there), so they appear after a first answer, and only for a Pro, Max or Ultra subscription.
+- **ChatGPT** quotas come from the transcript of the Codex sessions launched by Mnemo, read by the service after a hook
+  (Codex has no status line). A window Codex does not report is not shown (some plans report the week only). A reading
+  older than an hour is ignored.
 
 The left rail has two views: **Sessions** (its badge: sessions waiting for your answer) and **Mémoire** (its badge: items
 to process).
@@ -341,20 +355,25 @@ inside a terminal.
 Without the interface, sessions are driven from the command line, with the service running:
 
 - `mnemo sessions`: running sessions (id, state, profile, folder, objective);
-- `mnemo session lancer <folder> [--profil p] [--objectif t]`: starts `claude` in this folder (relative to the root);
-- `mnemo session terminer <id> [--sans-bilan]`: wrap-up (Claude writes the episode, then the session stops), or abandon;
+- `mnemo session lancer <folder> [--profil p] [--objectif t]`: starts the engine of the profile (`claude` or `codex`) in
+  this folder (relative to the root);
+- `mnemo session terminer <id> [--sans-bilan]`: wrap-up (the agent writes the episode, then the session stops), or
+  abandon;
 - `mnemo session voir <id>`: the terminal of the session inside yours; Ctrl-] to quit.
 
 `<id>` can be shortened to its start (8 characters are enough).
 
-A session follows a simple cycle: "travaille" (working) during a Claude turn, "attend" (waiting) when it is done or asks
+A session follows a simple cycle: "travaille" (working) during a turn of the agent, "attend" (waiting) when it is done or asks
 for a permission, "en pause" (paused) when you stopped it, "à relire" (to review) when it stopped by itself, "terminée"
-(finished) after the wrap-up or the abandon. The **wrap-up** types an instruction into the session: Claude writes the
+(finished) after the wrap-up or the abandon. The **wrap-up** types an instruction into the session: the agent writes the
 episode of the session (`_mnemo/episodes/<project>/`) and 0 to 3 lessons, then the session stops. A session stopped
 without a wrap-up receives a minimal episode, written without AI (objective, dates, branch, files changed according to
 git).
 
-Each session started by Mnemo receives a plugin (`.mnemo/plugins/<session>/`): the instruction of its profile, its
+A session keeps the engine and model it was started with, also when it is resumed: changing the profile afterwards
+changes neither (see [Managing profiles](#managing-profiles)).
+
+Each Claude Code session started by Mnemo receives a plugin (`.mnemo/plugins/<session>/`): the instruction of its profile, its
 skills, its hooks (`mnemo hook …`), Claude Code auto-memory turned off, and the Mnemo tools needed for the wrap-up allowed
 in advance. Depending on the profile, the hooks inject the instructions and a few leads at each message
 (see "Injected context"), and refuse an action that breaks a checked instruction. They never hold the session up (under one
@@ -369,10 +388,41 @@ and, when the meaning model has already computed it, that message's vector. The 
 (never in the versioned memory), survives `/clear`, `/compact` and the end of the session, and is never purged on its
 own. Deleting a session keeps its gestures but erases the text and the vectors of its messages from the file.
 
+### Codex sessions
+
+A profile whose engine is Codex starts `codex` (0.171 or later; `MNEMO_CODEX` names another binary) in the terminal of
+the session, without a shell, with your ChatGPT subscription (`CODEX_API_KEY` is removed from its environment). The hooks
+are those installed once for the machine by `mnemo init --codex` and approved in Codex (`/hooks`): see
+[installation.md](installation.md#codex). They act only in a session started by Mnemo, and follow the hooks of the
+profile.
+
+- **What it receives.** The instruction of the profile is passed on the command line, followed by the list of its skills
+  (profile and memory: name, description, path of `SKILL.md`), which Codex reads with `lire` when they apply. Nothing is
+  written into the project folder. Codex's own memory is turned off. The Mnemo MCP server is passed on the command line
+  too, with the reading tools and `proposer` approved in advance; if your own Codex settings may change what the session
+  gets, a `[Mnemo] …` line at the top of the terminal says so, as it does when the hooks are missing, belong to another
+  installation or are not approved.
+- **First message.** Codex sends its first hook at the first message, not when it opens, and the first time it runs in
+  a folder it asks « Trust this folder? » in the terminal: answer it yourself, Mnemo never does. Until the first hook
+  arrives, Mnemo types nothing into the session.
+- **Resume.** Mnemo learns the identity of the Codex session from that first hook, and resumes it with `codex resume`.
+  A session whose hooks are not approved never sends it: it can be neither paused nor resumed, and neither wrapped up;
+  only abandoned. The interface greys these actions out and says why.
+- **Stop.** Mnemo stops a Codex session by typing `/quit` (before the first hook, it stops the process without typing
+  anything).
+- **One conversation per session.** Do not use `/new` or `/resume` inside a session started by Mnemo: the session keeps
+  following the conversation it started with, so what comes after is neither tracked nor resumed. The session ends when
+  Codex exits. Commands run in another conversation, such as a nested `codex exec`, are still checked against your
+  verified instructions.
+- **Context gauge and quotas.** They are read from the session's transcript (`~/.codex/sessions/`, or under
+  `$CODEX_HOME`) after a hook: how full the context window is, and the ChatGPT quotas of the title bar.
+- **Not found.** Without `codex`, or with a version older than 0.171, a Codex session is not started (there is no command
+  line to paste, unlike Claude Code); the launch says why, and so does the engine's line in Settings › Profiles.
+
 ### Injected context
 
-Mnemo proposes, it never forces. It does not push notes into the session: it hands Claude a few **cards** (title, path,
-one line) and Claude reads with `lire` the ones useful to its task. The tools `chercher`, `lire`, `lister`, `voisins`,
+Mnemo proposes, it never forces. It does not push notes into the session: it hands the agent a few **cards** (title, path,
+one line) and the agent reads with `lire` the ones useful to its task. The tools `chercher`, `lire`, `lister`, `voisins`,
 `chronologie` and `contexte` stay available for the rest.
 
 What a session receives, in this order:
@@ -410,7 +460,7 @@ What Mnemo does not do:
 - A **mute message** gets no card: a message that starts with a tag (`<task-notification>`, `<command-name>`…) or that
   has fewer than two meaningful words ("oui vas-y pousse"). Only the instructions come, and the note of the position if
   it was not injected yet.
-- **Nothing after a tool call**, and no computation in the background: `PostToolUse` only records which notes Claude
+- **Nothing after a tool call**, and no computation in the background: `PostToolUse` only records which notes the agent
   reads or writes.
 - No `source`, `dossier`, `consigne`, `profil` or `episode` note is proposed, and no note from another project or client
   unless your message names it or it is linked to a note you injected by hand. Episodes stay findable with `chercher` and `chronologie`.
@@ -419,11 +469,11 @@ What Mnemo does not do:
 - After `/clear` or `/compact`, the cards can be proposed again and the note of the position is injected again.
 
 The `contexte(question)` MCP tool draws leads on demand: given a question, it returns up to 10 cards of the closest notes
-by meaning, notes from elsewhere included (Claude asked), to read with `lire`.
+by meaning, notes from elsewhere included (the agent asked), to read with `lire`.
 
-The profile `travail` does not tell Claude how to use its own native memory. It says that the Mnemo memory holds
+The profile `travail` does not tell the agent how to use its own native memory. It says that the Mnemo memory holds
 information relevant to the work, that Mnemo proposes leads, and to write with `proposer` whatever is worth keeping. The
-automatic memory of Claude Code stays off in the sessions started by Mnemo.
+automatic memory of Claude Code, and the memory of Codex, stay off in the sessions started by Mnemo.
 
 **Injecting a note by hand.** In the Contexte panel, ➤ "Injecter dans la session" (inject into the session) on a line
 queues the whole note for the session's **next message** (never after a tool call): it is then injected whole, under
@@ -441,23 +491,23 @@ discreet « sans note de sens » next to the panel title says so (not after a mu
 A note the session read (tools `lire`, `voisins`) is a line of the same list, placed at the time it was read, with ◈ on
 the left (tooltip: when it was read); it appears as soon as it is read, without reloading. A note already in the list
 (injected or proposed) keeps its line and its tooltip adds « lue aussi à HH:MM ». Then the type dot and the title on one line. The notes injected whole come first (the note of the position and the notes you
-asked for, oldest first), then the cards proposed to Claude, most recent first. The reason of a card is written on the
+asked for, oldest first), then the cards proposed to the agent, most recent first. The reason of a card is written on the
 right only when it tells something (*nommée*, *question*, *liée à <title>*); *du périmètre*, the default, is in the tooltip
 with the time the card was proposed and its path. The list scrolls on its own and stays anchored where the two meet. On
 hover, the reason gives way to ➤ (inject at the next message) and ✗ "ne plus suggérer" (dismiss the note for the
 session; dismissed notes stay under "Écartées (N)" with "Rétablir"); a note that was only read has ➤ alone, since only
 what Mnemo proposed can be dismissed. A mute message shows its reason under the list.
 Clicking a title opens the note. Above the list: the avatar of the profile, the state and the objective of the session,
-then its folder, start, duration, branch and, once known, the **Contexte** line: how full Claude Code's context window
-is (read from the end of the session's transcript by the service, for this gauge only; the same gauge runs under the
-title bar of the session). When Claude Code's `autoCompactWindow` setting is set (the project's `.claude/settings.local.json`,
+then its engine and model (the **Moteur** line), its folder, start, duration, branch and, once known, the **Contexte**
+line: how full the agent's context window is (read from the end of the session's transcript by the service, for this
+gauge only; the same gauge runs under the title bar of the session). When Claude Code's `autoCompactWindow` setting is set (the project's `.claude/settings.local.json`,
 then `.claude/settings.json`, then `~/.claude/settings.json`; read again at each reading), the gauge fills up to that
 threshold instead of the size of the window, and its tooltip says "tokens avant résumé automatique" (before the automatic summary).
 
 The context settings (`contexte.cartesPerimetre`, `contexte.cartesNommees`, `contexte.poidsInjection`,
 `contexte.demiVieInjection`) and the minimum similarity of search are listed in [installation.md](installation.md#settings).
 
-**Permissions.** A Mnemo session runs with your own Claude Code permissions: Mnemo is not a sandbox. Checked
+**Permissions.** A Mnemo session runs with your own Claude Code or Codex permissions: Mnemo is not a sandbox. Checked
 instructions are reminders: they refuse the actions they recognise, without guaranteeing that no other one gets through.
 The archivist receives `--add-dir` on the whole root of the Mnemo folder.
 
@@ -467,7 +517,7 @@ A profile decides what a session receives. Two are shipped:
 
 - `travail` (work, default): started in the project folder; all hooks; the skills of `_mnemo/skills/` active for the
   project;
-- `archiviste` (archivist): started in `_mnemo/`, with the root of the folder added by `--add-dir`; it files what you
+- `archiviste` (archivist, always on Claude Code): started in `_mnemo/`, with the root of the folder added by `--add-dir`; it files what you
   give it (documents, emails, imported memory) through the Mnemo MCP tools; no context injected by the hooks (it reads the
   memory with the tools), no action check; its own skills, placed at first launch in
   `_mnemo/profils/archiviste/skills/`. Its instruction lets it organise the folder tree freely, reuse or create note
@@ -480,9 +530,9 @@ default instruction of a profile, unless you replaced it, follows Mnemo updates.
 The archivist cleans the memory with the `entretenir` MCP tool (also a `menage` skill, and the memory's own « Ménage de la
 mémoire » note if there is one). Each action is one commit under the lock (`mnemo: supprime <path>`, `mnemo: fusionne
 <path> → <path>`, `mnemo: corrige_lien <path>`, like `mnemo: déplace <path> → <path>`), followed by a reindex. The MCP
-server offers `entretenir` to every profile, the work profile included; the only guard is Claude Code's permission
-prompt: Mnemo does not pre-allow it (it is not in the permissions Mnemo writes), so Claude Code asks you before each call
-unless your own settings allow it:
+server offers `entretenir` to every profile, the work profile included; the only guard is the agent's permission
+prompt: Mnemo does not pre-allow it (it is not among the tools Mnemo approves in advance, for Claude Code or Codex), so
+the agent asks you before each call unless your own settings allow it:
 
 - `supprimer` (delete a note): refused while other notes link to it (by path, name, title or alias), and the refusal lists
   them; with `redirection`, their links are rewritten to that note (section or anchor dropped, displayed text kept), then
@@ -575,7 +625,7 @@ prefix of the first line) in one commit, `mnemo: migre format ancien (<n> fiches
 no commit. Run it once per memory.
 
 Other fixes: links written with the full path or the `.md` extension are rewritten when a note moves; `retirer_dossier`
-removes a folder that holds only its own note; an episode that Claude writes over the minimal one takes a file name from
+removes a folder that holds only its own note; an episode that the agent writes over the minimal one takes a file name from
 its title, not from the objective.
 
 A profile is a note of the memory, `_mnemo/profils/<name>/<name>.md`: see [format-coffre.md](format-coffre.md#profile-notes).
@@ -585,6 +635,13 @@ A profile is a note of the memory, `_mnemo/profils/<name>/<name>.md`: see [forma
 **Settings › Profiles** lists the profiles in two groups: **Memory**, the archivist, always there, which files and keeps the memory (started from the Archivist drawer); and **Work profiles**, the sessions on your projects, started from New session, `travail` first (the default one, always there). Each line shows the avatar, the name and the first line of the instruction; the chosen profile is edited on the right:
 
 - **Avatar**: a small creature (12 shapes) and a colour, chosen separately; shown in New session and in the session lists.
+- **Engine**: Claude Code or Codex, the coding agent that runs the sessions of the profile. Each line says whether the
+  engine is ready on this computer; one that cannot be found is greyed out with the reason. The archivist stays on Claude
+  Code. A profile on Codex shows a badge in the list and in New session.
+- **Model**: a model of the engine, chosen among the proposed ones (Claude Code: `opus`, `sonnet`, `haiku`; Codex: the
+  list given by `codex debug models`) or typed freely. **Empty: the engine's default model.** It is passed as `--model`
+  (Claude Code) or `-m` (Codex). Changing the engine empties the model and the plugins; going back to the saved engine
+  restores them.
 - **Instruction**: Mnemo's default instruction (which follows Mnemo updates) or your own text. « Restore the default
   instruction » goes back to the default.
 - **Start**: in the chosen project folder, or in the memory (`_mnemo/`, the root added with `--add-dir`). The
@@ -592,7 +649,7 @@ A profile is a note of the memory, `_mnemo/profils/<name>/<name>.md`: see [forma
 - **Mnemo hooks**: at least one of the six events.
 - **Memory skills**: all those of `_mnemo/skills/` (future ones included), or only the ticked ones. The skills of the
   profile itself (`profils/<name>/skills/`) are always active and win over a memory skill of the same name.
-- **Claude Code plugins**: the installed plugins (read from `~/.claude/plugins/installed_plugins.json`, or
+- **Claude Code plugins** (Claude Code only): the installed plugins (read from `~/.claude/plugins/installed_plugins.json`, or
   `CLAUDE_CONFIG_DIR`). The ticked ones are switched on in the session, every other installed plugin is switched off,
   even one switched on in your Claude Code settings (`enabledPlugins` of the session settings). A profile with no plugin
   ticked gets none.
@@ -605,17 +662,22 @@ opened, the save is refused until you reload it.
 Below the editor, **What a session receives** previews, read-only and as saved: the profile instruction, the Mnemo MCP
 server instructions, the hooks, the memory skills (and why one is left out), the Claude Code plugins, what comes from
 Claude Code outside Mnemo (personal skills, `CLAUDE.md`), and the system instructions (wrap-up, import sent to the
-archivist).
+archivist). For a Codex profile, the instruction is shown with the list of skills it carries, and what comes from
+outside Mnemo is Codex's own (`AGENTS.md`, `.agents/skills`); there are no plugins.
+
+A session takes the engine and model of its profile when it starts and keeps them, resume included: changing the profile
+later only affects new sessions.
 
 Mnemo creates no profile and switches no plugin on by itself: until you tick a plugin in a profile, sessions started by
 Mnemo get no Claude Code plugin.
 
 ## Degraded mode
 
-Without node-pty, or if `claude` cannot be found, Mnemo cannot open a terminal. Everything else works: service, API,
-hooks, memory, search. Starting a session then returns a complete command line to paste into your own terminal. The
-session is followed through its hooks, without a terminal in Mnemo. The meaning models are another, independent option:
-without them, search works by words.
+Without node-pty, Mnemo cannot open a terminal; nor can it for a Claude Code session when `claude` cannot be found.
+Everything else works: service, API, hooks, memory, search. Starting a session then returns a complete command line to
+paste into your own terminal (`claude …` or `codex …`; a Codex that cannot be found is refused instead, see
+[Codex sessions](#codex-sessions)). The session is followed through its hooks, without a terminal in Mnemo. The meaning
+models are another, independent option: without them, search works by words.
 
 node-pty is an optional dependency. On macOS and Windows it comes prebuilt (Node-API: it survives Node.js upgrades),
 with no build tools. On Linux it is compiled at install time (`pnpm install`: `python3`, `make`, a C++ compiler);
@@ -657,6 +719,18 @@ claude mcp add --scope user mnemo -- '<path to node>' '<path to main.ts>' mcp
 ```
 
 To undo: `claude mcp remove mnemo --scope user`. `MNEMO_SANS_MCP=1` is the same as `--sans-mcp`.
+
+## Connecting Codex
+
+`mnemo init --codex` declares the same server to Codex at user level, so every Codex session reaches the memory, and
+installs the Mnemo hooks for the sessions started by Mnemo. If `codex` cannot be found, it prints the command to run
+yourself:
+
+```
+codex mcp add mnemo -- '<path to node>' '<path to main.ts>' mcp
+```
+ To undo both: `mnemo declarer --moteur codex --retirer`. The steps, the approval of the hooks and the
+case of your own settings are in [installation.md](installation.md#codex).
 
 ## Connecting the Claude app
 

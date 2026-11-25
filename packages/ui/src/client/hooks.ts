@@ -14,6 +14,7 @@ import {
 	type ReponseInjectionAutomatique,
 	type ReponseAServir,
 	type ReponseFenetres,
+	type QuotasDesMoteursVue,
 	type QuotasVue,
 	type ReponseQuotas,
 	type EntreeServieVue,
@@ -29,6 +30,7 @@ import {
 	type GitDossierVue,
 	type LotVue,
 	type ReponseLots,
+	type ReponseMoteurs,
 	type ReponseDocuments,
 	type ApercuProfilVue,
 	type ClaudeDesktopVue,
@@ -76,6 +78,15 @@ export function useReglages(): Ressource<ReglagesVue> {
 export function useClaudeDesktop(): Ressource<ClaudeDesktopVue> {
 	const { api } = useClient();
 	return useRessource('claude-desktop', () => api.lire<ClaudeDesktopVue>(ROUTES.claudeDesktop));
+}
+
+/**
+ * Moteurs du service (agents de code) : trouvés ou non, version, modèles proposés ; `poste` : avec l'état du poste
+ * (déclaration MCP, hooks), plus lent, pour Réglages › Système.
+ */
+export function useMoteurs(poste = false): Ressource<ReponseMoteurs> {
+	const { api } = useClient();
+	return useRessource(poste ? 'moteurs:poste' : 'moteurs', () => api.lire<ReponseMoteurs>(ROUTES.moteurs, poste ? { poste: '1' } : undefined));
 }
 
 /** Profils de session qui peuvent être lancés ; relus quand la mémoire change (un profil ajouté sous `profils/`). */
@@ -354,21 +365,38 @@ export function useAServir(session: string): AServir {
 	};
 }
 
+const AUCUN_QUOTA: QuotasDesMoteursVue = {};
+
 /**
- * Quotas du compte Claude (communs à toutes les sessions) : lus au service, puis tenus par les messages `quotas` ; null tant
- * qu'aucune ligne d'état n'en a transmis.
+ * Quotas de l'abonnement de chaque moteur (communs à toutes ses sessions) : lus au service, puis tenus par les messages
+ * `quotasMoteurs` ; vide tant qu'aucun n'est relevé. Un service sans `moteurs` ni `quotasMoteurs` : ceux de Claude Code seuls
+ * (`quotas`, réponse et message).
  */
-export function useQuotas(): QuotasVue | null {
+export function useQuotas(): QuotasDesMoteursVue {
 	const { api, connexion } = useClient();
 	const base = useRessource('quotas', () => api.lire<ReponseQuotas>(ROUTES.quotas));
-	const [recus, setRecus] = useState<QuotasVue | null>(null);
-	useEffect(() => connexion.surMessage((m) => m.type === 'quotas' && setRecus(m.quotas)), [connexion]);
-	return recus ?? base.donnees?.quotas ?? null;
+	const [recus, setRecus] = useState<QuotasDesMoteursVue | null>(null);
+	// `quotas` (Claude Code) d'un service qui n'envoie pas `quotasMoteurs` : rangé sous Claude Code, tant qu'aucun `quotasMoteurs` n'est reçu
+	const [claudeSeul, setClaudeSeul] = useState<QuotasVue | null>(null);
+	useEffect(
+		() =>
+			connexion.surMessage((m) => {
+				if (m.type === 'quotasMoteurs') setRecus(m.moteurs);
+				else if (m.type === 'quotas') setClaudeSeul(m.quotas);
+			}),
+		[connexion],
+	);
+	const lue = base.donnees;
+	const duService = useMemo(() => {
+		const moteurs = lue === undefined ? AUCUN_QUOTA : (lue.moteurs ?? (lue.quotas === null ? AUCUN_QUOTA : { 'claude-code': lue.quotas }));
+		return claudeSeul === null ? moteurs : { ...moteurs, 'claude-code': claudeSeul };
+	}, [lue, claudeSeul]);
+	return recus ?? duService;
 }
 
 /**
  * Fenêtre de contexte de Claude Code d'une session : lue au service (toutes les sessions, une requête partagée), puis tenue
- * par les messages `fenetre` ; null tant qu'aucune réponse de Claude n'a été vue.
+ * par les messages `fenetre` ; null tant qu'aucune réponse de l'agent n'a été vue.
  */
 export function useFenetre(session: string): FenetreVue | null {
 	const { api, connexion } = useClient();

@@ -11,7 +11,7 @@ import { etatApres } from '../domaine/session.ts';
 import type { ArretAttendu, CauseArret, EtatSession, EvenementHook, Session } from '../domaine/session.ts';
 
 /** Version du schéma (`PRAGMA user_version`). L'état n'est pas jetable : une autre version est une erreur, jamais un effacement. */
-export const VERSION_ETAT = 13;
+export const VERSION_ETAT = 14;
 /** Migration 3 → 4 : les sessions terminées depuis plus longtemps n'entrent plus dans le rattrapage des épisodes. */
 const RATTRAPAGE_MAX_MS = 7 * 86_400_000;
 const ATTENTE_VERROU_MS = 2000;
@@ -119,7 +119,7 @@ CREATE INDEX IF NOT EXISTS lots_decide ON lots (decide_ms);
 /**
  * Fiches écartées toujours (« Ne plus jamais suggérer ») : sorties des candidates partout jusqu'à leur rétablissement ;
  * `session` : celle du geste (null : fait hors session) ; `retablie_ms` : instant du dernier rétablissement (null : écartée),
- * gardé pour que les écarts d'avant ne comptent plus. Ajoutée avec le journal des gestes (version 13).
+ * gardé pour que les écarts d'avant ne comptent plus. Ajoutée avec le journal des gestes (version 14).
  */
 const SCHEMA_ECARTEES_TOUJOURS = `
 CREATE TABLE IF NOT EXISTS ecartees_toujours (
@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS ecartees_toujours (
 `;
 
 /**
- * Journal durable des gestes sur les fiches (sans limite, gardé après la session) ; ajouté en version 13, avec le dernier
+ * Journal durable des gestes sur les fiches (sans limite, gardé après la session) ; ajouté en version 14, avec le dernier
  * message porteur de chaque session et le rang du message des entrées servies. `note` : JSON (`{"note":0.72}`) ; `vecteur` :
  * vecteur du message (Float32 petit-boutiste), du modèle `modele_vecteur` ; null s'il n'a pas été calculé.
  */
@@ -186,6 +186,9 @@ CREATE TABLE IF NOT EXISTS sessions (
 	perimetre_propose_ms INTEGER,
 	messages_porteurs INTEGER NOT NULL DEFAULT 0,
 	niveau_modeles TEXT,
+	moteur TEXT,
+	modele TEXT,
+	fil TEXT,
 	dernier_message TEXT
 );
 CREATE TABLE IF NOT EXISTS servis (
@@ -281,6 +284,11 @@ function ligneVersSession(l: Ligne): Session {
 		dossierNonRattache: l.dossier_non_rattache === 1,
 		// une valeur qui n'est pas un niveau est ignorée : la session suit le niveau de la machine
 		...(estNiveauModeles(l.niveau_modeles) ? { niveauModeles: l.niveau_modeles } : {}),
+		// non enregistrés (session d'avant les moteurs) : absents, lus Claude Code et le modèle par défaut ; un moteur inconnu de
+		// ce Mnemo est gardé tel quel
+		...(typeof l.moteur === 'string' ? { moteur: l.moteur } : {}),
+		...(typeof l.modele === 'string' ? { modele: l.modele } : {}),
+		...(typeof l.fil === 'string' ? { fil: l.fil } : {}),
 	};
 }
 
@@ -403,7 +411,9 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				// versions précédentes : la trace du processus (1 → 2), le bilan lu (2 → 3), le dernier arrêt et l'épisode écrit
 				// (3 → 4), la demande et le classement des entrées servies et les écartés (4 → 5), le dossier non rattaché
 				// (5 → 6), les fiches servies, lues ou écrites par chaque session (6 → 7), les cartes proposées, le journal des actions et le journal servi enrichi (7 → 8), l'empreinte lue des fiches (8 → 9), les injections à la main et le
-				// compteur de messages porteurs (9 → 10), les lots d'informations (10 → 11), le niveau des modèles d'une session (11 → 12), le journal durable des gestes (12 → 13) s'ajoutent, rien n'est perdu
+				// compteur de messages porteurs (9 → 10), les lots d'informations (10 → 11), le niveau des modèles d'une session (11 → 12),
+				// le moteur et le modèle de chaque session (12 → 13), le journal durable des gestes et le classement vivant (13 → 14)
+				// s'ajoutent, rien n'est perdu
 				if (version === 1) for (const colonne of ['demarrage_machine_ms', 'lance_ms', 'vu_vivant_ms']) base.exec(`ALTER TABLE sessions ADD COLUMN ${colonne} INTEGER`);
 				if (version <= 2) base.exec('ALTER TABLE sessions ADD COLUMN bilan_lu_ms INTEGER');
 				if (version <= 3) {
@@ -440,26 +450,22 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				// 11 → 12 : le niveau des modèles propre à une session (absent : elle suit celui de la machine)
 				const colonnesSessions = (base.prepare('PRAGMA table_info(sessions)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesSessions.includes('niveau_modeles')) base.exec('ALTER TABLE sessions ADD COLUMN niveau_modeles TEXT');
-				// 12 → 13 : le journal durable des gestes, le dernier message porteur des sessions, le rang du message des entrées servies
+				// 12 → 13 : le moteur, le modèle et l'identifiant chez le moteur (`fil`) de chaque session, null pour celles d'avant (lu :
+				// Claude Code, modèle par défaut, fil inconnu) ; une table déjà au schéma courant les a
+				const deSession = (base.prepare('PRAGMA table_info(sessions)').all() as Ligne[]).map((c) => c.name);
+				for (const colonne of ['moteur', 'modele', 'fil']) if (!deSession.includes(colonne)) base.exec(`ALTER TABLE sessions ADD COLUMN ${colonne} TEXT`);
+				// 13 → 14 : le journal durable des gestes et les écartées toujours, le dernier message porteur des sessions, le rang du
+				// message, l'état d'affinage, la durée vue du service et la calibration des entrées servies ; chaque ajout est vérifié,
+				// pour un état en 13 venu de la 1.6.1 comme pour un état de développement qui en a déjà une partie
 				base.exec(SCHEMA_GESTES);
-				if (!colonnesSessions.includes('dernier_message')) base.exec('ALTER TABLE sessions ADD COLUMN dernier_message TEXT');
-				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
-				if (!colonnesServis.includes('rang_message')) base.exec('ALTER TABLE servis ADD COLUMN rang_message INTEGER');
-				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
-				if (!colonnesServis.includes('ms_service')) base.exec('ALTER TABLE servis ADD COLUMN ms_service INTEGER');
-				if (!colonnesServis.includes('calibree')) base.exec('ALTER TABLE servis ADD COLUMN calibree INTEGER');
-				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
-			} else if (version === VERSION_ETAT) {
-				// 13 non publiée : un état déjà en 13 (développement) reçoit l'état d'affinage du classement, la durée vue du service,
-				// la calibration du classement, les écartées toujours et l'index du suivi des injections automatiques
-				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
-				if (!colonnesServis.includes('affinage')) base.exec('ALTER TABLE servis ADD COLUMN affinage TEXT');
-				if (!colonnesServis.includes('ms_service')) base.exec('ALTER TABLE servis ADD COLUMN ms_service INTEGER');
-				if (!colonnesServis.includes('calibree')) base.exec('ALTER TABLE servis ADD COLUMN calibree INTEGER');
-				base.exec(SCHEMA_ECARTEES_TOUJOURS);
 				const colonnesEcartees = (base.prepare('PRAGMA table_info(ecartees_toujours)').all() as Ligne[]).map((c) => c.name);
 				if (!colonnesEcartees.includes('retablie_ms')) base.exec('ALTER TABLE ecartees_toujours ADD COLUMN retablie_ms INTEGER');
-				base.exec('CREATE INDEX IF NOT EXISTS gestes_sorte ON gestes (geste, horodatage_ms)');
+				if (!deSession.includes('dernier_message')) base.exec('ALTER TABLE sessions ADD COLUMN dernier_message TEXT');
+				const colonnesServis = (base.prepare('PRAGMA table_info(servis)').all() as Ligne[]).map((c) => c.name);
+				for (const [colonne, type] of [['rang_message', 'INTEGER'], ['affinage', 'TEXT'], ['ms_service', 'INTEGER'], ['calibree', 'INTEGER']] as const) {
+					if (!colonnesServis.includes(colonne)) base.exec(`ALTER TABLE servis ADD COLUMN ${colonne} ${type}`);
+				}
+				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
 			} else if (version !== VERSION_ETAT) {
 				throw new ErreurEtat(
 					`L'état des sessions (${chemin}) est en version de schéma ${version}, ce Mnemo lit la version ${VERSION_ETAT} : rien n'est effacé, mettre Mnemo à jour.`,
@@ -580,8 +586,8 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 					.prepare(
 						`INSERT INTO sessions (id, profil, dossier, position, projet, objectif, etat, creee_ms, maj_ms, arret_attendu,
 							bilan_demande_ms, commit_debut, branche, pid, ecrit_ms, demarrage_machine_ms, lance_ms, vu_vivant_ms, bilan_lu_ms, dernier_arret, episode_ms,
-							dossier_non_rattache, niveau_modeles)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+							dossier_non_rattache, niveau_modeles, moteur, modele, fil)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					)
 					.run(
 						s.id,
@@ -607,6 +613,9 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 						s.episodeMs ?? null,
 						s.dossierNonRattache === true ? 1 : 0,
 						estNiveauModeles(s.niveauModeles) ? s.niveauModeles : null,
+						s.moteur ?? null,
+						s.modele ?? null,
+						s.fil ?? null,
 					);
 			});
 		},
@@ -626,6 +635,11 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 			return ecrire(() => {
 				const actuelle = lire(id);
 				if (actuelle === null) return null;
+				// l'identifiant chez le moteur : noté au premier événement qui le porte, jamais écrasé
+				if (complement?.fil !== undefined && complement.fil !== '' && actuelle.fil === undefined) {
+					base.prepare('UPDATE sessions SET fil = ? WHERE id = ? AND fil IS NULL').run(complement.fil, id);
+					actuelle.fil = complement.fil;
+				}
 				if (horodatageMs <= actuelle.majMs) return actuelle;
 				const objectif = actuelle.objectif === null && e === 'message' && complement?.objectif !== undefined ? complement.objectif : actuelle.objectif;
 				const commitDebut = complement?.commitDebut !== undefined ? complement.commitDebut : actuelle.commitDebut;

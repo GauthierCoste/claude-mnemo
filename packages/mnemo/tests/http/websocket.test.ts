@@ -11,6 +11,7 @@ import { signalerGroupe } from '../../src/infra/processus.ts';
 import { terminauxPty } from '../../src/infra/terminaux-pty.ts';
 import { appeler, jusqua, serviceFaux } from '../aides/service-faux.ts';
 import type { ContexteService } from '../aides/service-faux.ts';
+import { commandeClaude } from '../aides/moteurs.ts';
 
 const FAUX_CLAUDE = resolve(import.meta.dirname, '../aides/faux-claude.mjs');
 const UUID = '11111111-2222-4333-8444-555555555555';
@@ -398,7 +399,7 @@ describe.skipIf(sauter)('WebSocket : client lent (vrai pseudo-terminal, faux-cla
 			{
 				pil: (pil) => {
 					pil.terminaux = terminaux;
-					pil.plugin.claude = { commande: process.execPath, avant: [FAUX_CLAUDE, '--bavard', '20'] };
+					commandeClaude(pil, { commande: process.execPath, avant: [FAUX_CLAUDE, '--bavard', '20'] });
 				},
 			},
 		);

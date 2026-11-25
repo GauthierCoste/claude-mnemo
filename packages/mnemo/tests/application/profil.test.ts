@@ -71,12 +71,14 @@ describe('profilsDisponibles', () => {
 	it('rend les profils par défaut et ceux de profils/, triés, chacun décrit par la première ligne de sa consigne', async () => {
 		const dep = fauxPorts();
 		dep.fichiers.set('profils/redaction/redaction.md', '---\ntype: profil\n---\n# Profil rédaction\n\nRédige les courriers.\nSuite de la consigne.\n');
+		dep.fichiers.set('profils/calculs/calculs.md', '---\ntype: profil\nmoteur: codex\nmodele: gpt-6.2-sol\n---\n# Profil calculs\n\nFait les calculs.\n');
 		const r = await profilsDisponibles(dep);
 		expect(r.profils).toEqual([
-			{ nom: PROFIL_ARCHIVISTE, description: CONSIGNE_ARCHIVISTE_PAR_DEFAUT.split('\n')[0], lancement: 'memoire', lanceur: 'propre', avatar: { forme: 'chouette', couleur: 'violet' }, personnalise: false },
-			// profil de l'utilisateur sans avatar déclaré : celui de `travail` ; sa consigne n'est pas celle par défaut
-			{ nom: 'redaction', description: 'Rédige les courriers.', lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: true },
-			{ nom: PROFIL_TRAVAIL, description: CONSIGNE_TRAVAIL_PAR_DEFAUT.split('\n')[0], lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: false },
+			{ nom: PROFIL_ARCHIVISTE, description: CONSIGNE_ARCHIVISTE_PAR_DEFAUT.split('\n')[0], lancement: 'memoire', lanceur: 'propre', avatar: { forme: 'chouette', couleur: 'violet' }, personnalise: false, moteur: 'claude-code', modele: '' },
+			{ nom: 'calculs', description: 'Fait les calculs.', lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: true, moteur: 'codex', modele: 'gpt-6.2-sol' },
+			// profil de l'utilisateur sans avatar déclaré : celui de `travail` ; sa consigne n'est pas celle par défaut ; ni moteur ni modèle : Claude Code et celui par défaut
+			{ nom: 'redaction', description: 'Rédige les courriers.', lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: true, moteur: 'claude-code', modele: '' },
+			{ nom: PROFIL_TRAVAIL, description: CONSIGNE_TRAVAIL_PAR_DEFAUT.split('\n')[0], lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: false, moteur: 'claude-code', modele: '' },
 		]);
 		expect(r.ignores).toEqual([]);
 		expect(r.avertissements).toEqual([]);
@@ -89,6 +91,17 @@ describe('profilsDisponibles', () => {
 		expect(r.profils.find((p) => p.nom === 'redaction')!.lanceur).toBe('dialogue');
 		expect(r.profils.find((p) => p.nom === PROFIL_ARCHIVISTE)!.lanceur).toBe('propre');
 		expect(r.avertissements).toEqual([{ nom: 'redaction', motif: expect.stringContaining('propre') }]);
+	});
+
+	it('moteur ou modèle invalides dans une fiche écrite à la main : lus comme le défaut, avec un avertissement chacun', async () => {
+		const dep = fauxPorts();
+		dep.fichiers.set('profils/redaction/redaction.md', '---\ntype: profil\nmoteur: Codex\nmodele: 4.5\n---\n# Rédaction\n\nRédige.\n');
+		const r = await profilsDisponibles(dep);
+		expect(r.profils.find((p) => p.nom === 'redaction')).toMatchObject({ moteur: 'claude-code', modele: '' });
+		expect(r.avertissements).toEqual([
+			{ nom: 'redaction', motif: expect.stringContaining('moteur « Codex » inconnu') },
+			{ nom: 'redaction', motif: expect.stringContaining('modèle « 4.5 » refusé') },
+		]);
 	});
 
 	it('un dossier de profils/ au nom invalide est rendu dans ignores avec son motif, jamais lancé comme travail en silence', async () => {

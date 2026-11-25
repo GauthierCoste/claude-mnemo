@@ -7,8 +7,8 @@ export type FauxTerminal = Terminal & {
 	tailles: [number, number][];
 	/** Délais reçus par `arreter` (undefined : celui par défaut). */
 	arrets: (number | undefined)[];
-	/** Options reçues par `arreter` (`echap` : un Échap précède `/exit`). */
-	optionsArret: ({ echap?: boolean } | undefined)[];
+	/** Options reçues par `arreter` (`echap` : un Échap précède `/exit` ; `sansTouche` : signaux seulement). */
+	optionsArret: ({ echap?: boolean; sansTouche?: boolean } | undefined)[];
 	/** Nombre d'écritures (`ecrits`) déjà faites à chaque appel de `arreter` : l'ordre des écritures et des arrêts. */
 	ecritsAvantArret: number[];
 	/** Instant (`Date.now()`) de chaque écriture, dans l'ordre de `ecrits`. */

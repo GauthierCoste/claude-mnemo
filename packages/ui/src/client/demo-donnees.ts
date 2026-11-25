@@ -34,8 +34,16 @@ export type SessionDemo = {
 	lues?: [string, number][];
 	/** Faux : session suivie sans terminal dans Mnemo (vrai par défaut). */
 	terminal?: boolean;
-	/** Écran du terminal : [genre, texte] ; u = utilisateur, m = Mnemo, t = outil, r = résultat, a = réponse, q = question. */
-	ecran: ['u' | 'm' | 't' | 'r' | 'a' | 'q', string][];
+	/** Moteur et modèle de la session (absents : Claude Code, modèle par défaut). */
+	moteur?: 'claude-code' | 'codex';
+	modele?: string;
+	/** Pourquoi elle ne peut être ni mise en pause ni reprise (Codex dont aucun hook n'est arrivé). */
+	sansReprise?: string;
+	/**
+	 * Écran du terminal : [genre, texte] ; u = utilisateur, m = Mnemo, t = outil, r = résultat, a = réponse, q = question,
+	 * w = avertissement écrit par le service en tête du terminal (`[Mnemo] …`, tel quel).
+	 */
+	ecran: ['u' | 'm' | 't' | 'r' | 'a' | 'q' | 'w', string][];
 };
 
 /** Une piste ◇ fictive : la fiche, sa raison, et pour `liee` la fiche injectée à la main d'où vient le poids. */
@@ -100,20 +108,21 @@ export const SESSIONS_DEMO: SessionDemo[] = [
 		profil: PROFIL_TRAVAIL,
 		dossier: 'erp-saas',
 		objectif: 'Écrire les tests du module achats',
-		etat: 'travaille',
-		ageMin: 18,
-		calmeMin: 0,
+		// hooks de Codex pas encore approuvés : Mnemo n'a reçu aucun événement (état du lancement, aucun outil vu), la session
+		// ne peut pas être reprise ; l'avertissement est celui que le service écrit en tête du terminal
+		etat: 'attend',
+		ageMin: 3,
+		calmeMin: 3,
 		branche: 'test/achats',
-		servis: ['consignes/Test avant correction.md', 'projets/erp-saas/achats/Commandes fournisseurs.md'],
+		servis: [],
+		moteur: 'codex',
+		sansReprise:
+			"session Codex dont l'identifiant chez Codex est inconnu (aucun hook reçu : hooks de Mnemo absents ou non approuvés dans Codex, ou aucun message envoyé) : elle ne peut pas être reprise",
 		ecran: [
-			['u', 'Écris les tests manquants du module achats, sans toucher au code métier.'],
-			['m', 'Mnemo : 2 fiches injectées (Test avant correction, Commandes fournisseurs)'],
-			['t', '● Glob(src/Achat/**/*.php)'],
-			['r', '23 fichiers'],
-			['t', '● Write(tests/Achat/CommandeTest.php)'],
-			['r', '12 tests'],
-			['t', '● Bash(php bin/phpunit tests/Achat)'],
-			['r', 'en cours…'],
+			[
+				'w',
+				'Hooks de Mnemo pour Codex non approuvés : cette session ne transmettra rien à Mnemo (état, contexte servi, consignes vérifiées, épisode). 7 hook(s) de Mnemo sur 7 sans approbation : à approuver dans Codex (/hooks).',
+			],
 		],
 	},
 	{
@@ -192,6 +201,8 @@ export const SESSIONS_DEMO: SessionDemo[] = [
 		dossier: 'api-facturation',
 		objectif: 'Faire passer les tests du dépôt SFTP',
 		etat: 'travaille',
+		moteur: 'codex',
+		modele: 'gpt-6.2-sol',
 		ageMin: 42,
 		calmeMin: 0,
 		branche: 'fix/sftp-tests',
@@ -199,14 +210,15 @@ export const SESSIONS_DEMO: SessionDemo[] = [
 		classees: [['episodes/api-facturation/2026-11-20-dependances.md', 0.27]],
 		ecran: [
 			['u', 'Les tests du dépôt SFTP échouent depuis la mise à jour. Trouve pourquoi et corrige.'],
-			['t', '● Bash(php bin/phpunit --filter Sftp)'],
+			// marques de Codex (« Ran », « Edited », « Called »), pas celles de Claude Code
+			['t', 'Ran php bin/phpunit --filter Sftp'],
 			['r', '11 tests, 5 échecs'],
 			['a', "La mise à jour a ramené le délai de connexion à 10 s. J'écris d'abord le test qui reproduit, puis je corrige."],
-			['t', '● Edit(config/packages/sftp.yaml)'],
+			['t', 'Edited config/packages/sftp.yaml'],
 			['r', 'timeout: 30'],
-			['t', '● memoire_proposer(« Dépôt SFTP », « Le délai de connexion SFTP est de 30 s »)'],
+			['t', 'Called mnemo.proposer(« Dépôt SFTP », « Le délai de connexion SFTP est de 30 s »)'],
 			['r', 'ajouté'],
-			['t', '● Bash(php bin/phpunit --filter Sftp)'],
+			['t', 'Ran php bin/phpunit --filter Sftp'],
 			['r', 'en cours… 8 sur 11'],
 		],
 	},

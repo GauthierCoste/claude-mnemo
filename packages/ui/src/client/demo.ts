@@ -7,6 +7,7 @@ import { lotsDemo } from './demo-lots.ts';
 import { creerModelesDemo } from './demo-modeles.ts';
 import { creerClaudeDesktopDemo } from './demo-claude-desktop.ts';
 import { creerProfilsDemo } from './demo-profils.ts';
+import { moteursDemo } from './demo-moteurs.ts';
 import type { Connexion, EtatConnexion, FluxTerminal } from './connexion.ts';
 import type { Client } from './contexte.tsx';
 import { ecranInitial, EFFACER_LIGNE, effacerInvite, indicateur, invite, majIndicateur, messageUtilisateur, NL, outil, reponse, sansSequences } from './demo-terminal.ts';
@@ -250,7 +251,16 @@ function vueSession(s: SessionDemo, maintenant: number): SessionVue {
 		terminal: s.terminal ?? true,
 		dialogueOuvert: false,
 		niveauModeles: null,
+		...(s.moteur === undefined ? {} : { moteur: s.moteur }),
+		...(s.modele === undefined ? {} : { modele: s.modele }),
+		...(s.sansReprise === undefined || s.etat === 'terminee' ? {} : { sansReprise: s.sansReprise }),
 	};
+}
+
+/** La session dans son nouvel état ; terminée, sans motif d'impossible reprise (comme la vue du service). */
+function avecEtat(s: SessionVue, etat: SessionVue['etat']): SessionVue {
+	const { sansReprise, ...reste } = s;
+	return { ...reste, etat, majMs: Date.now(), ...(sansReprise === undefined || etat === 'terminee' ? {} : { sansReprise }) };
 }
 
 function texteServi(memoire: Memoire, ids: string[]): string {
@@ -542,10 +552,11 @@ function creerConnexionDemo(monde: Monde): FausseConnexion {
 		if (s && s.etat !== 'travaille') changerEtat(s.id, 'travaille');
 		const [reflexion, reponseCommune] = REPONSES_TERMINAL_DEMO;
 		const reponseFinale = (s?.profil === PROFIL_ARCHIVISTE ? REPONSES_ARCHIVISTE_DEMO[texte.trim()] : undefined) ?? reponseCommune;
-		sortie(session, `${effacerInvite(indicateurs.delete(session))}${messageUtilisateur(texte)}${NL}${NL}${indicateur(reflexion)}`);
-		setTimeout(() => sortie(session, `${EFFACER_LIGNE}${outil('memoire_chercher', `« ${texte.slice(0, 40)} »`, '2 fiches injectées')}${NL}${NL}${indicateur(reflexion)}`), 600);
+		const moteur = s?.moteur === 'codex' ? 'codex' : 'claude-code';
+		sortie(session, `${effacerInvite(indicateurs.delete(session))}${messageUtilisateur(texte, moteur)}${NL}${NL}${indicateur(reflexion, moteur)}`);
+		setTimeout(() => sortie(session, `${EFFACER_LIGNE}${outil('memoire_chercher', `« ${texte.slice(0, 40)} »`, '2 fiches injectées', moteur)}${NL}${NL}${indicateur(reflexion, moteur)}`), 600);
 		setTimeout(() => {
-			sortie(session, `${EFFACER_LIGNE}${reponse(reponseFinale)}${NL}${NL}${invite(colonnes.get(session) ?? COLONNES_PAR_DEFAUT)}`);
+			sortie(session, `${EFFACER_LIGNE}${reponse(reponseFinale, moteur)}${NL}${NL}${invite(colonnes.get(session) ?? COLONNES_PAR_DEFAUT, moteur)}`);
 			occupees.delete(session);
 			changerEtat(session, 'attend');
 		}, 1600);
@@ -576,7 +587,7 @@ function creerConnexionDemo(monde: Monde): FausseConnexion {
 	function changerEtat(id: string, e: SessionVue['etat']): void {
 		const i = monde.sessions.findIndex((s) => s.id === id);
 		if (i < 0) return;
-		const s = { ...monde.sessions[i]!, etat: e, majMs: Date.now() };
+		const s = avecEtat(monde.sessions[i]!, e);
 		monde.sessions[i] = s;
 		diffuser({ type: 'session', session: s });
 	}
@@ -623,7 +634,7 @@ function creerConnexionDemo(monde: Monde): FausseConnexion {
 		setInterval(() => {
 			if (progression >= 23 || !indicateurs.has(bavarde.id) || occupees.has(bavarde.id)) return;
 			progression = Math.min(progression + 3, 23);
-			sortie(bavarde.id, majIndicateur(`Tests : ${progression} sur 23`));
+			sortie(bavarde.id, majIndicateur(`Tests : ${progression} sur 23`, bavarde.moteur));
 		}, 4000);
 
 	return {
@@ -909,6 +920,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			if (!session) throw introuvable('Session');
 			return { session };
 		}
+		if (chemin === ROUTES.moteurs) return moteursDemo(params['poste'] === '1');
 		switch (chemin) {
 			case ROUTES.ecarteesToujours:
 				return { ecarteesToujours: monde.ecarteesToujours };
@@ -918,9 +930,11 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 				// fenêtres de contexte fictives, de plus en plus pleines, pour voir les trois couleurs de la jauge
 				return { fenetres: Object.fromEntries(monde.sessions.filter((x) => x.etat !== 'terminee').map((x, i) => [x.id, { utilises: [38_000, 124_000, 171_000, 92_000, 58_000][i % 5]!, max: 200_000 }])) } satisfies ReponseFenetres;
 			case ROUTES.quotas: {
-				// quotas fictifs : fenêtre de 5 h à moitié, semaine bien entamée, remises dans 2 h et dans 3 jours
+				// quotas fictifs : Claude, fenêtre de 5 h à moitié, semaine bien entamée, remises dans 2 h et dans 3 jours ; ChatGPT, semaine seule
 				const maintenant = Date.now();
-				return { quotas: { cinqHeures: { pourcentage: 42, remiseMs: maintenant + 2 * 3_600_000 }, semaine: { pourcentage: 61, remiseMs: maintenant + 3 * 86_400_000 } } } satisfies ReponseQuotas;
+				const claude = { cinqHeures: { pourcentage: 42, remiseMs: maintenant + 2 * 3_600_000 }, semaine: { pourcentage: 61, remiseMs: maintenant + 3 * 86_400_000 }, releveMs: maintenant };
+				const chatgpt = { semaine: { pourcentage: 18, remiseMs: maintenant + 5 * 86_400_000 }, releveMs: maintenant };
+				return { quotas: claude, moteurs: { 'claude-code': claude, codex: chatgpt } } satisfies ReponseQuotas;
 			}
 			case ROUTES.sessions:
 				return { sessions: [...monde.sessions] };
@@ -937,7 +951,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			case ROUTES.reglages:
 				return reglagesDemo();
 			case ROUTES.sante:
-				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.5.2' } satisfies SanteVue;
+				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.6.1' } satisfies SanteVue;
 			case ROUTES.graphe:
 				return graphe(monde.memoire);
 			case ROUTES.fiche:
@@ -1055,10 +1069,10 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			const i = monde.sessions.findIndex((s) => s.id === id);
 			if (i < 0) throw introuvable('Session');
 			const avant = monde.sessions[i]!;
+			// comme le service : une session que son moteur ne peut pas reprendre n'a ni pause, ni reprise, ni bilan
+			if (action !== 'abandon' && avant.sansReprise !== undefined) throw new ErreurApi(`${action === 'bilan' ? 'Bilan' : action === 'pause' ? 'Pause' : 'Reprise'} impossible : ${avant.sansReprise} ; abandonne-la à la place.`, 409);
 			const s = {
-				...avant,
-				etat,
-				majMs: Date.now(),
+				...avecEtat(avant, etat),
 				bilanDemandeMs: action === 'bilan' ? Date.now() : avant.bilanDemandeMs,
 				terminal: action === 'reprise' ? true : avant.terminal,
 			};

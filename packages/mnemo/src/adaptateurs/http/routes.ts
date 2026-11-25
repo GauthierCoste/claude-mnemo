@@ -18,21 +18,21 @@ import type { AprioriDesGestes } from '../../application/apriori.ts';
 import type { DureeDuReranker } from '../../application/duree-reranker.ts';
 import { affiner } from '../../application/affiner.ts';
 import type { DemandeAffinage } from '../../application/affiner.ts';
-import { traiterEvenement } from '../../application/evenements.ts';
+import { estEtranger, traiterEvenement } from '../../application/evenements.ts';
 import { modelesActifs } from '../../application/note-du-classement.ts';
 import { coupuresDesInjections, reactiverInjection, SuiviIllisible } from '../../application/suivi-injection.ts';
 import type { SuiviDesInjections } from '../../application/suivi-injection.ts';
 import { dependancesDeSession } from '../../application/modeles-de-session.ts';
 import { fichesDemandees } from '../../application/fiches-demandees.ts';
 import { notesDuClassement, noteDuPorteur, porteursRecents, vecteurDuPorteur } from '../../application/porteurs-recents.ts';
-import { fenetreDeTranscription } from '../../infra/fenetre-transcription.ts';
 import type { EntreeHook } from '../../application/evenements.ts';
 import { filDuJour } from '../../application/fil.ts';
 import { historiqueDesSessions } from '../../application/historique.ts';
 import { lireElement, motifIntrouvable } from '../../application/lire.ts';
 import { lister } from '../../application/lister.ts';
+import { ErreurMoteurIndisponible, ErreurRepriseImpossible, ErreurSessionNonCommencee } from '../../application/pilote.ts';
 import type { Pilote } from '../../application/pilote.ts';
-import type { Dependances, DossiersRacine, MemoireClaude, Modeles, Pilotage, ProjetsClaude } from '../../application/ports.ts';
+import type { Dependances, DossiersRacine, MemoireClaude, Modeles, Pilotage, ProjetsClaude, SourceTranscription } from '../../application/ports.ts';
 import { ErreurFichier } from '../../application/ports.ts';
 import { dossierAccepte, ErreurDossier, niveauDossiers } from '../../application/dossiers.ts';
 import type { GenreErreurDossier } from '../../application/dossiers.ts';
@@ -43,7 +43,9 @@ import { validerArguments, validerDemande, validerParametresRecherche, validerRe
 import { cheminDeDepot, cheminDeLaRacine } from '../../domaine/chemin.ts';
 import { messageDErreur } from '../../domaine/texte.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
-import { memesQuotas, quotasDeLimites } from '../../domaine/quotas.ts';
+import { estIdMoteur, MOTEUR_PAR_DEFAUT } from '../../domaine/moteurs/moteur.ts';
+import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
+import { memesQuotas, releveAGarder } from '../../domaine/quotas.ts';
 import type { Quotas } from '../../domaine/quotas.ts';
 import { estCauseNonVerifiee } from '../../domaine/refus-outil.ts';
 import { estSourceDeDebut, estUuid } from '../../domaine/session.ts';
@@ -254,7 +256,7 @@ const EVENEMENTS: readonly EvenementHook[] = ['debut', 'message', 'outil', 'apre
 /** Entrée de `mnemo hook` (celle qu'il traduit de Claude Code) : forme vérifiée, sinon 400. */
 function entreeHook(brut: unknown): EntreeHook {
 	if (!estObjet(brut)) throw new ErreurHttp(400, 'Événement attendu : un objet JSON.');
-	const { evenement, session, horodatageMs, cwd, prompt, outil, arret, sansContexte, source } = brut;
+	const { evenement, session, horodatageMs, cwd, prompt, outil, arret, sansContexte, source, moteur, fil } = brut;
 	if (typeof evenement !== 'string' || !EVENEMENTS.includes(evenement as EvenementHook)) throw new ErreurHttp(400, 'Événement inconnu.');
 	if (typeof session !== 'string' || (session !== '' && !estUuid(session))) throw new ErreurHttp(400, 'Session : uuid ou « » attendu.');
 	if (typeof horodatageMs !== 'number' || !Number.isFinite(horodatageMs)) throw new ErreurHttp(400, 'Horodatage : nombre attendu.');
@@ -282,6 +284,14 @@ function entreeHook(brut: unknown): EntreeHook {
 		if (!estSourceDeDebut(source)) throw new ErreurHttp(400, 'source : startup, resume, clear ou compact attendu.');
 		entree.source = source;
 	}
+	if (moteur !== undefined) {
+		if (!estIdMoteur(moteur)) throw new ErreurHttp(400, 'moteur : identifiant de moteur attendu.');
+		entree.moteur = moteur;
+	}
+	if (fil !== undefined) {
+		if (typeof fil !== 'string' || fil === '' || fil.length > 200) throw new ErreurHttp(400, 'fil : identifiant de session du moteur attendu.');
+		entree.fil = fil;
+	}
 	return entree;
 }
 
@@ -289,6 +299,8 @@ function entreeHook(brut: unknown): EntreeHook {
 const MARGE_REPONSE_HOOK_MS = 50;
 /** Ce qu'attendait au plus un hook qui ne transmet pas son échéance (version plus ancienne), depuis son envoi. */
 const ATTENTE_HOOK_SANS_ECHEANCE_MS = 300;
+/** Une lecture de transcription (jauge, quotas) au-delà : abandonnée, la suivante de la session peut partir. */
+const DELAI_LECTURE_TRANSCRIPTION_MS = 2000;
 
 /**
  * Échéance de `message` et `apres_outil` : un hook qui n'attend plus la réponse recalcule seul, en excluant les fiches notées
@@ -318,7 +330,7 @@ function echeanceDuHook(brut: unknown, evenement: EvenementHook): number | undef
 	return (echeanceMs ?? Date.now() + ATTENTE_HOOK_SANS_ECHEANCE_MS) - MARGE_REPONSE_HOOK_MS;
 }
 
-/** Chemin de la transcription de Claude Code joint au hook, pour la seule jauge de la fenêtre de contexte ; hors de `EntreeHook`. */
+/** Chemin de la transcription du moteur joint au hook, pour la seule jauge de la fenêtre de contexte ; hors de `EntreeHook`. */
 function transcriptionDuHook(brut: unknown): string | undefined {
 	const transcription = estObjet(brut) ? brut.transcription : undefined;
 	if (transcription === undefined) return undefined;
@@ -347,7 +359,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	const { dep, pil, pilote, apriori } = ctx;
 	/** Recherche complète en cours par clé de remplacement (la suivante de même clé l'abandonne). */
 	const recherchesEnCours = new Map<string, AbortController>();
-	const vue = (s: Session) => vueSession(s, pilote.enCours(s.id), apriori.suggestions(s.id), ctx.suivi === undefined ? [] : vueCoupures(ctx.suivi.derniere()));
+	const vue = (s: Session) => vueSession(s, pilote.enCours(s.id), pilote.motifSansReprise(s), apriori.suggestions(s.id), ctx.suivi === undefined ? [] : vueCoupures(ctx.suivi.derniere()));
 	/**
 	 * Après un geste : l'a priori relit les gestes nouveaux (et les écartées toujours si `ecartees`), puis la vue de chaque
 	 * session dont les suggestions « écartée toujours » ont changé est rediffusée. Une panne de lecture n'empêche pas le geste
@@ -401,7 +413,10 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	/** Action du pilote sur une session existante : la session après, ou 404. */
 	const surSession = (action: (id: string) => Promise<Session | null>) => async (r: Requete) => {
 		await session(r.id);
-		const apres = await action(r.id);
+		const apres = await action(r.id).catch((erreur: unknown) => {
+			if (erreur instanceof ErreurMoteurIndisponible || erreur instanceof ErreurRepriseImpossible || erreur instanceof ErreurSessionNonCommencee) throw new ErreurHttp(409, erreur.message);
+			throw erreur;
+		});
 		if (apres === null) throw new ErreurHttp(404, 'Session inconnue.');
 		return ok({ session: vue(apres) });
 	};
@@ -456,20 +471,69 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		ctx.diffuser({ type: 'aServir', session: id, chemins });
 		return ok({ chemins } satisfies ReponseAServir);
 	};
-	/** Jauge seulement : la transcription n'est lue que pour la taille de la fenêtre de contexte, jamais pour le contexte injecté. */
-	const lectureFenetre = fenetreDeTranscription();
-	/** Fenêtre de contexte de chaque session, relue dans sa transcription après un hook ; diffusée si elle change. */
+	/** Télémétrie du moteur (Claude Code par défaut) ; null : moteur inconnu de ce service. */
+	const telemetrie = (moteur: IdMoteur = MOTEUR_PAR_DEFAUT) => pil.moteurs[moteur]?.moteur.telemetrie ?? null;
+	/** Quotas de l'abonnement de chaque moteur, communs à toutes ses sessions : le dernier relevé de chacun. */
+	const quotasParMoteur: Partial<Record<IdMoteur, Quotas>> = {};
+	/**
+	 * Note un relevé des quotas d'un moteur ; diffusé si les fenêtres changent (`quotas` en plus pour Claude Code, que lisent
+	 * les anciens clients) ; sinon seul l'instant du relevé est mis à jour.
+	 */
+	const noterQuotas = (moteur: IdMoteur, recus: Quotas): void => {
+		const avant = quotasParMoteur[moteur];
+		quotasParMoteur[moteur] = recus;
+		if (memesQuotas(avant, recus)) return;
+		if (moteur === MOTEUR_PAR_DEFAUT) ctx.diffuser({ type: 'quotas', quotas: recus });
+		ctx.diffuser({ type: 'quotasMoteurs', moteurs: { ...quotasParMoteur } });
+	};
+	const reponseQuotas = (): ReponseQuotas => ({ quotas: quotasParMoteur[MOTEUR_PAR_DEFAUT] ?? null, moteurs: { ...quotasParMoteur } });
+	/**
+	 * Fenêtre de contexte de chaque session, relue dans sa transcription (par le moteur qui a lancé le hook) après un hook,
+	 * avec les quotas de l'abonnement quand le moteur les y écrit (Codex) ; diffusés s'ils changent. Jauge seulement : la
+	 * transcription n'est jamais lue pour le contexte injecté.
+	 */
 	const fenetres = new Map<string, FenetreVue>();
-	const relireFenetre = async (session: string, chemin: string, dossier: string | null): Promise<void> => {
-		const fenetre = await lectureFenetre.lire(chemin, dossier);
-		if (fenetre === null) return;
+	const relireFenetre = async (session: string, source: SourceTranscription, moteur: IdMoteur = MOTEUR_PAR_DEFAUT): Promise<void> => {
+		const lecture = telemetrie(moteur)?.fenetre;
+		if (lecture === undefined) return;
+		const lue = await lecture.lire(source);
+		if (lue === null) return;
+		const { fenetre, quotas } = lue;
+		// une transcription peut être vieille (session reprise, service redémarré) : seul un relevé récent est gardé
+		const garde = quotas === undefined ? null : releveAGarder(quotasParMoteur[moteur], quotas, Date.now());
+		if (garde !== null) noterQuotas(moteur, garde);
+		if (fenetre === undefined) return;
 		const avant = fenetres.get(session);
 		if (avant !== undefined && avant.utilises === fenetre.utilises && avant.max === fenetre.max && avant.avantResume === fenetre.avantResume) return;
 		fenetres.set(session, fenetre);
 		ctx.diffuser({ type: 'fenetre', session, fenetre });
 	};
-	/** Quotas du compte Claude, communs à toutes les sessions : le dernier relevé reçu d'une ligne d'état. */
-	let quotas: Quotas | null = null;
+	/**
+	 * Une seule lecture à la fois par session, chacune bornée à `DELAI_LECTURE_TRANSCRIPTION_MS` : un hook arrivé pendant une
+	 * lecture en demande une autre, faite juste après (la transcription a pu changer entre-temps) ; les suivants s'y joignent.
+	 */
+	const lectures = new Map<string, { encore: (() => Promise<void>) | null }>();
+	const relireApresHook = (session: string, relire: () => Promise<void>): void => {
+		const enCours = lectures.get(session);
+		if (enCours !== undefined) {
+			enCours.encore = relire;
+			return;
+		}
+		const etat: { encore: (() => Promise<void>) | null } = { encore: null };
+		lectures.set(session, etat);
+		void (async () => {
+			let suivante: (() => Promise<void>) | null = relire;
+			while (suivante !== null) {
+				// bornée : une lecture qui ne finit pas (disque lent, fichier spécial) ne coince jamais la file de la session
+				let minuteur: NodeJS.Timeout | undefined;
+				await Promise.race([suivante().catch(() => {}), new Promise<void>((fin) => (minuteur = setTimeout(fin, DELAI_LECTURE_TRANSCRIPTION_MS)))]);
+				clearTimeout(minuteur);
+				suivante = etat.encore;
+				etat.encore = null;
+			}
+			lectures.delete(session);
+		})();
+	};
 	/** Écartés de la session, rendus et diffusés après un changement. */
 	const ecartesDiffuses = async (id: string): Promise<Reponse> => {
 		const ecartes = (await pil.etat.ecartes(id)).map(vueEcarte);
@@ -734,7 +798,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		{
 			methode: 'GET',
 			chemin: ROUTES.quotas,
-			action: async () => ok({ quotas } satisfies ReponseQuotas),
+			action: async () => ok(reponseQuotas()),
 		},
 		{
 			methode: 'POST',
@@ -743,13 +807,10 @@ export function routes(ctx: ContexteRoutes): Route[] {
 			// relevé de `mnemo ligne-etat`, envoyé par chaque session : le plus récent vaut pour tout le compte
 			action: async (r) => {
 				const brut = await r.json();
-				const recus = quotasDeLimites(estObjet(brut) ? brut.rate_limits : undefined);
+				const recus = telemetrie()?.quotas(estObjet(brut) ? brut.rate_limits : undefined) ?? null;
 				if (recus === null) throw new ErreurHttp(400, 'Aucune fenêtre de quota lisible.');
-				if (!memesQuotas(quotas, recus)) {
-					quotas = recus;
-					ctx.diffuser({ type: 'quotas', quotas: recus });
-				}
-				return ok({ quotas } satisfies ReponseQuotas);
+				noterQuotas(MOTEUR_PAR_DEFAUT, { ...recus, releveMs: Date.now() });
+				return ok(reponseQuotas());
 			},
 		},
 		{
@@ -793,6 +854,9 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const entree = entreeHook(brut);
 				const echeance = echeanceDuHook(brut, entree.evenement);
 				const transcription = transcriptionDuHook(brut);
+				// un autre moteur que celui de la session, ou un autre fil : ni état, ni contexte, ni jauge ; un `outil` est tout de même vérifié
+				const etranger = await estEtranger(pil, entree);
+				if (etranger && entree.evenement !== 'outil') return ok({});
 				// le reranker compté et mesuré par le service ; les modèles de la session bornés par son niveau (relu à chaque appel)
 				const depMesure = avecRerankerMesure(dep);
 				const depDuHook = entree.session === '' ? depMesure : dependancesDeSession(depMesure, pil.etat, entree.session);
@@ -800,7 +864,10 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const aAffiner: { demande: DemandeAffinage | null; controle: AbortController | null } = { demande: null, controle: null };
 				// ce qui attend que la réponse soit écrite (gestes des fiches injectées par Mnemo)
 				const aLaReponse: Array<() => Promise<unknown>> = [];
-				const reponse = await traiterEvenement(depDuHook, pil, entree, {
+				// `fin` d'un moteur qui l'envoie sans quitter (Codex : `/new`, `/resume`) pendant que son processus tourne ici : ignoré,
+				// la fin est traitée à la sortie du processus
+				const finIgnoree = entree.evenement === 'fin' && pilote.enCours(entree.session) && pil.moteurs[entree.moteur ?? MOTEUR_PAR_DEFAUT]?.moteur.hooks.finIgnoreeSiVivante === true;
+				const reponse = finIgnoree ? {} : await traiterEvenement(depDuHook, pil, entree, {
 					froid: 'permis',
 					...(echeance === undefined ? {} : { echeance }),
 					...debutDuHook(entree.horodatageMs),
@@ -823,10 +890,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 						affinages.set(d.session, aAffiner.controle);
 					},
 				});
-				if (entree.session !== '' && transcription !== undefined && (entree.evenement === 'message' || entree.evenement === 'apres_outil' || entree.evenement === 'arret' || entree.evenement === 'debut')) {
-					// hors du chemin du hook : sa réponse n'attend pas la lecture
-					void relireFenetre(entree.session, transcription, entree.cwd).catch(() => {});
-				}
+				if (etranger) return ok(reponse);
 				if (entree.session !== '') {
 					const s = await pil.etat.lire(entree.session).catch(() => null);
 					// un message (injection à la main) ou une lecture après une carte a pu noter un geste : l'a priori le relit, hors du chemin du hook
@@ -857,6 +921,12 @@ export function routes(ctx: ContexteRoutes): Route[] {
 							);
 						}
 					}
+				}
+				// après la réponse, hors du chemin du hook (ni sa réponse ni son échéance n'attendent la lecture), aux seuls événements
+				// où le moteur écrit dans sa transcription ce qu'on y lit
+				if (entree.session !== '' && (transcription !== undefined || entree.fil !== undefined) && telemetrie(entree.moteur)?.evenementsLus.has(entree.evenement) === true) {
+					const source: SourceTranscription = { ...(transcription === undefined ? {} : { chemin: transcription }), ...(entree.fil === undefined ? {} : { fil: entree.fil }), dossier: entree.cwd };
+					setImmediate(() => relireApresHook(entree.session, () => relireFenetre(entree.session, source, entree.moteur)));
 				}
 				if (aLaReponse.length === 0) return ok(reponse);
 				// la réponse écrite : les gestes, puis le suivi qui les lit

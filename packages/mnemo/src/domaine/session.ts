@@ -1,4 +1,5 @@
 import type { NiveauModeles } from '@mnemo/commun';
+import { MOTEUR_PAR_DEFAUT } from '@mnemo/commun';
 
 export type EtatSession = 'travaille' | 'attend' | 'a_relire' | 'en_pause' | 'terminee';
 export type EvenementHook = 'debut' | 'message' | 'outil' | 'apres_outil' | 'arret' | 'fin';
@@ -52,7 +53,25 @@ export type Session = {
 	 * (`niveauEffectif`). Gardé à la reprise.
 	 */
 	niveauModeles?: NiveauModeles;
+	/**
+	 * Moteur et modèle enregistrés au lancement : une reprise garde les siens. Absents (session d'avant les moteurs) : Claude
+	 * Code et son modèle par défaut ; `modele` « » : le modèle par défaut du moteur. `moteur` est gardé tel qu'enregistré,
+	 * même inconnu de ce Mnemo (`IdMoteur` quand il est connu) : une telle session ne se relance pas.
+	 */
+	moteur?: string;
+	modele?: string;
+	/** Identifiant de la session chez son moteur, appris par un hook (absent : inconnu, ou le moteur reçoit déjà l'uuid). */
+	fil?: string;
 };
+
+/**
+ * Un événement de hook qui n'est pas de cette session : envoyé par un autre moteur que le sien (un `codex` lancé depuis une
+ * session Claude Code hérite de `MNEMO_SESSION`), ou portant un autre `fil` que celui déjà appris. Sans effet.
+ */
+export function evenementEtranger(session: Pick<Session, 'moteur' | 'fil'>, evenement: { moteur?: string; fil?: string }): boolean {
+	if ((session.moteur ?? MOTEUR_PAR_DEFAUT) !== (evenement.moteur ?? MOTEUR_PAR_DEFAUT)) return true;
+	return session.fil !== undefined && evenement.fil !== undefined && evenement.fil !== session.fil;
+}
 
 /** Un dialogue de Claude Code (permission) attend peut-être l'utilisateur : la dernière chose vue est une `Notification`. */
 export const dialogueOuvert = (s: Pick<Session, 'etat' | 'dernierArret'>): boolean => s.etat === 'attend' && s.dernierArret === 'notification';

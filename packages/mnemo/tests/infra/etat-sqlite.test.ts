@@ -24,13 +24,21 @@ async function ouvrir(): Promise<{ etat: EtatSessions; chemin: string; dossier: 
 	return { etat, chemin, dossier };
 }
 
-/** Retire ce que la version 13 a ajouté (journal durable des gestes, écartées toujours, dernier message porteur, rang du message et calibration des entrées servies). */
-function sansVersion13(base: DatabaseSync): void {
+/**
+ * Retire ce que la version 14 a ajouté (journal durable des gestes, écartées toujours, dernier message porteur, rang du
+ * message, affinage, durée vue du service et calibration des entrées servies) : un état tel que la 1.6.1 l'écrit.
+ */
+function sansVersion14(base: DatabaseSync): void {
 	base.exec('DROP TABLE gestes');
 	base.exec('DROP TABLE ecartees_toujours');
 	base.exec('ALTER TABLE sessions DROP COLUMN dernier_message');
-	base.exec('ALTER TABLE servis DROP COLUMN rang_message');
-	base.exec('ALTER TABLE servis DROP COLUMN calibree');
+	for (const colonne of ['rang_message', 'affinage', 'ms_service', 'calibree']) base.exec(`ALTER TABLE servis DROP COLUMN ${colonne}`);
+}
+
+/** Retire ce que la version 13 a ajouté (moteur, modèle et fil des sessions). */
+function sansVersion13(base: DatabaseSync): void {
+	sansVersion14(base);
+	for (const colonne of ['moteur', 'modele', 'fil']) base.exec(`ALTER TABLE sessions DROP COLUMN ${colonne}`);
 }
 
 /** Retire ce que la version 12 a ajouté (niveau des modèles d'une session). */
@@ -468,6 +476,75 @@ describe('etat.sqlite', () => {
 		expect((await etat.lire('s2'))?.vuVivantMs).toBe(7777);
 		expect((await etat.lire('s3'))?.vuVivantMs).toBeNull();
 		expect(await etat.derniereModificationMs()).toBe(avant);
+	});
+
+	it('moteur et modèle : enregistrés tels quels ; absents, ils le restent (session d’avant les moteurs)', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('m', { moteur: 'claude-code', modele: '' }));
+		await etat.creer(session('n'));
+		expect(await etat.lire('m')).toMatchObject({ moteur: 'claude-code', modele: '' });
+		expect(await etat.lire('n')).not.toHaveProperty('moteur');
+		expect(await etat.lire('n')).not.toHaveProperty('modele');
+	});
+
+	it('moteur inconnu de ce Mnemo : gardé tel quel', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('g', { moteur: 'gemini' }));
+		expect((await etat.lire('g'))?.moteur).toBe('gemini');
+	});
+
+	it('fil (identifiant chez le moteur) : noté au premier événement qui le porte, même ancien, jamais écrasé', async () => {
+		const { etat } = await ouvrir();
+		await etat.creer(session('f', { majMs: 10 }));
+		await etat.appliquer('f', 'message', 20, { objectif: 'x' });
+		expect(await etat.lire('f')).not.toHaveProperty('fil');
+		await etat.appliquer('f', 'debut', 5, { fil: 'fil-1' });
+		expect((await etat.lire('f'))?.fil).toBe('fil-1');
+		await etat.appliquer('f', 'message', 30, { fil: 'fil-2' });
+		expect(await etat.lire('f')).toMatchObject({ fil: 'fil-1', majMs: 30 });
+	});
+
+	it('migre la version 12 (niveau des modèles, sans moteur ni modèle ni fil) vers la 14 en passant par la 13 : le niveau de la session est gardé', async () => {
+		const { etat, chemin } = await ouvrir();
+		await etat.creer(session('n1', { pid: 7, niveauModeles: 'sens' }));
+		etat.fermer();
+		ouverts.pop();
+		const base = new DatabaseSync(chemin);
+		sansVersion13(base);
+		base.exec('PRAGMA user_version = 12');
+		base.close();
+		const rouvert = ouvrirEtat(chemin);
+		ouverts.push(rouvert);
+		const lue = await rouvert.lire('n1');
+		expect(lue).toMatchObject({ pid: 7, niveauModeles: 'sens' });
+		expect(lue).not.toHaveProperty('moteur');
+		expect(lue).not.toHaveProperty('fil');
+		await rouvert.appliquer('n1', 'debut', Date.now(), { fil: 'fil-codex' });
+		expect((await rouvert.lire('n1'))?.fil).toBe('fil-codex');
+		expect(await rouvert.gestes({ limite: null })).toEqual([]);
+		const verif = new DatabaseSync(chemin);
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: 14 });
+		verif.close();
+	});
+
+	it('migre la version 11 (sans niveau des modèles, moteur ni modèle) vers la dernière sans rien perdre', async () => {
+		const { etat, chemin } = await ouvrir();
+		await etat.creer(session('s1', { pid: 4 }));
+		etat.fermer();
+		ouverts.pop();
+		const base = new DatabaseSync(chemin);
+		for (const colonne of ['niveau_modeles', 'moteur', 'modele', 'fil']) base.exec(`ALTER TABLE sessions DROP COLUMN ${colonne}`);
+		base.exec('PRAGMA user_version = 11');
+		base.close();
+		const rouvert = ouvrirEtat(chemin);
+		ouverts.push(rouvert);
+		expect(await rouvert.lire('s1')).toMatchObject({ pid: 4 });
+		expect(await rouvert.lire('s1')).not.toHaveProperty('moteur');
+		await rouvert.creer(session('s2', { moteur: 'claude-code', modele: '' }));
+		expect(await rouvert.lire('s2')).toMatchObject({ moteur: 'claude-code', modele: '' });
+		const verif = new DatabaseSync(chemin);
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
+		verif.close();
 	});
 
 	it('migre la version 1 (sans trace) vers la dernière sans rien perdre', async () => {
@@ -921,11 +998,39 @@ describe('etat.sqlite', () => {
 		expect(await rouvert.noterMessagePorteur('s1', 'la suite')).toBe(2);
 		const verif = new DatabaseSync(chemin);
 		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
-		expect(VERSION_ETAT).toBe(13);
+		expect(VERSION_ETAT).toBe(14);
 		verif.close();
 	});
 
-	it('état déjà en 13 (développement) sans écartées toujours, affinage ni calibration : table et colonnes ajoutées, rien perdu', async () => {
+	it('migration depuis la version 13 (1.6.1 : moteur, modèle et fil) : sessions, moteur, fil et journal servi gardés ; gestes et écartées toujours vides, colonnes du classement vivant ajoutées', async () => {
+		const { etat, chemin } = await ouvrir();
+		await etat.creer(session('s1', { pid: 4, niveauModeles: 'sens', moteur: 'codex', modele: 'gpt-a' }));
+		await etat.appliquer('s1', 'debut', 5, { fil: 'fil-1' });
+		await etat.journaliser({ session: 's1', moment: 'message', horodatageMs: 10, ids: ['a.md'], texte: 't', ms: 1, sens: false, demande: 'quoi ?', classement: [], muet: null, cartes: [], position: 'a/b' });
+		etat.fermer();
+		ouverts.pop();
+		const base = new DatabaseSync(chemin);
+		sansVersion14(base);
+		base.exec('PRAGMA user_version = 13');
+		base.close();
+		const rouvert = ouvrirEtat(chemin);
+		ouverts.push(rouvert);
+		expect(await rouvert.lire('s1')).toMatchObject({ pid: 4, niveauModeles: 'sens', moteur: 'codex', modele: 'gpt-a', fil: 'fil-1' });
+		expect(await rouvert.servis('s1', 10)).toMatchObject([{ demande: 'quoi ?' }]);
+		expect((await rouvert.servis('s1', 10))[0]).not.toHaveProperty('rangMessage');
+		expect(await rouvert.gestes({ limite: null })).toEqual([]);
+		expect(await rouvert.ecarteesToujours()).toEqual([]);
+		expect(await rouvert.noterMessagePorteur('s1', 'la suite')).toBe(1);
+		await rouvert.journaliser({ session: 's1', moment: 'message', horodatageMs: 20, ids: [], texte: '', ms: 1, sens: true, demande: 'la suite', classement: [], calibree: true, muet: null, cartes: [], position: null });
+		expect((await rouvert.servis('s1', 1))[0]).toMatchObject({ calibree: true, rangMessage: 1 });
+		expect(await rouvert.ecarterToujours({ fiche: 'a.md', session: 's1', horodatageMs: 30 })).toBe('ecartee');
+		const verif = new DatabaseSync(chemin);
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: 14 });
+		expect(verif.prepare("SELECT 1 AS un FROM sqlite_master WHERE type = 'index' AND name = 'gestes_sorte'").get()).toEqual({ un: 1 });
+		verif.close();
+	});
+
+	it('état en 13 de développement (classement vivant en partie, sans écartées toujours, affinage ni calibration) : complété en 14, rien perdu', async () => {
 		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('s1'));
 		await etat.noterGeste({ geste: 'ecartee_ici', session: 's1', fiche: 'a.md', empreinte: null, horodatageMs: 5 });
@@ -935,6 +1040,7 @@ describe('etat.sqlite', () => {
 		base.exec('DROP TABLE ecartees_toujours');
 		base.exec('ALTER TABLE servis DROP COLUMN affinage');
 		base.exec('ALTER TABLE servis DROP COLUMN calibree');
+		base.exec('PRAGMA user_version = 13');
 		base.close();
 		const rouvert = ouvrirEtat(chemin);
 		ouverts.push(rouvert);
@@ -943,6 +1049,9 @@ describe('etat.sqlite', () => {
 		expect(await rouvert.gestes({ limite: null })).toMatchObject([{ geste: 'ecartee_ici', fiche: 'a.md' }]);
 		expect(await rouvert.ecarterToujours({ fiche: 'a.md', session: 's1', horodatageMs: 10 })).toBe('ecartee');
 		expect(await rouvert.ecarteesToujours()).toEqual([{ fiche: 'a.md', session: 's1', horodatageMs: 10, retablieMs: null }]);
+		const verif = new DatabaseSync(chemin);
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: 14 });
+		verif.close();
 	});
 
 	it('écartées toujours : une fois chacune, rétablies (instant gardé), écartées à nouveau', async () => {

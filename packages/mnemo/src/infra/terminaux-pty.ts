@@ -1,8 +1,9 @@
 import { accessSync, chmodSync, constants, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { PAUSE_APRES_ECHAP_MS } from '../application/ports.ts';
 import type { OptionsTerminal, Terminal, Terminaux } from '../application/ports.ts';
+import { TOUCHES_CLAUDE_CODE } from '../domaine/moteurs/claude-code/touches.ts';
+import type { TouchesDuMoteur } from '../domaine/moteurs/moteur.ts';
 import { ATTENTE_FINALE_MS, DELAI_TUE_MS, existenceProcessus, jusqua, signalerGroupe } from './processus.ts';
 
 /** Ce que Mnemo utilise de node-pty, typé ici : le paquet est facultatif (`optionalDependencies`). */
@@ -18,9 +19,9 @@ type ModulePty = {
 	spawn(fichier: string, args: string[], options: { name: string; cols: number; rows: number; cwd: string; env: Record<string, string> }): ProcessusPty;
 };
 
-/** Délai laissé à `/exit` avant SIGTERM, par défaut. */
+/** Délai laissé à la commande d'arrêt du moteur (`/exit`) avant SIGTERM, par défaut. */
 export const DELAI_ARRET_MS = 5000;
-/** Entre `/exit` et la touche Entrée : une seule écriture pourrait être lue comme un collage. */
+/** Entre la commande d'arrêt (`/exit`) et la touche Entrée : une seule écriture pourrait être lue comme un collage. */
 const PAUSE_ENTREE_MS = 100;
 /** Processus d'essai lancé au chargement : au-delà, node-pty est jugé inutilisable. */
 const DELAI_ESSAI_MS = 5000;
@@ -38,7 +39,7 @@ function groupeVivant(pgid: number): boolean {
 	return existenceProcessus(-pgid) !== 'non';
 }
 
-function terminalPty(proc: ProcessusPty, delaiParDefaut: number, plateforme: NodeJS.Platform): Terminal {
+function terminalPty(proc: ProcessusPty, delaiParDefaut: number, plateforme: NodeJS.Platform, touches: TouchesDuMoteur): Terminal {
 	const pid = proc.pid;
 	let fin: { code: number | null } | null = null;
 	const fins: ((code: number | null) => void)[] = [];
@@ -71,17 +72,17 @@ function terminalPty(proc: ProcessusPty, delaiParDefaut: number, plateforme: Nod
 	};
 
 	let arret: Promise<void> | null = null;
-	const arreter = async (delaiMs: number, echap: boolean): Promise<void> => {
-		if (fin === null && echap) {
-			// un dialogue de permission est peut-être ouvert : Échap le ferme (sinon `/exit` y serait tapé)
-			ecrire('\x1b');
-			await pause(PAUSE_APRES_ECHAP_MS);
+	const arreter = async (delaiMs: number, echap: boolean, sansTouche: boolean): Promise<void> => {
+		if (fin === null && echap && !sansTouche) {
+			// un dialogue de permission est peut-être ouvert : Échap le ferme (sinon la commande d'arrêt y serait tapée)
+			ecrire(touches.echap);
+			await pause(touches.pauseApresEchapMs);
 		}
-		if (fin === null) {
-			// Ctrl-U efface ce que l'utilisateur avait commencé à taper, puis `/exit`
-			ecrire('\x15/exit');
+		if (fin === null && !sansTouche) {
+			// Claude Code : Ctrl-U efface ce que l'utilisateur avait commencé à taper, puis `/exit`
+			ecrire(touches.arret);
 			await pause(Math.min(PAUSE_ENTREE_MS, delaiMs));
-			ecrire('\r');
+			ecrire(touches.entree);
 			await jusqua(fini, delaiMs - PAUSE_ENTREE_MS);
 		}
 		if (plateforme === 'win32') {
@@ -127,7 +128,7 @@ function terminalPty(proc: ProcessusPty, delaiParDefaut: number, plateforme: Nod
 			else fins.push(f);
 		},
 		arreter(delaiMs = delaiParDefaut, options = {}) {
-			arret ??= arreter(Math.max(0, delaiMs), options.echap === true);
+			arret ??= arreter(Math.max(0, delaiMs), options.echap === true, options.sansTouche === true);
 			return arret;
 		},
 	};
@@ -220,7 +221,7 @@ export async function terminauxPty(reglages: ReglagesPty = {}): Promise<Terminau
 		lancer(o: OptionsTerminal): Terminal {
 			if (mod === null) throw new Error(motif ?? `node-pty n'est pas installé ; ${VOIR_INSTALLATION}`);
 			const proc = mod.spawn(o.commande, o.args, { name: 'xterm-256color', cols: o.colonnes, rows: o.lignes, cwd: o.dossier, env: o.env });
-			return terminalPty(proc, delai, plateforme);
+			return terminalPty(proc, delai, plateforme, o.touches ?? TOUCHES_CLAUDE_CODE);
 		},
 	};
 }

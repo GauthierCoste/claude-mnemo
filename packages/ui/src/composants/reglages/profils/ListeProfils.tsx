@@ -8,6 +8,7 @@ import type { ProfilVue } from '@mnemo/contrat';
 import { useState, type ReactNode } from 'react';
 import { AvatarProfil } from '../../commun/AvatarProfil.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
+import { moteurEtModele, moteurParticulier } from '../../../moteurs/noms.ts';
 import s from './Profils.module.css';
 
 export function ListeProfils(p: {
@@ -69,6 +70,11 @@ export function ListeProfils(p: {
 									{x.nom}
 									{x.nom === PROFIL_TRAVAIL && <span className={s.badge}>par défaut</span>}
 									{x.personnalise && <span className={s.badge}>personnalisé</span>}
+									{moteurParticulier(x) !== null && (
+										<span className={s.badge} title={`Moteur : ${moteurEtModele(x)}`}>
+											{moteurParticulier(x)}
+										</span>
+									)}
 								</span>
 								<span className={s.description}>{x.description}</span>
 							</span>

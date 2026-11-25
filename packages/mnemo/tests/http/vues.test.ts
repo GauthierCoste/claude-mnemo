@@ -34,4 +34,14 @@ describe('vueSession', () => {
 		expect(vueSession(archiviste({ niveauModeles: 'sens' }), false).niveauModeles).toBe('sens');
 		expect(vueSession(archiviste({ niveauModeles: 'coupes' }), false).niveauModeles).toBe('coupes');
 	});
+
+	it('moteur, modèle et sansReprise : seulement s’ils sont connus ; jamais sansReprise pour une session terminée', () => {
+		const avant = vueSession(archiviste({}), false);
+		expect(avant).not.toHaveProperty('moteur');
+		expect(avant).not.toHaveProperty('modele');
+		expect(avant).not.toHaveProperty('sansReprise');
+		expect(vueSession(archiviste({ moteur: 'claude-code', modele: '' }), false)).not.toHaveProperty('modele');
+		expect(vueSession(archiviste({ moteur: 'codex', modele: 'gpt-a' }), false, 'fil inconnu')).toMatchObject({ moteur: 'codex', modele: 'gpt-a', sansReprise: 'fil inconnu' });
+		expect(vueSession(archiviste({ etat: 'terminee', moteur: 'codex' }), false, 'fil inconnu')).not.toHaveProperty('sansReprise');
+	});
 });

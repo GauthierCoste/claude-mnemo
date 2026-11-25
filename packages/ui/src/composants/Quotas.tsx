@@ -1,9 +1,12 @@
 /**
- * Quotas du compte Claude dans la barre de titre, à gauche de l'Archiviste : communs à toutes les sessions (la fenêtre de
- * contexte, propre à chaque session, reste sur sa jauge). Replié, un cercle à deux anneaux (intérieur : 5 heures ; extérieur :
- * semaine) ; un clic le déplie en barres avec la remise à zéro, un autre le replie. Rien tant qu'aucun quota n'est connu.
+ * Quotas des abonnements dans la barre de titre, à gauche de l'Archiviste : compte Claude (Claude Code) et compte ChatGPT
+ * (Codex), côte à côte quand les deux sont relevés, sinon celui qui l'est ; communs à toutes les sessions (la fenêtre de
+ * contexte, propre à chaque session, reste sur sa jauge). Replié, par abonnement, un cercle à deux anneaux (intérieur :
+ * 5 heures ; extérieur : semaine) ; un clic le déplie en barres avec la remise à zéro, un autre le replie. Rien tant qu'aucun
+ * quota n'est connu.
  */
-import type { QuotaVue, QuotasVue } from '@mnemo/contrat';
+import type { IdMoteur } from '@mnemo/commun';
+import type { QuotaVue, QuotasDesMoteursVue, QuotasVue } from '@mnemo/contrat';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useQuotas } from '../client/hooks.ts';
 import s from './Quotas.module.css';
@@ -28,6 +31,26 @@ export function remiseLisible(remiseMs: number, maintenant: number): string {
 export function quotasEnCours(q: QuotasVue | null, maintenant: number): QuotasVue {
 	const valable = (f: QuotaVue | undefined) => f !== undefined && f.remiseMs > maintenant;
 	return { ...(valable(q?.cinqHeures) ? { cinqHeures: q!.cinqHeures } : {}), ...(valable(q?.semaine) ? { semaine: q!.semaine } : {}) };
+}
+
+/** Abonnements montrés, dans cet ordre, et leur libellé. */
+const ABONNEMENTS: readonly { moteur: IdMoteur; libelle: string }[] = [
+	{ moteur: 'claude-code', libelle: 'Claude' },
+	{ moteur: 'codex', libelle: 'ChatGPT' },
+];
+
+export type AbonnementEnCours = { moteur: IdMoteur; libelle: string; quotas: QuotasVue };
+
+/** Les abonnements qui ont au moins une fenêtre encore valable, dans l'ordre de `ABONNEMENTS`. */
+export function abonnementsEnCours(moteurs: QuotasDesMoteursVue, maintenant: number): AbonnementEnCours[] {
+	return ABONNEMENTS.map(({ moteur, libelle }) => ({ moteur, libelle, quotas: quotasEnCours(moteurs[moteur] ?? null, maintenant) })).filter((a) => a.quotas.cinqHeures !== undefined || a.quotas.semaine !== undefined);
+}
+
+/** « Claude : 5 heures : 42 % (remise 18:00) · semaine : 61 % (remise lun. 09:00) ». */
+function detailDe(a: AbonnementEnCours, maintenant: number): string {
+	const { cinqHeures, semaine } = a.quotas;
+	const fenetres = [cinqHeures && `5 heures : ${cinqHeures.pourcentage} % (remise ${remiseLisible(cinqHeures.remiseMs, maintenant)})`, semaine && `semaine : ${semaine.pourcentage} % (remise ${remiseLisible(semaine.remiseMs, maintenant)})`].filter(Boolean).join(' · ');
+	return `${a.libelle} : ${fenetres}`;
 }
 
 function deplieRetenu(): boolean {
@@ -80,26 +103,33 @@ export function Quotas(): ReactNode {
 	}, []);
 	// un nouveau relevé est lu avec l'heure du moment
 	useEffect(() => setMaintenant(Date.now()), [recus]);
-	const { cinqHeures, semaine } = quotasEnCours(recus, maintenant);
-	if (cinqHeures === undefined && semaine === undefined) return null;
-	const detail = [cinqHeures && `5 heures : ${cinqHeures.pourcentage} % (remise ${remiseLisible(cinqHeures.remiseMs, maintenant)})`, semaine && `semaine : ${semaine.pourcentage} % (remise ${remiseLisible(semaine.remiseMs, maintenant)})`].filter(Boolean).join(' · ');
+	const abonnements = abonnementsEnCours(recus, maintenant);
+	if (abonnements.length === 0) return null;
+	const detail = abonnements.map((a) => detailDe(a, maintenant)).join(' ; ');
 	const basculer = () => {
 		setDeplie(!deplie);
 		retenirDeplie(!deplie);
 	};
 	return (
-		<button type="button" className={s.quotas} aria-expanded={deplie} aria-label={`Quotas du compte Claude : ${detail}. ${deplie ? 'Replier' : 'Déplier'}`} title={`Quotas du compte Claude : ${detail}`} onClick={basculer}>
-			{deplie ? (
-				<span className={s.detail}>
-					{cinqHeures && <Ligne nom="5 h" quota={cinqHeures} maintenant={maintenant} />}
-					{semaine && <Ligne nom="sem." quota={semaine} maintenant={maintenant} />}
-				</span>
-			) : (
-				<svg className={s.anneaux} viewBox="0 0 22 22" aria-hidden="true">
-					<Anneau rayon={9} quota={semaine} />
-					<Anneau rayon={5} quota={cinqHeures} />
-				</svg>
-			)}
+		<button type="button" className={s.quotas} aria-expanded={deplie} aria-label={`Quotas des abonnements, ${detail}. ${deplie ? 'Replier' : 'Déplier'}`} title={`Quotas des abonnements, ${detail}`} onClick={basculer}>
+			<span className={s.abonnements}>
+				{abonnements.map(({ moteur, libelle, quotas: { cinqHeures, semaine } }) => (
+					<span key={moteur} className={s.abonnement} data-moteur={moteur}>
+						<span className={s.libelle}>{libelle}</span>
+						{deplie ? (
+							<span className={s.detail}>
+								{cinqHeures && <Ligne nom="5 h" quota={cinqHeures} maintenant={maintenant} />}
+								{semaine && <Ligne nom="sem." quota={semaine} maintenant={maintenant} />}
+							</span>
+						) : (
+							<svg className={s.anneaux} viewBox="0 0 22 22" aria-hidden="true">
+								<Anneau rayon={9} quota={semaine} />
+								<Anneau rayon={5} quota={cinqHeures} />
+							</svg>
+						)}
+					</span>
+				))}
+			</span>
 		</button>
 	);
 }

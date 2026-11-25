@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { creerPilote } from '../../src/application/pilote.ts';
 import type { Pilote } from '../../src/application/pilote.ts';
 import type { EtatSessions, Pilotage, Terminal } from '../../src/application/ports.ts';
-import { ecrirePlugin } from '../../src/infra/claude.ts';
+import { ecrirePlugin } from '../../src/infra/plugin-fichiers.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
 import { demarrageMachineMs, etatProcessus, nettoyerRestes, signalerGroupe } from '../../src/infra/processus.ts';
 import { dependancesReelles, pilotageReel } from '../../src/infra/systeme.ts';
@@ -15,6 +15,7 @@ import { terminauxPty } from '../../src/infra/terminaux-pty.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { DEPOT_ABSENT, fauxPorts } from '../aides/faux-ports.ts';
 import { versionMnemo } from '../../src/infra/version.ts';
+import { commandeClaude, moteursDeTest } from '../aides/moteurs.ts';
 
 const FAUX_CLAUDE = resolve(import.meta.dirname, '../aides/faux-claude.mjs');
 const SERVICE = resolve(import.meta.dirname, '../aides/service-pilote.ts');
@@ -190,7 +191,7 @@ describe.skipIf(sauter)('terminaux-pty : faux-claude sous un vrai pseudo-termina
 		await t.arreter();
 	});
 
-	it('arreter : octets envoyés — Ctrl-U, /exit, Entrée ; avec echap, Échap seul d’abord puis 150 ms au moins', async () => {
+	it('arreter : octets envoyés — Ctrl-U, /exit, Entrée ; avec echap, Échap seul d’abord puis 150 ms au moins ; sansTouche : aucun', async () => {
 		// un processus en mode brut qui affiche chaque morceau reçu (hexadécimal, instant) et sort à `/exit` + Entrée
 		const code = [
 			'process.stdin.setRawMode(true);',
@@ -202,13 +203,13 @@ describe.skipIf(sauter)('terminaux-pty : faux-claude sous un vrai pseudo-termina
 			'});',
 			"process.stdout.write('pret\\r\\n');",
 		].join('\n');
-		const recus = async (echap: boolean): Promise<{ instant: number; octets: string }[]> => {
+		const recus = async (echap: boolean, sansTouche = false): Promise<{ instant: number; octets: string }[]> => {
 			const dossier = await dossierTemporaire();
 			const t = terminaux.lancer({ commande: process.execPath, args: ['-e', code], dossier, env: { ...(process.env as Record<string, string>) }, colonnes: 80, lignes: 24 });
 			pids.add(t.pid);
 			const s = suivre(t);
 			await s.attendre(/pret/u);
-			await t.arreter(2000, { echap });
+			await t.arreter(2000, { echap, sansTouche });
 			return [...s.texte().matchAll(/recu (\d+) ([0-9a-f]+)/gu)].map((m) => ({ instant: Number(m[1]), octets: m[2]! }));
 		};
 		const sans = await recus(false);
@@ -218,6 +219,8 @@ describe.skipIf(sauter)('terminaux-pty : faux-claude sous un vrai pseudo-termina
 		expect(avec[0]!.octets).toBe('1b');
 		expect(avec.slice(1).map((r) => r.octets).join('')).toBe(Buffer.from('\x15/exit\r', 'latin1').toString('hex'));
 		expect(avec[1]!.instant - avec[0]!.instant).toBeGreaterThanOrEqual(140);
+		// sans touche (une question attend peut-être l'utilisateur) : rien d'écrit, le processus terminé par signal
+		expect(await recus(true, true)).toEqual([]);
 	});
 
 	it('--tetu ignore /exit et SIGTERM : tué au SIGKILL 3 s après, lui et son enfant', async () => {
@@ -283,9 +286,9 @@ describe.skipIf(sauter)('Pilote sous de vrais pseudo-terminaux : aucun orphelin'
 				ecrire: (session, fichiers) => ecrirePlugin(racine, session, fichiers),
 				retirer: async () => {},
 				appel: { node: process.execPath, main: join(racine, 'journal.mjs'), version: '0.0.0-essai' },
-				claude: { commande: process.execPath, avant: [FAUX_CLAUDE, ...avant] },
 				racine,
 			},
+			moteurs: moteursDeTest({ commande: process.execPath, avant: [FAUX_CLAUDE, ...avant] }),
 			hote: { env: process.env, plateforme: process.platform, dossier: async (r) => ({ absolu: join(racine, r), reel: r }), processus: etatProcessus, demarrageMachineMs, nettoyerRestes },
 		});
 		const dep = fauxPorts();
@@ -338,9 +341,9 @@ describe.skipIf(sauter)('Pilote sous de vrais pseudo-terminaux : aucun orphelin'
 				ecrire: (session, fichiers) => ecrirePlugin(racine, session, fichiers),
 				retirer: async () => {},
 				appel: { node: process.execPath, main: join(racine, 'journal.mjs'), version: '0.0.0-essai' },
-				claude: { commande: process.execPath, avant: [FAUX_CLAUDE, '--tetu', '--enfant'] },
 				racine,
 			},
+			moteurs: moteursDeTest({ commande: process.execPath, avant: [FAUX_CLAUDE, '--tetu', '--enfant'] }),
 			hote: { env: process.env, plateforme: process.platform, dossier: async (r) => ({ absolu: join(racine, r), reel: r }), processus: etatProcessus, demarrageMachineMs, nettoyerRestes },
 		});
 		pilotes.push(pilote);
@@ -400,7 +403,7 @@ describe.skipIf(sauter)('Pilote sous de vrais pseudo-terminaux : aucun orphelin'
 
 		const pil = await pilotageReel(racine, { terminaux });
 		etats.push(pil.etat);
-		pil.plugin.claude = { commande: process.execPath, avant: [FAUX_CLAUDE] };
+		commandeClaude(pil, { commande: process.execPath, avant: [FAUX_CLAUDE] });
 		pil.plugin.appel = { node: process.execPath, main: hook, version: '0.0.0-essai' };
 		const dep = dependancesReelles(racine);
 		const pilote = creerPilote(dep, pil);
@@ -423,7 +426,7 @@ describe.skipIf(sauter)('Pilote sous de vrais pseudo-terminaux : aucun orphelin'
 		const pil = await pilotageReel(racine, { env: { MNEMO_CLAUDE: FAUX_CLAUDE, PATH: '' }, terminaux });
 		expect(pil.plugin.racine).toBe(racine);
 		expect(pil.plugin.appel).toEqual({ node: process.execPath, main: resolve(import.meta.dirname, '../../src/adaptateurs/cli/main.ts'), version: versionMnemo() });
-		expect(pil.plugin.claude).toEqual({ commande: process.execPath, avant: [FAUX_CLAUDE] });
+		expect(pil.moteurs['claude-code']?.commande).toEqual({ commande: process.execPath, avant: [FAUX_CLAUDE] });
 		expect(pil.terminaux).toBe(terminaux);
 		await symlink(join(racine, 'projet'), join(racine, 'lien'));
 		await mkdir(join(racine, '_mnemo', 'fiches'), { recursive: true });
