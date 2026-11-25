@@ -73,6 +73,8 @@ export const HOOKS_MISTRAL_VIBE: HooksDuMoteur = hooksGardes({
 	arret: arretDe,
 	// approbation demandée par un sous-agent (`task`) : `parent_session_id` est la session (non mesuré)
 	dialogueDuParent: true,
+	// `post_tool` installé pour tous les outils : il efface le dialogue ouvert une fois l'outil approuvé passé
+	apresOutilDEtat: true,
 	sortie: sortieDe,
 	echeancesMs: ECHEANCES_MS,
 	finIgnoreeSiVivante: true,

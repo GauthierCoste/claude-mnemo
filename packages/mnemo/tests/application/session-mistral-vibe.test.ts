@@ -145,6 +145,13 @@ describe('hooks de Mistral Vibe', () => {
 		expect(HOOKS_MISTRAL_VIBE.inerte({ MNEMO_SESSION: ID, MNEMO_MOTEUR: 'mistral-vibe' })).toBe(false);
 	});
 
+	it('apres_outil que le profil ne demande pas : l’état seulement (il efface le dialogue ouvert), sans contexte ni fiche notée ; outil non demandé : rien', () => {
+		const sansApresOutil = { MNEMO_SESSION: ID, MNEMO_MOTEUR: 'mistral-vibe', MNEMO_HOOKS: 'debut,message,arret,fin' };
+		expect(HOOKS_MISTRAL_VIBE.traduire(appel('apres_outil', { tool_name: 'file_system.bash', tool_input: { command: 'ls' } }, [], sansApresOutil))?.entree).toMatchObject({ evenement: 'apres_outil', sansContexte: true });
+		expect(HOOKS_MISTRAL_VIBE.traduire(appel('outil', { tool_name: 'file_system.bash', tool_input: { command: 'ls' } }, [], sansApresOutil))).toBeNull();
+		expect(HOOKS_MISTRAL_VIBE.traduire(appel('apres_outil', { tool_name: 'file_system.bash' }, [], { ...sansApresOutil, MNEMO_HOOKS: 'debut,message,apres_outil,arret,fin' }))?.entree.sansContexte).toBeUndefined();
+	});
+
 	it('arrêts : fin du tour, dialogue ouvert (approbation, question), tour échoué ; turn_completed ignoré ; fin clear ignorée', () => {
 		expect(HOOKS_MISTRAL_VIBE.traduire(appel('arret'))?.entree.arret).toBe('stop');
 		expect(HOOKS_MISTRAL_VIBE.traduire(appel('arret', { notification_type: 'approval_requested' }, ['--notification']))?.entree.arret).toBe('notification');

@@ -169,12 +169,12 @@ describe('hooks de Codex selon le profil de la session (MNEMO_HOOKS)', () => {
 		reel: (c) => c,
 	});
 
-	it('debut et message non demandés : l’état seulement (sans contexte) ; outil et apres_outil non demandés : ignorés ; arret et fin toujours', () => {
+	it('debut, message et apres_outil non demandés : l’état seulement (sans contexte ; apres_outil efface le dialogue ouvert) ; outil non demandé : ignoré ; arret et fin toujours', () => {
 		const hooks = 'arret,fin';
 		expect(HOOKS_CODEX.traduire(appel('debut', hooks))?.entree).toMatchObject({ evenement: 'debut', session: ID, fil: FIL, sansContexte: true });
 		expect(HOOKS_CODEX.traduire(appel('message', hooks, { prompt: 'Bonjour' }))?.entree).toMatchObject({ evenement: 'message', prompt: 'Bonjour', sansContexte: true });
 		expect(HOOKS_CODEX.traduire(appel('outil', hooks, { tool_name: 'Bash', tool_input: { command: 'ls' } }))).toBeNull();
-		expect(HOOKS_CODEX.traduire(appel('apres_outil', hooks, { tool_name: 'apply_patch' }))).toBeNull();
+		expect(HOOKS_CODEX.traduire(appel('apres_outil', hooks, { tool_name: 'apply_patch' }))?.entree).toMatchObject({ evenement: 'apres_outil', sansContexte: true });
 		expect(HOOKS_CODEX.traduire(appel('arret', hooks))?.entree).toMatchObject({ evenement: 'arret', arret: 'stop' });
 		expect(HOOKS_CODEX.traduire(appel('arret', hooks))?.entree.sansContexte).toBeUndefined();
 	});

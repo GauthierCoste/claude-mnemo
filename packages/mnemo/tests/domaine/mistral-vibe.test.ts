@@ -105,6 +105,9 @@ describe('hooks de Mnemo dans hooks.toml', () => {
 		expect(elements[3]).toMatchObject({ name: 'mnemo-pre_tool', timeout: { texte: '10' } });
 		expect(elements[2]).toMatchObject({ name: 'mnemo-pre_agent', match: 'main', command: `[ "$MNEMO_MOTEUR" = mistral-vibe ] || exit 0; '${NODE}' '${MAIN}' hook message --moteur mistral-vibe` });
 		expect(elements[3]).not.toHaveProperty('strict');
+		// post_tool pour tous les outils : il efface le dialogue ouvert après l'outil approuvé
+		expect(elements[4]).toMatchObject({ name: 'mnemo-post_tool' });
+		expect(elements[4]).not.toHaveProperty('match');
 		expect(elements[6]!['command']).toContain('hook arret --notification --moteur mistral-vibe');
 		expect(commandeDuHook('C:\\node.exe', 'C:\\m\\main.ts', ['fin'], 'win32')).toBe('if "%MNEMO_MOTEUR%"=="mistral-vibe" "C:\\node.exe" "C:\\m\\main.ts" hook fin --moteur mistral-vibe');
 	});

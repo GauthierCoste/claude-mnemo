@@ -23,7 +23,10 @@ const NON_ECRITURES = new Set(['file_system.read_file', 'file_system.grep', 'fil
 /** Outils du serveur MCP `mnemo` chez Mistral Vibe : `mcp_<serveur>.<outil>`. */
 const PREFIXE_MCP = 'mcp_mnemo.';
 
-/** `match` des hooks `post_tool` de Vibe (`re:` : expression entière, sans casse) : une écriture, une fiche lue ou écrite par Mnemo. */
+/**
+ * Outils après lesquels un fichier ou une fiche est lu ou écrit (`re:` : expression entière, sans casse, la forme d'un `match`
+ * de Vibe). Pas de `match` sur `post_tool` : il est installé pour tous les outils (il efface le dialogue ouvert).
+ */
 const MOTIF_APRES_OUTIL = 're:file_system\\.(?:write_file|edit)|mcp_mnemo\\..+';
 
 export const OUTILS_MISTRAL_VIBE: OutilsDuMoteur = {

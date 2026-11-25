@@ -59,6 +59,9 @@ export const HOOKS_CODEX: HooksDuMoteur = hooksGardes({
 	evenements: EVENEMENTS,
 	notifications: new Set(['PermissionRequest']),
 	raisonsIgnorees: new Set(['clear', 'resume']),
+	// `PostToolUse` n'est installé que pour `motifApresOutil` (le changer ferait réapprouver les hooks) : il efface le dialogue
+	// ouvert après un patch ou un outil de Mnemo approuvés ; après une commande approuvée, le prochain `outil` ou `arret` le fait
+	apresOutilDEtat: true,
 	sortie: sortieDe,
 	echeancesMs: ECHEANCES_MS,
 	finIgnoreeSiVivante: true,

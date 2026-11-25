@@ -17,7 +17,7 @@ const OPTIONS: Partial<Record<EvenementHook, readonly string[]>> = { arret: ['--
  * - `raisonsIgnorees` : raisons d'une fin de conversation qui ne termine pas la session (`/clear`…) ;
  * - `arret` : ce qu'est un arrêt d'après son entrée (null : ignoré) ; par défaut, `notification` sur `--notification` ;
  * - `apresOutilDEtat` : `apres_outil` tient aussi l'état quand le profil ne le demande pas (l'état seulement, `sansContexte`) :
- *   il efface un dialogue ouvert une fois l'outil approuvé passé (GitHub Copilot CLI : aucun autre hook ne le fait avant la
+ *   il efface un dialogue ouvert une fois l'outil approuvé passé (aucun autre hook ne le fait avant l'outil suivant ou la
  *   fin du tour) ;
  * - `dialogueDuParent` : un dialogue ouvert (`arret` `notification`) porte `parent_session_id`, l'identifiant de la session
  *   quand il vient d'un agent qu'elle a lancé (son approbation s'affiche dans le terminal de la session) : il compte pour elle ;

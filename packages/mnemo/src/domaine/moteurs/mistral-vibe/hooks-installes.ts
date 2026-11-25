@@ -3,7 +3,6 @@ import { avecBlocALaFin, sansPlages } from '../toml-edition.ts';
 import { elementsDuTableau, entreesToml } from '../toml-lecture.ts';
 import type { ElementDeTableau } from '../toml-lecture.ts';
 import { valeurToml } from '../toml.ts';
-import { OUTILS_MISTRAL_VIBE } from './outils.ts';
 
 /**
  * Hooks de Mnemo dans `hooks.toml` de Mistral Vibe : un élément `[[hooks]]` par événement Vibe (`name` unique, `type`,
@@ -14,6 +13,9 @@ import { OUTILS_MISTRAL_VIBE } from './outils.ts';
  *   passer l'outil, comme chez Claude Code et Codex ; 10 s, loin de l'échéance de Mnemo (`refusDelai`, 2 s, comptée depuis
  *   le démarrage du hook : un Node lent à démarrer ne fait pas passer l'outil), qui décide lui-même : une panne de Mnemo ne
  *   bloque pas chaque outil de la session ;
+ * - `post_tool` sans `match` : après chaque outil, il efface le dialogue ouvert (l'outil approuvé a tourné), même pour un
+ *   profil qui ne demande pas `apres_outil` (l'état seulement : `apresOutilDEtat`) ; seuls les outils qui lisent ou
+ *   écrivent une fiche y en notent une ;
  * - `notification` : `arret --notification`, son type dit s'il ouvre un dialogue ;
  * - `session_end` : 2 s au plus (Vibe n'attend pas plus, à la fermeture, l'ensemble des hooks en cours).
  */
@@ -21,7 +23,7 @@ export const HOOKS_MISTRAL_VIBE_INSTALLES: readonly { type: string; args: readon
 	{ type: 'session_start', args: ['debut'], timeout: 10 },
 	{ type: 'pre_agent', args: ['message'], timeout: 5, match: 'main' },
 	{ type: 'pre_tool', args: ['outil'], timeout: 10 },
-	{ type: 'post_tool', args: ['apres_outil'], timeout: 3, match: OUTILS_MISTRAL_VIBE.motifApresOutil },
+	{ type: 'post_tool', args: ['apres_outil'], timeout: 3 },
 	{ type: 'post_agent', args: ['arret'], timeout: 3, match: 'main' },
 	{ type: 'notification', args: ['arret', '--notification'], timeout: 3 },
 	{ type: 'session_end', args: ['fin'], timeout: 2 },
