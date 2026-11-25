@@ -44,6 +44,11 @@ export type Session = {
 	bilanLuMs?: number | null;
 	/** Cause du dernier `arret`, effacée par `debut`, `message` et `outil` (null : aucun arrêt depuis). */
 	dernierArret?: CauseArret | null;
+	/**
+	 * Outil dont le dialogue est ouvert (`arret` `notification` qui le nomme : Codex, Mistral Vibe) : seul un `apres_outil` de
+	 * ce même outil le ferme ; null : inconnu (GitHub Copilot CLI, Claude Code), n'importe quel `apres_outil` le ferme.
+	 */
+	dialogueOutil?: string | null;
 	/** Instant où l'épisode de la session a été écrit ou constaté (rattrapage au démarrage : déjà fait au-delà). */
 	episodeMs?: number | null;
 	/** Vrai si aucune fiche ne couvre le dossier de la session (`dossier_projet`) : sa position est alors la racine. */
@@ -105,6 +110,13 @@ export const dialogueOuvert = (s: Pick<Session, 'etat' | 'dernierArret' | 'majMs
  */
 export const messageApresSonDebut = (s: Pick<Session, 'etat' | 'dernierArret' | 'majMs' | 'lanceMs'>, horodatageMs: number): boolean =>
 	s.etat === 'attend' && (s.dernierArret ?? null) === null && (s.lanceMs ?? null) !== null && s.majMs > s.lanceMs! && horodatageMs > s.lanceMs!;
+
+/**
+ * Un `apres_outil` de l'outil `outil` pendant un dialogue ouvert pour un autre outil nommé : il ne le ferme pas (outils lancés
+ * en parallèle). Faux si l'un des deux noms est inconnu : l'après-outil ferme alors le dialogue, comme avant.
+ */
+export const autreOutilQueLeDialogue = (s: Pick<Session, 'dernierArret' | 'dialogueOutil'>, outil: string | undefined): boolean =>
+	s.dernierArret === 'notification' && (s.dialogueOutil ?? null) !== null && outil !== undefined && outil !== s.dialogueOutil;
 
 /** États dans lesquels une session est relancée (`claude --resume`) au redémarrage du service. */
 export const ETATS_RELANCES: readonly EtatSession[] = ['travaille', 'attend', 'a_relire'];

@@ -71,6 +71,16 @@ const entree = (evenement: EvenementHook, horodatageMs: number, extra: Partial<E
 const local = { froid: 'si-budget' as const };
 
 describe('traiterEvenement : états', () => {
+	it('dialogue ouvert qui nomme son outil (Mistral Vibe, Codex) : l’après-outil d’un autre outil ne le ferme pas, celui de cet outil le ferme', async () => {
+		const { dep, etat, pil } = await contexte({ etat: 'travaille', majMs: 5 });
+		await traiterEvenement(dep, pil, entree('arret', 10, { arret: 'notification', outil: { nom: 'bash', entree: { command: 'ls' } } }), local);
+		expect(await etat.lire(ID)).toMatchObject({ etat: 'attend', dernierArret: 'notification', dialogueOutil: 'bash' });
+		await traiterEvenement(dep, pil, entree('apres_outil', 11, { outil: { nom: 'read_file', entree: {} }, sansContexte: true }), local);
+		expect(await etat.lire(ID)).toMatchObject({ etat: 'attend', dernierArret: 'notification' });
+		await traiterEvenement(dep, pil, entree('apres_outil', 12, { outil: { nom: 'bash', entree: {} }, sansContexte: true }), local);
+		expect(await etat.lire(ID)).toMatchObject({ etat: 'travaille', dernierArret: null, dialogueOutil: null });
+	});
+
 	it('transitions : debut → attend, message → travaille, outil → travaille, arret → attend, fin → a_relire', async () => {
 		const { dep, etat, pil } = await contexte({ etat: 'travaille' });
 		const suite: [EvenementHook, string][] = [

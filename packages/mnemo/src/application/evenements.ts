@@ -249,6 +249,8 @@ async function appliquer(pil: Pick<Pilotage, 'etat'>, entree: EntreeHook): Promi
 		...(objectif === null ? {} : { objectif }),
 		...(entree.evenement === 'arret' && entree.arret !== undefined ? { arret: entree.arret } : {}),
 		...(entree.fil === undefined ? {} : { fil: entree.fil }),
+		// l'outil d'un dialogue ouvert, et celui d'un après-outil : seul l'après-outil de cet outil ferme le dialogue
+		...(((entree.evenement === 'arret' && entree.arret === 'notification') || entree.evenement === 'apres_outil') && entree.outil !== undefined && 'nom' in entree.outil ? { outil: entree.outil.nom } : {}),
 	};
 	try {
 		return await pil.etat.appliquer(entree.session, entree.evenement, entree.horodatageMs, Object.keys(complement).length === 0 ? undefined : complement);

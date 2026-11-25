@@ -729,14 +729,16 @@ export interface EtatSessions {
 	 * Applique l'événement seulement si `horodatageMs` > `majMs`, sauf un `message` qui suit le `debut` de ce lancement
 	 * (`messageApresSonDebut` : jamais ignoré, `majMs` ne recule pas) ; rend la session après (inchangée si ignoré), null si inconnue.
 	 * Le premier `message` après `bilanDemandeMs` d'une session en bilan note `bilanLuMs`. `arret` note `dernierArret`
-	 * (`complement.arret`, `stop` par défaut) ; `debut`, `message` et `outil` l'effacent. `complement.fil` (identifiant de la
+	 * (`complement.arret`, `stop` par défaut) ; `debut`, `message` et `outil` l'effacent ; un dialogue ouvert note l'outil qu'il
+	 * nomme (`complement.outil`, `dialogueOutil`), et un `apres_outil` d'un autre outil nommé est alors ignoré (`autreOutilQueLeDialogue`).
+	 * `complement.fil` (identifiant de la
 	 * session chez son moteur) est noté au premier événement qui le porte, même ignoré par ailleurs, et jamais écrasé ensuite.
 	 */
 	appliquer(
 		id: string,
 		e: EvenementHook,
 		horodatageMs: number,
-		complement?: { objectif?: string; commitDebut?: string | null; branche?: string | null; arret?: CauseArret; fil?: string },
+		complement?: { objectif?: string; commitDebut?: string | null; branche?: string | null; arret?: CauseArret; fil?: string; outil?: string },
 	): Promise<Session | null>;
 	/**
 	 * Une session `terminee` garde son `etat` et son `arretAttendu` (les autres champs restent modifiables). `fil` : remplacé
