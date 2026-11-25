@@ -789,11 +789,12 @@ export type ReponseRejetLot = { id: string };
 /**
  * `mnemo init --json` (lu par un programme qui pilote l'installation) : une ligne JSON par événement sur la sortie
  * standard, et rien d'autre. Une étape menée s'annonce (`debut`) puis finit (`fait` ou `echec`) ; une étape laissée de
- * côté ne donne qu'une ligne `saute`. `lanceur` : macOS seulement. `motif` (étape `mcp`, `echec` seulement) : `perime`,
- * une déclaration de Mnemo de portée utilisateur existe déjà et lance un autre Node ou un autre `main.ts` (autre
- * installation de Mnemo), que `mnemo declarer --remplacer` reprend. Absent : tout autre échec.
+ * côté ne donne qu'une ligne `saute`. `lanceur` : macOS seulement. `codex` : seulement avec `--codex` (déclaration MCP
+ * chez Codex), aucune ligne sans. `motif` (étapes `mcp` et `codex`, `echec` seulement) : `perime`, une déclaration de
+ * Mnemo de portée utilisateur existe déjà et lance un autre Node ou un autre `main.ts` (autre installation de Mnemo), que
+ * `mnemo declarer --remplacer` (`--moteur codex` pour Codex) reprend. Absent : tout autre échec.
  */
-export type EtapeInit = 'memoire' | 'mcp' | 'modeles' | 'commande' | 'lanceur';
+export type EtapeInit = 'memoire' | 'mcp' | 'codex' | 'modeles' | 'commande' | 'lanceur';
 export type MotifEchecInit = 'perime';
 export type EvenementInit = { etape: EtapeInit; etat: 'debut' | 'fait' | 'saute' | 'echec'; message: string; motif?: MotifEchecInit };
 /**
@@ -806,17 +807,27 @@ export type FinInit = { fin: true; racine: string; ok: boolean };
 export type LigneInit = EvenementInit | ProgressionInit | FinInit;
 
 /**
- * `mnemo verifier-poste --json` : ce dont Mnemo a besoin sur le poste. `git.version` : « 2.50.1 » ; `claude.chemin` : le
- * `claude` que lanceront les sessions ; `motif` : pourquoi ce n'est pas utilisable ; `node.version` : celle qui exécute Mnemo.
+ * Déclaration du serveur MCP `mnemo` chez un moteur, lue sans rien changer : `deja` (elle lance ce Node et ce Mnemo),
+ * `absent`, `perime` (une déclaration de Mnemo qui lance un autre Node ou un autre Mnemo : `mnemo declarer --remplacer`),
+ * `autre` (une déclaration `mnemo` qui ne lance pas Mnemo : laissée), `echec` (illisible ; `motif` dit pourquoi).
+ */
+export type EtatMcpVerifie = { etat: 'deja' | 'absent' | 'perime' | 'autre' | 'echec'; motif?: string };
+
+/**
+ * `mnemo verifier-poste --json` : ce dont Mnemo a besoin sur le poste, un bloc par moteur. `git.version` : « 2.50.1 » ;
+ * `claude.chemin` : le `claude` que lanceront les sessions ; `codex.chemin` : le `codex` trouvé (facultatif : son absence
+ * n'est pas un manque), `codex.mcp` : sa déclaration MCP, lue quand il est trouvé ; `motif` : pourquoi ce n'est pas
+ * utilisable ; `node.version` : celle qui exécute Mnemo.
  */
 export type PosteVerifie = {
 	git: { ok: boolean; version?: string; motif?: string };
 	claude: { ok: boolean; chemin?: string; motif?: string };
+	codex: { ok: boolean; chemin?: string; motif?: string; mcp?: EtatMcpVerifie };
 	node: { version: string };
 };
 
 /**
- * `mnemo declarer (--remplacer | --retirer) --json` : une ligne.
+ * `mnemo declarer (--remplacer | --retirer) [--moteur claude-code | codex] --json` : une ligne.
  * `absent` : aucune déclaration `mnemo` ; `deja` : elle lance déjà ce Node et ce Mnemo ; `remplace` : refaite sur eux ;
  * `retire` : retirée ; `autre` : laissée (elle ne lance pas ce Mnemo, ou n'est pas de portée utilisateur) ; `echec` : code
  * de sortie 1, `message` dit pourquoi.

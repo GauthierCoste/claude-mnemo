@@ -7,6 +7,7 @@ import type { LigneInit } from '@mnemo/contrat';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { commandeInit } from '../../src/adaptateurs/cli/init.ts';
 import type { SuiviModeles } from '../../src/adaptateurs/cli/init.ts';
+import type { ResultatDeclaration } from '../../src/application/ports.ts';
 import { journalInit, PAS_PROGRESSION_MS } from '../../src/adaptateurs/cli/init-journal.ts';
 import { lireOptionsInit } from '../../src/adaptateurs/cli/init-options.ts';
 import type { Piece } from '../../src/infra/modeles/catalogue.ts';
@@ -69,7 +70,8 @@ describe('mnemo init : options', () => {
 			expect(() => lireOptionsInit([avec!, sans!])).toThrow(expect.objectContaining({ code: 2, message: expect.stringContaining('contradictoires') }));
 		}
 		expect(() => lireOptionsInit(['--modele'])).toThrow(expect.objectContaining({ code: 2 }));
-		expect(lireOptionsInit(['d', '--json', '--mcp', '--sans-lanceur'])).toEqual({ dossier: 'd', oui: false, json: true, mcp: true, modeles: null, commande: null, lanceur: false });
+		expect(lireOptionsInit(['d', '--json', '--mcp', '--sans-lanceur'])).toEqual({ dossier: 'd', oui: false, json: true, mcp: true, codex: false, modeles: null, commande: null, lanceur: false });
+		expect(lireOptionsInit(['--codex'])).toMatchObject({ codex: true, mcp: null });
 	});
 
 	it('options contradictoires : rien n’est créé', async () => {
@@ -257,6 +259,61 @@ describe('mnemo init : échec en mode texte', () => {
 		expect(sortie.texte()).toContain('Commande « mnemo » : échec — droits insuffisants');
 		expect(a.creerLanceur).toHaveBeenCalledWith(racine);
 		expect(sortie.texte()).toContain('Pour démarrer : ouvrez l’application Mnemo');
+	});
+});
+
+describe('mnemo init --codex', () => {
+	const avecCodex = (declaration: ResultatDeclaration) => ({
+		...actions(),
+		declarerCodex: vi.fn(async () => declaration),
+	});
+
+	it('déclare chez Codex (étape « codex »), le reste inchangé ; sans --codex, Codex n’est jamais touché', async () => {
+		avecMcpFactice();
+		const racine = await dossierTemporaire();
+		const a = avecCodex('declare');
+		const sortie = capture();
+		await commandeInit([racine, '--json', '--sans-mcp', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: a });
+		expect(a.declarerCodex).toHaveBeenCalledOnce();
+		expect(a.declarerMcp).not.toHaveBeenCalled();
+		expect(evenements(lignesJson(sortie.texte()))).toEqual(['memoire:debut', 'memoire:fait', 'mcp:saute', 'codex:debut', 'codex:fait', 'modeles:saute', 'commande:saute', 'lanceur:saute']);
+		const sans = avecCodex('declare');
+		const sortieSans = capture();
+		await commandeInit([racine, '--json', '--mcp'], { sortie: sortieSans.flux, plateforme: 'linux', actions: sans });
+		expect(sans.declarerCodex).not.toHaveBeenCalled();
+		expect(evenements(lignesJson(sortieSans.texte())).some((e) => e.startsWith('codex:'))).toBe(false);
+	});
+
+	it('texte : une ligne dit ce qui est fait chez Codex', async () => {
+		avecMcpFactice();
+		const racine = await dossierTemporaire();
+		const sortie = capture();
+		await commandeInit([racine, '--sans-mcp', '--codex'], { sortie: sortie.flux, interactif: false, plateforme: 'linux', actions: avecCodex('deja') });
+		expect(sortie.texte()).toContain('Serveur MCP déjà déclaré à Codex.');
+	});
+
+	it('déclaration de Mnemo périmée chez Codex : échec de motif « perime » ; une autre déclaration : échec sans motif', async () => {
+		avecMcpFactice();
+		const manuel = "codex mcp add mnemo -- 'node' 'main.ts' mcp";
+		for (const [remplacable, motif] of [[true, 'perime'], [false, undefined]] as const) {
+			const racine = await dossierTemporaire();
+			const sortie = capture();
+			await expect(commandeInit([racine, '--json', '--sans-mcp', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: avecCodex({ perime: true, manuel, remplacable }) })).rejects.toMatchObject({ code: 1 });
+			const echec = lignesJson(sortie.texte()).find((l) => 'etat' in l && l.etape === 'codex' && l.etat === 'echec');
+			expect(echec).toBeDefined();
+			if (motif === undefined) expect(echec).not.toHaveProperty('motif');
+			else expect(echec).toMatchObject({ motif, message: expect.stringContaining('mnemo declarer --moteur codex --remplacer') });
+		}
+	});
+
+	it('MNEMO_SANS_MCP=1 l’emporte sur --codex', async () => {
+		vi.stubEnv('MNEMO_SANS_MCP', '1');
+		const racine = await dossierTemporaire();
+		const a = avecCodex('declare');
+		const sortie = capture();
+		await commandeInit([racine, '--json', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: a });
+		expect(a.declarerCodex).not.toHaveBeenCalled();
+		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'codex', etat: 'saute', message: 'Serveur MCP non déclaré à Codex (MNEMO_SANS_MCP=1).' });
 	});
 });
 

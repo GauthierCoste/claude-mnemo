@@ -13,6 +13,7 @@ import type { ResultatDeclaration } from '../../application/ports.ts';
 import { citerPosix, citerPowerShell } from '../../domaine/citer.ts';
 import { commandeManuelle, declarerServeurMcp } from '../../infra/moteurs/claude-code/declaration-mcp.ts';
 import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
+import { MOTEUR_CODEX } from '../../infra/moteurs/codex.ts';
 import { commandeAJour, dossierDeCommande } from '../../infra/commande-mnemo.ts';
 import type { Piece } from '../../infra/modeles/catalogue.ts';
 import { dependancesReelles } from '../../infra/systeme.ts';
@@ -41,6 +42,8 @@ export type SuiviModeles = {
  */
 export type ActionsInit = {
 	declarerMcp(): Promise<ResultatDeclaration>;
+	/** Déclaration du serveur MCP chez Codex (`--codex`). */
+	declarerCodex(): Promise<ResultatDeclaration>;
 	installerModeles(racine: string, suivi?: SuiviModeles): Promise<void>;
 	creerLanceur(racine: string, ecrire?: (ligne: string) => void): Promise<void>;
 	installerCommande(ecrire?: (ligne: string) => void): Promise<void>;
@@ -64,6 +67,8 @@ export type OptionsInit = {
 
 const actionsReelles: ActionsInit = {
 	declarerMcp: () => declarerServeurMcp(executeurReel(), MAIN, trouverClaude(process.env, process.platform)),
+	declarerCodex: () =>
+		MOTEUR_CODEX.declarationMcp.declarer({ executer: executeurReel(), main: MAIN, commande: MOTEUR_CODEX.trouver(process.env, process.platform), plateforme: process.platform }),
 	installerModeles: async (racine, suivi) => (await import('./modeles.ts')).commandeModeles(['installer'], { racine, ...suivi }),
 	creerLanceur: async (racine, ecrire) => (await import('./lanceur.ts')).commandeLanceur([], racine, ecrire),
 	installerCommande: async (ecrire) => (await import('./commande.ts')).commandeCommande([], ecrire === undefined ? {} : { ecrire }),
@@ -119,6 +124,7 @@ class EchecMotive extends Error {
  * non (`MNEMO_SANS_MCP=1` l'emporte sur `--mcp`). `--json` : aucune question, une ligne `LigneInit` (`@mnemo/contrat`) par
  * événement et rien d'autre sur la sortie standard. L'échec d'une étape hors mémoire n'arrête pas les suivantes : il est
  * dit, puis le code de sortie est 1 (en texte, une déclaration MCP impossible reste dite sans être un échec, comme avant).
+ * `--codex` : déclare aussi le serveur MCP chez Codex (sans question ; sans `--codex`, Codex n'est jamais touché).
  */
 export async function commandeInit(args: string[], o: OptionsInit = {}): Promise<void> {
 	const choix = lireOptionsInit(args);
@@ -216,6 +222,20 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 		}
 		for (const ligne of messagesInit(racine, resultat, declaration)) ecrire(ligne);
 		if (sansDeclaration !== null) ecrire(sansDeclaration);
+
+		// Codex : seulement sur --codex (jamais par défaut ni sur question) ; MNEMO_SANS_MCP=1 l'emporte
+		if (choix.codex && sansMcpEnv) j.evenement('codex', 'saute', 'Serveur MCP non déclaré à Codex (MNEMO_SANS_MCP=1).');
+		else if (choix.codex) {
+			let ligne: string | null = null;
+			await mener('codex', 'Serveur MCP (Codex)', 'Déclaration du serveur MCP à Codex.', async () => {
+				const declarationCodex = await actions.declarerCodex();
+				ligne = messageCodex(declarationCodex);
+				if (json && declarationCodex !== 'declare' && declarationCodex !== 'deja')
+					throw 'perime' in declarationCodex && declarationCodex.remplacable === true ? new EchecMotive(ligne, 'perime') : new Error(ligne);
+				return ligne;
+			});
+			if (ligne !== null) ecrire(ligne);
+		}
 
 		// sur une mémoire existante, les modèles ne sont pas proposés (seulement installés sur --modeles)
 		if (choix.modeles ?? (!existante && (await ouiNon('Installer les modèles locaux (recherche par le sens ; environ 1,3 Go à télécharger) ?', false)))) {
@@ -350,6 +370,18 @@ export function messagesInit(racine: string, resultat: ResultatInitialisation, d
 	else if (declaration.introuvable) lignes.push(`Claude Code introuvable : lancez vous-même : ${declaration.manuel}`);
 	else lignes.push(`Déclaration automatique impossible (${declaration.raison}) : lancez vous-même : ${declaration.manuel}`);
 	return lignes;
+}
+
+/** Une ligne pour la déclaration MCP chez Codex. */
+export function messageCodex(declaration: ResultatDeclaration): string {
+	if (declaration === 'declare') return 'Serveur MCP déclaré pour toutes les sessions Codex.';
+	if (declaration === 'deja') return 'Serveur MCP déjà déclaré à Codex.';
+	if ('perime' in declaration)
+		return declaration.remplacable === true
+			? 'Serveur MCP déclaré à Codex pour un autre Node ou un autre Mnemo : lancez « mnemo declarer --moteur codex --remplacer ».'
+			: `Une déclaration MCP « mnemo » qui ne lance pas Mnemo existe chez Codex : retirez-la (\`codex mcp remove mnemo\`) puis : ${declaration.manuel}`;
+	if (declaration.introuvable) return `Codex introuvable : lancez vous-même : ${declaration.manuel}`;
+	return `Déclaration automatique à Codex impossible (${declaration.raison}) : lancez vous-même : ${declaration.manuel}`;
 }
 
 /** Ligne de démarrage à copier-coller sans la commande `mnemo` : PowerShell (`& 'node.exe' …`) sous Windows, POSIX ailleurs. */
