@@ -163,10 +163,9 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(bouton.getAttribute('title')).toMatch(/\nOrdre seul : aucune note apprise et validée/u);
 		await act(async () => bouton.click());
 		expect(screen.getByText(/^Ordre seul : aucune note apprise et validée/u)).toBeTruthy();
-		// ni seuil d'injection : le séparateur reste, en filet gris sans texte
+		// ni seuil d'injection, ni séparateur (aucune fiche injectée)
 		expect(screen.queryByText(/seuil d’injection/u)).toBeNull();
-		expect(separateurs().map((x) => x.getAttribute('data-genre'))).toEqual(['filet']);
-		expect(separateurs()[0]!.textContent).toBe('');
+		expect(separateurs()).toEqual([]);
 		cleanup();
 		// entrée d'avant le classement vivant : une note du reranker, sans `calibree`
 		monter({ entrees: [{ session: 's1', moment: 'message', horodatageMs: 1, ids: [], texte: '', ms: 1, sens: true, classement: [{ id: 'b.md', titre: 'Bêta', note: 0.8, servi: false, rang: 1 }], muet: null, cartes: [] }] });
@@ -220,20 +219,22 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(screen.queryByText(/le classement viendra au prochain message/u)).toBeNull();
 	});
 
-	it('séparateur : sans fiche injectée, il ouvre la liste ; un seul, jamais deux traits', async () => {
+	it('séparateur : sans fiche injectée, aucun (rien à séparer), injection active ou ordre seul ; jamais deux traits', async () => {
 		monter({ entrees: [entree(A(14, 34), [v('d.md', 'Delta', 1, 0.5), v('e.md', 'Epsilon', 2, 0.3)])] });
 		await act(async () => {});
-		const items = [...liste().children];
-		expect(items[0]!.textContent).toBe('seuil d’injection 90\u00a0%');
-		expect(items[1]!.getAttribute('data-id')).toBe('d.md');
-		expect(separateurs()).toHaveLength(1);
+		expect(liste().firstElementChild!.getAttribute('data-id')).toBe('d.md');
+		expect(separateurs()).toHaveLength(0);
+		expect(screen.queryByText(/seuil d’injection/u)).toBeNull();
 		cleanup();
-		// ordre seul, rien d'injecté : le filet gris, sous l'en-tête (rien de vu encore)
 		monter({ entrees: [entree(A(14, 34), [v('d.md', 'Delta', 1, null, { pNonCalibree: 0.5 })], { calibree: false })] });
 		await act(async () => {});
-		const premier = liste().firstElementChild!;
-		expect(premier.querySelector('[data-genre]')?.getAttribute('data-genre')).toBe('filet');
-		expect(separateurs()).toHaveLength(1);
+		expect(liste().firstElementChild!.getAttribute('data-id')).toBe('d.md');
+		expect(separateurs()).toHaveLength(0);
+		cleanup();
+		// ordre seul avec une fiche injectée : le filet gris, sans texte
+		monter({ entrees: [entree(A(14, 34), [v('d.md', 'Delta', 1, null, { pNonCalibree: 0.5 })], { calibree: false, ids: [POSITION] })] });
+		await act(async () => {});
+		expect(separateurs().map((x) => [x.getAttribute('data-genre'), x.textContent])).toEqual([['filet', '']]);
 	});
 
 	it('pas de ligne qui rappelle le message ; « affinage… » dans le bouton des modèles pendant l’affinage, puis l’icône seule', async () => {

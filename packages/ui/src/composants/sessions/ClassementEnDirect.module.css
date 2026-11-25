@@ -217,7 +217,7 @@
 	white-space: nowrap;
 }
 
-/* La jonction : le seul séparateur entre le vu (◆) et le pas vu, jamais retiré. */
+/* La jonction : le seul séparateur entre le vu (◆) et le pas vu, dès qu'une fiche est injectée. */
 .jonction {
 	margin: 0;
 	padding: 0 4px;
@@ -238,7 +238,7 @@
 .separateur::before {
 	content: '';
 	flex: 1;
-	/* visible même seul sous l'en-tête (rien de vu encore) : plus marqué qu'une bordure */
+	/* plus marqué qu'une bordure : il se voit entre les ◆ et le classement */
 	border-top: 1px solid color-mix(in srgb, var(--dim) 55%, transparent);
 }
 

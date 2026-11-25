@@ -597,7 +597,8 @@ aside a note Mnemo injected counts as an error for the watch above.
 - At the top, ◆ the notes injected whole, oldest first, with on the right how: « du dossier » (the note of the position),
   « à la main » (➤), or « auto 94 % » (injected by Mnemo, with its score at that message; the tooltip gives the threshold
   and the time).
-- One separator, always there, between what the session has seen (◆) and what it has not: a plain grey line; when
+- One separator between what the session has seen (◆) and what it has not, as soon as a note was injected (none: nothing
+  to separate, no line): a plain grey line; when
   automatic injection is active (accepted score, not cut), the same line becomes the dashed threshold of injection,
   « seuil d’injection 90 % »; when it is cut, grey again, « seuil 90 % – coupé ». Under it, when cut, the notice and
   « Réactiver ». A note above the threshold that was not injected (refined later, or the cap per message reached) stays

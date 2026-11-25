@@ -2,7 +2,7 @@
  * « Injecté dans la session » (panneau Contexte), le classement vivant. Une seule liste :
  * - ◆ en haut, les fiches injectées entières, de la plus ancienne à la plus récente ; à droite, comment : « du dossier » (fiche
  *   de position), « à la main » (➤), ou « auto 94 % » (injectée par Mnemo, sa note au message ; l'info-bulle le dit) ;
- * - la jonction : un seul séparateur entre le vu (◆) et le pas vu, jamais retiré : filet gris, ou le seuil d'injection
+ * - la jonction : un seul séparateur entre le vu (◆) et le pas vu, dès qu'une fiche est injectée (aucune : rien à séparer) : filet gris, ou le seuil d'injection
  *   (vert pointillé) quand l'injection automatique est active, gris « coupé » si elle l'est ; dessous, l'injection
  *   automatique coupée par le suivi, avec son motif et « Réactiver ». L'état du classement qui sort de l'ordinaire (« affinage… », « ordre seul » et sa raison) est dit dans le bouton des
  *   modèles de la session, à droite du titre. Le message classé n'est pas rappelé ;
@@ -536,7 +536,9 @@ export function ClassementEnDirect(p: {
 				: 'Au-dessus : vu par la session ; dessous : pas encore vu.';
 	const lignesClassees = classees.map((l) => ligneClassee(l));
 
-	const jonctionVisible = ordreServies.length + enLice.length > 0 || coupures.length > 0;
+	// sans fiche injectée, rien à séparer : pas de séparateur (la coupure se dit quand même, à la même place)
+	const separateurVisible = ordreServies.length > 0;
+	const jonctionVisible = separateurVisible || coupures.length > 0;
 	const etatClassement = { affinage, ordreSeul: ordreSeul ? raisonOrdreSeul(coupes) : null };
 	const niveaux = [...new Set(coupures.map((x) => x.niveau))];
 	const libelleNiveau = (n: CoupureInjectionVue['niveau']) => (n === 'complets' ? 'modèles complets' : 'sens seul');
@@ -566,9 +568,11 @@ export function ClassementEnDirect(p: {
 					{ordreServies.map(ligneInjectee)}
 					{jonctionVisible && (
 						<li key="jonction" ref={jonction} className={s.jonction} role="presentation">
-							<div className={s.separateur} data-genre={genreSeparateur} title={bulleSeparateur}>
-								{genreSeparateur !== 'filet' && <span>{genreSeparateur === 'seuil' ? `seuil d’injection ${pourcentage(seuil)}` : `seuil ${pourcentage(seuil)} – coupé`}</span>}
-							</div>
+							{separateurVisible && (
+								<div className={s.separateur} data-genre={genreSeparateur} title={bulleSeparateur}>
+									{genreSeparateur !== 'filet' && <span>{genreSeparateur === 'seuil' ? `seuil d’injection ${pourcentage(seuil)}` : `seuil ${pourcentage(seuil)} – coupé`}</span>}
+								</div>
+							)}
 							{coupures.length > 0 && (
 								<div className={s.coupure} role="status">
 									<p>
