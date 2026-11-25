@@ -58,7 +58,7 @@ describe('routes : quotas du compte', () => {
 		const c = await serviceFaux({}, { pil: (pil) => void (pil.moteurs = { ...pil.moteurs, codex: { moteur: codex, commande: null } }) });
 		await c.etat.creer({ id: UUID, profil: 'travail', dossier: 'alpha', position: 'projets/alpha', projet: 'alpha', objectif: 'Objectif', etat: 'travaille', creeeMs: 1000, majMs: 1000, arretAttendu: null, bilanDemandeMs: null, commitDebut: null, branche: null, pid: null, moteur: 'codex', modele: '', fil: FIL } satisfies Session);
 		const jeton = c.service.jeton;
-		const hook = (evenement: string) => appeler(c.service.port, 'POST', ROUTES.hook, { jeton, corps: { evenement, session: UUID, horodatageMs: Date.now(), cwd: null, moteur: 'codex', fil: FIL, transcription } });
+		const hook = (evenement: string, extra: Record<string, unknown> = {}) => appeler(c.service.port, 'POST', ROUTES.hook, { jeton, corps: { evenement, session: UUID, horodatageMs: Date.now(), cwd: null, moteur: 'codex', fil: FIL, transcription, ...extra } });
 		const lus = async () => (await appeler(c.service.port, 'GET', ROUTES.quotas, { jeton })).corps as ReponseQuotas;
 		const fenetre = async () => ((await appeler(c.service.port, 'GET', ROUTES.fenetres, { jeton })).corps as ReponseFenetres).fenetres[UUID];
 		return { c, jeton, hook, lus, fenetre, ecrire };
@@ -81,6 +81,14 @@ describe('routes : quotas du compte', () => {
 		const { hook, fenetre } = await serviceCodex(new Date().toISOString());
 		expect((await hook('outil')).statut).toBe(200);
 		expect(await jusqua(async () => (await fenetre()) !== undefined, 300)).toBe(false);
+	});
+
+	it('Codex : pas de lecture après un après-outil que le profil ne demande pas (l’état seul) ; lue après un après-outil demandé', async () => {
+		const { hook, fenetre } = await serviceCodex(new Date().toISOString());
+		expect((await hook('apres_outil', { sansContexte: true })).statut).toBe(200);
+		expect(await jusqua(async () => (await fenetre()) !== undefined, 300)).toBe(false);
+		expect((await hook('apres_outil')).statut).toBe(200);
+		expect(await jusqua(async () => (await fenetre()) !== undefined, 2000)).toBe(true);
 	});
 
 	it('Codex : un relevé de plus d’une heure (transcription relue après un redémarrage) est ignoré, la fenêtre non', async () => {

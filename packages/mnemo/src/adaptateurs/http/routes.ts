@@ -891,6 +891,9 @@ export function routes(ctx: ContexteRoutes): Route[] {
 					},
 				});
 				if (etranger) return ok(reponse);
+				// un après-outil que le profil ne demande pas (`sansContexte` : tenu pour l'état seul) : aucune fiche lue n'est notée
+				// (`traiterEvenement`), rien à relire ni à diffuser
+				const etatSeul = entree.evenement === 'apres_outil' && entree.sansContexte === true;
 				if (entree.session !== '') {
 					const s = await pil.etat.lire(entree.session).catch(() => null);
 					// un message (injection à la main) ou une lecture après une carte a pu noter un geste : l'a priori le relit, hors du chemin du hook
@@ -900,7 +903,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 						// les fiches demandées partent au message (jamais après un outil) : l'interface voit tout de suite ➤ s'éteindre et ◆ paraître
 						if (entree.evenement === 'message') ctx.diffuser({ type: 'aServir', session: s.id, chemins: demandees.voir(s.id) });
 						// après un outil, une fiche a pu être lue : le panneau Contexte l'apprend sans relire `servis`
-						if (entree.evenement === 'apres_outil') {
+						if (entree.evenement === 'apres_outil' && !etatSeul) {
 							const lues = await luesDe(s.id).catch(() => null);
 							const texte = JSON.stringify(lues);
 							if (lues !== null && luesDiffusees.get(s.id) !== texte) {
@@ -923,8 +926,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 					}
 				}
 				// après la réponse, hors du chemin du hook (ni sa réponse ni son échéance n'attendent la lecture), aux seuls événements
-				// où le moteur écrit dans sa transcription ce qu'on y lit
-				if (entree.session !== '' && (transcription !== undefined || entree.fil !== undefined) && telemetrie(entree.moteur)?.evenementsLus.has(entree.evenement) === true) {
+				// où le moteur écrit dans sa transcription ce qu'on y lit (un après-outil, seulement demandé par le profil)
+				if (entree.session !== '' && !etatSeul && (transcription !== undefined || entree.fil !== undefined) && telemetrie(entree.moteur)?.evenementsLus.has(entree.evenement) === true) {
 					const source: SourceTranscription = { ...(transcription === undefined ? {} : { chemin: transcription }), ...(entree.fil === undefined ? {} : { fil: entree.fil }), dossier: entree.cwd };
 					setImmediate(() => relireApresHook(entree.session, () => relireFenetre(entree.session, source, entree.moteur)));
 				}
