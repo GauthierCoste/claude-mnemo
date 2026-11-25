@@ -45,9 +45,10 @@ describe('Réglages › Profils : moteur et modèle', () => {
 	it('chaque choix : son nom seul comme libellé, sa ligne d’état et d’effet comme description (lue une fois)', async () => {
 		const editeur = await choisirProfil('revue-code');
 		const codex = within(moteur(editeur)).getByRole('radio', { name: 'Codex' });
-		const description = document.getElementById(codex.getAttribute('aria-describedby')!)!;
-		expect(description.closest('label')).toBeNull();
-		expect(description.textContent).toMatch(/^version 0\.171\.0-alpha\.13 — skills listées/u);
+		// la description se complète quand les moteurs sont chargés (version) : attendue, sans course
+		const description = () => document.getElementById(codex.getAttribute('aria-describedby')!)!;
+		await waitFor(() => expect(description().textContent).toMatch(/^version 0\.171\.0-alpha\.13 — skills listées/u));
+		expect(description().closest('label')).toBeNull();
 	});
 
 	it('aller-retour de moteur : le modèle saisi pour chacun est gardé pendant l’édition', async () => {
