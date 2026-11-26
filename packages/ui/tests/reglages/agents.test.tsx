@@ -183,20 +183,27 @@ describe('Réglages › Agents : l’équipement', () => {
 });
 
 describe('Réglages › Agents : pouvoirs et mission', () => {
-	it('au moins un pouvoir : le dernier allumé ne s’éteint pas, et le dit', async () => {
-		const { liste } = await ouvrirAgents();
-		await choisir(liste, 'archiviste');
-		expect(['Éveil', 'Veille', 'Récit'].map((x) => pouvoir(x).getAttribute('aria-checked'))).toEqual(['true', 'true', 'true']);
-		expect(description(pouvoir('Éveil'))).toBe('au démarrage : la session apparaît dans Sessions');
-		await act(async () => pouvoir('Éveil').click());
-		await act(async () => pouvoir('Veille').click());
-		const recit = pouvoir('Récit');
-		expect(recit.getAttribute('aria-disabled')).toBe('true');
-		expect(description(recit)).toMatch(/Au moins un pouvoir reste allumé\.$/u);
-		await act(async () => recit.click());
-		expect(recit.getAttribute('aria-checked')).toBe('true');
-		await act(async () => pouvoir('Souffle').click());
-		expect(pouvoir('Récit').getAttribute('aria-disabled')).toBeNull();
+	it('pouvoirs : Éveil, Veille, Récit toujours actifs, et le disent ; Souffle, Bouclier, Carnet se basculent ; la liste garde les premiers', async () => {
+		const { client } = await ouvrirAgents();
+		for (const nom of ['Éveil', 'Veille', 'Récit']) {
+			const p = pouvoir(nom);
+			expect(p.getAttribute('aria-checked')).toBe('true');
+			expect(p.getAttribute('aria-disabled')).toBe('true');
+			expect(description(p)).toMatch(/ \| Éveil, Veille et Récit : toujours actifs, ils tiennent l’état de la session\.$/u);
+			await act(async () => p.click());
+			expect(p.getAttribute('aria-checked')).toBe('true');
+		}
+		expect(description(pouvoir('Éveil'))).toMatch(/^au démarrage : la session apparaît dans Sessions \|/u);
+		for (const nom of ['Souffle', 'Bouclier', 'Carnet']) {
+			expect(pouvoir(nom).getAttribute('aria-disabled')).toBeNull();
+			await act(async () => pouvoir(nom).click());
+			expect(pouvoir(nom).getAttribute('aria-checked')).toBe('false');
+		}
+		const stats = within(screen.getByRole('list', { name: 'Stats' })).getAllByRole('listitem');
+		expect(stats.at(-1)?.textContent).toBe('Pouvoirs3');
+		await act(async () => enregistrer().click());
+		await within(pied()).findByText('Enregistré.');
+		expect((await detail(client, 'travail')).editable.hooks).toEqual(['debut', 'arret', 'fin']);
 	});
 
 	it('mission : la consigne par défaut se modifie, puis revient d’un geste', async () => {

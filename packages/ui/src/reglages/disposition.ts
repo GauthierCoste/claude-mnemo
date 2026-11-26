@@ -1,6 +1,7 @@
 /**
  * Disposition des réglages (route `reglages`, `ReglagesVue`) dans l'onglet Réglages : quelle carte, quel groupe, quel libellé
- * court (l'explication du service passe en infobulle) et quelle forme pour chaque champ. Mémoire : cartes Rappel et Confiance ;
+ * court (l'explication du service passe en infobulle) et quelle forme pour chaque champ. Mémoire : cartes Rappel (ce qui est
+ * injecté dans les sessions), Recherche (l'outil chercher et la recherche de l'interface) et Confiance ;
  * Système : une carte. Un champ que cette disposition ne connaît pas va dans « Réglages fins » de Rappel, sous son libellé du
  * service : rien de ce que le service rend n'est caché.
  */
@@ -34,7 +35,7 @@ const barre = (cle: string, libelle: string): ChampDispose => ({ cle, libelle, f
 const RAPPEL: CarteDisposee = {
 	cle: 'rappel',
 	titre: 'Rappel',
-	sous: 'Ce que Mnemo injecte dans tes sessions, et dans quel ordre.',
+	sous: 'Ce que Mnemo injecte dans tes sessions, et ce qu’il propose en pistes.',
 	groupes: [
 		{
 			titre: null,
@@ -45,6 +46,28 @@ const RAPPEL: CarteDisposee = {
 				{ cle: 'contexte.pistesParMessage', libelle: 'Pistes proposées', forme: 'curseur' },
 			],
 		},
+		// les marqueurs ne servent qu'au lancement d'une session : ◆ sur les dossiers-projets de l'arbre où l'on choisit son dossier
+		{ titre: 'Un projet, c’est un dossier avec…', champs: [{ cle: 'projets.marqueurs', libelle: 'Marqueurs de projet', forme: 'puces' }] },
+		{
+			titre: 'Réglages fins',
+			repli: true,
+			ton: 'accent',
+			champs: [
+				barre('contexte.similariteRecherche', 'Similarité min.'),
+				barre('contexte.poidsInjection', 'Poids d’une injection à la main'),
+				barre('contexte.demiVieInjection', 'Demi-vie'),
+				barre('contexte.cartesNommees', 'Fiches nommées'),
+			],
+		},
+	],
+};
+
+/** Réglages qui ne jouent que sur la recherche (`application/chercher.ts`) : l'outil chercher et la recherche de l'interface. */
+const RECHERCHE: CarteDisposee = {
+	cle: 'recherche',
+	titre: 'Recherche',
+	sous: 'Ce que remontent l’outil chercher et la recherche de l’interface, et dans quel ordre.',
+	groupes: [
 		{
 			titre: 'Ce qui passe devant',
 			ton: 'accent',
@@ -60,12 +83,8 @@ const RAPPEL: CarteDisposee = {
 			repli: true,
 			ton: 'accent',
 			champs: [
-				barre('contexte.similariteRecherche', 'Similarité min.'),
-				barre('memoire.seuilRappel', 'Seuil de rappel'),
-				barre('contexte.poidsInjection', 'Poids d’une injection à la main'),
-				barre('contexte.demiVieInjection', 'Demi-vie'),
-				barre('contexte.cartesNommees', 'Fiches nommées'),
 				barre('recherche.resultats', 'Résultats / recherche'),
+				barre('memoire.seuilRappel', 'Seuil de rappel'),
 				barre('recherche.chronologie', 'Chronologie'),
 				barre('recherche.graphe', 'Graphe'),
 				barre('recherche.reranker', 'Reranker'),
@@ -103,7 +122,6 @@ const CONFIANCE: CarteDisposee = {
 			],
 		},
 		{ titre: 'L’archiviste écrit seul…', champs: [{ cle: 'archiviste.typesAConfirmer', libelle: 'Types de fiche', forme: 'interrupteurs', inverse: true }] },
-		{ titre: 'Un projet, c’est un dossier avec…', champs: [{ cle: 'projets.marqueurs', libelle: 'Marqueurs de projet', forme: 'puces' }] },
 	],
 };
 
@@ -126,10 +144,10 @@ const SYSTEME: CarteDisposee = {
 };
 
 /** Les cartes de chaque section de l'onglet Réglages (Branchements n'a pas de réglage de `ReglagesVue`). */
-export const CARTES_REGLAGES = { memoire: [RAPPEL, CONFIANCE], systeme: [SYSTEME] } as const;
+export const CARTES_REGLAGES = { memoire: [RAPPEL, RECHERCHE, CONFIANCE], systeme: [SYSTEME] } as const;
 
 const clesDe = (cartes: readonly CarteDisposee[]): Set<string> => new Set(cartes.flatMap((c) => c.groupes.flatMap((g) => g.champs.map((x) => x.cle))));
-const CLES_DISPOSEES = clesDe([RAPPEL, CONFIANCE, SYSTEME]);
+const CLES_DISPOSEES = clesDe([RAPPEL, RECHERCHE, CONFIANCE, SYSTEME]);
 const CLES_SYSTEME = clesDe([SYSTEME]);
 
 /** Section où se règle un champ : Système pour les siens, Mémoire pour tous les autres (non disposés compris). */

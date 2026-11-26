@@ -137,18 +137,17 @@ describe('vue Réglages', () => {
 		expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Agents', 'Réglages', 'Documentation']);
 		expect(screen.getByRole('tab', { name: 'Réglages' }).getAttribute('aria-selected')).toBe('true');
 		const sections = within(screen.getByRole('tabpanel')).getByRole('navigation', { name: 'Sections des réglages' });
-		expect(within(sections).getAllByRole('button').map((b) => b.textContent)).toEqual(['Branchementsmoteurs et app Claude', 'Mémoirerappel et confiance', 'Systèmeservice, modèles, couleur']);
+		expect(within(sections).getAllByRole('button').map((b) => b.textContent)).toEqual(['Branchementsmoteurs et app Claude', 'Mémoirerappel, recherche, confiance', 'Systèmeservice, modèles, couleur']);
 		await act(async () => screen.getByRole('tab', { name: 'Documentation' }).click());
 		expect(valeurs.get('mnemo.reglages.onglet')).toBe('documentation');
 		expect(screen.getByRole('region', { name: 'Documentation' })).toBeTruthy();
 		vi.unstubAllGlobals();
 	});
 
-	it('Mémoire : cartes Rappel et Confiance ; curseur avec sa valeur et sa phrase d’effet, « Défaut · Rétablir » seulement s’il diffère', async () => {
+	it('Mémoire : cartes Rappel, Recherche et Confiance ; curseur avec sa valeur et sa phrase d’effet, « Défaut · Rétablir » seulement s’il diffère', async () => {
 		const { section } = await ouvrirReglages();
 		const page = await section('Mémoire');
-		expect(within(page).getByRole('heading', { name: 'Rappel' })).toBeTruthy();
-		expect(within(page).getByRole('heading', { name: 'Confiance' })).toBeTruthy();
+		expect(within(page).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Rappel', 'Recherche', 'Confiance']);
 		const injectees = blocDe(page, 'Fiches injectées');
 		expect(curseur(page, 'Fiches injectées').value).toBe('3');
 		expect(within(injectees).getByText('3 fiches')).toBeTruthy();

@@ -121,9 +121,10 @@ opened is remembered in this browser:
   [Managing profiles](#managing-profiles).
 - **Réglages** (settings), in three sections: **Branchements** (connections: the engines and their link to Mnemo, then
   the Claude app: see [Engines](#engines) and [Connecting the Claude app](#connecting-the-claude-app)), **Mémoire**
-  (memory: two cards side by side, *Rappel* for what is injected and the weights of search, *Confiance* for source
-  reliability, fact weights, the repetitions before a rule is proposed as permanent, the note types the archivist writes
-  without asking, and the project markers) and **Système** (system: service state, port and launcher browser, local
+  (memory: three cards side by side, *Rappel* for what is injected into sessions and proposed as leads, with the project
+  markers, *Recherche* for what the `chercher` tool and the search of the interface bring up and in which order,
+  *Confiance* for source reliability, fact weights, the repetitions before a rule is proposed as permanent and the note
+  types the archivist writes without asking) and **Système** (system: service state, port and launcher browser, local
   model shutdown after inactivity, main colour). Main sliders show their value on the right and a sentence saying what
   it does; « Défaut : x · Rétablir » appears only when the value differs from the default; finer settings are folded
   under « Réglages fins · N ». Mémoire and Système share one Cancel / Save footer; leaving the tab or the view with
@@ -879,8 +880,9 @@ a draft saved with one gesture:
   from `~/.claude/plugins/installed_plugins.json`, or `CLAUDE_CONFIG_DIR`). The ticked ones are switched on in the
   session, every other installed plugin is switched off, even one switched on in your Claude Code settings
   (`enabledPlugins` of the session settings). A profile with no plugin ticked gets none.
-- **Pouvoirs** (powers): the six Mnemo hooks, each a switch with what it does: Éveil (start), Souffle (each message),
-  Bouclier (before an action), Carnet (after an action), Veille (stop), Récit (end). At least one stays on.
+- **Pouvoirs** (powers): the six Mnemo hooks, each with what it does: Éveil (start), Souffle (each message), Bouclier
+  (before an action), Carnet (after an action), Veille (stop), Récit (end). Souffle, Bouclier and Carnet are switches;
+  Éveil, Veille and Récit keep the session state and are always on (shown on, not switchable, with the reason).
 - **Mission**: the instruction, Mnemo's default one (which follows Mnemo updates) or your own text; « Revenir à la
   consigne par défaut » goes back to the default.
 - **Gérer l'agent** (manage, folded at the bottom): its note in the memory, **what a session receives** (read-only, as

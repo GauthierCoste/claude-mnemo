@@ -259,9 +259,10 @@ listed on the left:
   « Lier à Mnemo » (see [usage.md](usage.md#engines)), and the MCP servers of the Claude app (see
   [usage.md](usage.md#connecting-the-claude-app)). An amber dot on the tab and on the section says that an engine waits
   for something from you.
-- **Mémoire** (memory): **Rappel** (recall: what Mnemo injects into your sessions, and the order of search results; the rarer settings
-  are folded under « Réglages fins ») and **Confiance** (trust: reliability of sources, weight of a fact, what the
-  archivist writes alone, project markers).
+- **Mémoire** (memory): **Rappel** (recall: what Mnemo injects into your sessions and proposes as leads, and the project
+  markers), **Recherche** (search: what the `chercher` tool and the search of the interface bring up, and in which order)
+  and **Confiance** (trust: reliability of sources, weight of a fact, what the archivist writes alone). The rarer
+  settings are folded under « Réglages fins ».
 - **Système** (system): the service (its state, launcher browser, port), the local models, the main colour.
 
 Each slider says in one sentence what its value does; a setting that differs from its default shows the default and
@@ -296,7 +297,7 @@ falls back to its default with a warning, never a crash.
 | Main colour of the interface, `#rrggbb` (`interface.accent`): active items, links, titles, focus; the logo does not change. The text on it turns light on a dark colour | `#7df0c6` (green) | immediately |
 
 Some settings of the **Mémoire** section are rules of the memory, which live in the header of `_mnemo/SCHEMA.md`
-(versioned with the memory) rather than in `.mnemo/reglages.json`: in **Rappel**, the recall threshold (`seuil_rappel`,
+(versioned with the memory) rather than in `.mnemo/reglages.json`: in **Recherche**, the recall threshold (`seuil_rappel`,
 0.4, under « Réglages fins »); in **Confiance**, the reliability of each source type (`fiabilites`), the weight of a
 declared, observed or inferred fact (`poids_*`) and the repetitions before an instruction is proposed one level up
 (`repetitions_pour_monter`, 2). Saving them rewrites only those lines of the header, in one commit

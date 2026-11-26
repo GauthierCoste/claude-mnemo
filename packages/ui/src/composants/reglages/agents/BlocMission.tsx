@@ -11,7 +11,7 @@ import { Bloc } from './Bloc.tsx';
 export function BlocMission(p: { consigne: string | null; consigneParDefaut: string; surChange(consigne: string | null): void }): ReactNode {
 	const parDefaut = p.consigne === null;
 	return (
-		<Bloc titre="Mission" sous="sa consigne, ajoutée au début de chaque session">
+		<Bloc titre="Mission" sous="sa consigne, ajoutée aux instructions de chaque session">
 			<textarea
 				className={`${f.texteLong} ${s.mission}`}
 				aria-label="Consigne de l’agent"

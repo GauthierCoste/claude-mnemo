@@ -1,7 +1,7 @@
 /**
  * Onglet Réglages de la vue Réglages : les sections à gauche (Branchements, Mémoire, Système), la section choisie à droite.
  * Branchements : les moteurs et leur liaison à Mnemo, puis l'app Claude (sans réglage à enregistrer : chaque geste écrit tout
- * de suite). Mémoire (cartes Rappel et Confiance) et Système : les réglages du dossier (`ReglagesVue` : `.mnemo/reglages.json`,
+ * de suite). Mémoire (cartes Rappel, Recherche et Confiance) et Système : les réglages du dossier (`ReglagesVue` : `.mnemo/reglages.json`,
  * et les règles de `SCHEMA.md`), enregistrés ensemble par un seul pied Annuler / Enregistrer, validés par le service (tout ou
  * rien). Les trois sections restent montées (cachées hors de la section choisie) : une saisie survit au changement de section.
  * Une pastille ambre sur Branchements quand un moteur attend un geste. Changer d'onglet avec une saisie non enregistrée
@@ -32,7 +32,7 @@ import r from './Reglages.module.css';
 
 const SECTIONS: readonly { cle: SectionReglages; titre: string; sous: string }[] = [
 	{ cle: 'branchements', titre: 'Branchements', sous: 'moteurs et app Claude' },
-	{ cle: 'memoire', titre: 'Mémoire', sous: 'rappel et confiance' },
+	{ cle: 'memoire', titre: 'Mémoire', sous: 'rappel, recherche, confiance' },
 	{ cle: 'systeme', titre: 'Système', sous: 'service, modèles, couleur' },
 ];
 

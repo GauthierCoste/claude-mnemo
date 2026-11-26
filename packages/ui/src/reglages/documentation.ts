@@ -51,7 +51,7 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 				points: [
 					'**Tout est lisible.** Une fiche est un fichier texte que tu peux ouvrir, corriger, supprimer.',
 					'**Tout est réversible.** Chaque écriture est un commit git : rien ne se perd.',
-					'**La mémoire reste chez toi.** La recherche et la note des fiches tournent sur des modèles locaux ; seul ce que Mnemo injecte part, avec la session, chez le fournisseur de l’agent.',
+					'**La mémoire reste chez toi.** La recherche et la note des fiches tournent sur des modèles locaux ; seul ce que Mnemo injecte et ce que l’agent lit avec ses outils part, avec la session, chez le fournisseur de l’agent.',
 				],
 			},
 		],
@@ -64,7 +64,7 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 		blocs: [
 			{
 				genre: 'chapo',
-				texte: 'Mnemo intervient à six moments de la vie d’une session. Ce sont les **pouvoirs** d’un agent (des « hooks ») : chacun s’allume ou s’éteint dans l’onglet Agents.',
+				texte: 'Mnemo intervient à six moments de la vie d’une session. Ce sont les **pouvoirs** d’un agent (des « hooks »). Trois s’allument ou s’éteignent dans l’onglet Agents (Souffle, Bouclier, Carnet) ; Éveil, Veille et Récit tiennent l’état de la session et restent toujours actifs.',
 			},
 			{
 				genre: 'frise',
@@ -81,7 +81,7 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 			{ genre: 'note', texte: 'Un agent sans Souffle travaille sans la mémoire : il peut la consulter avec ses outils, mais rien ne lui est injecté.' },
 			{
 				genre: 'note',
-				texte: 'Un **projet** est un dossier qui contient l’un des marqueurs choisis (`.git`, `package.json`… : Réglages › Mémoire › Confiance) : il porte ◆ dans l’arbre des dossiers où tu choisis où lancer une session.',
+				texte: 'Un **projet** est un dossier qui contient l’un des marqueurs choisis (`.git`, `package.json`… : Réglages › Mémoire › Rappel) : il porte ◆ dans l’arbre des dossiers où tu choisis où lancer une session.',
 			},
 		],
 	},
@@ -104,7 +104,7 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 						'Équipement',
 						'**Skills** : des savoir-faire écrits dans la mémoire (`_mnemo/skills/`) ou propres à l’agent ; l’agent en lit une quand sa tâche correspond à sa description. Le crayon ✎ d’une skill ouvre son éditeur. **Plugins** : des extensions de Claude Code (commandes, outils), propres à ce moteur.',
 					],
-					['Pouvoirs', 'Les moments où Mnemo agit dans la session (voir « Une session ») ; au moins un reste allumé.'],
+					['Pouvoirs', 'Les moments où Mnemo agit dans la session (voir « Une session ») : Souffle, Bouclier et Carnet se basculent ; Éveil, Veille et Récit restent toujours actifs.'],
 					[
 						'Départ',
 						'« Démarre dans la mémoire » : ses sessions s’ouvrent dans le dossier de la mémoire, pour ranger ou relire les fiches ; sinon dans le dossier choisi au lancement. L’archiviste démarre toujours dans la mémoire.',
@@ -150,7 +150,7 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 			{ genre: 'intertitre', texte: 'L’ordre des recherches' },
 			{
 				genre: 'paragraphe',
-				texte: 'Quand l’agent ou toi cherchez (outil `chercher`, recherche de l’interface), entre deux résultats aussi pertinents passent devant ceux du **projet en cours**, les plus **sûrs**, ceux de la **mémoire** plutôt que des documents, et les plus **récents**, selon les poids « Ce qui passe devant » de Réglages › Mémoire.',
+				texte: 'Quand l’agent ou toi cherchez (outil `chercher`, recherche de l’interface), entre deux résultats aussi pertinents passent devant ceux du **projet en cours**, les plus **sûrs**, ceux de la **mémoire** plutôt que des documents, et les plus **récents**, selon les poids « Ce qui passe devant » de Réglages › Mémoire › Recherche.',
 			},
 			{
 				genre: 'note',

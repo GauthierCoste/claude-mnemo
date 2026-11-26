@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ROUTES } from '@mnemo/contrat';
 import type { RefusSkill, ReponseEcritureSkill, SkillDetailVue, SkillEditableVue } from '@mnemo/contrat';
+import { MOTIF_CONFLIT_SKILL } from '../../src/adaptateurs/http/skills.ts';
 import { deposerSkillsParDefaut } from '../../src/application/profil.ts';
 import { appeler, serviceFaux } from '../aides/service-faux.ts';
 import type { ContexteService } from '../aides/service-faux.ts';
@@ -55,7 +56,9 @@ describe('routes : skills de la mémoire', () => {
 		const c = await serviceFaux();
 		await api(c).post(ROUTES.skills, DEVIS);
 		const { empreinte } = (await api(c).get(chemin(ROUTES.skill, 'devis'))).corps as SkillDetailVue;
-		expect((await api(c).put(chemin(ROUTES.skill, 'devis'), { ...DEVIS, contenu: 'Autre.', empreinte: 'perimee' })).statut).toBe(409);
+		const conflit = await api(c).put(chemin(ROUTES.skill, 'devis'), { ...DEVIS, contenu: 'Autre.', empreinte: 'perimee' });
+		expect(conflit.statut).toBe(409);
+		expect(conflit.corps).toMatchObject({ erreur: MOTIF_CONFLIT_SKILL });
 		const r = await api(c).put(chemin(ROUTES.skill, 'devis'), { ...DEVIS, nom: 'devis-maison', contenu: 'Autre.', empreinte });
 		expect(r.statut).toBe(200);
 		expect(r.corps).toEqual({ commit: expect.any(String), nom: 'devis-maison' });

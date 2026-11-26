@@ -99,7 +99,7 @@ export function BlocEquipement(p: {
 	const raisonPlugins = { id: `${id}-plugins`, texte: 'Les plugins sont propres à Claude Code.' };
 	const icone = (x: SkillVue) => x.icone ?? ICONE_SKILL;
 	return (
-		<Bloc titre="Équipement" sous={`skills et plugins : des savoir-faire chargés dans chaque session · ${n} équipé${n > 1 ? 's' : ''}`}>
+		<Bloc titre="Équipement" sous={`skills et plugins : des savoir-faire que l’agent charge quand sa tâche s’y prête · ${n} équipé${n > 1 ? 's' : ''}`}>
 			<div className={s.toutes}>
 				<Bascule actif={e.skillsMemoire === 'tous'} surChangement={(actif) => p.surChange({ skillsMemoire: actif ? 'tous' : [...disponibles] })}>
 					Toutes les skills de la mémoire, y compris les futures

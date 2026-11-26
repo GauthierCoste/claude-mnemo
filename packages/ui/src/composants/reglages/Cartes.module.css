@@ -25,7 +25,7 @@
 	max-width: 760px;
 }
 
-/* Mémoire : Rappel et Confiance côte à côte, l'une sous l'autre quand elles ne tiennent plus */
+/* Mémoire : Rappel, Recherche et Confiance côte à côte, l'une sous l'autre quand elles ne tiennent plus */
 .duo {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(min(26rem, 100%), 1fr));

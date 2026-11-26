@@ -1,5 +1,5 @@
 /**
- * Une carte de réglages de l'onglet Réglages (Rappel, Confiance, Système), d'après sa disposition (`reglages/disposition.ts`) :
+ * Une carte de réglages de l'onglet Réglages (Rappel, Recherche, Confiance, Système), d'après sa disposition (`reglages/disposition.ts`) :
  * titre, sous-titre, puis ses groupes ; chaque champ dans sa forme (curseur, barre, liste déroulante, nombre, interrupteurs,
  * puces, nuancier). Un champ absent de la vue du service n'est pas montré ; un groupe sans champ non plus. Les barres qui se
  * suivent partagent une grille ; « Réglages fins » est replié, avec son nombre de réglages.

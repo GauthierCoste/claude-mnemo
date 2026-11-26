@@ -13,11 +13,26 @@ describe('disposition des réglages', () => {
 		expect(cles.filter((c) => !REGLAGES_DEMO.some((x) => x.cle === c))).toEqual([]);
 	});
 
-	it('Mémoire : Rappel puis Confiance ; Système : service, modèles locaux, couleur', () => {
+	it('Mémoire : Rappel, Recherche puis Confiance ; Système : service, modèles locaux, couleur', () => {
 		expect(CARTES_REGLAGES.memoire.map((c) => [c.titre, c.groupes.map((g) => g.titre)])).toEqual([
-			['Rappel', [null, 'Ce qui passe devant', 'Réglages fins']],
-			['Confiance', ['Fiabilité des sources', 'Un fait vaut…', 'L’archiviste écrit seul…', 'Un projet, c’est un dossier avec…']],
+			['Rappel', [null, 'Un projet, c’est un dossier avec…', 'Réglages fins']],
+			['Recherche', ['Ce qui passe devant', 'Réglages fins']],
+			['Confiance', ['Fiabilité des sources', 'Un fait vaut…', 'L’archiviste écrit seul…']],
 		]);
+		const champs = (titre: string) => CARTES_REGLAGES.memoire.find((c) => c.titre === titre)!.groupes.flatMap((g) => g.champs.map((x) => x.cle));
+		// Recherche : seulement ce qui joue sur la recherche (outil chercher, recherche de l'interface)
+		expect(champs('Recherche')).toEqual([
+			'recherche.poidsPosition',
+			'recherche.poidsConfiance',
+			'recherche.poidsMemoire',
+			'recherche.poidsFraicheur',
+			'recherche.resultats',
+			'memoire.seuilRappel',
+			'recherche.chronologie',
+			'recherche.graphe',
+			'recherche.reranker',
+		]);
+		expect(champs('Rappel').filter((c) => !c.startsWith('contexte.'))).toEqual(['projets.marqueurs']);
 		expect(CARTES_REGLAGES.systeme.map((c) => c.groupes.map((g) => g.titre))).toEqual([['Service', 'Modèles locaux', 'Couleur']]);
 		expect(sectionDuChamp('service.port')).toBe('systeme');
 		expect(sectionDuChamp('memoire.fiabilite_email')).toBe('memoire');
