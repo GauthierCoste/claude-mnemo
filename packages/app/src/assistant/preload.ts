@@ -1,13 +1,15 @@
 /**
  * Preload de la fenêtre de l'assistant (et d'elle seule) : expose `window.assistant` (`ApiAssistant`) par `contextBridge`,
- * quatre fonctions et rien d'autre. Construit à part en CommonJS (`dist/assistant/preload.cjs`) : un preload en `sandbox`
+ * la plateforme (en lecture seule) et quatre fonctions, rien d'autre. Construit à part en CommonJS (`dist/assistant/preload.cjs`) : un preload en `sandbox`
  * n'est pas un module ES. Tout ce qui passe ici est revalidé par le processus principal.
  */
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type { LigneInit } from '@mnemo/contrat';
 import { CANAUX_ASSISTANT as C, type ApiAssistant } from '../domaine/assistant-pont.ts';
+import { plateformeApp } from '../domaine/plateforme.ts';
 
 const api: ApiAssistant = {
+	plateforme: plateformeApp(process.platform),
 	verifierPoste: () => ipcRenderer.invoke(C.verifierPoste),
 	choisirDossier: () => ipcRenderer.invoke(C.choisirDossier),
 	installer(choix, surLigne) {

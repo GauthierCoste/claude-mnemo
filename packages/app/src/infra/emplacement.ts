@@ -28,15 +28,17 @@ export function paquetDeLApp(ressources: string, plateforme: NodeJS.Platform = p
 	const contents = dirname(ressources);
 	const paquet = dirname(contents);
 	if (basename(ressources) !== 'Resources' || basename(contents) !== 'Contents' || !basename(paquet).endsWith('.app') || basename(paquet) === '.app') return null;
-	return emplacementProvisoire(ressources) ? null : paquet;
+	return emplacementProvisoire(ressources, plateforme) ? null : paquet;
 }
 
 /**
  * L'app tourne-t-elle depuis un emplacement provisoire : l'image disque montée (`/Volumes/…`, retirée à l'éjection) ou une
  * copie de translocation de macOS (`…/AppTranslocation/…`, app en quarantaine ouverte sans avoir été déplacée : chemin
- * aléatoire, effacé à la fermeture) ? Rien n'est alors refait pour pointer vers elle, ni mis à la corbeille.
+ * aléatoire, effacé à la fermeture) ? Rien n'est alors refait pour pointer vers elle, ni mis à la corbeille. Propre à
+ * macOS : sous Windows, l'app installée par son installeur n'est jamais à un emplacement provisoire.
  */
-export function emplacementProvisoire(ressources: string): boolean {
+export function emplacementProvisoire(ressources: string, plateforme: NodeJS.Platform = process.platform): boolean {
+	if (plateforme === 'win32') return false;
 	return ressources.startsWith('/Volumes/') || ressources.includes('/AppTranslocation/');
 }
 

@@ -6,6 +6,7 @@
 import type { LigneInit, PosteVerifie } from '@mnemo/contrat';
 import type { ChoixInstallation, DossierChoisi } from './assistant.ts';
 import type { ResultatInstallation } from './assistant-lignes.ts';
+import type { PlateformeApp } from './plateforme.ts';
 
 export const CANAUX_ASSISTANT = {
 	verifierPoste: 'assistant:verifier-poste',
@@ -27,6 +28,8 @@ export type ReponseTerminer = { ok: true } | { ok: false; erreur: string };
 
 /** Ce que le preload expose à la page, et rien d'autre. */
 export type ApiAssistant = {
+	/** La plateforme de l'app (textes, liens et choix de la page), en lecture seule. */
+	readonly plateforme: PlateformeApp;
 	verifierPoste(): Promise<ReponsePoste>;
 	choisirDossier(): Promise<ReponseDossier>;
 	/** Lance `init` sur le dossier choisi ; `surLigne` reçoit chaque ligne validée ; rend la fin du processus. */
@@ -46,10 +49,11 @@ export function validerChoix(brut: unknown): ChoixInstallation | null {
 	return { mcp: o['mcp'] as boolean, commande: o['commande'] as boolean, modeles: o['modeles'] as boolean, ouvrirALaSession: o['ouvrirALaSession'] as boolean };
 }
 
-/** Liens que la page peut ouvrir (dans le navigateur par défaut) : installer Claude Code, installer git. */
+/** Liens que la page peut ouvrir (dans le navigateur par défaut) : installer Claude Code, installer git (macOS, Windows). */
 export const LIENS_EXTERNES = {
 	claude: 'https://code.claude.com/docs/en/setup',
 	git: 'https://git-scm.com/downloads/mac',
+	gitWindows: 'https://git-scm.com/downloads/win',
 } as const;
 
 /** Seuls les liens de `LIENS_EXTERNES`, à l'identique, sortent de la fenêtre. */

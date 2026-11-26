@@ -5,6 +5,7 @@
  */
 import type { LigneInit, PosteVerifie } from '@mnemo/contrat';
 import { appliquerLigne, installationVide, peutTerminer, type EtatInstallation, type ResultatInstallation } from './assistant-lignes.ts';
+import type { PlateformeApp } from './plateforme.ts';
 
 export const ETAPES_ASSISTANT = ['verifications', 'dossier', 'choix', 'installation', 'termine'] as const;
 export type EtapeAssistant = (typeof ETAPES_ASSISTANT)[number];
@@ -14,6 +15,21 @@ export type ChoixInstallation = { mcp: boolean; commande: boolean; modeles: bool
 
 /** Déclarer à Claude Code, installer la commande, ouvrir à l'ouverture de session : oui ; télécharger les modèles : non. */
 export const CHOIX_PAR_DEFAUT: Readonly<ChoixInstallation> = Object.freeze({ mcp: true, commande: true, modeles: false, ouvrirALaSession: true });
+
+/** Choix proposés par la page, dans l'ordre : sous Windows, pas de commande « mnemo » (elle ne s'y installe pas). */
+export function choixProposes(plateforme: PlateformeApp): (keyof ChoixInstallation)[] {
+	return plateforme === 'win32' ? ['mcp', 'modeles', 'ouvrirALaSession'] : ['mcp', 'commande', 'modeles', 'ouvrirALaSession'];
+}
+
+/** Choix de départ : `CHOIX_PAR_DEFAUT`, sans la commande sous Windows. */
+export function choixParDefaut(plateforme: PlateformeApp): ChoixInstallation {
+	return { ...CHOIX_PAR_DEFAUT, ...(plateforme === 'win32' ? { commande: false } : {}) };
+}
+
+/** Les choix tels qu'ils sont menés sur la plateforme : sous Windows, jamais la commande (même demandée). */
+export function choixPourPlateforme(choix: ChoixInstallation, plateforme: PlateformeApp): ChoixInstallation {
+	return plateforme === 'win32' ? { ...choix, commande: false } : choix;
+}
 
 /** Taille des modèles locaux à télécharger, comme la dit `mnemo init`. */
 export const TAILLE_MODELES = 'environ 1,3 Go';
@@ -78,6 +94,7 @@ export function posteSuffisant(poste: PosteVerifie): boolean {
  * plus rien n'avance.
  */
 export type EtatAssistant = {
+	plateforme: PlateformeApp;
 	etape: EtapeAssistant;
 	verification: boolean;
 	deplacer: boolean;
@@ -103,8 +120,8 @@ export type EvenementAssistant =
 	| { type: 'ligne'; ligne: LigneInit }
 	| { type: 'fin-installation'; resultat: ResultatInstallation };
 
-export function etatInitial(): EtatAssistant {
-	return { etape: 'verifications', verification: false, deplacer: false, poste: null, erreurPoste: null, dossier: null, erreurDossier: null, choix: { ...CHOIX_PAR_DEFAUT }, installation: null };
+export function etatInitial(plateforme: PlateformeApp): EtatAssistant {
+	return { plateforme, etape: 'verifications', verification: false, deplacer: false, poste: null, erreurPoste: null, dossier: null, erreurDossier: null, choix: choixParDefaut(plateforme), installation: null };
 }
 
 /** Peut-on passer à l'étape suivante (bouton « Continuer ») ? */
@@ -138,7 +155,7 @@ export function evoluer(etat: EtatAssistant, e: EvenementAssistant): EtatAssista
 		case 'erreur-dossier':
 			return etat.etape === 'dossier' ? { ...etat, erreurDossier: e.message } : etat;
 		case 'choix':
-			return etat.etape === 'choix' ? { ...etat, choix: { ...etat.choix, [e.cle]: e.valeur } } : etat;
+			return etat.etape === 'choix' ? { ...etat, choix: choixPourPlateforme({ ...etat.choix, [e.cle]: e.valeur }, etat.plateforme) } : etat;
 		case 'continuer':
 			if (!peutContinuer(etat)) return etat;
 			return { ...etat, etape: etat.etape === 'verifications' ? 'dossier' : 'choix' };
@@ -148,7 +165,7 @@ export function evoluer(etat: EtatAssistant, e: EvenementAssistant): EtatAssista
 			if (peutReessayer(etat)) return { ...etat, etape: 'choix', installation: null };
 			return etat;
 		case 'installer':
-			return etat.etape === 'choix' && etat.dossier !== null ? { ...etat, etape: 'installation', installation: installationVide() } : etat;
+			return etat.etape === 'choix' && etat.dossier !== null ? { ...etat, etape: 'installation', installation: installationVide(etat.plateforme) } : etat;
 		case 'ligne':
 			return etat.etape === 'installation' && etat.installation !== null ? { ...etat, installation: appliquerLigne(etat.installation, e.ligne) } : etat;
 		case 'fin-installation': {

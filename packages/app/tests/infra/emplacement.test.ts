@@ -37,8 +37,10 @@ describe('emplacement du Node et du main.ts', () => {
 		expect(paquetDeLApp('/Applications/Mnemo/Contents/Resources', 'darwin')).toBeNull();
 		expect(paquetDeLApp('/Volumes/Mnemo 1.5.0/Mnemo.app/Contents/Resources', 'darwin')).toBeNull();
 		expect(paquetDeLApp('/private/var/folders/ab/T/AppTranslocation/1234/d/Mnemo.app/Contents/Resources', 'darwin')).toBeNull();
-		expect(emplacementProvisoire('/Volumes/Mnemo 1.5.0/Mnemo.app/Contents/Resources')).toBe(true);
-		expect(emplacementProvisoire('/Applications/Mnemo.app/Contents/Resources')).toBe(false);
+		expect(emplacementProvisoire('/Volumes/Mnemo 1.5.0/Mnemo.app/Contents/Resources', 'darwin')).toBe(true);
+		expect(emplacementProvisoire('/Applications/Mnemo.app/Contents/Resources', 'darwin')).toBe(false);
+		// propre à macOS : jamais détecté sous Windows
+		expect(emplacementProvisoire('/Volumes/Mnemo 1.5.0/Mnemo.app/Contents/Resources', 'win32')).toBe(false);
 	});
 
 	it('PATH par défaut : dossiers habituels devant, sans doublon', () => {

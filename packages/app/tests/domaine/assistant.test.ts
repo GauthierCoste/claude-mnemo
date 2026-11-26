@@ -1,18 +1,20 @@
 import type { LigneInit, PosteVerifie } from '@mnemo/contrat';
 import { describe, expect, it } from 'vitest';
-import { argumentsInit, argumentsVerifierPoste, CHOIX_PAR_DEFAUT, etatInitial, evoluer, lirePoste, peutContinuer, peutReessayer, posteSuffisant, type EtatAssistant, type EvenementAssistant } from '../../src/domaine/assistant.ts';
+import { argumentsInit, argumentsVerifierPoste, CHOIX_PAR_DEFAUT, choixPourPlateforme, etatInitial, evoluer, lirePoste, peutContinuer, peutReessayer, posteSuffisant, type EtatAssistant, type EvenementAssistant } from '../../src/domaine/assistant.ts';
 import { decisionDemarrage, MESSAGE_PROVISOIRE } from '../../src/domaine/assistant-demarrage.ts';
 import { lienAutorise, LIENS_EXTERNES, validerChoix } from '../../src/domaine/assistant-pont.ts';
+import { etapesMontrees } from '../../src/domaine/assistant-lignes.ts';
+import { textesAssistant } from '../../src/domaine/assistant-textes.ts';
 
 const POSTE: PosteVerifie = { git: { ok: true, version: '2.50.1' }, claude: { ok: true, chemin: '/usr/local/bin/claude' }, node: { version: '24.1.0' } };
 const DOSSIER = { racine: '/srv/exemple/Projets', memoireExistante: false };
-const suite = (evenements: EvenementAssistant[], depart: EtatAssistant = etatInitial()) => evenements.reduce(evoluer, depart);
+const suite = (evenements: EvenementAssistant[], depart: EtatAssistant = etatInitial('darwin')) => evenements.reduce(evoluer, depart);
 
 describe('choix et commandes', () => {
 	it('par défaut : Claude Code, commande, ouverture de session oui ; modèles non', () => {
 		expect(CHOIX_PAR_DEFAUT).toEqual({ mcp: true, commande: true, modeles: false, ouvrirALaSession: true });
-		expect(etatInitial().choix).toEqual(CHOIX_PAR_DEFAUT);
-		expect(etatInitial().choix).not.toBe(CHOIX_PAR_DEFAUT);
+		expect(etatInitial('darwin').choix).toEqual(CHOIX_PAR_DEFAUT);
+		expect(etatInitial('darwin').choix).not.toBe(CHOIX_PAR_DEFAUT);
 	});
 
 	it('init : un choix explicite par étape, --json, jamais le lanceur', () => {
@@ -82,7 +84,7 @@ describe('enchaînement des étapes', () => {
 	});
 
 	it('événements hors de propos : sans effet', () => {
-		const depart = etatInitial();
+		const depart = etatInitial('darwin');
 		for (const e of [{ type: 'dossier', dossier: DOSSIER }, { type: 'choix', cle: 'mcp', valeur: false }, { type: 'installer' }, { type: 'ligne', ligne: { fin: true, racine: '/r', ok: true } }, { type: 'retour' }, { type: 'fin-installation', resultat: { fin: null, erreur: 'x' } }] as EvenementAssistant[]) {
 			expect(evoluer(depart, e), e.type).toBe(depart);
 		}
@@ -101,6 +103,35 @@ describe('enchaînement des étapes', () => {
 	});
 });
 
+describe('sous Windows', () => {
+	it('pas de commande « mnemo » : ni proposée, ni cochée, ni menée, ni montrée parmi les étapes', () => {
+		const depart = etatInitial('win32');
+		expect(depart.choix).toEqual({ ...CHOIX_PAR_DEFAUT, commande: false });
+		expect(textesAssistant('win32').cases.map((c) => c.cle)).toEqual(['mcp', 'modeles', 'ouvrirALaSession']);
+		expect(textesAssistant('darwin').cases.map((c) => c.cle)).toEqual(['mcp', 'commande', 'modeles', 'ouvrirALaSession']);
+		const choisi = suite([{ type: 'poste', poste: POSTE }, { type: 'continuer' }, { type: 'dossier', dossier: DOSSIER }, { type: 'continuer' }, { type: 'choix', cle: 'commande', valeur: true }], depart);
+		expect(choisi.choix.commande).toBe(false);
+		expect(choixPourPlateforme(CHOIX_PAR_DEFAUT, 'win32').commande).toBe(false);
+		expect(choixPourPlateforme(CHOIX_PAR_DEFAUT, 'darwin')).toBe(CHOIX_PAR_DEFAUT);
+		expect(suite([{ type: 'installer' }], choisi).installation?.etapes.map((e) => e.etape)).toEqual(['memoire', 'mcp', 'modeles']);
+		expect(etapesMontrees('darwin')).toEqual(['memoire', 'mcp', 'modeles', 'commande']);
+	});
+
+	it('textes : « cet ordinateur », zone de notification, Git pour Windows sans commande d’Apple ; macOS inchangé', () => {
+		const w = textesAssistant('win32');
+		expect(w.intro).toBe('Mnemo donne une mémoire à tes sessions Claude Code. Il lui faut git et Claude Code sur cet ordinateur.');
+		expect(w.aideGit).toEqual({ commande: null, libelleLien: 'Installer Git pour Windows', lien: 'https://git-scm.com/downloads/win' });
+		expect(w.cases.find((c) => c.cle === 'ouvrirALaSession')?.detail).toBe('Mnemo reste dans la zone de notification.');
+		expect(w.cases.find((c) => c.cle === 'modeles')?.detail).toMatch(/^Recherche par le sens, sur cet ordinateur ; /u);
+		expect(JSON.stringify(w)).not.toMatch(/Mac|barre des menus|xcode/u);
+		const m = textesAssistant('darwin');
+		expect(m.intro).toBe('Mnemo donne une mémoire à tes sessions Claude Code. Il lui faut git et Claude Code sur ce Mac.');
+		expect(m.aideGit).toEqual({ commande: 'xcode-select --install', libelleLien: 'installer git', lien: 'https://git-scm.com/downloads/mac' });
+		expect(m.cases.find((c) => c.cle === 'ouvrirALaSession')?.detail).toBe('Mnemo reste dans la barre des menus.');
+		expect(m.cases.find((c) => c.cle === 'commande')?.detail).toBe('Pour le terminal : ~/.local/bin/mnemo.');
+	});
+});
+
 describe('pont : ce qui vient de la page', () => {
 	it('choix : exactement quatre booléens', () => {
 		expect(validerChoix({ ...CHOIX_PAR_DEFAUT })).toEqual(CHOIX_PAR_DEFAUT);
@@ -112,6 +143,7 @@ describe('pont : ce qui vient de la page', () => {
 	it('liens : seulement ceux de l’installation, à l’identique', () => {
 		expect(lienAutorise(LIENS_EXTERNES.claude)).toBe(true);
 		expect(lienAutorise(LIENS_EXTERNES.git)).toBe(true);
+		expect(lienAutorise(LIENS_EXTERNES.gitWindows)).toBe(true);
 		for (const url of [`${LIENS_EXTERNES.claude}?x`, 'https://exemple.test', 'file:///etc/passwd', 'javascript:alert(1)']) expect(lienAutorise(url)).toBe(false);
 	});
 });
@@ -150,6 +182,6 @@ describe('au lancement : interface ou assistant', () => {
 		expect(e).toMatchObject({ deplacer: true, verification: false, poste: null, erreurPoste: null, etape: 'verifications' });
 		expect(peutContinuer(e)).toBe(false);
 		expect(suite([{ type: 'poste', poste: POSTE }, { type: 'continuer' }, { type: 'dossier', dossier: DOSSIER }], e)).toBe(e);
-		expect(etatInitial().deplacer).toBe(false);
+		expect(etatInitial('darwin').deplacer).toBe(false);
 	});
 });

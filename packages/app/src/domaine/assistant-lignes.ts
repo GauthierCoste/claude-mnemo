@@ -4,6 +4,7 @@
  * étape, barre de chaque pièce de modèle).
  */
 import type { EtapeInit, FinInit, LigneInit } from '@mnemo/contrat';
+import type { PlateformeApp } from './plateforme.ts';
 
 /** Une ligne plus longue est ignorée (aucune ligne d'`init` n'en approche). */
 export const LONGUEUR_MAX_LIGNE = 64 * 1024;
@@ -77,6 +78,11 @@ export function decoupeurLignes(): { ajouter(morceau: string): string[]; finir()
 export const ETAPES_MONTREES = ['memoire', 'mcp', 'modeles', 'commande'] as const;
 export type EtapeMontree = (typeof ETAPES_MONTREES)[number];
 
+/** Étapes montrées sur la plateforme : sous Windows, pas de commande « mnemo » (elle ne s'y installe pas). */
+export function etapesMontrees(plateforme: PlateformeApp): readonly EtapeMontree[] {
+	return plateforme === 'win32' ? ETAPES_MONTREES.filter((e) => e !== 'commande') : ETAPES_MONTREES;
+}
+
 export const LIBELLES_ETAPES: Readonly<Record<EtapeMontree, string>> = {
 	memoire: 'Mémoire',
 	mcp: 'Déclaration à Claude Code',
@@ -94,8 +100,8 @@ export type ResultatInstallation = { fin: FinInit | null; erreur: string | null 
 
 export type EtatInstallation = { etapes: EtapeSuivie[]; pieces: PieceSuivie[]; fin: FinInit | null; erreur: string | null; enCours: boolean };
 
-export function installationVide(): EtatInstallation {
-	return { etapes: ETAPES_MONTREES.map((etape) => ({ etape, etat: 'attente', message: '' })), pieces: [], fin: null, erreur: null, enCours: true };
+export function installationVide(plateforme: PlateformeApp): EtatInstallation {
+	return { etapes: etapesMontrees(plateforme).map((etape) => ({ etape, etat: 'attente', message: '' })), pieces: [], fin: null, erreur: null, enCours: true };
 }
 
 const finie = (p: PieceSuivie): PieceSuivie => (p.finie ? p : { ...p, finie: true });

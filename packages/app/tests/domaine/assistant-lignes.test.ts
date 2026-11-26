@@ -56,12 +56,12 @@ describe('découpage du flux en lignes', () => {
 	});
 });
 
-const appliquer = (lignes: LigneInit[], depart: EtatInstallation = installationVide()) => lignes.reduce(appliquerLigne, depart);
+const appliquer = (lignes: LigneInit[], depart: EtatInstallation = installationVide('darwin')) => lignes.reduce(appliquerLigne, depart);
 const progression = (piece: string, recu: number, total: number | null): LigneInit => ({ etape: 'modeles', etat: 'progression', piece, libelle: `Pièce ${piece}`, recu, total });
 
 describe('suivi de l’installation', () => {
 	it('quatre étapes en attente au départ ; chaque événement met son étape à jour ; le lanceur n’est pas montré', () => {
-		const vide = installationVide();
+		const vide = installationVide('darwin');
 		expect(vide.etapes.map((e) => [e.etape, e.etat])).toEqual([['memoire', 'attente'], ['mcp', 'attente'], ['modeles', 'attente'], ['commande', 'attente']]);
 		const i = appliquer([
 			{ etape: 'memoire', etat: 'debut', message: 'Dossier' },

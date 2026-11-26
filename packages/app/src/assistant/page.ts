@@ -7,9 +7,10 @@ import './assistant.css';
 import { tailleLisible } from '@mnemo/commun';
 import type { PosteVerifie } from '@mnemo/contrat';
 import { MESSAGE_PROVISOIRE } from '../domaine/assistant-demarrage.ts';
-import { ETAPES_ASSISTANT, etatInitial, evoluer, peutContinuer, peutReessayer, TAILLE_MODELES, type ChoixInstallation, type EtapeAssistant, type EtatAssistant, type EvenementAssistant } from '../domaine/assistant.ts';
+import { ETAPES_ASSISTANT, etatInitial, evoluer, peutContinuer, peutReessayer, type EtapeAssistant, type EtatAssistant, type EvenementAssistant } from '../domaine/assistant.ts';
 import { fractionPiece, LIBELLES_ETAPES, type EtapeSuivie, type EtatInstallation, type PieceSuivie } from '../domaine/assistant-lignes.ts';
 import { LIENS_EXTERNES, type ApiAssistant } from '../domaine/assistant-pont.ts';
+import { textesAssistant } from '../domaine/assistant-textes.ts';
 
 declare global {
 	interface Window {
@@ -41,11 +42,16 @@ function bouton(libelle: string, action: () => void, o: { primaire?: boolean; de
 
 const lien = (libelle: string, url: string): HTMLElement => el('a', { href: url, target: '_blank', rel: 'noreferrer' }, libelle);
 
-let etat: EtatAssistant = etatInitial();
+const api = window.assistant;
+/** La plateforme vient du preload (macOS si la page est ouverte hors de l'app : elle ne fait alors rien). */
+const plateforme = api?.plateforme === 'win32' ? 'win32' : 'darwin';
+const textes = textesAssistant(plateforme);
+// barre de titre : les boutons de Windows sont à droite (`assistant.css`)
+if (plateforme === 'win32') document.documentElement.dataset['plateforme'] = 'windows';
+let etat: EtatAssistant = etatInitial(plateforme);
 /** `terminer` est en cours (configuration, ouverture de l'interface) ; `erreurFin` : ce qui l'a empêché. */
 let ouverture = false;
 let erreurFin: string | null = null;
-const api = window.assistant;
 
 function envoyer(e: EvenementAssistant): void {
 	etat = evoluer(etat, e);
@@ -120,11 +126,17 @@ function lignePoste(nom: string, ok: boolean, detail: string, aide: Enfant): HTM
 	return el('li', { class: ok ? 'verif ok' : 'verif manque' }, el('span', { class: 'puce', 'aria-hidden': 'true' }), el('span', { class: 'nom' }, nom), el('span', { class: 'detail' }, detail), aide !== null && aide !== false ? el('span', { class: 'aide' }, aide) : null);
 }
 
+/** macOS : la commande d'Apple, ou le lien ; Windows : le lien vers Git pour Windows seul. */
+function aideGit(): HTMLElement {
+	const { commande, libelleLien, lien: url } = textes.aideGit;
+	return commande === null ? lien(libelleLien, url) : el('span', {}, 'Dans un terminal : ', el('code', {}, commande), ' ; ou ', lien(libelleLien, url), '.');
+}
+
 function vuePoste(poste: PosteVerifie): HTMLElement {
 	return el(
 		'ul',
 		{ class: 'verifs' },
-		lignePoste('git', poste.git.ok, poste.git.ok ? (poste.git.version ?? '') : (poste.git.motif ?? 'absent'), !poste.git.ok && el('span', {}, 'Dans un terminal : ', el('code', {}, 'xcode-select --install'), ' ; ou ', lien('installer git', LIENS_EXTERNES.git), '.')),
+		lignePoste('git', poste.git.ok, poste.git.ok ? (poste.git.version ?? '') : (poste.git.motif ?? 'absent'), !poste.git.ok && aideGit()),
 		lignePoste('Claude Code', poste.claude.ok, poste.claude.ok ? (poste.claude.chemin ?? '') : (poste.claude.motif ?? 'absent'), !poste.claude.ok && lien('Installer Claude Code', LIENS_EXTERNES.claude)),
 		lignePoste('Node', true, poste.node.version, null),
 	);
@@ -133,7 +145,7 @@ function vuePoste(poste: PosteVerifie): HTMLElement {
 function vueVerifications(): Enfant[] {
 	return [
 		el('h1', {}, 'Bienvenue dans Mnemo'),
-		el('p', { class: 'intro' }, 'Mnemo donne une mémoire à tes sessions Claude Code. Il lui faut git et Claude Code sur ce Mac.'),
+		el('p', { class: 'intro' }, textes.intro),
 		etat.verification ? el('p', { class: 'attente' }, 'Vérification…') : etat.poste !== null ? vuePoste(etat.poste) : null,
 		erreur(etat.erreurPoste),
 		el(
@@ -167,13 +179,6 @@ function vueDossier(): Enfant[] {
 	];
 }
 
-const CASES: { cle: keyof ChoixInstallation; titre: string; detail: string }[] = [
-	{ cle: 'mcp', titre: 'Déclarer Mnemo à Claude Code', detail: 'Toutes tes sessions Claude Code peuvent lire la mémoire et y proposer (serveur MCP).' },
-	{ cle: 'commande', titre: 'Installer la commande « mnemo »', detail: 'Pour le terminal : ~/.local/bin/mnemo.' },
-	{ cle: 'modeles', titre: 'Télécharger les modèles locaux', detail: `Recherche par le sens, sur ce Mac ; ${TAILLE_MODELES} à télécharger. Sans eux, la recherche se fait par les mots ; plus tard : mnemo modeles installer.` },
-	{ cle: 'ouvrirALaSession', titre: 'Ouvrir Mnemo à l’ouverture de session', detail: 'Mnemo reste dans la barre des menus.' },
-];
-
 function vueChoix(): Enfant[] {
 	return [
 		el('h1', {}, 'Que faut-il installer ?'),
@@ -181,7 +186,7 @@ function vueChoix(): Enfant[] {
 		el(
 			'div',
 			{ class: 'choix' },
-			...CASES.map(({ cle, titre, detail }) => {
+			...textes.cases.map(({ cle, titre, detail }) => {
 				const id = `choix-${cle}`;
 				const c = el('input', { type: 'checkbox', id, checked: etat.choix[cle], 'data-cle': id }) as HTMLInputElement;
 				c.addEventListener('change', () => envoyer({ type: 'choix', cle, valeur: c.checked }));

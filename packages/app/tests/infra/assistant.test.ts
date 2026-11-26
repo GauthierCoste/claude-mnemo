@@ -165,6 +165,15 @@ describe('contrôleur de l’assistant', () => {
 		expect(await c.choisirDossier()).toMatchObject({ ok: false, annule: false });
 	});
 
+	it('sous Windows : la commande « mnemo » n’est jamais demandée à init, même cochée', async () => {
+		const e = essai();
+		const c = controleurAssistant({ ...e.d, plateforme: 'win32' });
+		await c.choisirDossier();
+		await c.installer(CHOIX_PAR_DEFAUT);
+		const lance = JSON.parse((e.lignes[0] as { message: string }).message) as { options: string[] };
+		expect(lance.options).toEqual(['--json', '--mcp', '--sans-modeles', '--sans-commande', '--sans-lanceur']);
+	});
+
 	it('entrées refusées : choix invalides, aucun dossier, aucun Mnemo ; terminer avant la fin', async () => {
 		const e = essai();
 		const c = controleurAssistant(e.d);

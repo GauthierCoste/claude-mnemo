@@ -11,12 +11,13 @@ import { stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { avecVariable } from '@mnemo/commun';
 import type { EtapeInit, EvenementInit, FinInit, LigneInit } from '@mnemo/contrat';
-import { argumentsInit, argumentsVerifierPoste, DOSSIER_MEMOIRE, lirePoste, type ChoixInstallation, type DossierChoisi, type ExecutableMnemo } from '../domaine/assistant.ts';
+import { argumentsInit, argumentsVerifierPoste, choixPourPlateforme, DOSSIER_MEMOIRE, lirePoste, type ChoixInstallation, type DossierChoisi, type ExecutableMnemo } from '../domaine/assistant.ts';
 import { appliquerLigne, decoupeurLignes, installationVide, lireLigneInit, peutTerminer, type EtatInstallation, type ResultatInstallation } from '../domaine/assistant-lignes.ts';
 import { validerChoix, type ReponseDossier, type ReponsePoste, type ReponseTerminer } from '../domaine/assistant-pont.ts';
 import { estCheminAbsolu, type Configuration, type Lancement } from '../domaine/configuration.ts';
 import { decisionDemarrage, type DecisionDemarrage, MESSAGE_PROVISOIRE } from '../domaine/assistant-demarrage.ts';
 import { declarationAReprendre, finApresReprise, ligneApresReprise, type ResultatDeclarer } from '../domaine/assistant-reprise.ts';
+import { plateformeApp } from '../domaine/plateforme.ts';
 import { declarer } from './commande-mnemo.ts';
 import { ecrireConfiguration, lireConfiguration } from './configuration-fichier.ts';
 
@@ -156,6 +157,8 @@ export type DependancesAssistant = {
 	/** `MNEMO_PORT` à garder dans la configuration écrite (celui de la configuration précédente). */
 	port?: number;
 	base?: NodeJS.ProcessEnv;
+	/** Par défaut celle du processus ; sous Windows, la commande « mnemo » n'est jamais installée. */
+	plateforme?: NodeJS.Platform;
 	/** Sélecteur natif : un chemin, ou null si fermé sans choix. */
 	choisirDossierNatif(): Promise<string | null>;
 	envoyerLigne(ligne: LigneInit): void;
@@ -181,6 +184,7 @@ const refus = (erreur: string): ResultatInstallation => ({ fin: null, erreur });
 /** L'état de confiance de l'assistant, et ce que chaque demande de la page a le droit de faire. */
 export function controleurAssistant(d: DependancesAssistant): ControleurAssistant {
 	const base = d.base ?? process.env;
+	const plateforme = plateformeApp(d.plateforme ?? process.platform);
 	let dossier: DossierChoisi | null = null;
 	let choix: ChoixInstallation | null = null;
 	let installation: EtatInstallation | null = null;
@@ -205,15 +209,16 @@ export function controleurAssistant(d: DependancesAssistant): ControleurAssistan
 			return { ok: true, dossier: r.dossier };
 		},
 		async installer(brut) {
-			const lus = validerChoix(brut);
-			if (lus === null) return refus('Choix invalides.');
+			const valides = validerChoix(brut);
+			if (valides === null) return refus('Choix invalides.');
+			const lus = choixPourPlateforme(valides, plateforme);
 			if (d.provisoire === true) return refus(MESSAGE_PROVISOIRE);
 			if (d.executable === null) return refus(MESSAGE_SANS_MNEMO);
 			if (dossier === null) return refus('Aucun dossier choisi.');
 			if (enCours !== null || ecrite !== null || terminaison) return refus('L’installation est déjà lancée.');
 			choix = lus;
 			const executable = d.executable;
-			let etat = installationVide();
+			let etat = installationVide(plateforme);
 			installation = etat;
 			const transmettre = (ligne: LigneInit) => {
 				etat = appliquerLigne(etat, ligne);
