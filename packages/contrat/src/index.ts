@@ -102,19 +102,32 @@ export type EvenementHookVue = 'debut' | 'message' | 'outil' | 'apres_outil' | '
 
 /**
  * Une skill (de la mémoire, d'un profil ou d'un plugin) : son nom, sa description et son icône (`metadata.icone` de son
- * frontmatter ; absente : aucune).
+ * frontmatter ; absente : aucune). `origine` : présente pour une skill éditable par les routes `skill` (de la mémoire ou d'un
+ * profil), `mnemo` si Mnemo la fournit (skill par défaut d'un profil : elle a une version d'origine), `memoire` sinon ;
+ * absente pour une skill de plugin (lecture seule).
  */
-export type SkillVue = { nom: string; description: string; icone?: string };
+export type SkillVue = { nom: string; description: string; icone?: string; origine?: 'mnemo' | 'memoire' };
 
 /** Ce qui se règle d'une skill de la mémoire : `icone` null = aucune ; `contenu` : le Markdown sous le frontmatter. */
 export type SkillEditableVue = { nom: string; description: string; icone: string | null; contenu: string };
 
 /**
- * Réponse de `skill` GET : une skill de la mémoire (`skills/<nom>/SKILL.md`). `origine` : `mnemo` si Mnemo la fournit (elle a
- * une version d'origine, que `skillOrigine` rétablit), `memoire` sinon ; `modifiee` : elle diffère de la version fournie ;
- * `agents` : les profils qui la reçoivent ; `empreinte` : à renvoyer au `PUT` ; `avertissements` : frontmatter illisible.
+ * Réponse de `skill` GET : une skill de la mémoire (`skills/<nom>/SKILL.md`, `profil` null) ou du profil `profil`
+ * (`profils/<profil>/skills/<nom>/SKILL.md`). `origine` : `mnemo` si Mnemo la fournit (skill par défaut du profil : elle a une
+ * version d'origine, que `skillOrigine` rétablit ; la modifier arrête ses mises à jour automatiques), `memoire` sinon ;
+ * `modifiee` : elle diffère de la version fournie ; `agents` : les profils qui la reçoivent (le profil propriétaire pour une
+ * skill de profil) ; `empreinte` : à renvoyer au `PUT` ; `motifFixe` : pourquoi elle ne se renomme ni ne se supprime (une skill
+ * fournie par Mnemo serait redéposée au prochain lancement du profil), null si elle le peut ; `avertissements` : frontmatter illisible.
  */
-export type SkillDetailVue = SkillEditableVue & { origine: 'mnemo' | 'memoire'; modifiee: boolean; agents: string[]; empreinte: string; avertissements: string[] };
+export type SkillDetailVue = SkillEditableVue & {
+	profil: string | null;
+	origine: 'mnemo' | 'memoire';
+	modifiee: boolean;
+	agents: string[];
+	empreinte: string;
+	motifFixe: string | null;
+	avertissements: string[];
+};
 
 /** Corps de `skill` PUT : la skill réglée (`nom` différent : renommage) et l'empreinte du `SKILL.md` lu. */
 export type EnregistrementSkill = SkillEditableVue & { empreinte: string };
@@ -440,11 +453,13 @@ export type MessageClient =
  * - `profils` GET → `ReponseProfils` : les profils du paquet et ceux de `profils/` ;
  * - `profil` GET → `ProfilDetailVue` (404 inconnu) ; PUT `EnregistrementProfil` → `ReponseEcritureProfil` (400 `RefusProfil`, 409 la fiche a changé) ; DELETE → `ReponseEcritureProfil` ;
  * - `profilDupliquer` POST `{ nom }` → `ReponseEcritureProfil` (201) ; `profilApercu` GET `?projet=` → `ApercuProfilVue` ;
- * - `skills` POST `SkillEditableVue` → 201 `ReponseEcritureSkill` : crée `skills/<nom>/SKILL.md` (400 `RefusSkill`, nom pris compris) ;
+ * - routes des skills (`skills`, `skill`, `skillOrigine`) : sans paramètre, une skill de la mémoire (`skills/<nom>/`) ; avec
+ *   `?profil=<nom>`, une skill de ce profil (`profils/<nom>/skills/<nom>/`) ; 404 pour un profil inconnu ; jamais celles d'un plugin ;
+ * - `skills` POST `SkillEditableVue` → 201 `ReponseEcritureSkill` : crée son `SKILL.md` (400 `RefusSkill`, nom pris compris) ;
  * - `skill` GET → `SkillDetailVue` (404 inconnue) ; PUT `EnregistrementSkill` → `ReponseEcritureSkill` (renomme si `nom` diffère :
- *   dossier déplacé et profils qui la listent mis à jour ; 400 `RefusSkill`, 404, 409 le `SKILL.md` a changé) ; DELETE →
- *   `ReponseEcritureSkill` (retirée aussi des profils qui la listent ; 404) ; seulement les skills de la mémoire, jamais
- *   celles d'un profil ou d'un plugin ;
+ *   dossier déplacé et, pour une skill de la mémoire, profils qui la listent mis à jour ; 400 `RefusSkill`, renommage d'une
+ *   skill fournie par Mnemo compris, 404, 409 le `SKILL.md` a changé) ; DELETE → `ReponseEcritureSkill` (une skill de la
+ *   mémoire est retirée aussi des profils qui la listent ; 400 pour une skill fournie par Mnemo, 404) ;
  * - `skillOrigine` POST (sans corps) → `ReponseEcritureSkill` : réécrit la version fournie par Mnemo (400 si Mnemo ne la fournit pas, 404) ;
  * - `pause` POST → `{ session }` (409 : la session ne peut pas être reprise, `SessionVue.sansReprise`) ;
  * - `reprise` POST → `{ session }` (409 : de même) ;

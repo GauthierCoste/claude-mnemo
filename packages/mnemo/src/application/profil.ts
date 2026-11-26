@@ -37,7 +37,7 @@ export async function lireProfil(dep: Dependances, nom: string, parDefaut: strin
 /** Une skill déposée par défaut dans `profils/<profil>/skills/<nom>/SKILL.md`. */
 export type SkillParDefaut = { nom: string; texte: string };
 
-const skill = (nom: string, description: string, corps: string[]): SkillParDefaut => ({
+const skill = (nom: string, description: string, corps: readonly string[]): SkillParDefaut => ({
 	nom,
 	texte: `---\nname: ${nom}\ndescription: ${description}\n---\n\n${corps.join('\n')}\n`,
 });
@@ -46,6 +46,20 @@ const FIN_DE_SOURCE =
 	'Pour finir : `proposer` genre `modification` avec `traitee: true` sur la fiche source. La réponse liste les fiches qui la citent ; une source riche qui n\'en touche qu\'une est suspecte : reprends la répartition.';
 const CONDENSE =
 	'un seul condensé : un document Markdown écrit à côté de l\'original, référencé par `extraire_source`, qui garde la liste complète des points à suivre ; les fiches y renvoient au lieu de la recopier.';
+
+/** Étapes de la skill `menage` de l'archiviste (version actuelle). */
+const CORPS_MENAGE: readonly string[] = [
+	'1. Si la mémoire a une fiche de ménage (« Ménage de la mémoire »), lis-la d\'abord pour t\'en aider : elle dit ce que l\'utilisateur veut garder, fusionner ou retirer.',
+	'2. Commence le ménage par `diagnostiquer` : liens cassés, doublons probables, fiches isolées ou mal nommées, chemins et ancres. Puis repère ce qui cite une fiche : `chercher` signale les copies, `voisins` montre les liens entrants.',
+	'3. Deux fiches qui décrivent la même chose : `entretenir`, action `fusionner`, la moins complète `dans` l\'autre. Informations, sections, relations et alias sont versés, les liens réécrits, la fiche absorbée supprimée.',
+	'4. Une fiche inutile : `entretenir`, action `supprimer`. Si d\'autres fiches la citent, le refus les liste : donne une `redirection` vers la fiche qui la remplace, ou corrige ces liens d\'abord. Une note importée de Claude Code (propriété `origine` en `claude-code/…`) supprimée sans `redirection` revient au prochain import tant qu\'elle existe dans Claude Code : donne une `redirection` (ou fusionne-la) ; l\'import la tient alors pour connue tant qu\'elle ne change pas.',
+	'5. Un lien cassé ou faux (dans une source aussi) : `entretenir`, action `corriger_lien`, `ancien` → `nouveau` ; sans `nouveau`, le lien perd ses crochets.',
+	'6. Une fiche mal nommée ou mal rangée : `deplacer` (`nom` pour renommer) ; les liens suivent.',
+	'7. Les informations barrées restent : elles gardent l\'historique.',
+	'8. Une fiche temporaire ou une information périmée (rubrique `perimees` de `diagnostiquer`) : supprime la fiche (`entretenir`, action `supprimer`) ou barre l\'information, sauf si elle reste vraie : prolonge alors `perime_le` (`proposer`, genre `modification`). Dans le doute, demande à l\'utilisateur.',
+	'9. Plusieurs suppressions, fusions ou confirmations d\'informations : propose un lot (`entretenir`, action `proposer_lot`) que l\'utilisateur valide dans « À arbitrer », au lieu de les lui demander une par une. Une information faible : `corroborer` avec une seconde source ; une fiche de plus de 40 informations : `deplacer_informations`. Une faute de frappe, un nom mal écrit, une catégorie à reprendre (hors catégories à fort enjeu comme `montant`) : `retoucher_information` ; pour changer le sens d\'une information, `proposer` avec `remplace`.',
+	'10. Dis à l\'utilisateur ce que tu as fusionné ou supprimé : chaque action est un commit, que git peut défaire.',
+];
 
 /**
  * Skills déposées au premier lancement d'un profil si elles manquent ; ensuite, réécrites seulement tant qu'elles restent
@@ -81,18 +95,7 @@ export const SKILLS_PAR_DEFAUT: Record<string, readonly SkillParDefaut[]> = {
 			'6. Une décision qui en contredit une plus ancienne : propose-la avec `remplace` et signale la contradiction.',
 			`7. ${FIN_DE_SOURCE}`,
 		]),
-		skill('menage', 'Faire le ménage dans la mémoire Mnemo : doublons, fiches inutiles, liens cassés ou faux, fiches mal nommées.', [
-			'1. Si la mémoire a une fiche de ménage (« Ménage de la mémoire »), lis-la d\'abord pour t\'en aider : elle dit ce que l\'utilisateur veut garder, fusionner ou retirer.',
-			'2. Commence le ménage par `diagnostiquer` : liens cassés, doublons probables, fiches isolées ou mal nommées, chemins et ancres. Puis repère ce qui cite une fiche : `chercher` signale les copies, `voisins` montre les liens entrants.',
-			'3. Deux fiches qui décrivent la même chose : `entretenir`, action `fusionner`, la moins complète `dans` l\'autre. Informations, sections, relations et alias sont versés, les liens réécrits, la fiche absorbée supprimée.',
-			'4. Une fiche inutile : `entretenir`, action `supprimer`. Si d\'autres fiches la citent, le refus les liste : donne une `redirection` vers la fiche qui la remplace, ou corrige ces liens d\'abord. Une note importée de Claude Code (propriété `origine` en `claude-code/…`) supprimée sans `redirection` revient au prochain import tant qu\'elle existe dans Claude Code : donne une `redirection` (ou fusionne-la) ; l\'import la tient alors pour connue tant qu\'elle ne change pas.',
-			'5. Un lien cassé ou faux (dans une source aussi) : `entretenir`, action `corriger_lien`, `ancien` → `nouveau` ; sans `nouveau`, le lien perd ses crochets.',
-			'6. Une fiche mal nommée ou mal rangée : `deplacer` (`nom` pour renommer) ; les liens suivent.',
-			'7. Les informations barrées restent : elles gardent l\'historique.',
-			'8. Une fiche temporaire ou une information périmée (rubrique `perimees` de `diagnostiquer`) : supprime la fiche (`entretenir`, action `supprimer`) ou barre l\'information, sauf si elle reste vraie : prolonge alors `perime_le` (`proposer`, genre `modification`). Dans le doute, demande à l\'utilisateur.',
-			'9. Plusieurs suppressions, fusions ou confirmations d\'informations : propose un lot (`entretenir`, action `proposer_lot`) que l\'utilisateur valide dans « À arbitrer », au lieu de les lui demander une par une. Une information faible : `corroborer` avec une seconde source ; une fiche de plus de 40 informations : `deplacer_informations`. Une faute de frappe, un nom mal écrit, une catégorie à reprendre (hors catégories à fort enjeu comme `montant`) : `retoucher_information` ; pour changer le sens d\'une information, `proposer` avec `remplace`.',
-			'10. Dis à l\'utilisateur ce que tu as fusionné ou supprimé : chaque action est un commit, que git peut défaire.',
-		]),
+		skill('menage', 'Faire le ménage dans la mémoire Mnemo (doublons, fiches inutiles, liens cassés ou faux, fiches mal nommées).', CORPS_MENAGE),
 	],
 };
 
@@ -160,15 +163,10 @@ export const ANCIENNES_SKILLS: Record<string, readonly SkillParDefaut[]> = {
 			'8. Plusieurs suppressions, fusions ou confirmations d\'informations : propose un lot (`entretenir`, action `proposer_lot`) que l\'utilisateur valide dans « À arbitrer », au lieu de les lui demander une par une. Une information faible : `corroborer` avec une seconde source ; une fiche de plus de 40 informations : `deplacer_informations`. Une faute de frappe, un nom mal écrit, une catégorie à reprendre (hors catégories à fort enjeu comme `montant`) : `retoucher_information` ; pour changer le sens d\'une information, `proposer` avec `remplace`.',
 			'9. Dis à l\'utilisateur ce que tu as fusionné ou supprimé : chaque action est un commit, que git peut défaire.',
 		]),
+		// description au frontmatter illisible (« : » dans un texte YAML sans guillemets), avant l'édition des skills
+		skill('menage', 'Faire le ménage dans la mémoire Mnemo : doublons, fiches inutiles, liens cassés ou faux, fiches mal nommées.', CORPS_MENAGE),
 	],
 };
-
-/**
- * Skills de la mémoire (`skills/<nom>/`) fournies par Mnemo : leur version d'origine, que « revenir à la version
- * d'origine » réécrit (Réglages › Agents). Aucune aujourd'hui : les skills fournies par Mnemo sont celles des profils
- * (`SKILLS_PAR_DEFAUT`), déposées dans le dossier du profil et en lecture seule dans l'interface.
- */
-export const SKILLS_MEMOIRE_FOURNIES: readonly SkillParDefaut[] = [];
 
 /** Dossier des skills d'un profil, relatif à la mémoire. */
 export const dossierSkillsDuProfil = (nom: string): string => `${DOSSIERS_FIXES.profils}/${nomDeProfil(nom)}/${DOSSIERS_FIXES.skills}`;

@@ -42,8 +42,11 @@ const HOOKS_TOUS: EvenementHookVue[] = ['debut', 'message', 'outil', 'apres_outi
 
 type Etat = { editable: ProfilEditableVue; consigneParDefaut: string; ecrit: boolean; version: number };
 
-/** `skillsMemoire` : les skills de la mémoire de la démo (celles de `creerSkillsDemo`), lues à chaque appel. */
-export function creerProfilsDemo(skillsMemoire: () => SkillVue[]) {
+/** Les skills de la démo (celles de `creerSkillsDemo`), lues à chaque appel : de la mémoire, et propres à un profil. */
+export type SkillsPourProfils = { memoire(): SkillVue[]; duProfil(nom: string): SkillVue[] };
+
+export function creerProfilsDemo(skills: SkillsPourProfils) {
+	const skillsMemoire = () => skills.memoire();
 	const profils = new Map<string, Etat>([
 		[PROFIL_TRAVAIL, { editable: { avatar: { forme: 'robot', couleur: 'vert' }, consigne: null, lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: 'tous', plugins: [], moteur: 'claude-code', modele: '' }, consigneParDefaut: CONSIGNE_TRAVAIL, ecrit: true, version: 1 }],
 		[PROFIL_ARCHIVISTE, { editable: { avatar: { forme: 'chouette', couleur: 'violet' }, consigne: null, lancement: 'memoire', hooks: ['debut', 'arret', 'fin'], skillsMemoire: [], plugins: [], moteur: 'claude-code', modele: '' }, consigneParDefaut: CONSIGNE_ARCHIVISTE, ecrit: false, version: 1 }],
@@ -83,7 +86,7 @@ export function creerProfilsDemo(skillsMemoire: () => SkillVue[]) {
 	};
 	const consigne = (e: Etat) => e.editable.consigne ?? e.consigneParDefaut;
 	const empreinte = (nom: string, e: Etat) => (e.ecrit ? `${nom}-${e.version}` : null);
-	const skillsDuProfil = (nom: string): SkillVue[] => (nom === 'redaction' ? [{ nom: 'signature', description: 'Signer un courrier.' }] : []);
+	const skillsDuProfil = (nom: string): SkillVue[] => skills.duProfil(nom);
 	/** Comme le service : les skills du profil puis celles de la mémoire qu'il retient (le profil gagne à nom égal), les plugins installés qu'il allume, avec Claude Code seulement. */
 	const equipement = (nom: string, e: Etat): EquipementProfilVue => {
 		const duProfil = skillsDuProfil(nom).map((x) => x.nom);
@@ -95,6 +98,8 @@ export function creerProfilsDemo(skillsMemoire: () => SkillVue[]) {
 	};
 
 	return {
+		existe: (nom: string): boolean => profils.has(nom),
+
 		/** Profils qui reçoivent la skill `nom` de la mémoire : ils la retiennent et n'ont pas de skill propre du même nom. */
 		equipes(nom: string): string[] {
 			return [...profils.entries()]

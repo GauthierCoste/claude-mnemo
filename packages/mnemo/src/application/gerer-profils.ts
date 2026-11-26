@@ -12,6 +12,7 @@ import { ecrireEtCommiter, ficheVide, fichiersDuDossier, sousVerrou, texteDeFich
 import { anciennesConsignes } from './consignes-par-defaut.ts';
 import type { Dependances, PluginInstalle, SkillInstallee } from './ports.ts';
 import { chargerProfil, cheminDeProfil, dossierSkillsDuProfil, profilParDefaut } from './profil.ts';
+import { origineDeSkill } from './gerer-skills.ts';
 import { reindexerApresEcriture } from './synchroniser.ts';
 
 /**
@@ -67,16 +68,18 @@ async function existe(dep: Dependances, nom: string): Promise<boolean> {
 }
 
 /**
- * Skills d'un dossier : chaque sous-dossier qui contient un `SKILL.md` (nom = dossier, description et icône du frontmatter ;
- * frontmatter illisible : la skill reste listée par son nom).
+ * Skills d'un dossier, celui de la mémoire (`profil` null) ou celui du profil `profil` : chaque sous-dossier qui contient un
+ * `SKILL.md` (nom = dossier, description et icône du frontmatter ; frontmatter illisible : la skill reste listée par son nom),
+ * avec son `origine` (`origineDeSkill`) : toutes s'éditent depuis Réglages (`gerer-skills.ts`).
  */
-async function skillsDuDossier(dep: Dependances, dossier: string): Promise<SkillInstallee[]> {
+async function skillsDuDossier(dep: Dependances, dossier: string, profil: string | null): Promise<SkillInstallee[]> {
 	const resultat: SkillInstallee[] = [];
 	for (const sous of (await dep.coffre.lister(dossier)).dossiers) {
 		const texte = await dep.coffre.lire(`${sous}/SKILL.md`);
 		if (texte === null) continue;
+		const nom = sous.slice(sous.lastIndexOf('/') + 1);
 		const { description, icone } = lireSkill(texte);
-		resultat.push({ nom: sous.slice(sous.lastIndexOf('/') + 1), description, ...(icone === null ? {} : { icone }) });
+		resultat.push({ nom, description, ...(icone === null ? {} : { icone }), origine: origineDeSkill(profil, nom) });
 	}
 	return resultat;
 }
@@ -112,8 +115,8 @@ export async function detailProfil(dep: Dependances, nom: string): Promise<Detai
 		supprimable: !PROFILS_DU_PAQUET.includes(nom),
 		lancementModifiable: nom !== PROFIL_ARCHIVISTE,
 		empreinte: texte === null ? null : empreinte(texte),
-		skillsMemoireDisponibles: await skillsDuDossier(dep, DOSSIERS_FIXES.skills),
-		skillsDuProfil: await skillsDuDossier(dep, dossierSkillsDuProfil(nom)),
+		skillsMemoireDisponibles: await skillsDuDossier(dep, DOSSIERS_FIXES.skills, null),
+		skillsDuProfil: await skillsDuDossier(dep, dossierSkillsDuProfil(nom), nom),
 		pluginsInstalles: plugins,
 		avertissements,
 	};
@@ -131,7 +134,7 @@ async function motifsDe(dep: Dependances, nom: string, editable: ProfilEditable)
 	else if (nom === PROFIL_ARCHIVISTE && editable.lancement !== PROFILS_PAR_DEFAUT[PROFIL_ARCHIVISTE].lancement) motifs.lancement = 'le lancement de l\'archiviste ne se modifie pas';
 	if (!Array.isArray(editable.hooks) || editable.hooks.length === 0 || !editable.hooks.every((h) => EVENEMENTS_HOOK.includes(h))) motifs.hooks = 'au moins un événement, parmi ceux de Mnemo';
 	if (editable.skillsMemoire !== 'tous') {
-		const disponibles = new Set((await skillsDuDossier(dep, DOSSIERS_FIXES.skills)).map((s) => s.nom));
+		const disponibles = new Set((await skillsDuDossier(dep, DOSSIERS_FIXES.skills, null)).map((s) => s.nom));
 		const inconnues = Array.isArray(editable.skillsMemoire) ? editable.skillsMemoire.filter((s) => !disponibles.has(s)) : ['?'];
 		if (inconnues.length > 0) motifs.skillsMemoire = `skills inconnues dans ${DOSSIERS_FIXES.skills}/ : ${inconnues.join(', ')}`;
 	}

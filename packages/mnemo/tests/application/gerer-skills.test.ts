@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { detailProfil } from '../../src/application/gerer-profils.ts';
-import { creerSkill, detailSkill, modifierSkill, revenirALOrigine, supprimerSkill } from '../../src/application/gerer-skills.ts';
+import { creerSkill, detailSkill, modifierSkill, motifSkillFournie, revenirALOrigine, supprimerSkill } from '../../src/application/gerer-skills.ts';
 import type { SkillEntree } from '../../src/application/gerer-skills.ts';
-import { chargerProfil, cheminDeProfil } from '../../src/application/profil.ts';
-import type { SkillParDefaut } from '../../src/application/profil.ts';
+import { ANCIENNES_SKILLS, chargerProfil, cheminDeProfil, deposerSkillsParDefaut, dossierSkillsDuProfil, SKILLS_PAR_DEFAUT } from '../../src/application/profil.ts';
 import { MOTIF_NOM_DE_SKILL, texteDeSkill } from '../../src/domaine/skill.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
 
@@ -26,7 +25,7 @@ describe('skills de la mémoire : créer et lire', () => {
 		const dep = await memoire();
 		expect(dep.commits[0]).toMatchObject({ message: `mnemo: cree ${CHEMIN}`, chemins: [CHEMIN] });
 		const detail = (await detailSkill(dep, 'devis'))!;
-		expect(detail).toMatchObject({ nom: 'devis', description: DEVIS.description, icone: '📜', contenu: DEVIS.contenu, origine: 'memoire', modifiee: false, avertissements: [] });
+		expect(detail).toMatchObject({ nom: 'devis', description: DEVIS.description, icone: '📜', contenu: DEVIS.contenu, profil: null, origine: 'memoire', modifiee: false, motifFixe: null, avertissements: [] });
 		expect(detail.agents).toEqual(['redaction', 'travail']);
 		expect(detail.empreinte).toMatch(/\S/u);
 	});
@@ -62,8 +61,8 @@ describe('skills de la mémoire : créer et lire', () => {
 		const dep = await memoire();
 		const detail = (await detailProfil(dep, 'redaction'))!;
 		expect(detail.skillsMemoireDisponibles).toEqual([
-			{ nom: 'devis', description: DEVIS.description, icone: '📜' },
-			{ nom: 'relecture', description: 'Relire.' },
+			{ nom: 'devis', description: DEVIS.description, icone: '📜', origine: 'memoire' },
+			{ nom: 'relecture', description: 'Relire.', origine: 'memoire' },
 		]);
 	});
 });
@@ -135,28 +134,100 @@ describe('skills de la mémoire : supprimer', () => {
 	});
 });
 
-describe('skills fournies par Mnemo', () => {
-	const FOURNIES: SkillParDefaut[] = [{ nom: 'devis', texte: texteDeSkill(DEVIS) }];
-
-	it('origine « mnemo » ; « modifiee » dès que le texte diffère de la version fournie', async () => {
+describe('skills de la mémoire : version d\'origine', () => {
+	it('une skill de la mémoire n\'est jamais fournie par Mnemo : revenir à l\'origine est refusé ; inconnue : introuvable', async () => {
 		const dep = await memoire();
-		expect(await detailSkill(dep, 'devis', FOURNIES)).toMatchObject({ origine: 'mnemo', modifiee: false });
-		dep.fichiers.set(CHEMIN, texteDeSkill({ ...DEVIS, contenu: 'Autre.' }));
-		expect(await detailSkill(dep, 'devis', FOURNIES)).toMatchObject({ origine: 'mnemo', modifiee: true });
+		expect(await revenirALOrigine(dep, 'relecture')).toEqual({ ok: false, motifs: { nom: 'la skill « relecture » n\'est pas fournie par Mnemo : pas de version d\'origine' } });
+		expect(await revenirALOrigine(dep, 'absente')).toEqual({ ok: false, introuvable: true });
+	});
+});
+
+describe('skills d\'un profil', () => {
+	const MENAGE = SKILLS_PAR_DEFAUT.archiviste!.find((s) => s.nom === 'menage')!;
+	const cheminMenage = `${dossierSkillsDuProfil('archiviste')}/menage/SKILL.md`;
+
+	/** L'archiviste avec ses skills par défaut déposées, et `redaction` avec une skill propre. */
+	async function avecProfils() {
+		const dep = await memoire();
+		await deposerSkillsParDefaut(dep, 'archiviste');
+		await creerSkill(dep, { ...DEVIS, nom: 'signature', description: 'Signer un courrier.' }, 'redaction');
+		return dep;
+	}
+
+	it('créer dans le dossier du profil : un commit « mnemo: cree profils/<p>/skills/<nom>/SKILL.md » ; agents = le profil', async () => {
+		const dep = await avecProfils();
+		expect(dep.commits.at(-1)!.message).toBe('mnemo: cree profils/redaction/skills/signature/SKILL.md');
+		expect(await detailSkill(dep, 'signature', 'redaction')).toMatchObject({ profil: 'redaction', origine: 'memoire', agents: ['redaction'], motifFixe: null });
+		expect(await detailSkill(dep, 'signature')).toBeNull();
+		expect((await detailProfil(dep, 'redaction'))!.skillsDuProfil).toEqual([{ nom: 'signature', description: 'Signer un courrier.', icone: '📜', origine: 'memoire' }]);
 	});
 
-	it('revenir à l\'origine : réécrit la version fournie, un commit « mnemo: retablit » ; déjà d\'origine : aucun commit', async () => {
-		const dep = await memoire();
-		dep.fichiers.set(CHEMIN, texteDeSkill({ ...DEVIS, contenu: 'Autre.' }));
-		expect(await revenirALOrigine(dep, 'devis', FOURNIES)).toEqual({ ok: true, commit: expect.any(String), nom: 'devis' });
-		expect(dep.commits.at(-1)).toMatchObject({ message: `mnemo: retablit ${CHEMIN}`, chemins: [CHEMIN] });
-		expect(dep.fichiers.get(CHEMIN)).toBe(FOURNIES[0]!.texte);
-		expect(await revenirALOrigine(dep, 'devis', FOURNIES)).toEqual({ ok: true, commit: null, nom: 'devis' });
+	it('profil inconnu ou nom invalide : introuvable', async () => {
+		const dep = await avecProfils();
+		expect(await detailSkill(dep, 'signature', 'inconnu')).toBeNull();
+		expect(await creerSkill(dep, DEVIS, 'inconnu')).toEqual({ ok: false, introuvable: true });
+		expect(await creerSkill(dep, DEVIS, '../x')).toEqual({ ok: false, introuvable: true });
 	});
 
-	it('revenir à l\'origine : refusé pour une skill qui n\'est pas fournie par Mnemo ; inconnue : introuvable', async () => {
-		const dep = await memoire();
-		expect(await revenirALOrigine(dep, 'relecture', FOURNIES)).toEqual({ ok: false, motifs: { nom: 'la skill « relecture » n\'est pas fournie par Mnemo : pas de version d\'origine' } });
-		expect(await revenirALOrigine(dep, 'absente', FOURNIES)).toEqual({ ok: false, introuvable: true });
+	it('renommer ou supprimer une skill de profil : son dossier seul, les listes skills_memoire des profils ne bougent pas', async () => {
+		const dep = await avecProfils();
+		dep.fichiers.set(cheminDeProfil('redaction'), profil('redaction', '[signature]'));
+		const { empreinte } = (await detailSkill(dep, 'signature', 'redaction'))!;
+		expect(await modifierSkill(dep, 'signature', { ...DEVIS, nom: 'paraphe' }, empreinte, 'redaction')).toMatchObject({ ok: true, nom: 'paraphe' });
+		expect(dep.commits.at(-1)).toMatchObject({ message: 'mnemo: renomme profils/redaction/skills/signature → profils/redaction/skills/paraphe' });
+		expect(dep.commits.at(-1)!.chemins).not.toContain(cheminDeProfil('redaction'));
+		expect(await supprimerSkill(dep, 'paraphe', 'redaction')).toMatchObject({ ok: true, nom: 'paraphe' });
+		expect(dep.commits.at(-1)!.message).toBe('mnemo: supprime profils/redaction/skills/paraphe/');
+		expect([...dep.fichiers.keys()].filter((c) => c.startsWith('profils/redaction/skills/'))).toEqual([]);
+		expect((await chargerProfil(dep, 'redaction')).skillsMemoire).toEqual(['signature']);
+	});
+
+	it('une skill par défaut de l\'archiviste : origine « mnemo », non modifiée, listée avec son origine', async () => {
+		const dep = await avecProfils();
+		expect(await detailSkill(dep, 'menage', 'archiviste')).toMatchObject({ origine: 'mnemo', modifiee: false, agents: ['archiviste'], motifFixe: motifSkillFournie('menage', 'archiviste') });
+		const liste = (await detailProfil(dep, 'archiviste'))!.skillsDuProfil;
+		expect(liste.map((s) => [s.nom, s.origine])).toEqual(SKILLS_PAR_DEFAUT.archiviste!.map((s) => [s.nom, 'mnemo']).sort());
+	});
+
+	it('restée une version fournie passée (ANCIENNES_SKILLS) : pas « modifiee », le prochain dépôt la remplacera', async () => {
+		const dep = await avecProfils();
+		dep.fichiers.set(cheminMenage, ANCIENNES_SKILLS.archiviste!.find((s) => s.nom === 'menage')!.texte);
+		expect((await detailSkill(dep, 'menage', 'archiviste'))!.modifiee).toBe(false);
+	});
+
+	it('modifier une skill fournie : « modifiee », plus jamais réécrite par le dépôt ; revenir à l\'origine réécrit la version fournie', async () => {
+		const dep = await avecProfils();
+		const { empreinte } = (await detailSkill(dep, 'menage', 'archiviste'))!;
+		const r = await modifierSkill(dep, 'menage', { nom: 'menage', description: 'Mon ménage.', icone: '🧹', contenu: 'À ma façon.' }, empreinte, 'archiviste');
+		expect(r).toMatchObject({ ok: true, nom: 'menage' });
+		expect(dep.commits.at(-1)!.message).toBe(`mnemo: modifie ${cheminMenage}`);
+		expect((await detailSkill(dep, 'menage', 'archiviste'))!.modifiee).toBe(true);
+		expect(await deposerSkillsParDefaut(dep, 'archiviste')).toBeNull();
+		expect(dep.fichiers.get(cheminMenage)).toMatch(/À ma façon\./u);
+		expect(await revenirALOrigine(dep, 'menage', 'archiviste')).toMatchObject({ ok: true, commit: expect.any(String) });
+		expect(dep.commits.at(-1)!.message).toBe(`mnemo: retablit ${cheminMenage}`);
+		expect(dep.fichiers.get(cheminMenage)).toBe(MENAGE.texte);
+		expect((await detailSkill(dep, 'menage', 'archiviste'))!.modifiee).toBe(false);
+		expect(await revenirALOrigine(dep, 'menage', 'archiviste')).toEqual({ ok: true, commit: null, nom: 'menage' });
+	});
+
+	it('une skill fournie ne se supprime ni ne se renomme : le dépôt la recréerait au prochain lancement', async () => {
+		const dep = await avecProfils();
+		const commits = dep.commits.length;
+		expect(await supprimerSkill(dep, 'menage', 'archiviste')).toEqual({ ok: false, motifs: { nom: motifSkillFournie('menage', 'archiviste') } });
+		const { empreinte } = (await detailSkill(dep, 'menage', 'archiviste'))!;
+		expect(await modifierSkill(dep, 'menage', { nom: 'menage-perso', description: 'x', icone: null, contenu: '' }, empreinte, 'archiviste')).toEqual({ ok: false, motifs: { nom: motifSkillFournie('menage', 'archiviste') } });
+		expect(dep.commits).toHaveLength(commits);
+		// ce que le refus protège : une skill par défaut absente est redéposée
+		dep.fichiers.delete(cheminMenage);
+		expect(await deposerSkillsParDefaut(dep, 'archiviste')).not.toBeNull();
+		expect(dep.fichiers.get(cheminMenage)).toBe(MENAGE.texte);
+	});
+
+	it('l\'archiviste a aussi ses propres skills : créées, modifiées, renommées et supprimées librement', async () => {
+		const dep = await avecProfils();
+		expect(await creerSkill(dep, { ...DEVIS, nom: 'factures', description: 'Ranger une facture.' }, 'archiviste')).toMatchObject({ ok: true });
+		expect(await detailSkill(dep, 'factures', 'archiviste')).toMatchObject({ origine: 'memoire', motifFixe: null });
+		expect(await supprimerSkill(dep, 'factures', 'archiviste')).toMatchObject({ ok: true });
 	});
 });

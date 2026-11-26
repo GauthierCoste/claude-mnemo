@@ -4,6 +4,7 @@ import { variablesRetirees } from '../../src/application/moteurs/environnement-d
 import type { PluginInstalle } from '../../src/application/ports.ts';
 import type { FichierPlugin } from '../../src/application/ports.ts';
 import { empreinte } from '../../src/domaine/empreinte.ts';
+import { lireSkill } from '../../src/domaine/skill.ts';
 import { ANCIENNES_SKILLS, chargerProfil, cheminDeProfil, CONSIGNE_ARCHIVISTE_PAR_DEFAUT, CONSIGNE_TRAVAIL_PAR_DEFAUT, SKILLS_PAR_DEFAUT } from '../../src/application/profil.ts';
 import { PROFILS_PAR_DEFAUT } from '../../src/domaine/profil.ts';
 import type { Profil } from '../../src/domaine/profil.ts';
@@ -183,9 +184,18 @@ describe('assemblerPlugin', () => {
 		expect(dep.commits).toHaveLength(1);
 	});
 
+	it('skills par défaut : frontmatter lisible, name égal au dossier, description non vide', () => {
+		for (const s of Object.values(SKILLS_PAR_DEFAUT).flat()) {
+			const lue = lireSkill(s.texte);
+			expect(lue.illisible, s.nom).toBe(false);
+			expect(lue.entete.name).toBe(s.nom);
+			expect(lue.description.length, s.nom).toBeGreaterThan(0);
+		}
+	});
+
 	it('rappel : une skill par défaut modifiée doit rejoindre ANCIENNES_SKILLS', () => {
 		const message = 'skill par défaut modifiée : ajoutez l\'ancienne à ANCIENNES_SKILLS puis mettez à jour cette empreinte';
-		expect(empreinte(SKILLS_PAR_DEFAUT.archiviste!.map((s) => s.texte).join('\n')), message).toBe('dbfb3da3905f2842');
+		expect(empreinte(SKILLS_PAR_DEFAUT.archiviste!.map((s) => s.texte).join('\n')), message).toBe('793c59fcf2044065');
 	});
 
 	it('enabledPlugins : vrai pour les plugins du profil installés, faux pour tous les autres installés', async () => {

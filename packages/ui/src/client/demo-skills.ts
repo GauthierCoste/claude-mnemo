@@ -1,109 +1,147 @@
 /**
- * Skills de la mémoire du mode démo (`?demo&vue=reglages`) : une imitation en mémoire des routes `skills`, `skill` et
- * `skillOrigine` du service (détail, création, modification avec empreinte et renommage, suppression, retour à la version
- * d'origine), pour voir l'éditeur de skill sans service. Les profils qui la listent suivent un renommage ou une suppression.
+ * Skills du mode démo (`?demo&vue=reglages`), de la mémoire ou d'un profil (`?profil=<nom>`) : une imitation en mémoire des
+ * routes `skills`, `skill` et `skillOrigine` du service (détail, création, modification avec empreinte et renommage,
+ * suppression, retour à la version d'origine), pour voir l'éditeur de skill sans service. Les profils qui listent une skill
+ * de la mémoire suivent son renommage ou sa suppression ; les skills par défaut de l'archiviste sont fournies par Mnemo.
  */
+import { PROFIL_ARCHIVISTE } from '@mnemo/commun';
 import type { ReponseEcritureSkill, SkillDetailVue, SkillEditableVue, SkillVue } from '@mnemo/contrat';
 import { ErreurApi } from './api.ts';
 
-/** Ce que les skills demandent aux profils de la démo : qui reçoit une skill, et suivre un renommage (`nouveau`) ou une suppression (null). */
-export type ProfilsPourSkills = { equipes(nom: string): string[]; suivreSkill(ancien: string, nouveau: string | null): void };
+/**
+ * Ce que les skills demandent aux profils de la démo : s'il existe, qui reçoit une skill de la mémoire, et suivre son
+ * renommage (`nouveau`) ou sa suppression (null).
+ */
+export type ProfilsPourSkills = { existe(nom: string): boolean; equipes(nom: string): string[]; suivreSkill(ancien: string, nouveau: string | null): void };
 
 type Etat = { description: string; icone: string | null; contenu: string; version: number };
+type Version = Omit<Etat, 'version'>;
 
-/** Version fournie par Mnemo de la skill `compte-rendu` de la démo : la démo montre l'avertissement et le retour à l'origine. */
-const FOURNIES: Readonly<Record<string, Omit<Etat, 'version'>>> = {
-	'compte-rendu': { description: 'Rédiger le compte rendu d’une réunion client.', icone: '📝', contenu: '# Compte rendu\n\n1. Date, participants, projet.\n2. Décisions, actions (qui, quoi, pour quand), points ouverts.' },
+/** Skills par défaut de l'archiviste, version fournie (abrégée pour la démo). */
+const FOURNIES: Readonly<Record<string, Readonly<Record<string, Version>>>> = {
+	[PROFIL_ARCHIVISTE]: {
+		emails: { description: 'Ranger un email ou un fil d’emails (.eml, .mbox) dans la mémoire Mnemo.', icone: null, contenu: '1. `extraire_source` sur le fichier, avec `type` `email`.\n2. Ne garde que ce qui dure : décisions, engagements, montants, échéances.' },
+		specs: { description: 'Ranger une spécification, un cahier des charges ou un document de conception dans la mémoire Mnemo.', icone: null, contenu: '1. `extraire_source` sur le document.\n2. Extrais le périmètre, les exigences et les échéances, une information par ligne.' },
+		'comptes-rendus': { description: 'Ranger un compte rendu de réunion ou une transcription dans la mémoire Mnemo.', icone: null, contenu: '1. `extraire_source`, avec `type` `compte_rendu`.\n2. Les décisions, les actions et les points ouverts, chacun avec sa citation.' },
+		menage: { description: 'Faire le ménage dans la mémoire Mnemo (doublons, fiches inutiles, liens cassés ou faux, fiches mal nommées).', icone: null, contenu: '1. Commence par `diagnostiquer`.\n2. Propose un lot que l’utilisateur valide dans « À arbitrer ».' },
+	},
 };
 
+const MOTIF_NOM = 'nom refusé : minuscules, chiffres et tirets, 40 caractères au plus, sans tiret au début';
+const motifFixe = (nom: string, profil: string) => `la skill « ${nom} » est fournie par Mnemo : elle serait redéposée au prochain lancement de « ${profil} » ; modifie-la, ou reviens à sa version d'origine`;
 const motifs = (s: SkillEditableVue): string[] => {
 	const refus: string[] = [];
-	if (!/^[a-z0-9][a-z0-9-]{0,39}$/u.test(s.nom)) refus.push('nom refusé : minuscules, chiffres et tirets, 40 caractères au plus, sans tiret au début');
+	if (!/^[a-z0-9][a-z0-9-]{0,39}$/u.test(s.nom)) refus.push(MOTIF_NOM);
 	if (s.description.trim() === '') refus.push('description obligatoire : c’est elle qui fait charger la skill par l’agent');
 	if (s.icone !== null && (s.icone === '' || /\s/u.test(s.icone))) refus.push('icône refusée : un emoji ou un caractère, sans espace');
 	return refus;
 };
+const memes = (a: Version, b: Version) => a.description === b.description && a.icone === b.icone && a.contenu === b.contenu;
+
+/** `profil` null : la mémoire. Clé d'une portée dans l'état de la démo. */
+const cle = (profil: string | null) => profil ?? '';
 
 export function creerSkillsDemo(profils: ProfilsPourSkills) {
-	const skills = new Map<string, Etat>([
-		['devis', { description: 'Rédiger un devis au format de la maison.', icone: '📜', contenu: '# Devis\n\nUn devis suit le modèle de la maison : périmètre, lots, jours, total HT.', version: 1 }],
-		['relecture', { description: 'Relire un courrier avant envoi.', icone: '🔍', contenu: '# Relecture\n\nRelire le ton, les chiffres et les noms avant tout envoi.', version: 1 }],
-		['compte-rendu', { ...FOURNIES['compte-rendu']!, version: 1 }],
+	const portees = new Map<string, Map<string, Etat>>([
+		[
+			cle(null),
+			new Map([
+				['devis', { description: 'Rédiger un devis au format de la maison.', icone: '📜', contenu: '# Devis\n\nUn devis suit le modèle de la maison : périmètre, lots, jours, total HT.', version: 1 }],
+				['relecture', { description: 'Relire un courrier avant envoi.', icone: '🔍', contenu: '# Relecture\n\nRelire le ton, les chiffres et les noms avant tout envoi.', version: 1 }],
+			]),
+		],
+		[PROFIL_ARCHIVISTE, new Map(Object.entries(FOURNIES[PROFIL_ARCHIVISTE]!).map(([nom, v]) => [nom, { ...v, version: 1 }]))],
+		['redaction', new Map([['signature', { description: 'Signer un courrier.', icone: '✍️', contenu: 'Signer au nom de la maison.', version: 1 }]])],
 	]);
-	const etat = (nom: string): Etat => {
-		const e = skills.get(nom);
+
+	/** Les skills de la portée ; un profil inconnu → 404. */
+	const skillsDe = (profil: string | null): Map<string, Etat> => {
+		if (profil !== null && !profils.existe(profil)) throw new ErreurApi(`Profil inconnu : « ${profil} ».`, 404);
+		let skills = portees.get(cle(profil));
+		if (!skills) portees.set(cle(profil), (skills = new Map()));
+		return skills;
+	};
+	const etat = (nom: string, profil: string | null): Etat => {
+		const e = skillsDe(profil).get(nom);
 		if (!e) throw new ErreurApi(`Skill inconnue : « ${nom} ».`, 404);
 		return e;
 	};
+	const fournie = (nom: string, profil: string | null): Version | undefined => (profil === null ? undefined : FOURNIES[profil]?.[nom]);
 	const empreinte = (nom: string, e: Etat) => `${nom}-${e.version}`;
-	const valider = (s: SkillEditableVue, ancien: string | null) => {
+	const valider = (s: SkillEditableVue, ancien: string | null, profil: string | null) => {
 		const refus = motifs(s);
-		if (s.nom !== ancien && skills.has(s.nom)) refus.push(`la skill « ${s.nom} » existe déjà`);
+		if (ancien !== null && s.nom !== ancien && fournie(ancien, profil) !== undefined) refus.push(motifFixe(ancien, profil!));
+		if (s.nom !== ancien && skillsDe(profil).has(s.nom)) refus.push(`la skill « ${s.nom} » existe déjà`);
 		if (refus.length > 0) throw new ErreurApi(`Skill refusée : ${refus.join(' ; ')}`, 400);
 	};
 	const editable = (corps: unknown): SkillEditableVue => {
 		const { nom, description, icone, contenu } = corps as SkillEditableVue;
 		return { nom: String(nom ?? ''), description: String(description ?? ''), icone: icone ?? null, contenu: String(contenu ?? '') };
 	};
-	const memeQueFournie = (nom: string, e: Etat) => {
-		const f = FOURNIES[nom];
-		return f !== undefined && f.description === e.description && f.icone === e.icone && f.contenu === e.contenu;
-	};
+	const liste = (profil: string | null): SkillVue[] =>
+		[...(portees.get(cle(profil)) ?? new Map<string, Etat>()).entries()]
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([nom, e]) => ({ nom, description: e.description, ...(e.icone === null ? {} : { icone: e.icone }), origine: fournie(nom, profil) === undefined ? 'memoire' : 'mnemo' }));
 
 	return {
 		/** Les skills de la mémoire, triées par nom, comme `skillsMemoireDisponibles`. */
-		liste(): SkillVue[] {
-			return [...skills.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([nom, e]) => ({ nom, description: e.description, ...(e.icone === null ? {} : { icone: e.icone }) }));
-		},
+		memoire: (): SkillVue[] => liste(null),
+		/** Les skills propres au profil `nom`, comme `skillsDuProfil`. */
+		duProfil: (nom: string): SkillVue[] => liste(nom),
 
-		detail(nom: string): SkillDetailVue {
-			const e = etat(nom);
+		detail(nom: string, profil: string | null): SkillDetailVue {
+			const e = etat(nom, profil);
+			const f = fournie(nom, profil);
 			return {
 				nom,
 				description: e.description,
 				icone: e.icone,
 				contenu: e.contenu,
-				origine: nom in FOURNIES ? 'mnemo' : 'memoire',
-				modifiee: nom in FOURNIES && !memeQueFournie(nom, e),
-				agents: profils.equipes(nom),
+				profil,
+				origine: f === undefined ? 'memoire' : 'mnemo',
+				modifiee: f !== undefined && !memes(f, e),
+				agents: profil === null ? profils.equipes(nom) : [profil],
 				empreinte: empreinte(nom, e),
+				motifFixe: f === undefined ? null : motifFixe(nom, profil!),
 				avertissements: [],
 			};
 		},
 
-		creer(corps: unknown): ReponseEcritureSkill {
+		creer(corps: unknown, profil: string | null): ReponseEcritureSkill {
 			const s = editable(corps);
-			valider(s, null);
-			skills.set(s.nom, { description: s.description.trim(), icone: s.icone, contenu: s.contenu.trim(), version: 1 });
+			valider(s, null, profil);
+			skillsDe(profil).set(s.nom, { description: s.description.trim(), icone: s.icone, contenu: s.contenu.trim(), version: 1 });
 			return { commit: 'demo0101', nom: s.nom };
 		},
 
-		modifier(nom: string, corps: unknown): ReponseEcritureSkill {
-			const e = etat(nom);
+		modifier(nom: string, corps: unknown, profil: string | null): ReponseEcritureSkill {
+			const e = etat(nom, profil);
 			if ((corps as { empreinte?: unknown }).empreinte !== empreinte(nom, e)) throw new ErreurApi('Le SKILL.md de la skill a changé depuis son ouverture : rechargez-la.', 409);
 			const s = editable(corps);
-			valider(s, nom);
+			valider(s, nom, profil);
 			const suivante: Etat = { description: s.description.trim(), icone: s.icone, contenu: s.contenu.trim(), version: e.version + 1 };
-			if (s.nom === nom && suivante.description === e.description && suivante.icone === e.icone && suivante.contenu === e.contenu) return { commit: null, nom };
+			if (s.nom === nom && memes(suivante, e)) return { commit: null, nom };
+			const skills = skillsDe(profil);
 			skills.delete(nom);
 			skills.set(s.nom, suivante);
-			if (s.nom !== nom) profils.suivreSkill(nom, s.nom);
+			if (s.nom !== nom && profil === null) profils.suivreSkill(nom, s.nom);
 			return { commit: 'demo0102', nom: s.nom };
 		},
 
-		supprimer(nom: string): ReponseEcritureSkill {
-			etat(nom);
-			skills.delete(nom);
-			profils.suivreSkill(nom, null);
+		supprimer(nom: string, profil: string | null): ReponseEcritureSkill {
+			etat(nom, profil);
+			if (fournie(nom, profil) !== undefined) throw new ErreurApi(`Skill refusée : ${motifFixe(nom, profil!)}`, 400);
+			skillsDe(profil).delete(nom);
+			if (profil === null) profils.suivreSkill(nom, null);
 			return { commit: 'demo0103', nom };
 		},
 
-		revenir(nom: string): ReponseEcritureSkill {
-			const e = etat(nom);
-			const f = FOURNIES[nom];
+		revenir(nom: string, profil: string | null): ReponseEcritureSkill {
+			const e = etat(nom, profil);
+			const f = fournie(nom, profil);
 			if (f === undefined) throw new ErreurApi(`Skill refusée : la skill « ${nom} » n’est pas fournie par Mnemo : pas de version d’origine`, 400);
-			if (memeQueFournie(nom, e)) return { commit: null, nom };
-			skills.set(nom, { ...f, version: e.version + 1 });
+			if (memes(f, e)) return { commit: null, nom };
+			skillsDe(profil).set(nom, { ...f, version: e.version + 1 });
 			return { commit: 'demo0104', nom };
 		},
 	};
