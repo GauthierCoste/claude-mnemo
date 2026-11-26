@@ -60,10 +60,16 @@
 	--etat-en-pause: var(--dim);
 	--etat-terminee: var(--dim);
 
-	/* --- Fournisseurs des moteurs (Réglages › Système › Moteurs) : seul endroit où chacun reçoit sa couleur --- */
+	/* --- Fournisseurs des moteurs (Nouvelle session, Agents) : seul endroit où chacun reçoit sa couleur --- */
 	--fournisseur-anthropic: var(--amber);
 	--fournisseur-openai: var(--blue);
 	--fournisseur-mistral: var(--pink);
+	/* Logo de Mistral (moteurs/logos.tsx, d'après @lobehub/icons-static-svg, MIT) : ses cinq bandes, du haut vers le bas */
+	--logo-mistral-1: #ffd700;
+	--logo-mistral-2: #ffaf00;
+	--logo-mistral-3: #ff8205;
+	--logo-mistral-4: #fa500f;
+	--logo-mistral-5: #e10500;
 
 	/* --- Branches de l'arbre (premier niveau, dans l'ordre de l'arbre) --- */
 	--branche-1: #a394ff;

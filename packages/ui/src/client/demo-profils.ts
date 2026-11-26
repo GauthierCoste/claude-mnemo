@@ -1,6 +1,6 @@
 /**
  * Profils du mode démo (`?demo&vue=reglages`) : une imitation en mémoire des routes de gestion des profils du service
- * (détail, enregistrement avec empreinte, duplication, suppression, aperçu), pour voir Réglages › Profils sans service.
+ * (détail, enregistrement avec empreinte, duplication, suppression, aperçu), pour voir Réglages › Agents sans service.
  */
 import { PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import type { IdMoteur } from '@mnemo/commun';

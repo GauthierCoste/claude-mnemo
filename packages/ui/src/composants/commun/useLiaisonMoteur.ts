@@ -1,5 +1,5 @@
 /**
- * Geste « Lier à Mnemo » d'un moteur, le même partout (Réglages › Système › Moteurs, Nouvelle session) : la route
+ * Geste « Lier à Mnemo » d'un moteur, le même partout (Réglages › Branchements, Nouvelle session) : la route
  * `moteurLier` (`useLierMoteur`, qui publie la vue relue des moteurs), un toast quand le moteur est lié, et ce que la
  * liaison laisse à dire : les étapes laissées (déclaration de l'utilisateur) ou en échec, ou le refus du service.
  */

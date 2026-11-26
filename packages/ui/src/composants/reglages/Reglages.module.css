@@ -1,111 +1,9 @@
-/* Vue Réglages : barre d'onglets ; champs de l'onglet Système (la disposition vient de profils/Profils.module.css). */
+/* Vue Réglages : barre d'onglets (Agents · Réglages · Documentation), avertissement de changement d'onglet, pastille ambre. */
 
 .titre {
 	margin: 0;
 	font-size: 16px;
 	font-weight: 600;
-}
-
-.discret {
-	margin: 0;
-	color: var(--mu);
-	font-size: 12px;
-}
-
-.champ {
-	margin: 0;
-	padding: var(--esp-3) 0 0;
-	border: none;
-	border-top: 1px solid var(--bd);
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	min-width: 0;
-}
-
-.champ:first-of-type {
-	border-top: none;
-	padding-top: 0;
-}
-
-.ligne {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: var(--esp-2);
-}
-
-.libelle {
-	font-weight: 600;
-}
-
-.effet {
-	padding: 1px 8px;
-	border-radius: var(--r-pastille);
-	background: color-mix(in srgb, var(--amber) 14%, transparent);
-	color: var(--amber);
-	font-size: 11px;
-}
-
-.explication {
-	margin: 0;
-	color: var(--mu);
-}
-
-.nombre,
-.texte {
-	background: var(--s1);
-	border: 1px solid var(--bd);
-	border-radius: var(--r-2);
-	padding: 6px 9px;
-	outline: none;
-	font-family: var(--mono);
-	font-size: 12px;
-}
-
-.nombre {
-	width: 120px;
-}
-
-.texte {
-	flex: 1;
-	min-width: 240px;
-}
-
-.couleur {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--esp-3);
-	font-size: 12px;
-}
-
-.couleur input[type='color'] {
-	width: 44px;
-	height: 28px;
-	padding: 2px;
-	background: var(--s1);
-	border: 1px solid var(--bd);
-	border-radius: var(--r-2);
-	cursor: pointer;
-}
-
-.avertissement {
-	margin: 0;
-	font-size: 12px;
-	color: var(--amber);
-}
-
-.cases {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--esp-2) var(--esp-4);
-}
-
-.case {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	cursor: pointer;
 }
 
 .actions {
@@ -125,6 +23,7 @@
 .barreOnglets {
 	display: flex;
 	align-items: center;
+	flex-wrap: wrap;
 	gap: var(--esp-5);
 	padding: var(--esp-4) 22px 0;
 	border-bottom: 1px solid var(--bd);
@@ -137,6 +36,7 @@
 
 .onglet {
 	padding: 8px 14px;
+	white-space: nowrap;
 	border: none;
 	border-bottom: 2px solid transparent;
 	background: none;
@@ -188,4 +88,42 @@
 		padding: var(--esp-3) 16px 0;
 		gap: var(--esp-3);
 	}
+}
+
+/* un moteur attend un geste : sur l'onglet Réglages et sur sa section Branchements */
+.pastille {
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	margin-left: 6px;
+	border-radius: 50%;
+	background: var(--amber);
+	vertical-align: 2px;
+}
+
+.horsEcran {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.documentation {
+	padding: 20px 22px;
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-2);
+	max-width: 760px;
+}
+
+.documentation h2 {
+	margin: 0;
+	font-size: 16px;
+}
+
+.documentation p {
+	margin: 0;
+	color: var(--mu);
 }

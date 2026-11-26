@@ -1,19 +1,23 @@
 /**
  * Onglet de la vue Réglages retenu dans ce navigateur (le dernier ouvert), et la demande d'ouvrir une section précise depuis
- * une autre vue (« Voir dans Réglages » de la Nouvelle session : Système › Moteurs) : la vue Réglages, montée ensuite, s'y
- * ouvre.
+ * une autre vue (« Voir dans Réglages » de la Nouvelle session : Réglages › Branchements) : la vue Réglages, montée ensuite,
+ * s'y ouvre. Une valeur retenue avant la 1.9 (`profils`, `systeme`, `app-claude`) mène à l'onglet qui a repris son contenu.
  */
 
-export type OngletReglages = 'profils' | 'systeme' | 'app-claude';
-export const ONGLETS_REGLAGES: readonly OngletReglages[] = ['profils', 'systeme', 'app-claude'];
+export type OngletReglages = 'agents' | 'reglages' | 'documentation';
+export const ONGLETS_REGLAGES: readonly OngletReglages[] = ['agents', 'reglages', 'documentation'];
 const CLE_ONGLET = 'mnemo.reglages.onglet';
+
+/** Anciens onglets (avant la 1.9) : où leur contenu est passé. */
+const ANCIENS: Readonly<Record<string, OngletReglages>> = { profils: 'agents', systeme: 'reglages', 'app-claude': 'reglages' };
 
 export function ongletRetenu(): OngletReglages {
 	try {
 		const v = localStorage.getItem(CLE_ONGLET);
-		return ONGLETS_REGLAGES.find((o) => o === v) ?? 'profils';
+		if (v === null) return 'agents';
+		return ONGLETS_REGLAGES.find((o) => o === v) ?? ANCIENS[v] ?? 'agents';
 	} catch {
-		return 'profils';
+		return 'agents';
 	}
 }
 
@@ -25,19 +29,22 @@ export function retenirOnglet(o: OngletReglages): void {
 	}
 }
 
-/** Section de Réglages › Système demandée depuis une autre vue, lue au montage de l'onglet puis oubliée. */
-let sectionSystemeDemandee: 'moteurs' | null = null;
+/** Sections de l'onglet Réglages, dans l'ordre de son panneau. */
+export type SectionReglages = 'branchements' | 'memoire' | 'systeme';
 
-/** Retient l'onglet Système et demande sa section Moteurs : à appeler juste avant d'aller à la vue Réglages. */
-export function demanderMoteursDansReglages(): void {
-	retenirOnglet('systeme');
-	sectionSystemeDemandee = 'moteurs';
+/** Section de l'onglet Réglages demandée depuis une autre vue, lue au montage de l'onglet puis oubliée. */
+let sectionDemandee: SectionReglages | null = null;
+
+/** Retient l'onglet Réglages et demande sa section Branchements : à appeler juste avant d'aller à la vue Réglages. */
+export function demanderBranchementsDansReglages(): void {
+	retenirOnglet('reglages');
+	sectionDemandee = 'branchements';
 }
 
 /** La section demandée, sans l'oublier (lue dans un initialiseur d'état, que React peut appeler deux fois). */
-export const sectionSystemeALire = (): 'moteurs' | null => sectionSystemeDemandee;
+export const sectionDemandeeALire = (): SectionReglages | null => sectionDemandee;
 
 /** Oublie la section demandée, une fois l'onglet monté. */
-export function oublierSectionSysteme(): void {
-	sectionSystemeDemandee = null;
+export function oublierSectionDemandee(): void {
+	sectionDemandee = null;
 }

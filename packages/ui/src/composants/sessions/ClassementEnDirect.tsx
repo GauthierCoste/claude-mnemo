@@ -530,7 +530,7 @@ export function ClassementEnDirect(p: {
 	const genreSeparateur = injectionActive ? 'seuil' : coupures.length > 0 && calibre ? 'coupe' : 'filet';
 	const bulleSeparateur =
 		genreSeparateur === 'seuil'
-			? `Au-dessus : vu par la session. Mnemo injecte au message même, entière, une fiche notée au-dessus de ${pourcentage(seuil)}. Réglages › Système › Contexte injecté.`
+			? `Au-dessus : vu par la session. Mnemo injecte au message même, entière, une fiche notée au-dessus de ${pourcentage(seuil)}. Réglages › Mémoire › Rappel.`
 			: genreSeparateur === 'coupe'
 				? `Seuil d'injection automatique : ${pourcentage(seuil)}. Injection coupée : rien n'est injecté au-dessus.`
 				: 'Au-dessus : vu par la session ; dessous : pas encore vu.';

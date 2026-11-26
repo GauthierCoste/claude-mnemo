@@ -7,7 +7,7 @@ import { Application } from '../../src/composants/Application.tsx';
 
 afterEach(cleanup);
 
-/** Réglages › Profils de la démo ouverts (le profil `travail` dans l'éditeur). */
+/** Réglages › Agents de la démo ouverts (le profil `travail` dans l'éditeur). */
 async function ouvrirProfils() {
 	const client = creerClientDemo();
 	render(<Application client={client} />);
@@ -21,7 +21,7 @@ async function ouvrirProfils() {
 const couleurDansLaListe = (liste: HTMLElement, nom: string): string =>
 	(within(liste).getByRole('button', { name: new RegExp(`^${nom}`, 'u') }).querySelector('svg') as SVGElement).style.color;
 
-describe('Réglages › Profils : nouveau profil', () => {
+describe('Réglages › Agents : nouveau profil', () => {
 	it('pendant la saisie du nom, aucun éditeur : les réglages du nouveau profil (Codex, ambre) vont à lui, travail garde Claude Code et son vert', async () => {
 		const { client, liste } = await ouvrirProfils();
 		await act(async () => within(liste).getByRole('button', { name: 'Nouveau profil de travail' }).click());

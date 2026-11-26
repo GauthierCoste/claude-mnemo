@@ -1,11 +1,12 @@
 /**
  * Formulaire d'ajout ou de modification d'un serveur MCP de l'app Claude : nom, commande, arguments (un par ligne),
  * variables (`NOM=valeur`, une par ligne). En modification, les valeurs existantes ne sont jamais montrées (le service ne
- * les donne pas) : `NOM` seul garde la valeur actuelle, une ligne effacée retire la variable. Quitter les Réglages avec une
- * saisie non enregistrée est retenu : un avertissement propose de l'enregistrer, de l'abandonner ou de rester.
+ * les donne pas) : `NOM` seul garde la valeur actuelle, une ligne effacée retire la variable. Une saisie non enregistrée est
+ * signalée par `surModifie` : l'onglet Réglages retient alors la sortie des Réglages, et ce formulaire propose de l'enregistrer,
+ * de l'abandonner ou de rester.
  */
 import type { ServeurMcpEcriture, ServeurMcpVue } from '@mnemo/contrat';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useNavigation } from '../../../navigation.tsx';
 import { demandeDe, SAISIE_VIDE, saisieDe, type SaisieServeur } from '../../../reglages/serveur-mcp.ts';
 import { Bouton } from '../../commun/Bouton.tsx';
@@ -30,15 +31,8 @@ export function FormulaireServeur(p: {
 	const titre = modification ? `Modifier le serveur « ${p.serveur!.nom} »` : 'Ajouter un serveur MCP';
 
 	const nav = useNavigation();
-	const modifieCourant = useRef(modifie);
-	modifieCourant.current = modifie;
 	const { surModifie } = p;
 	useEffect(() => surModifie?.(modifie), [surModifie, modifie]);
-	const { definirGardeSortie } = nav;
-	useEffect(() => {
-		definirGardeSortie(() => modifieCourant.current);
-		return () => definirGardeSortie(null);
-	}, [definirGardeSortie]);
 
 	const changer = (champ: keyof SaisieServeur) => (e: { target: { value: string } }) => setSaisie((x) => ({ ...x, [champ]: e.target.value }));
 	const enregistrer = async (): Promise<boolean> => {
@@ -66,7 +60,7 @@ export function FormulaireServeur(p: {
 				void enregistrer();
 			}}
 		>
-			<h3 className={s.titreFormulaire}>{titre}</h3>
+			<h4 className={s.titreFormulaire}>{titre}</h4>
 			<label className={s.champ}>
 				<span className={d.libelle}>Nom</span>
 				<input className={d.champTexte} spellCheck={false} autoComplete="off" value={saisie.nom} onChange={changer('nom')} />
@@ -89,7 +83,7 @@ export function FormulaireServeur(p: {
 				</span>
 				<textarea className={d.consigne} rows={3} spellCheck={false} autoComplete="off" aria-describedby={`${id}-variables`} value={saisie.env} onChange={changer('env')} />
 			</label>
-			{nav.sortieRetenue && (
+			{nav.sortieRetenue && modifie && (
 				<div className={d.avis} role="alert">
 					<p>Serveur MCP non enregistré : l’enregistrer avant de quitter les Réglages ?</p>
 					<div className={d.actions}>

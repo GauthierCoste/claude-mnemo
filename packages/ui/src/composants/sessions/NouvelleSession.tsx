@@ -17,7 +17,7 @@ import { ErreurApi } from '../../client/api.ts';
 import { useClient } from '../../client/contexte.tsx';
 import { useMoteurs, useProfils } from '../../client/hooks.ts';
 import { useNavigation } from '../../navigation.tsx';
-import { demanderMoteursDansReglages } from '../../reglages/onglet-retenu.ts';
+import { demanderBranchementsDansReglages } from '../../reglages/onglet-retenu.ts';
 import { etatDuMoteur, resumeDeLaSession } from '../../sessions/agents.ts';
 import { JETONS_COULEUR } from '../commun/AvatarProfil.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
@@ -93,7 +93,7 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 	};
 
 	const voirReglages = () => {
-		demanderMoteursDansReglages();
+		demanderBranchementsDansReglages();
 		fermer();
 		nav.aller('reglages');
 	};

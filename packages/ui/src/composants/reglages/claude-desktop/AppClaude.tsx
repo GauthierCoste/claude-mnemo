@@ -1,33 +1,31 @@
 /**
- * Onglet App Claude de la vue Réglages : la configuration MCP de l'app Claude (Claude Desktop). Section « Mémoire Mnemo »
- * (brancher, débrancher, mettre à jour l'entrée de Mnemo) et section « Autres serveurs MCP » (ajouter, modifier, retirer).
- * Les valeurs des variables ne viennent jamais du service. Un changement ne vaut qu'au redémarrage de l'app Claude : chaque
- * écriture réussie le rappelle. App absente : seulement le dire ; fichier illisible : l'erreur et le chemin, rien d'autre
- * (le service refuse alors toute écriture).
+ * Réglages › Branchements, groupe « App Claude » : la configuration MCP de l'app Claude (Claude Desktop). Une ligne
+ * « Mémoire Mnemo » (un interrupteur pour la brancher ou la débrancher ; entrée périmée : la mettre à jour ou la retirer),
+ * puis une ligne par autre serveur MCP (modifier, retirer) et « + Ajouter un serveur ». Les valeurs des variables ne viennent
+ * jamais du service. Un changement ne vaut qu'au redémarrage de l'app Claude : chaque écriture réussie le rappelle. App
+ * absente : seulement le dire ; fichier illisible : l'erreur et le chemin, rien d'autre (le service refuse alors toute écriture).
  */
 import { ROUTES, type ClaudeDesktopVue } from '@mnemo/contrat';
 import { useState, type ReactNode } from 'react';
 import { ErreurApi } from '../../../client/api.ts';
 import { useClient } from '../../../client/contexte.tsx';
 import { useClaudeDesktop } from '../../../client/hooks.ts';
+import { Bascule } from '../../commun/Bascule.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
-import d from '../profils/Profils.module.css';
+import c from '../Cartes.module.css';
 import { ServeursMcp } from './ServeursMcp.tsx';
 import s from './AppClaude.module.css';
 
 /** Une écriture : rend le motif d'un refus, ou null quand elle a réussi (la vue rendue par le service est alors montrée). */
 export type Ecrire = (appel: () => Promise<ClaudeDesktopVue>) => Promise<string | null>;
 
-const ETATS: Record<ClaudeDesktopVue['mnemo'], { texte: string; bouton: string }> = {
-	absent: { texte: 'La mémoire Mnemo n’est pas branchée sur l’app Claude.', bouton: 'Brancher la mémoire' },
-	branche: { texte: 'La mémoire Mnemo est branchée sur l’app Claude.', bouton: 'Débrancher' },
-	perime: {
-		texte: 'La mémoire Mnemo est branchée, mais son entrée ne correspond plus à cette installation (autre Node, autre emplacement de Mnemo ou autre dossier).',
-		bouton: 'Mettre à jour',
-	},
+const ETATS: Record<ClaudeDesktopVue['mnemo'], string> = {
+	absent: 'Pas branchée : l’app Claude ne voit pas ta mémoire.',
+	branche: 'Claude lit et écrit ta mémoire.',
+	perime: 'Son entrée ne correspond plus à cette installation (autre Node, autre emplacement de Mnemo ou autre dossier).',
 };
 
-/** `surModifie` : prévenu quand un formulaire de serveur a des modifications non enregistrées (changement d'onglet retenu). */
+/** `surModifie` : prévenu quand un formulaire de serveur a des modifications non enregistrées (changement d'onglet ou sortie retenus). */
 export function AppClaude(p: { surModifie?(modifie: boolean): void }): ReactNode {
 	const { api } = useClient();
 	const ressource = useClaudeDesktop();
@@ -42,7 +40,7 @@ export function AppClaude(p: { surModifie?(modifie: boolean): void }): ReactNode
 		try {
 			setEcrite(await appel());
 			setFait(true);
-			// le cache suit : rouvert plus tard, l'onglet ne montre pas d'abord la configuration d'avant l'écriture
+			// le cache suit : rouvert plus tard, le groupe ne montre pas d'abord la configuration d'avant l'écriture
 			ressource.recharger();
 			return null;
 		} catch (e) {
@@ -52,29 +50,17 @@ export function AppClaude(p: { surModifie?(modifie: boolean): void }): ReactNode
 		}
 	};
 
-	if (vue === undefined) {
-		return (
-			<section className={d.droite} aria-label="App Claude">
-				<p className={ressource.erreur === null ? d.discret : d.erreur} role={ressource.erreur === null ? undefined : 'alert'}>
+	return (
+		<section className={c.groupe} aria-labelledby="titre-app-claude">
+			<h3 id="titre-app-claude" className={c.titreGroupe}>
+				App Claude
+			</h3>
+			{vue === undefined ? (
+				<p className={ressource.erreur === null ? c.discret : c.erreur} role={ressource.erreur === null ? undefined : 'alert'}>
 					{ressource.erreur ?? 'Lecture de la configuration de l’app Claude…'}
 				</p>
-			</section>
-		);
-	}
-
-	return (
-		<section className={d.droite} aria-label="App Claude">
-			<p className={d.discret}>
-				Les serveurs MCP de l’app Claude (Claude Desktop) : la mémoire de ce dossier, et les autres.
-				{vue.installee && vue.erreur === undefined && (
-					<>
-						{' '}
-						Fichier : <code>{vue.fichier}</code>
-					</>
-				)}
-			</p>
-			{!vue.installee ? (
-				<p className={d.avis} role="status">
+			) : !vue.installee ? (
+				<p className={c.discret} role="status">
 					L’app Claude n’est pas installée sur ce poste.
 				</p>
 			) : vue.erreur !== undefined ? (
@@ -83,12 +69,12 @@ export function AppClaude(p: { surModifie?(modifie: boolean): void }): ReactNode
 					<p>
 						Fichier : <code>{vue.fichier}</code>
 					</p>
-					<p className={d.discret}>Mnemo ne réécrit jamais un fichier qu’il ne sait pas lire : corrige-le, puis rouvre cet onglet.</p>
+					<p className={c.discret}>Mnemo ne réécrit jamais un fichier qu’il ne sait pas lire : corrige-le, puis rouvre les Réglages.</p>
 				</div>
 			) : (
 				<>
 					{fait && (
-						<p className={d.avis} role="status">
+						<p className={c.avis} role="status">
 							Redémarre l’app Claude pour prendre ce changement en compte.
 						</p>
 					)}
@@ -100,6 +86,9 @@ export function AppClaude(p: { surModifie?(modifie: boolean): void }): ReactNode
 						debrancher={() => api.supprimer<ClaudeDesktopVue>(ROUTES.claudeDesktopMnemo)}
 					/>
 					<ServeursMcp serveurs={vue.serveurs} envoi={envoi} ecrire={ecrire} {...(p.surModifie ? { surModifie: p.surModifie } : {})} />
+					<p className={`${c.discret} ${s.fichier}`}>
+						Fichier : <code>{vue.fichier}</code>
+					</p>
 				</>
 			)}
 		</section>
@@ -114,33 +103,40 @@ function MemoireMnemo(p: {
 	debrancher(): Promise<ClaudeDesktopVue>;
 }): ReactNode {
 	const [erreur, setErreur] = useState<string | null>(null);
-	const { texte, bouton } = ETATS[p.etat];
-	const agir = async () => setErreur(await p.ecrire(p.etat === 'branche' ? p.debrancher : p.brancher));
+	const agir = async (appel: () => Promise<ClaudeDesktopVue>) => setErreur(await p.ecrire(appel));
 	return (
-		<section className={d.section} aria-labelledby="app-claude-mnemo">
-			<h2 id="app-claude-mnemo" className={d.titreSection}>
-				Mémoire Mnemo
-			</h2>
-			<div className={s.etat}>
-				<p className={s.texteEtat}>
-					<span className={s.pastille} data-etat={p.etat} aria-hidden="true" />
-					{texte}
-				</p>
-				<Bouton petit genre={p.etat === 'branche' ? 'normal' : 'primaire'} disabled={p.envoi} onClick={() => void agir()}>
-					{bouton}
-				</Bouton>
-				{/* entrée d'un autre Node, d'un autre emplacement ou d'un autre dossier : on peut aussi la retirer sans la réécrire */}
-				{p.etat === 'perime' && (
-					<Bouton petit disabled={p.envoi} onClick={() => void (async () => setErreur(await p.ecrire(p.debrancher)))()}>
-						Débrancher
-					</Bouton>
+		<ul className={c.lignes} aria-label="Mémoire Mnemo dans l’app Claude">
+			<li className={c.prise} aria-label="Mémoire Mnemo">
+				<span className={`${c.logo} ${s.mnemo}`} aria-hidden="true">
+					◆
+				</span>
+				<span className={c.ident}>
+					<span className={c.nom}>Mémoire Mnemo</span>
+					<span className={c.detailLigne}>{ETATS[p.etat]}</span>
+				</span>
+				<span className={c.droite}>
+					{p.etat === 'perime' ? (
+						<>
+							<Bouton petit genre="primaire" disabled={p.envoi} onClick={() => void agir(p.brancher)}>
+								Mettre à jour
+							</Bouton>
+							{/* entrée d'un autre Node, d'un autre emplacement ou d'un autre dossier : on peut aussi la retirer sans la réécrire */}
+							<Bouton petit disabled={p.envoi} onClick={() => void agir(p.debrancher)}>
+								Débrancher
+							</Bouton>
+						</>
+					) : (
+						<Bascule actif={p.etat === 'branche'} disabled={p.envoi} surChangement={(oui) => void agir(oui ? p.brancher : p.debrancher)}>
+							<span className={c.horsEcran}>Mémoire Mnemo branchée</span>
+						</Bascule>
+					)}
+				</span>
+				{erreur !== null && (
+					<p className={`${c.sousLigne} ${c.erreur}`} role="alert">
+						{erreur}
+					</p>
 				)}
-			</div>
-			{erreur !== null && (
-				<p className={d.erreur} role="alert">
-					{erreur}
-				</p>
-			)}
-		</section>
+			</li>
+		</ul>
 	);
 }

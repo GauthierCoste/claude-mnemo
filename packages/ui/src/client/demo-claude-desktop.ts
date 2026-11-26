@@ -1,6 +1,6 @@
 /**
  * App Claude du mode démo (`?demo&vue=reglages`) : une imitation en mémoire des routes `claudeDesktop…` du service
- * (brancher la mémoire, ajouter, modifier, retirer un serveur), pour voir Réglages › App Claude sans service. Comme le
+ * (brancher la mémoire, ajouter, modifier, retirer un serveur), pour voir Réglages › Branchements › App Claude sans service. Comme le
  * service, aucune valeur de variable n'est rendue.
  */
 import { MOTIF_NOM_SERVEUR } from '@mnemo/commun';

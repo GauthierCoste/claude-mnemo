@@ -1,5 +1,5 @@
 /**
- * Moteur et modèle d'un profil (Réglages › Profils) : l'agent de code de ses sessions et son fournisseur, chacun avec son état sur ce poste
+ * Moteur et modèle d'un profil (Réglages › Agents) : l'agent de code de ses sessions et son fournisseur, chacun avec son état sur ce poste
  * (version, ou pourquoi il ne lancera pas de session : il reste choisissable), puis le modèle, en saisie libre avec les
  * modèles proposés par le moteur ; vide : le modèle par défaut du moteur. L'archiviste reste sur Claude Code.
  */
@@ -83,7 +83,7 @@ export function ChoixMoteur(p: { profil: string; moteur: IdMoteur; modele: strin
 					{choisi.manuel
 						? `Tant que ${nom} manque, les sessions de ce profil se lancent par une ligne de commande à coller dans un terminal.`
 						: `Tant que ${nom} manque, les sessions de ce profil sont refusées.`}{' '}
-					État détaillé et commandes : Réglages › Système › Moteurs.
+					État détaillé et commandes : Réglages › Branchements.
 				</p>
 			)}
 

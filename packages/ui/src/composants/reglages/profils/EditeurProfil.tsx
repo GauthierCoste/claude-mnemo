@@ -1,5 +1,5 @@
 /**
- * Éditeur d'un profil (Réglages › Profils) : avatar, moteur et modèle, consigne (celle par défaut ou personnalisée), lieu de
+ * Éditeur d'un profil (Réglages › Agents) : avatar, moteur et modèle, consigne (celle par défaut ou personnalisée), lieu de
  * lancement, hooks de Mnemo, skills de la mémoire, plugins Claude Code (avec ce moteur seulement) ; enregistrement explicite,
  * validé par le service. Une modification
  * faite ailleurs entre-temps est signalée (empreinte) : l'enregistrement est alors refusé jusqu'au rechargement.

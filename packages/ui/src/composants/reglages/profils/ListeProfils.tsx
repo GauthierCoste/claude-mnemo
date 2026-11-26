@@ -1,5 +1,5 @@
 /**
- * Liste des profils de session (Réglages › Profils), en deux groupes : la mémoire (l'archiviste, toujours présent) et les
+ * Liste des profils de session (Réglages › Agents), en deux groupes : la mémoire (l'archiviste, toujours présent) et les
  * profils de travail (`travail` d'abord, le profil par défaut) ; avatar, nom, première ligne de la consigne ; et « Nouveau
  * profil de travail ».
  */

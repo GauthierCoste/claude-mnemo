@@ -1,6 +1,6 @@
 /**
  * État du moteur d'un agent, en bas de sa fiche : « Prêt », ou ce qui bloque son lancement avec le geste qui le débloque
- * (« Lier à Mnemo », comme Réglages › Système › Moteurs) et « Voir dans Réglages » ; un point à régler qui n'empêche pas de
+ * (« Lier à Mnemo », comme Réglages › Branchements) et « Voir dans Réglages » ; un point à régler qui n'empêche pas de
  * lancer ; la vérification du poste en cours, discrète (le choix reste libre). Le retour d'une liaison (déclaration laissée,
  * échec) reste dit quel que soit l'état qui suit. `idRaison` : l'élément qui dit pourquoi « Lancer » est indisponible.
  * L'annonce aux lecteurs d'écran est faite par la fiche : aucune région vivante ici, hors du retour de liaison.

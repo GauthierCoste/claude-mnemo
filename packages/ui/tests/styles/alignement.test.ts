@@ -46,10 +46,8 @@ const PERMIS = new Set([
 	'composants/sessions/GrilleSessions.module.css .rail > .railb',
 	// la créature du profil au milieu de sa tuile carrée (avatar d'une session)
 	'composants/sessions/AvatarSession.module.css .tuile',
-	// Réglages › Moteurs : la lettre du fournisseur dans son emblème, le nœud de chaque étape du circuit et son nom dessous
-	'composants/reglages/moteurs/Moteurs.module.css .embleme',
-	'composants/reglages/moteurs/Moteurs.module.css .etape',
-	'composants/reglages/moteurs/Moteurs.module.css .noeud',
+	// Réglages : le logo (moteur, initiale d'un serveur MCP, pouls du service) au milieu de sa case carrée
+	'composants/reglages/Cartes.module.css .logo',
 	// Nouvelle session : la scène est symétrique autour de l'agent choisi (lui, son sol, son nom), la rangée centrée sous
 	// elle ; la marque « ! » d'une vignette et la flèche dans son bouton rond
 	'composants/sessions/nouvelle/SceneAgents.module.css .carrousel::after',

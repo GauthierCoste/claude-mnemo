@@ -1,16 +1,11 @@
 /**
- * Circuit de liaison d'un moteur (Réglages › Système › Moteurs), tiré de ses points vérifiés sur le poste : une étape par
- * point (Installé, Version, Mémoire, Suivi, Approbation), la première cassée, le statut du moteur en un mot, et l'action qui
- * la débloque (le motif et le geste : lier à Mnemo, ou copier la commande).
+ * Liaison d'un moteur à Mnemo (Réglages › Branchements, Nouvelle session), tirée de ses points vérifiés sur le poste
+ * (Installé, Version, Mémoire, Suivi, Approbation) : le premier qui bloque, le statut du moteur en un mot, et l'action qui
+ * le débloque (le motif et le geste : lier à Mnemo, ou copier la commande).
  */
 import type { MoteurVue, PointMoteurVue } from '@mnemo/contrat';
 
 type CleEtape = PointMoteurVue['cle'];
-
-/** `casse` : la première étape non satisfaite (celle à régler d'abord) ; `attente` : une suivante non satisfaite ; `inconnu` : non vérifiable. */
-export type EtatEtape = 'ok' | 'casse' | 'attente' | 'inconnu';
-
-export type EtapeCircuit = { cle: CleEtape; nom: string; valeur: string; infobulle: string; etat: EtatEtape };
 
 type CleStatut = 'pret' | 'a-lier' | 'a-approuver' | 'a-verifier' | 'a-mettre-a-jour' | 'a-regler' | 'introuvable' | 'pas-installe';
 type StatutMoteur = { cle: CleStatut; libelle: string };
@@ -25,14 +20,6 @@ export type ActionMoteur = {
 	motif: string | null;
 	geste: 'lier' | 'copier' | null;
 	commande: NonNullable<PointMoteurVue['remede']> | null;
-};
-
-const NOMS_ETAPES: Readonly<Record<CleEtape, string>> = {
-	commande: 'Installé',
-	version: 'Version',
-	mcp: 'Mémoire',
-	hooks: 'Suivi',
-	approbation: 'Approbation',
 };
 
 const LIBELLES_STATUTS: Readonly<Record<CleStatut, string>> = {
@@ -55,19 +42,6 @@ function indiceCasse(points: readonly PointMoteurVue[]): number {
 	return faux >= 0 ? faux : points.findIndex((x) => x.ok === null && x.remede !== undefined);
 }
 
-export function etapesDuCircuit(m: MoteurVue): EtapeCircuit[] {
-	const points = m.poste ?? [];
-	const casse = indiceCasse(points);
-	return points.map((x, i) => ({
-		cle: x.cle,
-		nom: NOMS_ETAPES[x.cle],
-		// l'étape « Installé » satisfaite montre où est la commande ; les autres, leur état court
-		valeur: x.cle === 'commande' && x.ok === true ? (x.detail ?? x.etat) : x.etat,
-		infobulle: `${x.libelle} : ${x.etat}${x.detail === undefined ? '' : `. ${x.detail}`}`,
-		etat: i === casse ? 'casse' : x.ok === true ? 'ok' : x.ok === null ? 'inconnu' : 'attente',
-	}));
-}
-
 /** Point mcp ou hooks que « Lier à Mnemo » règle : non satisfait, avec un remède à lancer dans un terminal. */
 const liable = (x: PointMoteurVue): boolean => (x.cle === 'mcp' || x.cle === 'hooks') && x.ok !== true && x.remede?.dans === 'terminal';
 
@@ -82,6 +56,15 @@ export function statutDuMoteur(m: MoteurVue): StatutMoteur {
 	if (x.cle === 'version') return statut('a-mettre-a-jour');
 	if (x.cle === 'approbation') return statut(x.ok === null ? 'a-verifier' : 'a-approuver');
 	return statut(points.some(liable) ? 'a-lier' : 'a-regler');
+}
+
+/**
+ * Vrai si le moteur attend un geste de l'utilisateur (lier, approuver, mettre à jour…) : la pastille ambre de Réglages ›
+ * Branchements. Un moteur prêt n'en attend pas, ni un moteur pas installé (rien à faire dans Mnemo tant qu'on ne l'installe pas).
+ */
+export function attendUnGeste(m: MoteurVue): boolean {
+	const cle = statutDuMoteur(m).cle;
+	return cle !== 'pret' && cle !== 'pas-installe';
 }
 
 /** Ce que dit l'absence de liaison, d'après les points mcp et hooks non satisfaits. */

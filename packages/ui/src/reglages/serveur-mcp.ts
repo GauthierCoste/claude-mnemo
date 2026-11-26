@@ -1,5 +1,5 @@
 /**
- * Saisie d'un serveur MCP de l'app Claude (Réglages › App Claude) : nom, commande, arguments (un par ligne), variables
+ * Saisie d'un serveur MCP de l'app Claude (Réglages › Branchements › App Claude) : nom, commande, arguments (un par ligne), variables
  * (`NOM=valeur`, une par ligne). En modification, les valeurs existantes ne sont jamais montrées : `NOM` seul garde la
  * valeur actuelle (`null` dans la demande), une variable effacée est retirée. Le reste de la validation est au service.
  */

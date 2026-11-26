@@ -593,7 +593,7 @@ describe('vue Sessions', () => {
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions', { profil: 'redaction', dossier: 'erp-saas' });
 	});
 
-	it('Nouvelle session : « Voir dans Réglages » ferme le dialogue et ouvre Réglages › Système, section Moteurs', async () => {
+	it('Nouvelle session : « Voir dans Réglages » ferme le dialogue et ouvre l’onglet Réglages, section Branchements', async () => {
 		const profils = { ...PROFILS, profils: PROFILS.profils.map((x) => ({ ...x, moteur: x.nom === PROFIL_TRAVAIL ? 'codex' : 'claude-code', modele: '' })) };
 		const moteurs = { moteurs: [{ id: 'codex', nom: 'Codex', indisponible: 'Codex introuvable sur ce poste (codex).', manuel: false, version: null, modeles: [] }] };
 		const valeurs = stockage();
@@ -602,9 +602,10 @@ describe('vue Sessions', () => {
 		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
 		await cliquerQuandAffiche(within(dialogue).findByRole('button', { name: 'Voir dans Réglages' }));
 		expect(screen.queryByRole('dialog', { name: 'Nouvelle session' })).toBeNull();
-		expect(valeurs.get('mnemo.reglages.onglet')).toBe('systeme');
+		expect(valeurs.get('mnemo.reglages.onglet')).toBe('reglages');
 		const reglages = await screen.findByRole('region', { name: 'Réglages' });
-		expect(within(reglages).getByRole('tab', { name: 'Système' }).getAttribute('aria-selected')).toBe('true');
+		expect(within(reglages).getByRole('tab', { name: 'Réglages' }).getAttribute('aria-selected')).toBe('true');
+		expect(within(within(reglages).getByRole('navigation', { name: 'Sections des réglages' })).getByRole('button', { name: /^Branchements/u }).getAttribute('aria-current')).toBe('true');
 		expect(await within(reglages).findByRole('heading', { name: 'Moteurs' })).toBeTruthy();
 	});
 
