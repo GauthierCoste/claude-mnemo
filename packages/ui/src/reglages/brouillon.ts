@@ -4,8 +4,12 @@
  */
 import type { ChampReglageVue, ValeurReglageVue } from '@mnemo/contrat';
 
-/** Saisie d'un champ : texte (nombre, liste séparée par des virgules, choix) ou cases cochées. */
+/** Saisie d'un champ : texte (nombre, liste séparée par des virgules, choix, `oui`/`non` d'une case) ou cases cochées. */
 export type Saisie = string | string[];
+
+/** Saisie d'un réglage oui ou non (case à cocher). */
+export const OUI = 'oui';
+export const NON = 'non';
 
 export const egales = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
@@ -15,6 +19,7 @@ const decimal = (n: number): string => String(n).replace('.', ',');
 export function enSaisie(champ: ChampReglageVue, valeur: ValeurReglageVue): Saisie {
 	if (champ.genre === 'choix-multiple') return Array.isArray(valeur) ? [...valeur] : [];
 	if (Array.isArray(valeur)) return valeur.join(', ');
+	if (typeof valeur === 'boolean') return valeur ? OUI : NON;
 	if (champ.genre === 'decimal' && typeof valeur === 'number') return decimal(valeur);
 	return String(valeur);
 }
@@ -29,6 +34,7 @@ export function enValeur(champ: ChampReglageVue, saisie: Saisie): ValeurReglageV
 		const n = Number(saisie.trim().replace(',', '.'));
 		return saisie.trim() !== '' && Number.isFinite(n) ? n : saisie;
 	}
+	if (champ.genre === 'booleen') return saisie === OUI ? true : saisie === NON ? false : saisie;
 	if (champ.genre === 'liste') return saisie.split(',').map((x) => x.trim()).filter((x) => x !== '');
 	return saisie;
 }
@@ -50,6 +56,7 @@ export function modifications(champs: readonly ChampReglageVue[], saisies: Reado
 export function valeurLisible(champ: ChampReglageVue, valeur: ValeurReglageVue): string {
 	const libelle = (v: string) => champ.choix?.find((c) => c.valeur === v)?.libelle ?? v;
 	if (Array.isArray(valeur)) return valeur.length === 0 ? 'aucun' : valeur.map(libelle).join(', ');
+	if (typeof valeur === 'boolean') return valeur ? 'oui' : 'non';
 	const texte = typeof valeur === 'string' ? libelle(valeur) : champ.genre === 'decimal' ? decimal(valeur) : String(valeur);
 	return champ.unite === undefined ? texte : `${texte} ${champ.unite}`;
 }

@@ -35,4 +35,14 @@ describe('brouillon des réglages', () => {
 		expect(valeurLisible({ ...liste, defaut: [] }, [])).toBe('aucun');
 		expect(valeurLisible({ ...nombre, unite: 'minutes' }, 15)).toBe('15 minutes');
 	});
+
+	it('oui ou non : saisie « oui »/« non » (case à cocher), valeur booléenne, lisible en mots', () => {
+		const automatique: ChampReglageVue = { cle: 'entrainement.automatique', groupe: 'entrainement', libelle: 'A', explication: 'e', genre: 'booleen', defaut: true, valeur: true, effet: 'immediat' };
+		expect(enSaisie(automatique, true)).toBe('oui');
+		expect(enSaisie(automatique, false)).toBe('non');
+		expect(enValeur(automatique, 'non')).toBe(false);
+		expect(valeurLisible(automatique, true)).toBe('oui');
+		expect(modifications([automatique], { 'entrainement.automatique': 'non' })).toEqual({ 'entrainement.automatique': false });
+		expect(modifications([{ ...automatique, valeur: false }], { 'entrainement.automatique': 'oui' })).toEqual({ 'entrainement.automatique': null });
+	});
 });

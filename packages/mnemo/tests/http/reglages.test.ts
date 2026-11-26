@@ -20,6 +20,7 @@ describe('routes : réglages', () => {
 		// dans l'ordre de CHAMPS_REGLAGES, puis les règles de la mémoire (SCHEMA.md) : seuil, répétitions, 3 poids, 9 fiabilités
 		expect(vue.champs.map((x) => x.groupe)).toEqual([
 			...Array<string>(8).fill('contexte'),
+			'entrainement',
 			'archiviste',
 			...Array<string>(8).fill('recherche'),
 			'projets',

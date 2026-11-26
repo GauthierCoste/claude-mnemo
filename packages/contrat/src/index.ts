@@ -906,11 +906,11 @@ export type ResultatEcriture =
 
 /** Groupes de la vue Réglages, dans l'ordre de la page. */
 export type GroupeReglageVue = GroupeReglage;
-export type ValeurReglageVue = number | string | string[];
+export type ValeurReglageVue = number | string | string[] | boolean;
 
 /**
  * Un réglage de `.mnemo/reglages.json` : `cle` (`<groupe>.<nom>`), libellé et explication en une ligne, `genre` du champ
- * (`entier`, `decimal` : bornes `min`/`max` ; `liste` : noms libres ; `couleur` : `#rrggbb` ; `choix`, `choix-multiple` : parmi `choix`), `defaut`,
+ * (`entier`, `decimal` : bornes `min`/`max` ; `liste` : noms libres ; `couleur` : `#rrggbb` ; `booleen` : oui ou non ; `choix`, `choix-multiple` : parmi `choix`), `defaut`,
  * `valeur` en vigueur dans le fichier, `effet` d'une modification (`immediat`, `service` : au redémarrage du service,
  * `modeles` : au prochain démarrage des modèles).
  */
@@ -919,7 +919,7 @@ export type ChampReglageVue = {
 	groupe: GroupeReglageVue;
 	libelle: string;
 	explication: string;
-	genre: 'entier' | 'decimal' | 'liste' | 'choix' | 'choix-multiple' | 'couleur';
+	genre: 'entier' | 'decimal' | 'liste' | 'choix' | 'choix-multiple' | 'couleur' | 'booleen';
 	defaut: ValeurReglageVue;
 	valeur: ValeurReglageVue;
 	min?: number;
