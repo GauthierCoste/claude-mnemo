@@ -4,11 +4,17 @@ import { NOMS_MOTEURS } from '@mnemo/commun';
  * Profils) ; avec `poste=1`, ce que vérifie `mnemo verifier-poste` (déclaration MCP, hooks du poste et leur approbation), la
  * commande cherchée de nouveau (adoptée par le service si elle a changé) et la version relue (« Relire »), chaque point non
  * satisfaisant avec la commande qui y remédie (Réglages › Système). Une seule vérification du poste en vol à la fois.
+ * `ROUTES.moteurLier` : lie un moteur à Mnemo (serveur MCP, hooks du poste : `lierMoteur`), puis relit le poste.
  */
 import { ROUTES } from '@mnemo/contrat';
-import type { MoteurVue, PointMoteurVue, ReponseMoteurs } from '@mnemo/contrat';
+import type { EtapeLiaisonVue, LiaisonMoteurVue, MoteurVue, PointMoteurVue, ReponseLiaisonMoteur, ReponseMoteurs } from '@mnemo/contrat';
 import type { CommandeMoteur, Executer, Moteur, MoteurDuService, Pilotage } from '../../application/ports.ts';
+import { liaisonEchouee, lierMoteur } from '../../application/moteurs/lier.ts';
+import type { EtapeLiaison } from '../../application/moteurs/lier.ts';
 import { remedesDuMoteur } from '../../application/moteurs/remedes.ts';
+import { estIdMoteur } from '../../domaine/moteurs/moteur.ts';
+import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
+import { ErreurHttp } from './routes.ts';
 import type { Route } from './routes.ts';
 
 /** Délai de chaque commande du moteur lue pour le poste (`claude mcp get`, `codex mcp get`), comme `verifier-poste`. */
@@ -145,7 +151,43 @@ export function routesMoteurs(p: PosteDesMoteurs): Route[] {
 		(posteEnVol ??= lire(true).finally(() => {
 			posteEnVol = null;
 		}));
+	// une seule liaison à la fois par moteur : la seconde est refusée (409) tant que la première n'est pas finie
+	const liaisonsEnCours = new Set<IdMoteur>();
+	/**
+	 * Lie le moteur `id` avec sa commande cherchée de nouveau (adoptée par le service si elle a changé, comme à la lecture du
+	 * poste) ; 404 moteur inconnu du service, 409 `MNEMO_SANS_MCP=1`, liaison déjà en cours ou commande introuvable.
+	 */
+	const lier = async (id: string): Promise<LiaisonMoteurVue> => {
+		const entree = estIdMoteur(id) ? p.moteurs[id] : undefined;
+		if (entree === undefined) throw new ErreurHttp(404, `Moteur inconnu : « ${id.slice(0, 80)} ».`);
+		const { moteur } = entree;
+		const nom = NOMS_MOTEURS[moteur.id];
+		if (p.env.MNEMO_SANS_MCP === '1') throw new ErreurHttp(409, `MNEMO_SANS_MCP=1 dans l'environnement du service : ${nom} n'est pas lié (ni serveur MCP, ni hooks).`);
+		if (liaisonsEnCours.has(moteur.id)) throw new ErreurHttp(409, `Liaison de ${nom} à Mnemo déjà en cours.`);
+		liaisonsEnCours.add(moteur.id);
+		try {
+			const trouvee = moteur.trouver(p.env, p.plateforme);
+			if (trouvee === null) throw new ErreurHttp(409, `${nom} introuvable sur ce poste (${commandesDe(moteur).introuvable}) : rien n'est lié.`);
+			adopter(entree, trouvee, p);
+			const r = await lierMoteur(moteur, { executer: p.executer, main: p.main, node: p.node, commande: trouvee, plateforme: p.plateforme, env: p.env });
+			const etape = (e: EtapeLiaison): EtapeLiaisonVue => ({ resultat: e.resultat, message: e.message });
+			return { id: moteur.id, ok: !liaisonEchouee(r), mcp: etape(r.mcp), ...(r.hooks === undefined ? {} : { hooks: etape(r.hooks) }) };
+		} finally {
+			liaisonsEnCours.delete(moteur.id);
+		}
+	};
 	return [
+		{
+			methode: 'POST',
+			chemin: ROUTES.moteurLier,
+			action: async (r) => {
+				const liaison = await lier(r.id);
+				// une vérification du poste lancée avant la liaison ne la voit pas : attendue, puis le poste relu
+				await posteEnVol?.catch(() => []);
+				const moteurs = await lirePoste();
+				return { statut: 200, corps: { moteurs, liaison } satisfies ReponseLiaisonMoteur };
+			},
+		},
 		{
 			methode: 'GET',
 			chemin: ROUTES.moteurs,

@@ -481,6 +481,12 @@ export type MessageClient =
  *   (un commit par fiche ; celles déjà traitées sont ignorées) ;
  * - `moteurs` GET (`?poste=1` : avec les points vérifiés du poste, plus lent) → `ReponseMoteurs` : chaque moteur, sa commande
  *   trouvée au démarrage du service, sa version et ses modèles (en cache, quelques secondes au plus à la première lecture) ;
+ * - `moteurLier` POST (sans corps ; `:id` : `IdMoteur`) → `ReponseLiaisonMoteur` : lie ce moteur à Mnemo comme `mnemo init
+ *   --<option>` (serveur MCP absent : déclaré ; hooks du poste absents : installés) et `mnemo declarer --moteur <id>
+ *   --remplacer` (périmés : refaits), rien d'autre ; une déclaration de l'utilisateur (désactivée, ou « mnemo » qui ne lance
+ *   pas Mnemo) n'est jamais touchée (étape `laisse`) ; rend la liaison et la vue relue de tous les moteurs, comme
+ *   `moteurs?poste=1` ; 404 moteur inconnu du service ; 409 : commande du moteur introuvable, `MNEMO_SANS_MCP=1` dans
+ *   l'environnement du service, ou une liaison de ce moteur déjà en cours ;
  * - `reglages` GET → `ReglagesVue` ; PUT `{ valeurs: { "<cle>": valeur | null } }` → `ReglagesVue` (voir `ReglagesVue`) ;
  * - `claudeDesktop` GET → `ClaudeDesktopVue` : la configuration de l'app Claude (Claude Desktop), sans valeur de variable ;
  * - `claudeDesktopMnemo` PUT (sans corps) → `ClaudeDesktopVue` : branche ou met à jour l'entrée `mnemo` ; DELETE → `ClaudeDesktopVue` : la retire ;
@@ -553,6 +559,7 @@ export const ROUTES = {
 	sourcesMarquerTraite: '/api/memoire/sources/marquer-traite',
 	dossiersTraiter: '/api/memoire/dossiers-non-rattaches/traiter',
 	moteurs: '/api/moteurs',
+	moteurLier: '/api/moteurs/:id/lier',
 	reglages: '/api/reglages',
 	claudeDesktop: '/api/claude-desktop',
 	claudeDesktopMnemo: '/api/claude-desktop/mnemo',
@@ -593,6 +600,18 @@ export type MoteurVue = {
 	poste?: PointMoteurVue[];
 };
 export type ReponseMoteurs = { moteurs: MoteurVue[] };
+
+/**
+ * Une étape de la liaison d'un moteur (`moteurLier`) : `declare` (serveur MCP absent, déclaré), `remplace` (déclaration ou
+ * hooks de Mnemo faits pour un autre Node ou un autre Mnemo, refaits), `installe` (hooks absents, installés), `deja` (rien à
+ * faire), `laisse` (déclaration de l'utilisateur, désactivée ou qui ne lance pas Mnemo : jamais touchée), `echec` ;
+ * `message` à montrer.
+ */
+export type EtapeLiaisonVue = { resultat: 'declare' | 'remplace' | 'installe' | 'deja' | 'laisse' | 'echec'; message: string };
+/** Liaison d'un moteur : `ok` faux si une étape a échoué ; `hooks` : seulement pour un moteur qui en a pour tout le poste. */
+export type LiaisonMoteurVue = { id: IdMoteur; ok: boolean; mcp: EtapeLiaisonVue; hooks?: EtapeLiaisonVue };
+/** Réponse de `moteurLier` : la liaison, et tous les moteurs relus avec leurs points du poste (comme `moteurs?poste=1`). */
+export type ReponseLiaisonMoteur = ReponseMoteurs & { liaison: LiaisonMoteurVue };
 
 /** Fichiers d'un genre importés par `amorce` : nouveaux, modifiés (réécrits), inchangés. */
 export type CompteAmorceVue = { nouvelles: number; modifiees: number; inchangees: number };
