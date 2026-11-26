@@ -189,7 +189,7 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 		],
 	},
 	{
-		cle: 'archiviste',
+		cle: 'rangement',
 		titre: 'L’archiviste',
 		sous: 'qui range la mémoire',
 		titreLong: 'L’archiviste',
