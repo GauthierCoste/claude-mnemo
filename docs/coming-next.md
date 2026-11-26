@@ -6,6 +6,13 @@
 
 ## Done
 
+- **Settings redesign (26/11/2026, 1.9.0).** Three tabs, Agents · Réglages · Documentation: an agent is edited like a
+  game character (appearance, class, equipment, powers, mission); Réglages holds Branchements (engines, Claude app),
+  Mémoire (Rappel, Confiance) and Système; Documentation explains how Mnemo works in six chapters. The skills of the
+  memory and of an agent are created, edited, renamed and deleted from the interface (icon in `metadata.icone`); a
+  skill provided by Mnemo can be edited or reverted, not renamed or deleted. The screens named below are the ones of
+  their time: Settings › Système › Moteurs is now Settings › Réglages › Branchements. See
+  [usage.md](usage.md#settings).
 - **Link an engine from the interface (26/11/2026, 1.8.0).** Settings › Système › Moteurs shows one card per engine,
   with its provider (Anthropic, OpenAI, Mistral), a one-word status and the link circuit (installed, version, memory,
   follow-up hooks, approval); « Lier à Mnemo » (`POST /api/moteurs/:id/lier`) declares the MCP server and installs or
