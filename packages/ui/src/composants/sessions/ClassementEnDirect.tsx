@@ -5,7 +5,7 @@
  * - la jonction : un seul séparateur entre le vu (◆) et le pas vu, dès qu'une fiche est injectée (aucune : rien à séparer) : filet gris, ou le seuil d'injection
  *   (vert pointillé) quand l'injection automatique est active, gris « coupé » si elle l'est ; dessous, l'injection
  *   automatique coupée par le suivi, avec son motif et « Réactiver ». L'état du classement qui sort de l'ordinaire (« affinage… », « ordre seul » et sa raison) est dit dans le bouton des
- *   modèles de la session, à droite du titre. Le message classé n'est pas rappelé ;
+ *   modèles de la session, à droite du titre ; en ordre seul faute de note acceptée, son menu propose « Entraîner la note ». Le message classé n'est pas rappelé ;
  * - le classement du dernier message porteur : la note en % (calibrée) ; en ordre seul, « ≈ 42 % » en gris (note non
  *   calibrée) ou ◇ sans aucune note ; le titre et, dessous, la raison et « piste » (envoyée en piste dans la session) ;
  * - « Plus tôt dans la session » : les pistes plus anciennes et les fiches lues (◈) absentes du classement, plus récentes
@@ -545,7 +545,8 @@ export function ClassementEnDirect(p: {
 	const jonctionVisible = separateurVisible || coupures.length > 0;
 	// au repos, le bouton des modèles dit l'état du classement : coupé, calibré (un niveau accepté injecte), sinon ordre seul
 	const repos = coupures.length > 0 ? 'injection coupée' : calibre ? 'calibré' : 'ordre seul';
-	const etatClassement = { affinage, ordreSeul: ordreSeul ? raisonOrdreSeul(coupes) : null, repos };
+	// ordre seul faute de note acceptée (et non parce que les modèles sont coupés) : le menu propose d'entraîner la note
+	const etatClassement = { affinage, ordreSeul: ordreSeul ? raisonOrdreSeul(coupes) : null, repos, entrainer: ordreSeul && !coupes };
 	const niveaux = [...new Set(coupures.map((x) => x.niveau))];
 	const libelleNiveau = (n: CoupureInjectionVue['niveau']) => (n === 'complets' ? 'modèles complets' : 'sens seul');
 

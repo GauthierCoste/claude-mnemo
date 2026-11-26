@@ -31,6 +31,8 @@ export type Navigation = {
 	choisirOngletMemoire(onglet: OngletMemoire): void;
 	/** Passe à Mémoire › Archiviste, tiroir fermé : le terminal de l'archiviste s'affiche dans la page. */
 	ouvrirPageArchiviste(): void;
+	/** Passe à Mémoire › Entraîner (depuis le classement d'une session en ordre seul). */
+	ouvrirEntrainement(): void;
 	tiroirOuvert: boolean;
 	/** Fermer le tiroir le réduit aussi : rouvert, il revient à sa taille de tiroir. */
 	ouvrirTiroir(ouvert?: boolean): void;
@@ -152,6 +154,14 @@ export function FournisseurNavigation(p: {
 			}),
 		[quitter],
 	);
+	const ouvrirEntrainement = useCallback(
+		() =>
+			quitter(() => {
+				choisirOngletMemoire('entrainer');
+				setVue('memoire');
+			}),
+		[quitter],
+	);
 	const ouvrirSession = useCallback(
 		(session: SessionVue, o?: { zoom?: boolean }) => {
 			const destination = destinationDeSession(session);
@@ -178,6 +188,7 @@ export function FournisseurNavigation(p: {
 			ongletMemoire,
 			choisirOngletMemoire,
 			ouvrirPageArchiviste,
+			ouvrirEntrainement,
 			tiroirOuvert,
 			ouvrirTiroir,
 			archivisteGrand,
@@ -204,6 +215,7 @@ export function FournisseurNavigation(p: {
 			annulerSortie,
 			ongletMemoire,
 			ouvrirPageArchiviste,
+			ouvrirEntrainement,
 			tiroirOuvert,
 			ouvrirTiroir,
 			archivisteGrand,

@@ -248,6 +248,14 @@ describe('bouton de session', () => {
 		bouton = await boutonSession();
 		expect(bouton.firstElementChild!.textContent).toBe('ordre seul');
 		expect(reflet(bouton)).toBe(false);
+		// ordre seul sans `entrainer` (modèles coupés) : l'entraînement n'y peut rien, le menu ne le propose pas
+		await act(async () => bouton.click());
+		expect(screen.queryByRole('menuitem', { name: /Entraîner la note/u })).toBeNull();
+		cleanup();
+		monter(<ModelesSession session="s1" niveau={null} classement={{ affinage: false, ordreSeul: 'Ordre seul : raison', entrainer: true }} />, vueModeles());
+		bouton = await boutonSession();
+		await act(async () => bouton.click());
+		expect(screen.getByRole('menuitem', { name: /Entraîner la note/u })).toBeTruthy();
 		cleanup();
 		monter(<ModelesSession session="s1" niveau={null} />, vueModeles({ activites: [activite('injection', { session: 's1' })] }));
 		expect(reflet(await boutonSession())).toBe(true);

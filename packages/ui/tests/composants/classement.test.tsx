@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ErreurApi } from '../../src/client/api.ts';
 import { ClassementEnDirect } from '../../src/composants/sessions/ClassementEnDirect.tsx';
 import { FournisseurToast } from '../../src/composants/Toast.tsx';
+import { FournisseurNavigation, useNavigation } from '../../src/navigation.tsx';
 import { creerFauxClient, rendreAvecClient } from '../aides/faux-client.tsx';
 import { vueSelonReranker } from '../aides/modeles.ts';
 
@@ -62,6 +63,12 @@ type Options = {
 };
 
 /** Le composant, avec des entrées qu'on remplace comme le ferait un nouveau `servi`. */
+/** La vue et l'onglet de Mémoire, lus par les tests qui naviguent. */
+function Ou() {
+	const nav = useNavigation();
+	return <output data-testid="ou">{`${nav.vue} ${nav.ongletMemoire}`}</output>;
+}
+
 function monter(o: Options = {}) {
 	let ecartes = o.ecartes ?? [];
 	let modeles = o.modeles ?? 'pret';
@@ -112,9 +119,12 @@ function monter(o: Options = {}) {
 		);
 	}
 	rendreAvecClient(
-		<FournisseurToast>
-			<Banc />
-		</FournisseurToast>,
+		<FournisseurNavigation>
+			<FournisseurToast>
+				<Banc />
+				<Ou />
+			</FournisseurToast>
+		</FournisseurNavigation>,
 		faux.client,
 	);
 	return { faux, ouvrir, remplacer: (e: EntreeServieVue[]) => act(() => remplacer(e)) };
@@ -164,6 +174,11 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(bouton.getAttribute('title')).toMatch(/\nOrdre seul : aucune note apprise et validée/u);
 		await act(async () => bouton.click());
 		expect(screen.getByText(/^Ordre seul : aucune note apprise et validée/u)).toBeTruthy();
+		// l'ordre seul vient de la note : le menu propose de l'entraîner, qui ouvre Mémoire › Entraîner
+		const entrainer = screen.getByRole('menuitem', { name: /Entraîner la note/u });
+		expect(entrainer.textContent).toContain('Mémoire › Entraîner');
+		await act(async () => entrainer.click());
+		expect(screen.getByTestId('ou').textContent).toBe('memoire entrainer');
 		// ni seuil d'injection, ni séparateur (aucune fiche injectée)
 		expect(screen.queryByText(/seuil d’injection/u)).toBeNull();
 		expect(separateurs()).toEqual([]);
