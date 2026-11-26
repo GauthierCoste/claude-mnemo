@@ -20,7 +20,7 @@ export function variable(env: Env, nom: string, plateforme: string): string | un
  * (celle déjà présente, `Path` par exemple, est gardée) : deux clés `Path` et `PATH` passées à un processus enfant, et l'une
  * des deux est prise au hasard.
  */
-export function avecVariable<T extends Env>(env: T, nom: string, valeur: string, plateforme: string): Record<string, string | undefined> {
+export function avecVariable(env: Env, nom: string, valeur: string, plateforme: string): Record<string, string | undefined> {
 	if (plateforme !== 'win32') return { ...env, [nom]: valeur };
 	const copie: Record<string, string | undefined> = {};
 	let cle = nom;
