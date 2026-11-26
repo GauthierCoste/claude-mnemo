@@ -25,13 +25,27 @@ function contenu(png: Buffer): { entete: string; pixels: Buffer } {
 	return { entete, pixels: inflateSync(Buffer.concat(idat)) };
 }
 
-it('images versionnées = celles que dessine outils/images-barre.ts, deux tailles par image du domaine, noms « …Template »', () => {
+it('images versionnées = celles que dessine outils/images-barre.ts, deux tailles par image du domaine, « …Template » (macOS), « …-clair » et « …-sombre » (Windows)', () => {
 	const fichiers = fichiersImages();
 	expect(fichiers).toHaveLength(toutesLesImages().length * 2);
 	for (const f of fichiers) {
-		expect(f.fichier).toMatch(/Template(@2x)?\.png$/u);
+		expect(f.fichier).toMatch(/(Template|-clair|-sombre)(@2x)?\.png$/u);
 		const versionne = readFileSync(join(DOSSIER_IMAGES, f.fichier));
 		expect(dimensions(versionne)).toEqual({ largeur: f.cote, hauteur: f.cote });
 		expect(contenu(versionne)).toEqual(contenu(pngImage(f.nom, f.cote)));
+	}
+});
+
+it('Windows : même dessin que l’image « template », en blanc (-clair) ou en noir (-sombre)', () => {
+	const pixels = (nom: string) => contenu(pngImage(nom, 32)).pixels;
+	const template = pixels('etat-reposTemplate');
+	const clair = pixels('etat-repos-clair');
+	expect(pixels('etat-repos-sombre')).toEqual(template);
+	// filtre puis RVBA : l'opacité identique, la couleur blanche là où le dessin est visible
+	for (let i = 0; i < template.length; i++) {
+		if ((i % (1 + 32 * 4)) === 0) continue;
+		const canal = ((i % (1 + 32 * 4)) - 1) % 4;
+		if (canal === 3) expect(clair[i]).toBe(template[i]);
+		else expect(clair[i]).toBe(255);
 	}
 });

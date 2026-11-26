@@ -1,5 +1,7 @@
 /**
- * Images « template » de la barre des menus (noir sur transparent ; macOS les teinte selon le thème) : le « m » en deux
+ * Images « template » de la barre des menus (noir sur transparent ; macOS les teinte selon le thème), et leurs variantes
+ * pour la zone de notification de Windows, qui ne teinte rien : `-clair` (blanc, barre des tâches sombre) et `-sombre`
+ * (noir, barre claire), même dessin (`imageWindows`, domaine). Le « m » en deux
  * arches de l'icône de Mnemo (`packages/ui/outils/icone.ts`), épaissi pour rester lisible à 16 px, et ce qui marque
  * chaque état. Une image par nom de `toutesLesImages()` (domaine), en deux tailles : `<nom>.png` (16 px) et
  * `<nom>@2x.png` (32 px), dans `ressources/images/` (copié dans `dist/images/` par la construction). Dessinées ici sans
@@ -127,9 +129,16 @@ function bloc(type: string, donnees: Buffer): Buffer {
 
 const ECHANTILLONS = 4;
 
-/** Le PNG (RVBA 8 bits, noir, l'opacité seule varie) de l'image `nom`, de côté `cote`. */
+/** Le dessin et la couleur (niveau de gris, 0 noir ou 255 blanc) d'une image : `-clair` est blanche, le reste noir. */
+function dessinDe(nom: string): { couches: readonly Couche[] | undefined; gris: number } {
+	const windows = /^(.*)-(clair|sombre)$/u.exec(nom);
+	if (windows === null) return { couches: DESSINS[nom], gris: 0 };
+	return { couches: DESSINS[`${windows[1]}Template`], gris: windows[2] === 'clair' ? 255 : 0 };
+}
+
+/** Le PNG (RVBA 8 bits, noir ou blanc, l'opacité seule varie) de l'image `nom`, de côté `cote`. */
 export function pngImage(nom: string, cote: number): Buffer {
-	const couches = DESSINS[nom];
+	const { couches, gris } = dessinDe(nom);
 	if (couches === undefined) throw new Error(`Image de la barre des menus sans dessin : ${nom}`);
 	const echelle = COTE / cote;
 	const ligne = 1 + cote * 4;
@@ -143,7 +152,11 @@ export function pngImage(nom: string, cote: number): Buffer {
 					somme += opacitePoint(couches, (px + (sx + 0.5) / ECHANTILLONS) * echelle, (py + (sy + 0.5) / ECHANTILLONS) * echelle);
 				}
 			}
-			pixels[py * ligne + 1 + px * 4 + 3] = Math.round((255 * somme) / (ECHANTILLONS * ECHANTILLONS));
+			const i = py * ligne + 1 + px * 4;
+			pixels[i] = gris;
+			pixels[i + 1] = gris;
+			pixels[i + 2] = gris;
+			pixels[i + 3] = Math.round((255 * somme) / (ECHANTILLONS * ECHANTILLONS));
 		}
 	}
 	const entete = Buffer.alloc(13);

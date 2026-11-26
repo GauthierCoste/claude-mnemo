@@ -37,8 +37,19 @@ describe('icône', () => {
 		expect(IMAGES_ICONE.travaille).toHaveLength(2);
 		expect(IMAGES_ICONE.arret).toEqual(IMAGES_ICONE.travaille);
 		const toutes = toutesLesImages();
-		expect(toutes).toHaveLength(6);
-		for (const nom of toutes) expect(nom).toMatch(/^[a-z0-9-]+Template$/u);
+		expect(toutes).toHaveLength(18);
+		expect(toutes.filter((nom) => /^[a-z0-9-]+Template$/u.test(nom))).toHaveLength(6);
+	});
+
+	it('sous Windows : la même image en blanc sur une barre des tâches sombre, en noir sur une claire', () => {
+		expect(imageIcone('repos', 0, 'win32', true)).toBe('etat-repos-clair');
+		expect(imageIcone('repos', 0, 'win32', false)).toBe('etat-repos-sombre');
+		expect(imageIcone('travaille', 1, 'win32', true)).toBe('etat-travaille-2-clair');
+		expect(imageIcone('repos', 0, 'darwin', true)).toBe('etat-reposTemplate');
+		const toutes = toutesLesImages();
+		for (const etat of Object.keys(IMAGES_ICONE) as (keyof typeof IMAGES_ICONE)[]) {
+			for (const sombre of [true, false]) expect(toutes).toContain(imageIcone(etat, 0, 'win32', sombre));
+		}
 	});
 
 	it('infobulle : l’état en clair, au singulier ou au pluriel ; en erreur, la raison', () => {
