@@ -1,7 +1,8 @@
 /*
  * Page de l'assistant : les jetons de l'interface (couleurs, rayons, espacements, sombre comme elle), importés à la
  * construction ; ici aucune couleur en clair. La fenêtre est l'app : pas de marge autour, la barre de titre est la poignée
- * de la fenêtre, 78 px laissés à gauche aux boutons de macOS (`titleBarStyle: 'hiddenInset'`).
+ * de la fenêtre, 78 px laissés à gauche aux boutons de macOS (`titleBarStyle: 'hiddenInset'`) ; sous Windows
+ * (`data-plateforme="windows"`, posé par la page), la place des boutons du système à droite (`titleBarOverlay`).
  */
 @import '../../../ui/src/styles/jetons.css';
 
@@ -64,6 +65,12 @@ code {
 	background: var(--degrade-titre);
 	-webkit-app-region: drag;
 	app-region: drag;
+}
+
+:root[data-plateforme='windows'] .titre {
+	padding-left: var(--esp-4);
+	/* largeur des boutons : ce que la zone de titre (`env(titlebar-area-*)`) laisse à droite, sinon 3 × 46 px */
+	padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 138px)) + var(--esp-4));
 }
 
 .marque {

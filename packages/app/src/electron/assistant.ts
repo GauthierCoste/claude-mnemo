@@ -9,6 +9,8 @@ import { pathToFileURL } from 'node:url';
 import { BrowserWindow, dialog, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron';
 import type { ExecutableMnemo } from '../domaine/assistant.ts';
 import { CANAUX_ASSISTANT as C, lienAutorise } from '../domaine/assistant-pont.ts';
+import { optionsBarreTitre } from '../domaine/fenetre.ts';
+import { plateformeApp } from '../domaine/plateforme.ts';
 import { controleurAssistant, type FinAssistant } from '../infra/assistant.ts';
 
 export type OptionsAssistant = {
@@ -62,7 +64,7 @@ export function ouvrirAssistant(o: OptionsAssistant): BrowserWindow {
 		minHeight: 540,
 		show: false,
 		title: 'Mnemo',
-		titleBarStyle: 'hiddenInset',
+		...optionsBarreTitre(plateformeApp(process.platform), null),
 		backgroundColor: '#050506',
 		webPreferences: {
 			preload: join(dossier, 'preload.cjs'),

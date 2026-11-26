@@ -14,11 +14,13 @@ import {
 	bornesAOuvrir,
 	decisionNavigation,
 	FOND_FENETRE,
+	optionsBarreTitre,
 	origineService,
 	POSITION_BOUTONS_FENETRE,
 	TAILLE_DEFAUT,
 	TAILLE_MIN,
 } from '../domaine/fenetre.ts';
+import { plateformeApp } from '../domaine/plateforme.ts';
 import type { ServiceLocal } from '../infra/service-local.ts';
 
 export type Fenetre = {
@@ -74,8 +76,7 @@ export function creerFenetre(o: OptionsFenetre): Fenetre {
 			minHeight: TAILLE_MIN.hauteur,
 			title: 'Mnemo',
 			show: false,
-			titleBarStyle: 'hidden',
-			trafficLightPosition: POSITION_BOUTONS_FENETRE,
+			...optionsBarreTitre(plateformeApp(process.platform), POSITION_BOUTONS_FENETRE),
 			backgroundColor: FOND_FENETRE,
 			webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true, spellcheck: false },
 		});

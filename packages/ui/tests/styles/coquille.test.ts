@@ -52,6 +52,12 @@ describe('coquille de l’app de bureau (styles)', () => {
 		for (const s of ['button', 'a', 'input', "[role='button']", "[role='menu']"]) expect(interactifs?.[1]).toContain(s);
 	});
 
+	it('sous Windows, pas de retrait à gauche mais la place des boutons du système à droite', () => {
+		const titre = bloc(lire('composants/BarreTitre.module.css'), ":global([data-coquille='app'][data-plateforme='windows']) .titre");
+		expect(titre).toMatch(/padding-left:\s*14px/);
+		expect(titre).toMatch(/padding-right:\s*calc\(100vw - env\(titlebar-area-x, 0px\) - env\(titlebar-area-width, calc\(100vw - 138px\)\) \+ 14px\)/);
+	});
+
 	it('ce qui recouvre la barre de titre reste cliquable', () => {
 		const sansDrag = (corps: string) => /-webkit-app-region:\s*no-drag/.test(corps) && /(^|[;\s])app-region:\s*no-drag/.test(corps);
 		expect(sansDrag(bloc(lire('styles/coquille.css'), ":root[data-coquille='app'] :is(dialog, [role='dialog'], [role='alertdialog'], [role='menu'], [role='listbox'])"))).toBe(true);

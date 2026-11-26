@@ -117,6 +117,15 @@
 	padding-left: 78px;
 }
 
+:global([data-coquille='app'][data-plateforme='windows']) .titre {
+	padding-left: 14px;
+	/*
+	 * Windows : réduire, agrandir et fermer sont dessinés par le système à droite, par-dessus la barre (`titleBarOverlay`) ;
+	 * leur largeur est ce que la zone de titre (`env(titlebar-area-*)`) laisse à droite, sinon 3 × 46 px.
+	 */
+	padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 138px)) + 14px);
+}
+
 :global([data-coquille='app']) .titre :is(button, a, input, select, textarea, summary, label, [role='button'], [role='link'], [role='menu'], [role='menuitem'], [role='switch'], [tabindex]) {
 	-webkit-app-region: no-drag;
 	app-region: no-drag;

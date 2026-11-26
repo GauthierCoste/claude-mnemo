@@ -4,6 +4,7 @@
  * (`#session=`). Toute navigation hors de l'origine du service est refusée ; un lien `http`/`https` ailleurs s'ouvre
  * dans le navigateur. Taille et position retenues d'une ouverture à l'autre, si elles tiennent encore sur un écran.
  */
+import type { PlateformeApp } from './plateforme.ts';
 
 /** Adresse locale où le service écoute (jamais `localhost`, qui peut se résoudre ailleurs). */
 export const HOTE_SERVICE = '127.0.0.1';
@@ -38,9 +39,11 @@ export function decisionNavigation(adresse: string, origine: string): DecisionNa
 }
 
 /**
- * La fenêtre est l'app : barre de titre de macOS masquée, l'interface dessine la sienne (44 px de haut, retrait à gauche
- * pour les trois boutons de la fenêtre, qu'on y centre verticalement). L'interface le sait par la marque `MnemoApp/` de
- * son agent utilisateur.
+ * La fenêtre est l'app : barre de titre du système masquée, l'interface dessine la sienne (44 px de haut). L'interface le
+ * sait par la marque `MnemoApp/` de son agent utilisateur (et Windows, par celui de Chromium). Sous macOS, les trois
+ * boutons de la fenêtre sont incrustés à gauche, centrés verticalement (retrait à gauche dans l'interface) ; sous Windows,
+ * réduire, agrandir et fermer sont dessinés par le système à droite, par-dessus la barre de l'interface
+ * (`titleBarOverlay`, retrait à droite dans l'interface).
  */
 export const HAUTEUR_BARRE_TITRE = 44;
 /** Boutons de la fenêtre (16 points de haut) centrés dans la barre de titre de l'interface. */
@@ -48,6 +51,26 @@ export const POSITION_BOUTONS_FENETRE = { x: 14, y: (HAUTEUR_BARRE_TITRE - 16) /
 /** Fond de la fenêtre avant que l'interface ne s'affiche (pas d'éclair blanc) : `--bg` de `packages/ui/src/styles/jetons.css`. */
 export const FOND_FENETRE = '#09090b';
 export const MARQUE_APP = 'MnemoApp';
+
+/**
+ * Boutons de Windows posés sur la barre de l'interface (toujours sombre, comme elle : l'interface ne suit pas le thème du
+ * système). Fond : le milieu du dégradé `--degrade-titre` (#121317 → #0e0f12) ; symboles : `--tx`. Hauteur : celle de la
+ * barre moins son filet du bas (1 px), qui court ainsi jusqu'au bord droit.
+ */
+export const BOUTONS_WINDOWS = { color: '#101114', symbolColor: '#eceef2', height: HAUTEUR_BARRE_TITRE - 1 } as const;
+
+/**
+ * Options de barre de titre d'une fenêtre (celle de l'app, celle de l'assistant) selon la plateforme, à passer telles
+ * quelles à `BrowserWindow`. macOS : boutons incrustés à `position` ; Windows : boutons du système par-dessus la barre de
+ * l'interface, et barre des menus cachée (les raccourcis du menu restent actifs).
+ */
+export function optionsBarreTitre(
+	plateforme: PlateformeApp,
+	position: { x: number; y: number } | null,
+): { titleBarStyle: 'hidden' | 'hiddenInset'; trafficLightPosition?: { x: number; y: number }; titleBarOverlay?: typeof BOUTONS_WINDOWS; autoHideMenuBar?: true } {
+	if (plateforme === 'win32') return { titleBarStyle: 'hidden', titleBarOverlay: BOUTONS_WINDOWS, autoHideMenuBar: true };
+	return position === null ? { titleBarStyle: 'hiddenInset' } : { titleBarStyle: 'hidden', trafficLightPosition: position };
+}
 
 /** Agent utilisateur de la fenêtre : celui d'Electron suivi de ` MnemoApp/<version>`. */
 export function agentUtilisateur(defaut: string, version: string): string {

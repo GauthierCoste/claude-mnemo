@@ -8,7 +8,9 @@ import {
 	decisionNavigation,
 	FOND_FENETRE,
 	origineService,
+	optionsBarreTitre,
 	POSITION_BOUTONS_FENETRE,
+	BOUTONS_WINDOWS,
 	validerBornes,
 } from '../../src/domaine/fenetre.ts';
 import { lirePreferences, PREFERENCES_DEFAUT } from '../../src/domaine/preferences.ts';
@@ -42,6 +44,18 @@ describe('la fenêtre est l’app', () => {
 		const jetons = readFileSync(join(import.meta.dirname, '../../../ui/src/styles/jetons.css'), 'utf8');
 		expect(/--bg:\s*(#[0-9a-f]{6})/iu.exec(jetons)?.[1]?.toLowerCase()).toBe(FOND_FENETRE);
 		expect(POSITION_BOUTONS_FENETRE).toEqual({ x: 14, y: 14 });
+	});
+
+	it('barre de titre : macOS inchangé (boutons incrustés), Windows : boutons du système par-dessus, aux couleurs de la barre', () => {
+		expect(optionsBarreTitre('darwin', POSITION_BOUTONS_FENETRE)).toEqual({ titleBarStyle: 'hidden', trafficLightPosition: { x: 14, y: 14 } });
+		expect(optionsBarreTitre('darwin', null)).toEqual({ titleBarStyle: 'hiddenInset' });
+		for (const position of [POSITION_BOUTONS_FENETRE, null]) {
+			expect(optionsBarreTitre('win32', position)).toEqual({ titleBarStyle: 'hidden', titleBarOverlay: BOUTONS_WINDOWS, autoHideMenuBar: true });
+		}
+		const jetons = readFileSync(join(import.meta.dirname, '../../../ui/src/styles/jetons.css'), 'utf8');
+		expect(/--tx:\s*(#[0-9a-f]{6})/iu.exec(jetons)?.[1]?.toLowerCase()).toBe(BOUTONS_WINDOWS.symbolColor);
+		expect(jetons).toMatch(/--degrade-titre:\s*linear-gradient\(#121317, #0e0f12\)/u);
+		expect(BOUTONS_WINDOWS.height).toBe(43);
 	});
 });
 
