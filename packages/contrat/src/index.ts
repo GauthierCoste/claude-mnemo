@@ -397,6 +397,8 @@ export type MessageServeur =
 	| { type: 'memoire'; modifieeMs: number }
 	/** Les lots d'informations ont changé (proposé par l'archiviste, validé, rejeté, écarté) : relire `GET lots`. */
 	| { type: 'lots'; version: string }
+	/** L'état de l'entraînement de la note a changé (tâche, progression, jugements, nouveau modèle) : la vue entière, comme `GET entrainement`. */
+	| { type: 'entrainement'; etat: VueEntrainement }
 	| { type: 'retard'; session: string }
 	/** L'étape en cours du calcul qui suit un message porteur de la session (hook, puis affinage en fond) ; null : fini. */
 	| { type: 'etape'; session: string; etape: EtapeCalcul | null };
@@ -468,6 +470,20 @@ export type MessageClient =
  *   `ReponseValidationLot` : les lignes s'appliquent en un commit (400 : corps ou choix invalide, ou lignes qui ne
  *   s'appliquent pas, le lot restant en attente ; 404 : lot inconnu ou déjà décidé ; 409 : la fiche a changé depuis la
  *   proposition, le lot est écarté et l'archiviste le reproposera) ; canal de l'utilisateur seulement ;
+ * - `entrainement` GET → `VueEntrainement` : l'état de l'entraînement de la note de confiance (page Mémoire › Entraîner) ;
+ * - `entrainementPreparer` POST `DemandePreparer`, `entrainementPrejuger` POST, `entrainementApprendre` POST → 202
+ *   `VueEntrainement` : lance la tâche (une seule à la fois ; 409 si une tâche tourne, si une commande `mnemo banc contexte`
+ *   tient le fichier des jugements, sans juge (pré-juger) ou sans jugement validé (apprendre)) ; sa progression est diffusée ;
+ * - `entrainementArreter` POST → `VueEntrainement` : arrête la tâche en cours (ce qui est enregistré le reste) ;
+ * - `entrainementRevenir` POST → `VueEntrainement` : échange le modèle de note et le modèle d'avant (409 : aucun, ou un
+ *   apprentissage en cours) ;
+ * - `entrainementMessage` GET `?indice=` facultatif → `ReponseMessageAJuger` (sans indice : le prochain à juger, ceux à
+ *   relire d'abord ; 404 : indice inconnu) ; POST `DemandeReponseMessage` → `ReponseReponseMessage` (409 : « Rien d'utile ici »
+ *   alors qu'une fiche est jugée utile ; 404 : indice inconnu) ;
+ * - `entrainementAnnuler` POST → `ReponseAnnulation` : annule la dernière réponse (ou « Accepter les sûres ») de ce service
+ *   (409 : rien à annuler) ;
+ * - `entrainementAccepterSures` POST → `ReponseAccepterSures` : valide les messages dont toutes les propositions du juge ont une
+ *   confiance de 0,9 ou plus ;
  * - `lotRejeter` POST (corps vide ou `{}`) → `ReponseRejetLot` : le lot disparaît, rien n'est écrit (404 : inconnu ou déjà décidé) ;
  * - `deplacer` POST `{ id, dossier, nom? }` → `ResultatEcriture` (`fiche` : le nouveau chemin ; la fiche d'un dossier emporte tout son dossier) ;
  * - `fil` GET `?jour=AAAA-MM-JJ` → `FilVue` ;
@@ -587,6 +603,15 @@ export const ROUTES = {
 	lots: '/api/lots',
 	lotValider: '/api/lots/:id/valider',
 	lotRejeter: '/api/lots/:id/rejeter',
+	entrainement: '/api/entrainement',
+	entrainementPreparer: '/api/entrainement/preparer',
+	entrainementPrejuger: '/api/entrainement/prejuger',
+	entrainementApprendre: '/api/entrainement/apprendre',
+	entrainementArreter: '/api/entrainement/arreter',
+	entrainementRevenir: '/api/entrainement/revenir',
+	entrainementMessage: '/api/entrainement/message',
+	entrainementAnnuler: '/api/entrainement/annuler',
+	entrainementAccepterSures: '/api/entrainement/accepter-sures',
 	ws: '/ws',
 } as const;
 
@@ -977,6 +1002,88 @@ export type DemandeValidationLot = { lignes: number[] };
 /** Lot validé : `lignes` appliquées (triées), `commit`, ce qui a changé ; `avertissements` : réindexation incomplète. */
 export type ReponseValidationLot = { id: string; fiche: string; commit: string; lignes: number[]; changements: string[] } & AvecAvertissements;
 export type ReponseRejetLot = { id: string };
+
+/** État d'un modèle de note : accepté (%, injection seule), coupé (accepté, injection automatique coupée), refusé ou de départ (ordre seul), jamais appris. */
+export type EtatNoteVue = 'accepte' | 'coupe' | 'refuse' | 'depart' | 'non_appris';
+/** Niveau d'un modèle de note : Complets (avec le reranker) ou Sens seul. */
+export type NiveauNoteVue = 'complets' | 'sens';
+/**
+ * La note de confiance d'un niveau (page Entraîner) : `etat` ; `origine` (`appris` sur cette mémoire, `depart` : poids livrés
+ * avec Mnemo, `non_appris`) ; `date` d'apprentissage (ISO ; null : jamais) ; `verdict` en une phrase ; `criteres` : les critères
+ * manqués en clair ; `refus` : les mêmes, bruts (rapport).
+ */
+export type NoteDuNiveauVue = { niveau: NiveauNoteVue; etat: EtatNoteVue; origine: 'appris' | 'depart' | 'non_appris'; date: string | null; verdict: string; criteres: string[]; refus: string[] };
+/**
+ * Le banc des messages à juger : `messages` préparés (sautés exclus), `valides` (jugés : validés, silence ou toutes leurs fiches
+ * jugées), `aJuger`, `aRelire` (propositions du juge en attente de relecture), `aPrejuger` (messages sans proposition : autant
+ * d'appels au juge), `silences`, `sautes`, `paires` validées (fiches jugées utiles ou pas utiles).
+ */
+export type BancEntrainementVue = { messages: number; valides: number; aJuger: number; aRelire: number; aPrejuger: number; silences: number; sautes: number; paires: number };
+/** La tâche longue en cours (une seule à la fois) : `fait` sur `total` (0 : pas encore connu), `depuis` (ISO). */
+export type TacheEntrainementVue = { genre: 'preparer' | 'prejuger' | 'apprendre'; fait: number; total: number; depuis: string };
+/** Une ligne de l'historique des apprentissages (les 10 derniers) : `remplace` : le nouveau modèle a remplacé l'ancien. */
+export type LigneHistoriqueVue = { date: string; origine: 'manuel' | 'automatique'; verdicts: Record<NiveauNoteVue, EtatNoteVue>; remplace: boolean };
+/** Une tranche de la table de fiabilité : notes de `de` à `a`, `paires`, note moyenne `pMoyen`, part réellement utile `frequence`. */
+export type TrancheFiabiliteVue = { de: number; a: number; paires: number; pMoyen: number; frequence: number };
+/** Le dernier apprentissage (rapport) : par niveau, le verdict, les critères manqués en clair et la table de fiabilité. */
+export type ResultatApprentissageVue = {
+	date: string;
+	messages: number;
+	sessions: number;
+	niveaux: { niveau: NiveauNoteVue; accepte: boolean; verdict: string; criteres: string[]; refus: string[]; paires: number; fiabilite: TrancheFiabiliteVue[] }[];
+};
+/**
+ * État de l'entraînement de la note (`entrainement` GET, diffusé par `{ type: 'entrainement' }`) : `note` par niveau et `avant`
+ * (un modèle d'avant existe : « Revenir au modèle d'avant ») ; `banc` ; `tache` en cours (null : aucune) ; `historique` (les 10
+ * derniers, plus récents d'abord) ; `juge` (Claude Code trouvé, sinon la raison) ; `resultat` du dernier apprentissage ;
+ * `derniereErreur` de la dernière tâche (absente si elle a réussi ou a été arrêtée).
+ */
+export type VueEntrainement = {
+	note: { niveaux: NoteDuNiveauVue[]; avant: boolean };
+	banc: BancEntrainementVue;
+	tache: TacheEntrainementVue | null;
+	historique: LigneHistoriqueVue[];
+	juge: { disponible: boolean; raison?: string };
+	resultat: ResultatApprentissageVue | null;
+	derniereErreur?: string;
+};
+/** Jugement d'une fiche : utile (`pertinente`), pas utile (`non_pertinente`), je ne sais pas (`indecise`). */
+export type JugementVue = 'pertinente' | 'non_pertinente' | 'indecise';
+/** Proposition du juge Claude pour une fiche : jugement, confiance (0 à 1), raison (200 caractères au plus). */
+export type PropositionDuJugeVue = { jugement: JugementVue; confiance: number; raison: string };
+/** Une fiche candidate à juger : titre, première ligne, synthèse courte (300 caractères au plus), proposition du juge, jugement déjà donné. */
+export type CandidateAJugerVue = { chemin: string; titre: string; ligne: string; synthese: string; proposition: PropositionDuJugeVue | null; jugement: JugementVue | null };
+/**
+ * Un message à juger (`entrainementMessage` GET) : `indice` (à renvoyer), `message`, `precedent` (le message d'avant, s'il est
+ * joint ; null sinon), ses `candidates` dans l'ordre de présentation mêlé ; `valide` (déjà validé : le revoir), `silence`,
+ * `saute` ; `aRelire` : il attend la relecture de propositions du juge ; `restants` : messages encore à juger.
+ */
+export type VueMessageAJuger = {
+	indice: number;
+	message: string;
+	precedent: string | null;
+	candidates: CandidateAJugerVue[];
+	valide: boolean;
+	silence: boolean;
+	saute: boolean;
+	aRelire: boolean;
+	restants: number;
+};
+/** Réponse de `entrainementMessage` GET : le message (null : plus rien à juger). */
+export type ReponseMessageAJuger = { message: VueMessageAJuger | null };
+/** Corps de `entrainementPreparer` : `nombre` de messages à préparer (1 à 200 ; 30 par défaut). */
+export type DemandePreparer = { nombre?: number };
+/**
+ * Corps de `entrainementMessage` POST : la réponse au message `indice` ; `jugements` par chemin ; `resteNonUtile` : les fiches
+ * sans réponse deviennent « pas utile » ; `silence` : « Rien d'utile ici » ; `passer` : le message est sauté.
+ */
+export type DemandeReponseMessage = { indice: number; jugements: Record<string, JugementVue>; resteNonUtile: boolean; silence?: boolean; passer?: boolean };
+/** Réponse de `entrainementMessage` POST : l'indice du prochain message à juger (null : plus rien). */
+export type ReponseReponseMessage = { suivant: number | null };
+/** Réponse de `entrainementAnnuler` : l'indice du message rétabli (le rouvrir). */
+export type ReponseAnnulation = { indice: number };
+/** Réponse de `entrainementAccepterSures` : nombre de messages validés avec les propositions sûres du juge. */
+export type ReponseAccepterSures = { acceptes: number };
 
 /**
  * `mnemo init --json` (lu par un programme qui pilote l'installation) : une ligne JSON par événement sur la sortie
