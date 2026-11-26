@@ -15,6 +15,7 @@ export * from './memoire.ts';
 export * from './moteurs.ts';
 export * from './niveau-modeles.ts';
 export * from './parametres.ts';
+export * from './poste.ts';
 export * from './raisons-carte.ts';
 export * from './reglages.ts';
 export * from './serveurs-mcp.ts';
