@@ -498,10 +498,10 @@ export type MessageClient =
  *   (un commit par fiche ; celles déjà traitées sont ignorées) ;
  * - `moteurs` GET (`?poste=1` : avec les points vérifiés du poste, plus lent) → `ReponseMoteurs` : chaque moteur, sa commande
  *   trouvée au démarrage du service, sa version et ses modèles (en cache, quelques secondes au plus à la première lecture) ;
- * - `moteurLier` POST (sans corps ; `:id` : `IdMoteur`) → `ReponseLiaisonMoteur` : lie ce moteur à Mnemo comme `mnemo init
- *   --<option>` (serveur MCP absent : déclaré ; hooks du poste absents : installés) et `mnemo declarer --moteur <id>
- *   --remplacer` (périmés : refaits), rien d'autre, comme `mnemo declarer --moteur <id> --lier` ; une déclaration de l'utilisateur (désactivée, ou « mnemo » qui ne lance
- *   pas Mnemo) n'est jamais touchée (étape `laisse`) ; rend la liaison et la vue relue de tous les moteurs, comme
+ * - `moteurLier` POST (sans corps ; `:id` : `IdMoteur`) → `ReponseLiaisonMoteur` : lie ce moteur à Mnemo comme `mnemo
+ *   declarer --moteur <id> --lier` (serveur MCP absent : déclaré, périmé : refait ; hooks du poste absents : installés,
+ *   périmés : refaits), rien d'autre ; une déclaration de l'utilisateur (désactivée, ou « mnemo » qui ne lance pas Mnemo)
+ *   n'est jamais touchée (étape `laisse`) ; rend la liaison et la vue relue de tous les moteurs, comme
  *   `moteurs?poste=1` ; 404 moteur inconnu du service ; 409 : commande du moteur introuvable, `MNEMO_SANS_MCP=1` dans
  *   l'environnement du service, ou une liaison de ce moteur déjà en cours ;
  * - `reglages` GET → `ReglagesVue` ; PUT `{ valeurs: { "<cle>": valeur | null } }` → `ReglagesVue` (voir `ReglagesVue`) ;
@@ -985,7 +985,7 @@ export type ReponseRejetLot = { id: string };
  * sans ; de même `mistral` et `mistral_hooks` avec `--mistral` (déclaration MCP dans `~/.vibe/config.toml`, hooks dans
  * `~/.vibe/hooks.toml`). `motif` (étapes `mcp`, `codex`, `codex_hooks`, `mistral` et `mistral_hooks`, `echec` seulement) :
  * `perime`, une déclaration (ou des hooks) de Mnemo de portée utilisateur existe déjà et lance un autre Node ou un autre
- * `main.ts` (autre installation de Mnemo), que `mnemo declarer --remplacer` (`--moteur codex` ou `--moteur mistral-vibe`)
+ * `main.ts` (autre installation de Mnemo), que `mnemo declarer --lier` (`--moteur codex` ou `--moteur mistral-vibe`)
  * reprend. Absent : tout autre échec.
  */
 export type EtapeInit = 'memoire' | 'mcp' | 'codex' | 'codex_hooks' | 'mistral' | 'mistral_hooks' | 'modeles' | 'commande' | 'lanceur';
@@ -1011,8 +1011,8 @@ export type EtatMcpVerifie = { etat: 'deja' | 'absent' | 'perime' | 'autre' | 'd
 
 /**
  * Hooks de Mnemo de `~/.codex/hooks.json`, lus sans rien changer : `a_jour` (ceux de ce Node et ce Mnemo), `perime` (d'une
- * autre installation : `mnemo declarer --moteur codex --remplacer`), `absent` (`mnemo init --codex`), `echec` (fichier
- * illisible, `motif`). `approbation` (à jour seulement), lue dans `hooks.state` de `config.toml` : `approuves`,
+ * autre installation) et `absent` (`mnemo declarer --moteur codex --lier` dans les deux cas), `echec` (fichier illisible,
+ * `motif`). `approbation` (à jour seulement), lue dans `hooks.state` de `config.toml` : `approuves`,
  * `a_approuver` (dans Codex, `/hooks` ; désactivés compris), `inconnu` ; Mnemo ne recalcule pas l'empreinte de Codex, une
  * approbation périmée n'est donc pas vue (`motif` le dit).
  */

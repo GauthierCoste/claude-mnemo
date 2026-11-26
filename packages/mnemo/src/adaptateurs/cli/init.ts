@@ -223,7 +223,7 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 				declaration = await actions.declarerMcp();
 				const message = messagesInit(racine, resultat, declaration)[1]!;
 				// en JSON, une déclaration à refaire à la main est un échec ; en texte, elle est dite seulement
-				// (déclarée pour une autre installation de Mnemo, de portée utilisateur : `perime`, que `mnemo declarer --remplacer` reprend)
+				// (déclarée pour une autre installation de Mnemo, de portée utilisateur : `perime`, que `mnemo declarer --lier` reprend)
 				if (declaration === 'desactive') return { laisse: message };
 				if (json && declaration !== 'declare' && declaration !== 'deja') throw 'perime' in declaration && declaration.remplacable === true ? new EchecMotive(message, 'perime') : new Error(message);
 				return message;
@@ -262,7 +262,7 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 			const cheminHooks = actions.cheminHooks(m.id);
 			await mener(m.etapeHooks, `Hooks (${nom})`, `Installation des hooks de Mnemo chez ${nom} (${cheminHooks}).`, async () => {
 				const r = await actions.installerHooks(m.id);
-				// hooks d'une autre installation de Mnemo : `mnemo declarer --moteur <id> --remplacer` les reprend
+				// hooks d'une autre installation de Mnemo : `mnemo declarer --moteur <id> --lier` les reprend
 				if (typeof r !== 'string' && r.perime === true) throw new EchecMotive(r.echec, 'perime');
 				if (typeof r !== 'string') throw new Error(r.echec);
 				ligneHooks = messageHooksMoteur(MOTEURS_DU_POSTE[m.id], r, cheminHooks);

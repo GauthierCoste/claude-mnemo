@@ -11,7 +11,7 @@ import { useLierMoteur } from '../../client/hooks.ts';
 import { useToast } from '../Toast.tsx';
 
 /** Ce que la dernière liaison a laissé à dire ; `alerte` : un échec (à montrer en `role="alert"`). */
-export type RetourLiaison = { alerte: boolean; messages: string[] };
+type RetourLiaison = { alerte: boolean; messages: string[] };
 
 function retourDe(l: LiaisonMoteurVue): RetourLiaison | null {
 	const etapes = [l.mcp, l.hooks].filter((e): e is EtapeLiaisonVue => e !== undefined && (e.resultat === 'laisse' || e.resultat === 'echec'));

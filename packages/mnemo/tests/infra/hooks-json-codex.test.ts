@@ -59,7 +59,7 @@ describe('hooks.json de Codex sur le poste', () => {
 		const fichier = join(maison, 'hooks.json');
 		expect(await H.installer({ ...appel, main: '/autre/packages/mnemo/src/adaptateurs/cli/main.ts' })).toBe('installe');
 		const avant = await readFile(fichier, 'utf8');
-		expect(await H.installer(appel)).toEqual({ echec: expect.stringContaining('mnemo declarer --moteur codex --remplacer'), perime: true });
+		expect(await H.installer(appel)).toEqual({ echec: expect.stringContaining('mnemo declarer --moteur codex --lier'), perime: true });
 		expect(await readFile(fichier, 'utf8')).toBe(avant);
 		// cette installation, un événement retiré à la main : complété
 		await writeFile(fichier, JSON.stringify({ hooks: { Stop: [hooksAttendus(NODE, MAIN).get('Stop')] } }));

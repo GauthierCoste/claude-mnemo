@@ -14,7 +14,7 @@ import { chargerProfil, dossierSkillsDuProfil, ficheDeProfil, profilParDefaut } 
  * nom égal) ; `plugins`, les plugins Claude Code installés qu'il allume (`enabledPluginsDe`, seulement avec ce moteur) ;
  * `hooks`, ses événements de hook de Mnemo.
  */
-export type EquipementProfil = { skills: number; plugins: number; hooks: EvenementHook[] };
+type EquipementProfil = { skills: number; plugins: number; hooks: EvenementHook[] };
 
 /**
  * Un profil qui peut être lancé : `description`, première ligne de sa consigne ; `lancement` : dans le dossier choisi ou
@@ -37,7 +37,7 @@ export type ProfilDisponible = {
  * Équipement du profil, sans rien écrire ni lire de `SKILL.md` (les skills par défaut pas encore déposées ne comptent pas) ;
  * `skillsMemoire` : noms des skills de `_mnemo/skills/`, `installes` : plugins Claude Code, lus une fois pour tous les profils.
  */
-export async function equipementDuProfil(dep: Dependances, profil: Profil, skillsMemoire: readonly string[], installes: readonly PluginInstalle[]): Promise<EquipementProfil> {
+async function equipementDuProfil(dep: Dependances, profil: Profil, skillsMemoire: readonly string[], installes: readonly PluginInstalle[]): Promise<EquipementProfil> {
 	const duProfil = await nomsDesSkills(dep, dossierSkillsDuProfil(profil.nom));
 	const deLaMemoire = skillsMemoire.filter((nom) => !duProfil.includes(nom) && retenueParLeProfil(profil, nom));
 	const allumes = profil.moteur === MOTEUR_PAR_DEFAUT ? Object.values(enabledPluginsDe(profil, installes)).filter(Boolean).length : 0;

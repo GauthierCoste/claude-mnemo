@@ -12,8 +12,8 @@ export type EtatEtape = 'ok' | 'casse' | 'attente' | 'inconnu';
 
 export type EtapeCircuit = { cle: CleEtape; nom: string; valeur: string; infobulle: string; etat: EtatEtape };
 
-export type CleStatut = 'pret' | 'a-lier' | 'a-approuver' | 'a-verifier' | 'a-mettre-a-jour' | 'a-regler' | 'introuvable' | 'pas-installe';
-export type StatutMoteur = { cle: CleStatut; libelle: string };
+type CleStatut = 'pret' | 'a-lier' | 'a-approuver' | 'a-verifier' | 'a-mettre-a-jour' | 'a-regler' | 'introuvable' | 'pas-installe';
+type StatutMoteur = { cle: CleStatut; libelle: string };
 
 /**
  * Ce qui bloque, pour la première étape cassée : `titre` et `motif` à dire ; `geste` : « Lier à Mnemo » (`lier`), copier la

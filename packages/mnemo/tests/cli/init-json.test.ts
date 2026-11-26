@@ -342,9 +342,9 @@ describe('mnemo init --codex', () => {
 		avecMcpFactice();
 		const racine = await dossierTemporaire();
 		const sortie = capture();
-		const echec = '/h/codex-jetable/hooks.json porte des hooks de Mnemo d’une autre installation : lancez « mnemo declarer --moteur codex --remplacer » pour les reprendre.';
+		const echec = '/h/codex-jetable/hooks.json porte des hooks de Mnemo d’une autre installation : « mnemo declarer --moteur codex --lier » les reprend.';
 		await expect(commandeInit([racine, '--json', '--sans-mcp', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: avecCodex('declare', { echec, perime: true }) })).rejects.toMatchObject({ code: 1 });
-		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'codex_hooks', etat: 'echec', motif: 'perime', message: expect.stringContaining('mnemo declarer --moteur codex --remplacer') });
+		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'codex_hooks', etat: 'echec', motif: 'perime', message: expect.stringContaining('mnemo declarer --moteur codex --lier') });
 	});
 
 	it('MNEMO_SANS_MCP=1 l’emporte sur --codex', async () => {

@@ -42,7 +42,7 @@ async function lire(a: AppelHooksDuPoste): Promise<LectureHooksDuPoste> {
 /**
  * Installe les hooks de ce Node et ce `main.ts` s'il n'y en a aucun de Mnemo, ou complète et remet à jour ceux de cette même
  * installation. Des hooks d'une autre installation de Mnemo (autre Node, autre Mnemo) : échec `perime`, rien n'est écrit
- * (`mnemo declarer --moteur codex --remplacer` les reprend), comme pour la déclaration MCP.
+ * (`mnemo declarer --moteur codex --lier` les reprend), comme pour la déclaration MCP.
  */
 async function installer(a: AppelHooksDuPoste): Promise<ResultatInstallationHooks> {
 	const chemin = cheminHooksJson(a.env);
@@ -51,7 +51,7 @@ async function installer(a: AppelHooksDuPoste): Promise<ResultatInstallationHook
 	const { etat, autres } = etatDesHooks(lu.racine, a.node, a.main);
 	if (etat === 'a_jour') return 'deja';
 	if (autres)
-		return { echec: `${chemin} porte des hooks de Mnemo d’une autre installation (autre Node ou autre Mnemo) : lancez « mnemo declarer --moteur codex --remplacer » pour les reprendre.`, perime: true };
+		return { echec: `${chemin} porte des hooks de Mnemo d’une autre installation (autre Node ou autre Mnemo) : « mnemo declarer --moteur codex --lier » les reprend.`, perime: true };
 	const echec = await ecrire(chemin, lu, remplacerHooks(lu.racine, hooksAttendus(a.node, a.main)));
 	return echec ?? (etat === 'absent' ? 'installe' : 'mis_a_jour');
 }

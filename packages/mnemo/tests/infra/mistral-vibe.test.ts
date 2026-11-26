@@ -124,9 +124,9 @@ describe('hooks de Mnemo dans hooks.toml de Mistral Vibe', () => {
 		expect(await HOOKS_DU_POSTE_MISTRAL_VIBE.lire(appelHooks(home))).toMatchObject({ etat: 'a_jour' });
 		expect(await HOOKS_DU_POSTE_MISTRAL_VIBE.installer(appelHooks(home))).toBe('deja');
 
-		// un autre Node : périmés pour lui, refus d'installer par-dessus, remplacés par --remplacer
+		// un autre Node : périmés pour lui, refus d'installer par-dessus, remplacés par remplacer (mnemo declarer --lier)
 		expect(await HOOKS_DU_POSTE_MISTRAL_VIBE.lire(appelHooks(home, '/autre/node'))).toMatchObject({ etat: 'perime' });
-		expect(await HOOKS_DU_POSTE_MISTRAL_VIBE.installer(appelHooks(home, '/autre/node'))).toMatchObject({ perime: true, echec: expect.stringContaining('mnemo declarer --moteur mistral-vibe --remplacer') });
+		expect(await HOOKS_DU_POSTE_MISTRAL_VIBE.installer(appelHooks(home, '/autre/node'))).toMatchObject({ perime: true, echec: expect.stringContaining('mnemo declarer --moteur mistral-vibe --lier') });
 		expect(await HOOKS_DU_POSTE_MISTRAL_VIBE.retirer(appelHooks(home, '/autre/node'))).toBe('autre');
 		expect(await HOOKS_DU_POSTE_MISTRAL_VIBE.remplacer(appelHooks(home, '/autre/node'))).toBe('mis_a_jour');
 		expect(await HOOKS_DU_POSTE_MISTRAL_VIBE.lire(appelHooks(home, '/autre/node'))).toMatchObject({ etat: 'a_jour' });

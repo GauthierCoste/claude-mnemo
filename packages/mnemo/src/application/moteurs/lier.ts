@@ -17,7 +17,7 @@ export type AppelLiaison = AppelDeclaration & { node: string };
 export type EtapeLiaison = { resultat: 'declare' | 'remplace' | 'installe' | 'deja' | 'laisse' | 'echec'; message: string };
 
 /** La liaison d'un moteur : son serveur MCP, et ses hooks du poste s'il en a (Codex, Mistral Vibe). */
-export type ResultatLiaison = { mcp: EtapeLiaison; hooks?: EtapeLiaison };
+type ResultatLiaison = { mcp: EtapeLiaison; hooks?: EtapeLiaison };
 
 const texteErreur = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 

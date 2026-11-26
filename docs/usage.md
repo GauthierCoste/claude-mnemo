@@ -126,8 +126,19 @@ The **App Claude** tab connects the memory to the Claude app (Claude Desktop) an
 
 **Settings › Système › Moteurs** (engines) shows one card per engine the service knows (Claude Code, Codex, Mistral
 Vibe), each with its provider (Anthropic, OpenAI, Mistral), shown as a letter in the provider's colour (no brand logo),
-and a one-word status: « Prêt » (ready), « À lier » (to link), « À approuver » (to approve), « Pas installé » (not
-installed). Each card draws the **link circuit** of the engine on this computer: Installé (command found) → Version →
+and a one-word status:
+
+- « Prêt » (ready): linked and usable;
+- « À lier » (to link): the MCP declaration or the hooks are missing or out of date, « Lier à Mnemo » fixes it;
+- « À approuver » (to approve): the hooks are installed but not yet approved in the engine (Codex);
+- « À vérifier » (to check): whether the hooks are approved cannot be read;
+- « À mettre à jour » (to update): the engine's version is too old for Mnemo;
+- « À régler » (to set): a declaration of yours (turned off, of another scope, or not running Mnemo) or an unreadable
+  file, to fix by hand;
+- « Introuvable » (not found): the command the service started with has disappeared since;
+- « Pas installé » (not installed): no command found on this computer.
+
+Each card draws the **link circuit** of the engine on this computer: Installé (command found) → Version →
 Mémoire (MCP declaration) → Suivi (Mnemo hooks) → Approbation (for an engine that asks for it, Codex). Steps already
 done are lit in the provider's colour; the first broken one pulses, and a single action box below says what is wrong
 and what to do:
@@ -140,10 +151,10 @@ and what to do:
   environment, or while a link of the same engine is already running; its answer carries the steps of the link and
   every engine read again (like `GET /api/moteurs?poste=1`), types `ReponseLiaisonMoteur` and `LiaisonMoteurVue` in
   `@mnemo/contrat`.
-- **« Copier »** the approval command (`/hooks` in Codex) or the install command otherwise.
+- **« Copier »** copies the command to type in the engine (`/hooks` in Codex) when the hooks wait for an approval.
 
 Each card also lists its **team** (the profiles that run on this engine, with « Nouveau profil » to create one on it)
-and its **models** (the default marked when the engine reports it).
+and its **models** (the list the engine gives).
 
 **« Relire »** (read again, with the time of the last check) checks the machine again. An engine installed or moved
 after the service started is picked up there: the service adopts the command it finds now, new sessions start it, and
@@ -423,8 +434,8 @@ character select.
 The chosen agent (a work profile started in a dialog) stands large in the middle, on a floor in its colour, its
 neighbours smaller on each side; the arrows, ← and → (outside a text field), a click on a neighbour or on the row of
 agents below choose another. Its sheet gives its name, whether it is the default, built-in or your own, its
-description, its provider, engine and version, its model (« par défaut » with the name of the default model when the
-engine reports it), where it starts, and its equipment (skills, plugins, hooks). Below, the state of its engine:
+description, its provider, engine and version, its model (the one the profile sets, or « par défaut du moteur », the
+engine's default), where it starts, and its equipment (skills, plugins, hooks). Below, the state of its engine:
 « Prêt » (ready), or what blocks it. An engine that is not linked to Mnemo blocks the launch (« Lancer » unavailable,
 with the reason), since without its MCP server and hooks Mnemo cannot follow the session; « Lier à Mnemo » links it on
 the spot, « Voir dans Réglages » opens Settings › Système. Hooks still to approve in the engine, or a state that cannot
@@ -933,8 +944,8 @@ To undo: `claude mcp remove mnemo --scope user`. `MNEMO_SANS_MCP=1` is the same 
 
 `mnemo init --codex`, `mnemo declarer --moteur codex --lier` or « Lier à Mnemo » in Settings › Système › Moteurs
 declares the same server to Codex at user level, so every Codex session reaches the memory, and installs the Mnemo hooks
-for the sessions started by Mnemo. If `codex` cannot be found, it prints the command to run
-yourself:
+for the sessions started by Mnemo. If `codex` cannot be found, `init --codex` prints the command to run yourself;
+`--lier` and the button refuse, and link nothing:
 
 ```
 codex mcp add mnemo -- '<path to node>' '<path to main.ts>' mcp
