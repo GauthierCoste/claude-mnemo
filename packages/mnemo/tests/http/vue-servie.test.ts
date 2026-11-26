@@ -39,6 +39,10 @@ describe('vueServie : classement', () => {
 	it('modèle appris mais refusé : sa note en `pNonCalibree` (jamais `p`), à la place de la note provisoire', () => {
 		const vue = vueServie(entree([{ id: 'a.md', note: 0.8, servi: false, rang: 1, signaux, pNonCalibree: 0.92 }], { calibree: false }));
 		expect(vue.classement[0]).toMatchObject({ note: null, p: null, pNonCalibree: 0.92 });
+		expect(vue.classement[0]!.depart).toBeUndefined();
+		// d'un modèle de départ : marquée comme telle
+		const depart = vueServie(entree([{ id: 'a.md', note: 0.8, servi: false, rang: 1, signaux, pNonCalibree: 0.92, depart: true }], { calibree: false }));
+		expect(depart.classement[0]).toMatchObject({ note: null, p: null, pNonCalibree: 0.92, depart: true });
 		expect(vue.classement[0]).not.toHaveProperty('noteProvisoire');
 		expect(vue.mesure).toBe('ordre');
 	});

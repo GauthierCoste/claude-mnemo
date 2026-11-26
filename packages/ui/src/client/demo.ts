@@ -4,6 +4,7 @@
  */
 import type { EtapeCalcul } from '@mnemo/commun';
 import { ErreurApi, type Api } from './api.ts';
+import { creerEntrainementDemo, type DepartEntrainementDemo } from './demo-entrainement.ts';
 import { lotsDemo } from './demo-lots.ts';
 import { creerModelesDemo } from './demo-modeles.ts';
 import { creerClaudeDesktopDemo } from './demo-claude-desktop.ts';
@@ -343,8 +344,8 @@ function entreeVivante(
 		servi: id === auto,
 		rang: i + 1,
 		p: o.calibre ? p : null,
-		// ordre seul : la note du modèle appris mais refusé, montrée en gris
-		...(o.calibre ? {} : { pNonCalibree: p }),
+		// ordre seul : la note du modèle de départ livré avec Mnemo (ce que voit une mémoire qui n'a pas encore entraîné la sienne), en gris
+		...(o.calibre ? {} : { pNonCalibree: p, depart: true as const }),
 		signaux: signauxDemo(p, raison, o.affinage === 'fait'),
 		...(id === auto ? { auto: true as const } : {}),
 		...(m.pistes.includes(id) ? { piste: true as const } : {}),
@@ -708,6 +709,8 @@ export type OptionsDemo = {
 	coupure?: boolean;
 	/** Suggestion de la règle des 3 sessions sur la première session, sa fiche écartée ici (`&suggestion=1`). */
 	suggestion?: boolean;
+	/** Départ de Mémoire › Entraîner (`&entrainement=vide` ou `sansjuge`) ; absent : un banc entamé. */
+	entrainement?: DepartEntrainementDemo;
 };
 
 function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo): Api {
@@ -969,7 +972,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			case ROUTES.reglages:
 				return reglagesDemo();
 			case ROUTES.sante:
-				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.8.0' } satisfies SanteVue;
+				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.9.2' } satisfies SanteVue;
 			case ROUTES.graphe:
 				return graphe(monde.memoire);
 			case ROUTES.fiche:
@@ -1252,6 +1255,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 	};
 	const claudeDesktopDemo = creerClaudeDesktopDemo();
 	const moteursDemo = creerMoteursDemo();
+	const entrainementDemo = creerEntrainementDemo(connexion.diffuser, o.entrainement);
 	/** Route de profil (`:id`) du chemin, décodée ; undefined sinon. */
 	const profilDe = (route: string, chemin: string) => {
 		const id = idDans(route, chemin);
@@ -1297,10 +1301,13 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 		lire: <T>(chemin: string, params?: Record<string, string>, options?: { signal?: AbortSignal }) =>
 			attendre(() => {
 				options?.signal?.throwIfAborted();
-				return (claudeDesktopDemo.traiter('GET', chemin) ?? lire(chemin, params)) as T;
+				return (claudeDesktopDemo.traiter('GET', chemin) ?? entrainementDemo.lire(chemin, params) ?? lire(chemin, params)) as T;
 			}),
 		envoyer: <T>(chemin: string, corps?: unknown) =>
-			attendre(() => (claudeDesktopDemo.traiter('POST', chemin, corps) ?? envoyer(chemin, (corps ?? {}) as Record<string, unknown>)) as T),
+			attendre(() => {
+				const objet = (corps ?? {}) as Record<string, unknown>;
+				return (claudeDesktopDemo.traiter('POST', chemin, corps) ?? entrainementDemo.envoyer(chemin, objet) ?? envoyer(chemin, objet)) as T;
+			}),
 		remplacer: <T>(chemin: string, corps: unknown) =>
 			attendre(() => {
 				const app = claudeDesktopDemo.traiter('PUT', chemin, corps);

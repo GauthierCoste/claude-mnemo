@@ -16,6 +16,7 @@ import { objectifDe } from '../../domaine/session.ts';
 import type { Session } from '../../domaine/session.ts';
 import { motifRegleInvalide } from '../../domaine/regles-verifiees.ts';
 import type { Regle } from '../../domaine/consigne.ts';
+import { EchecClaudePrint, executerClaudePrint } from '../../infra/moteurs/claude-code/claude-print.ts';
 import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
 import { ecrirePlugin } from '../../infra/plugin-fichiers.ts';
 import { dossierServeurs } from '../../infra/modeles/dossier.ts';
@@ -28,7 +29,7 @@ import { trouverRacine } from './racine.ts';
 import { DOSSIER_MEMOIRE } from '../../domaine/dossier-memoire.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
 
-const USAGE = 'Usage : mnemo banc [questions.yaml] [--json] | mnemo banc consignes [--json] | mnemo banc contexte [--extraire [<session>] [--nombre <n>] | --completer | --juger | --recalculer | --gestes | --apprendre] [--json] | mnemo banc extraction|contradictions --reel [--json]';
+const USAGE = 'Usage : mnemo banc [questions.yaml] [--json] | mnemo banc consignes [--json] | mnemo banc contexte [--extraire [<session>] [--nombre <n>] | --completer | --juger | --prejuger [--nombre <n>] | --recalculer | --gestes | --apprendre] [--json] | mnemo banc extraction|contradictions --reel [--json]';
 /** Mémoire d'essai (dossier qui contient `_mnemo/`) et ses questions, livrées avec Mnemo. */
 const CORPUS = fileURLToPath(new URL('../../../banc/corpus/', import.meta.url));
 const QUESTIONS = fileURLToPath(new URL('../../../banc/questions.yaml', import.meta.url));
@@ -350,9 +351,6 @@ async function preparerArchiviste(genre: GenreArchiviste, dossier: string): Prom
 	}
 }
 
-/** Premières lignes non vides d'une sortie, pour un message d'erreur. */
-const extrait = (texte: string) => texte.split(/\r?\n/u).filter((l) => l.trim() !== '').slice(0, 5).join(' / ').slice(0, 500);
-
 /**
  * Arguments de confinement du `claude -p` du banc. `dontAsk` refuse tout appel qui demanderait une permission : seuls
  * passent ce que `--allowedTools` permet d'avance (le serveur MCP de Mnemo) et la lecture dans les dossiers de travail.
@@ -363,15 +361,6 @@ const extrait = (texte: string) => texte.split(/\r?\n/u).filter((l) => l.trim() 
 export function confinementArchiviste(): string[] {
 	const mcp = { mcpServers: { mnemo: { type: 'stdio', command: process.execPath, args: [MAIN, 'mcp'] } } };
 	return ['--permission-mode', 'dontAsk', '--tools', OUTILS_INTEGRES_ARCHIVISTE, '--allowedTools', ...OUTILS_ARCHIVISTE, '--strict-mcp-config', '--mcp-config', JSON.stringify(mcp)];
-}
-
-/** Motif lisible d'un `claude -p` qui n'a pas abouti : jamais la ligne de commande (mission, chemins, JSON). */
-function echecDeClaude(erreur: unknown, signal: AbortSignal | undefined): string {
-	const e = (typeof erreur === 'object' && erreur !== null ? erreur : {}) as { name?: unknown; code?: unknown; killed?: unknown };
-	if (signal?.aborted === true || e.name === 'AbortError') return 'claude -p interrompu : banc arrêté, processus tué.';
-	if (typeof e.code === 'string') return `claude -p n'a pas pu aboutir (${e.code}).`;
-	if (e.killed === true) return `claude -p tué au bout de ${DELAI_ARCHIVISTE_MS / 60_000} minutes : délai dépassé.`;
-	return 'claude -p n\'a pas pu aboutir.';
 }
 
 /**
@@ -411,20 +400,12 @@ export async function lancerArchiviste(executer: Executer, racine: string, missi
 	} finally {
 		dep.index.fermer();
 	}
-	// banc arrêté pendant la préparation : claude n'est pas lancé
-	if (signal?.aborted === true) throw new ErreurCli(echecDeClaude(null, signal));
-	let r: Awaited<ReturnType<Executer>>;
+	// banc arrêté pendant la préparation : claude n'est pas lancé (`executerClaudePrint` le refuse)
 	try {
-		r = await executer(claude.commande, [...claude.avant, ...commande.args], {
-			cwd: join(racine, DOSSIER_MEMOIRE),
-			env: commande.env,
-			delaiMs: DELAI_ARCHIVISTE_MS,
-			...(signal === undefined ? {} : { signal }),
-		});
+		await executerClaudePrint(executer, claude, { args: commande.args, cwd: join(racine, DOSSIER_MEMOIRE), env: commande.env, delaiMs: DELAI_ARCHIVISTE_MS, ...(signal === undefined ? {} : { signal }) });
 	} catch (erreur) {
-		throw new ErreurCli(echecDeClaude(erreur, signal));
+		throw erreur instanceof EchecClaudePrint ? new ErreurCli(erreur.message) : erreur;
 	}
-	if (r.code !== 0) throw new ErreurCli(`claude -p a échoué (code ${r.code}) : ${extrait(r.erreur) || extrait(r.sortie) || 'sans message'}`);
 }
 
 /** Note la mémoire de `racine` après le passage de l'archiviste. */

@@ -576,25 +576,31 @@ it too. The ranking of the panel is updated in place, and the models button of t
 (refining) meanwhile. Refinement changes nothing in the session: no injection, no lead, nothing kept for a later message.
 A newer meaningful message makes it obsolete: it stops and writes nothing.
 
-**The confidence score.** A small model, learned on your own judgements (`mnemo banc contexte --apprendre`, see
-[Benchmarks](#benchmarks)), turns the signals of a note into the probability that it is useful for this message. There is
-one model per level of the models: « Complets », for the notes the reranker scored, and « Sens seul » (meaning only), for
-the others. The coefficients are in `.mnemo/coefficients-note.json`, written by the learning and read again when it
-changes; without this file, Mnemo uses the defaults shipped with it, which have not learned anything yet. A model is
-**accepted** only if it passes strict criteria on your judgements (enough injections in enough real sessions, a high
-precision even at its pessimistic bound, a calibrated score, few injections on messages that need none), and only for the
-model files it was learned with. Three cases:
+**The confidence score.** A small model, learned on your own judgements (Mémoire › Entraîner, see
+[Training the confidence score](#training-the-confidence-score), or `mnemo banc contexte --apprendre`, see
+[Benchmarks](#benchmarks)), turns the signals of a note into the probability that it is useful for this message. There
+is one model per level of the models: « Complets », for the notes the reranker scored, and « Sens seul » (meaning only),
+for the others. The coefficients are in `.mnemo/coefficients-note.json`, written by the learning and read again when it
+changes; without this file, Mnemo uses the starting score shipped with it. A model is **accepted** only if it passes
+strict criteria on your judgements (enough injections in enough real sessions, a high precision even at its pessimistic
+bound, a calibrated score, few injections on messages that need none), and only for the model files it was learned
+with. Four cases:
 
 - **Accepted**: the score is a calibrated percentage. It orders the ranking, chooses the leads and may inject a note.
 - **Learned but refused** (criteria not met, or other model files installed since): its score still orders the ranking
   and chooses the leads at each message, but nothing is injected by Mnemo: « ordre seul » (order only). Its score is
   shown in grey with the sign « about », « ≈ 42 % », never as a calibrated percentage.
-- **Nothing learned** (a new installation): a provisional rule, also « ordre seul ». The ranking follows the meaning and
-  the words; the first new notes go out as leads only at the first message and at the message that carries a note you
-  inject by hand, at most `contexte.pistesParMessage`. Without the meaning model, a lead must match the words of the
-  message or be linked to an injected note (at the first message, the notes of the folder of the position still qualify).
+- **Starting score** (a new installation): weights shipped with Mnemo, learned on a bench of 133 judged messages from 28
+  sessions of another memory (numbers only: no text of a note or a message). It is not learned on your data, so it works
+  like a refused model: it orders the ranking and chooses the leads, without % and without automatic injection. The
+  Entraîner page calls it « De départ », the ranking « note de départ, à entraîner ».
+- **Nothing learned** (the coefficients file cannot be read): a provisional rule, also « ordre seul ». The ranking
+  follows the meaning and the words; the first new notes go out as leads only at the first message and at the message
+  that carries a note you inject by hand, at most `contexte.pistesParMessage`. Without the meaning model, a lead must
+  match the words of the message or be linked to an injected note (at the first message, the notes of the folder of the
+  position still qualify). An unreadable file never falls back to the starting score.
 
-**Leads.** With a learned score, each meaningful message sends as leads the new notes whose score reaches
+**Leads.** With a learned or starting score, each meaningful message sends as leads the new notes whose score reaches
 `contexte.seuilPiste` (10 % by default), best first, at most `contexte.pistesParMessage` (3 by default). A note whose title
 or alias is written in your message (whole words, at least 4 letters) is a lead at any message, with the reason *nommée*,
 at most `contexte.cartesNommees` (5 by default), in the order of the message. Naming the place of a note from elsewhere
@@ -679,7 +685,7 @@ aside a note Mnemo injected counts as an error for the watch above.
   « Réactiver ». A note above the threshold that was not injected (refined later, or the cap per message reached) stays
   under the line: the session has not seen it.
 - The ranking of the last meaningful message: on the left the calibrated score in %; in « ordre seul », the uncalibrated
-  score in grey (« ≈ 42 % »: the refused model, the provisional rule, or an entry from before the live ranking), or ◇
+  score in grey (« ≈ 42 % »: the refused or starting model, the provisional rule, or an entry from before the live ranking), or ◇
   when there is none; the type dot and the title, with the reason under it and « piste » when the note was sent as a
   lead. At each ranking, then at the refinement, the lines slide to their new place, ▲/▼ shows a change of rank for a
   few seconds, and a newcomer fades in; a note that becomes injected appears at the top in a fade rather than sliding up
@@ -717,6 +723,112 @@ minimum similarity of search are listed in [installation.md](installation.md#set
 **Permissions.** A Mnemo session runs with your own Claude Code or Codex permissions: Mnemo is not a sandbox. Checked
 instructions are reminders: they refuse the actions they recognise, without guaranteeing that no other one gets through.
 The archivist receives `--add-dir` on the whole root of the Mnemo folder.
+
+### Training the confidence score
+
+The confidence score is yours: one model per memory and per machine (`.mnemo/coefficients-note.json`, never committed).
+Mnemo starts from the starting score shipped with it (above); the more you judge and use Mnemo, the more the score
+follows what helps you. Only the judgements you validate measure a model: the propositions of Claude count once you
+validate them, and your gestures help it learn, never measure it.
+
+**The Entraîner page.** Mémoire › Entraîner (train). A badge on the tab counts the messages pre-judged by Claude that
+wait for your review. From top to bottom:
+
+- **The state of the score**, for each level (« Complets », « Sens seul »; one line when both say the same): a word
+  (« Acceptée », « Refusée », « De départ »…), a sentence, where it comes from (« livrée avec Mnemo » for the starting
+  score) and its date. The ⋯ menu holds « Revenir au modèle d’avant » (back to the previous model; below).
+- **The task under way**, if any: its name, its progress (« 12 sur 30 ») and « Arrêter » (stop). Only one task runs at
+  a time; the others wait, greyed, with the task as their reason.
+- **Three steps**, as numbered cards; the useful one is highlighted and carries the main button: « Préparer » when
+  nothing is prepared, « Juger » while messages wait for a judgement, « Apprendre » when messages were judged since the
+  last learning (or there was none), otherwise « Préparer » again. A gesture that is not available is greyed, with its
+  reason under it.
+- **The last learning** and the **history**, once there is one (below).
+
+**1. Préparer des messages** (prepare messages). Mnemo takes real messages from your last sessions (varied,
+deduplicated, 6 at most per session), each with the notes it would have proposed: the union of the first ones by
+meaning, by words and by the reranker, plus two notes drawn outside it. The number is 30 by default, 1 to 200. Mnemo
+uses the models of the service at their level, and the reranker in the background, so that a session is never kept
+waiting. The gauge counts the validated messages against the ~100 advised. « Arrêter » keeps the messages already
+prepared.
+
+**2. Juger** (judge). « Juger » opens the judging screen in the page; « Relire (n) » (review) when Claude has pre-judged
+messages: those come first, the most uncertain first. One screen is one whole message, with the message before it in
+the session, dimmed, when there is one; then its notes, in a mixed order that has nothing to do with their rank or
+score, so as not to sway you. Each note shows its title, its line and its summary (unfolded on demand), and three
+choices: « Utile » (useful), « Pas utile » (not useful), « Je ne sais pas » (I do not know). At the bottom:
+
+- « Le reste n’est pas utile » (the rest is not useful), checked by default, with the number of notes it will touch: the
+  notes left without an answer become « Pas utile » when you validate. Unchecked, they stay without a judgement.
+- « Valider » (validate) records the message and opens the next one.
+- « Rien d’utile ici » (nothing useful here): a message that needs no note, which the acceptance needs too. Not
+  available once a note is judged useful.
+- « Passer » (skip) sets the message aside.
+
+At the top, the progress, « Annuler le dernier » (undo the last answer: its message opens again) and « Retour » (back).
+When everything is judged, « Tout est jugé » leads back to the page, which then proposes to learn. Keyboard, while the
+screen has the focus (or nothing has) and outside a field: ↑ ↓ move from note to note, `o`, `n`, `i` answer useful, not
+useful, I do not know and go to the next note, Entrée validates, Échap goes back.
+
+**Pré-juger avec Claude** (pre-judge with Claude). Claude proposes an answer for each note of the messages to judge that
+have none yet. **It costs one Claude Code call per message, on your Claude subscription**: the page gives the number of
+calls before you start. Claude runs `claude -p` without any tool or MCP server, two messages at a time, and sees only the
+message, the message before it and, for each note, its title, line and a short summary, never the whole note. Its
+proposition is preselected on the judging screen, marked « Claude » with its confidence and its reason; you change it
+or validate it. A proposition never replaces a judgement you gave, and counts only once its message is validated.
+« Arrêter » keeps the propositions already received. Not available when Claude Code cannot be found on the computer.
+
+**Accepter les sûres** (accept the sure ones) validates at once each message where Claude proposed an answer for every
+note, each with a confidence of 90 % or more; a judgement you gave by hand is kept. The others wait for your review.
+« Annuler » undoes it.
+
+**3. Apprendre** (learn). « Apprendre la note » learns one model per level on your validated judgements, outside the
+thread of the service (the sessions are not slowed down), and checks the acceptance criteria (see
+[Benchmarks](#benchmarks)). Not available without a validated judgement. The new model replaces the current one, even
+refused; a level with no judged pair (for example « Complets » when the messages were prepared without the reranker)
+keeps its current model, so it never falls back to the provisional rule for lack of data. The service takes the new model
+at the next message, without a restart. « Arrêter » leaves the current model in place. Once the score has been learned,
+the card says how many messages were judged since the last learning (the most recent of the successful lines of the
+history and of the dates of the learned models; « Revenir au modèle d’avant » does not change it): a message counts from
+its validation; one judged in the terminal with `--juger`, which has no validation date, counts only if it was prepared
+after the last learning.
+
+**The verdict, in plain words.** « Accepté : les % sont justes et Mnemo injecte seul au-dessus de 90 % »; « Refusé : la
+note ordonne le classement, sans % », with each missed criterion in plain words (for example « trop peu de fiches
+au-dessus de 90 % : 2, il en faut 25 », « trop peu de messages « Rien d’utile ici » »). The last learning gives its date,
+the number of messages, whether its model replaced the one before, the state of each level and the table of
+reliability, folded (the predicted score against the share really useful).
+
+**Revenir au modèle d’avant** (back to the previous model), in the ⋯ menu: each learning keeps the model it replaced
+(`.mnemo/coefficients-note.avant.json`); this gesture puts it back, and doing it again returns to the newer one. Not
+available during a learning, nor while a `mnemo banc contexte` command (`--apprendre`, `--juger`…) holds the file of
+judgements in a terminal.
+
+**History.** The last 10 learnings: date, « Manuel » or « Automatique », the verdict of each level, and whether the
+model was « Remplacé » (replaced), « Gardé » (kept) or « Gardé (échec) » (kept after a failure, with the error).
+
+**Relearning in the background.** With the setting `entrainement.automatique` (on by default,
+[Settings](installation.md#settings) › Système, group « Note de confiance »), the service learns the score again from
+your gestures. It checks 5 minutes after it starts, then every 10 minutes, and learns when all of these hold:
+
+- no task of the Entraîner page is under way, and no session is computing (a hook, a refinement), nor finished within
+  the last minute;
+- the last learning, by hand or automatic, successful or not, is at least 24 hours old;
+- at least one validated judgement on the bench: gestures alone measure nothing;
+- at least 20 new gestures that judge a note since the last learning.
+
+Gestures taken as judgements: ➤ (injected by hand) and a note read by the agent after a lead count as useful; ✗ (set
+aside, here or for good) as not useful; a note in the first 3 of a ranking without any gesture or read in its session as
+weakly not useful (weight 0.3). Only the sessions where at least one gesture judges a note are read; a note injected
+by Mnemo is not a judgement (Mnemo chose it). Only what was shown can get a gesture: each of these pairs is weighed by
+the inverse of the share of the notes of its rank that get one (at most 5 times). These pairs only help the model
+learn; the acceptance is measured on your validated judgements alone. The new model replaces the current one when it
+keeps every level the current one has accepted: an accepted level is never lost, and a refused model only replaces a
+refused, starting or unlearned one. Each attempt writes its report and a line « Automatique » in the history.
+
+**From a session.** When the ranking of a session is in « ordre seul » for want of an accepted score, the models menu of
+the session (at the right of the title of the Contexte panel) offers « Entraîner la note », which opens Mémoire ›
+Entraîner (not when the models are off).
 
 ## Profiles
 
@@ -902,24 +1014,38 @@ Benchmarks measure Mnemo on fictitious corpora shipped with it (`packages/mnemo/
 - `mnemo banc contexte [--json]`: the leads proposed on messages labelled by hand, and the measures of the judged
   messages, from the file `.mnemo/banc-contexte.json` (private, never committed); `--recalculer` computes the signals
   again with the models. It ranks as the hook does, reading the index and the log of gestures as they are, without writing
-  to them. The steps to learn the confidence score of your memory (see [Injected context](#injected-context)):
+  to them. The steps to learn the confidence score of your memory in a terminal (see [Injected context](#injected-context);
+  the Entraîner page does the same, see [Training the confidence score](#training-the-confidence-score)):
   1. `--extraire [<session>] [--nombre <n>]` adds real messages from your sessions (varied, deduplicated), each with the
      notes to judge: the union of the first ones by meaning, by words and by the reranker, plus two notes drawn outside
      that union, to measure what it misses. `--par-session <n>` (6 by default) caps the messages taken per session.
      `--completer` reruns the extraction on the messages already taken; their new notes are added.
   2. `--juger` shows the notes one at a time, without score or rank, one key per answer (`o` useful, `n` not useful, `i`
      undecided, `r` nothing useful for this message, `s` skip the message, `b` back, `q` quit), saves each answer and
-     resumes where you stopped (a copy `banc-contexte.json.bak` is kept from before the session; only one of these
-     commands may write the file at a time). After `--completer`, it asks only the new notes.
+     resumes where you stopped (a copy `banc-contexte.json.bak` is kept from before the session). After `--completer`,
+     it asks only the new notes.
+     `--prejuger [--nombre <n>]` has Claude propose an answer for each note of the messages to judge that have none yet
+     (at most `<n>` messages), as « Pré-juger avec Claude » does: **one Claude Code call per message, on your Claude
+     subscription**, two at a time, without any tool or MCP server. The propositions are saved after each message and
+     never replace a judgement; they count once a message is validated on the Entraîner page. Run it again to resume
+     the messages left.
   3. `--apprendre [--module <path>]` learns one model per level (« Complets » and « Sens seul ») on the judgements,
      validated on sessions it did not learn from, and decides whether each one is accepted: at least 25 simulated
      injections in at least 10 real sessions, a pessimistic precision of 90 % or more (80 % or more at its lower Wilson
      bound and at the 2.5th percentile of a bootstrap by session), a calibration slope between 0.8 and 1.25, at least 20
      judged messages that need nothing (from 5 sessions) with an injection on at most 5 % of them, and at most 0.5
-     injection per message. It writes the coefficients to `.mnemo/coefficients-note.json`, which the service reads again
-     at once, and its report to `.mnemo/apprentissage-note.txt` (and `.json`): the reason of each refusal, and what each
-     threshold would give. Neither file holds any text of a note or a message. `--module <path>` also writes the
-     coefficients as the TypeScript module of defaults shipped with Mnemo (for development).
+     injection per message. It records the result as « Apprendre la note » does: the coefficients in
+     `.mnemo/coefficients-note.json`, which the service reads again at once (a level with no judged pair keeps its
+     current model; the current model is kept in `.mnemo/coefficients-note.avant.json`, for « Revenir au modèle
+     d’avant »), its report in `.mnemo/apprentissage-note.txt` (and `.json`): the reason of each refusal, and what each
+     threshold would give, and a line « Manuel » in the history of the Entraîner page. None of these files holds any text
+     of a note or a message. `--module <path>` also writes the
+     coefficients as the TypeScript module of defaults shipped with Mnemo (for development); with `--depart`, it writes
+     only that module, as starting models (shown « De départ », never accepted), and nothing in `.mnemo`.
+
+  Only one operation writes `banc-contexte.json` at a time, whether a command or a task of the Entraîner page in the
+  service: the second is refused, and the refusal names the one that holds the file (« préparer des messages »,
+  `--juger`…). A lock left by a stopped process is taken over.
 
   A note changed since the extraction has its judgement left out (`--empreintes garder` to keep it). `--json` also gives
   the judged pairs with their raw signals. Nothing is written to `.mnemo` except these files.

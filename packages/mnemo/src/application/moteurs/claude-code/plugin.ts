@@ -187,6 +187,18 @@ export function environnementClaude(env: Record<string, string | undefined>, ses
 }
 
 /**
+ * Environnement d'un `claude -p` qui n'est pas une session Mnemo (le juge du banc) : celui de l'utilisateur, sans les variables
+ * interdites ni celles d'un autre fournisseur (comme `environnementClaude`), sans aucune variable `MNEMO_*` (lancé depuis une
+ * session Mnemo, il en hériterait : les hooks de Mnemo installés pour tout le poste resteraient actifs et écriraient au
+ * journal de cette session), auto-mémoire coupée.
+ */
+export function environnementClaudeHorsSession(env: Record<string, string | undefined>): Record<string, string> {
+	const permis = environnementPermis('claude-code', env, estInterdite);
+	const sansMnemo = Object.fromEntries(Object.entries(permis).filter(([cle]) => !cle.toUpperCase().startsWith('MNEMO_')));
+	return environnementAvec(sansMnemo, { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' });
+}
+
+/**
  * Lancement de `claude` : arguments (`argumentsClaude`, puis à la reprise la consigne tapée d'emblée), environnement ; pour la
  * ligne à coller, les variables de la session et les variables interdites présentes chez l'utilisateur.
  */

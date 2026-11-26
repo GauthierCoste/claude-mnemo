@@ -584,6 +584,8 @@ export type Classe = {
 	pSansApriori?: number;
 	/** Note d'un modèle appris mais refusé (`p` absent ou null) : affichée en gris, jamais pour injecter ni apprendre. */
 	pNonCalibree?: number;
+	/** `pNonCalibree` vient d'un modèle de départ (livré avec Mnemo). */
+	depart?: true;
 	/**
 	 * `apriori` : absent des entrées écrites avant l'a priori des gestes (lu comme 0) ; `cosinusZ` : absent des entrées écrites
 	 * avant lui ; `logit` (brut, du reranker au hook) : présent seulement pour une candidate qu'il a notée.
@@ -716,6 +718,8 @@ export type GesteNote = {
 	rangMessage: number;
 	note: NoteDuGeste | null;
 	vecteur: VecteurDuMessage | null;
+	/** Identité du modèle du vecteur (`bge-m3@…`), lue même sans le vecteur (`sansVecteur`) ; null : pas de vecteur ; absente : non lue. */
+	modeleVecteur?: string | null;
 };
 
 /**
@@ -836,6 +840,8 @@ export interface EtatSessions {
 	noterGeste(geste: GesteANoter): Promise<void>;
 	/** Nombre de gestes par sorte et par fiche, sans lire messages ni vecteurs. */
 	comptesGestes(): Promise<GesteCompte[]>;
+	/** Nombre de gestes du journal depuis `depuisMs` (inclus), de ces `sortes` seulement, sans lire une ligne. */
+	nombreGestes(filtre: { depuisMs?: number; sortes?: readonly Geste[] }): Promise<number>;
 	/**
 	 * Gestes du journal durable, les plus récents d'abord : ceux de `fiche`, de `session`, depuis `depuisMs` (inclus), de rang `depuisRang` ou
 	 * plus (ordre d'écriture), de ces `sortes` seulement, dont la note porte ce `niveau` (`note.niveau` : injections
@@ -924,9 +930,10 @@ export type CommandeMoteur = { commande: string; avant: string[] };
 
 /**
  * Réglages d'une exécution : dossier courant, environnement complet (remplace celui du processus), délai avant de tuer,
- * signal d'abandon (levé : le processus est tué, la promesse rejette).
+ * signal d'abandon (levé : le processus est tué, la promesse rejette), texte écrit sur l'entrée du programme (`entree`, puis
+ * l'entrée est fermée ; sans lui, elle est fermée aussitôt).
  */
-export type OptionsExecution = { cwd?: string; env?: Record<string, string>; delaiMs?: number; signal?: AbortSignal };
+export type OptionsExecution = { cwd?: string; env?: Record<string, string>; delaiMs?: number; signal?: AbortSignal; entree?: string };
 /** Lance un programme sans shell : rend son code de sortie ; rejette s'il ne se lance pas, ne répond pas à temps ou est abandonné. */
 export type Executer = (commande: string, args: string[], options?: OptionsExecution) => Promise<{ code: number; sortie: string; erreur: string }>;
 

@@ -5,7 +5,7 @@
  * - la jonction : un seul séparateur entre le vu (◆) et le pas vu, dès qu'une fiche est injectée (aucune : rien à séparer) : filet gris, ou le seuil d'injection
  *   (vert pointillé) quand l'injection automatique est active, gris « coupé » si elle l'est ; dessous, l'injection
  *   automatique coupée par le suivi, avec son motif et « Réactiver ». L'état du classement qui sort de l'ordinaire (« affinage… », « ordre seul » et sa raison) est dit dans le bouton des
- *   modèles de la session, à droite du titre. Le message classé n'est pas rappelé ;
+ *   modèles de la session, à droite du titre ; en ordre seul faute de note acceptée, son menu propose « Entraîner la note ». Le message classé n'est pas rappelé ;
  * - le classement du dernier message porteur : la note en % (calibrée) ; en ordre seul, « ≈ 42 % » en gris (note non
  *   calibrée) ou ◇ sans aucune note ; le titre et, dessous, la raison et « piste » (envoyée en piste dans la session) ;
  * - « Plus tôt dans la session » : les pistes plus anciennes et les fiches lues (◈) absentes du classement, plus récentes
@@ -70,7 +70,7 @@ const chemin = (id: string) => id.split('#')[0]!;
 export function raisonOrdreSeul(coupes: boolean): string {
 	return coupes
 		? "Ordre seul : modèles coupés pour cette session, ni sens ni reranker. L'ordre suit les mots, puis l'historique de tes gestes ; sans %, ni injection par Mnemo."
-		: "Ordre seul : aucune note apprise et validée sur tes jugements pour les modèles installés (pas encore apprise, refusée, ou modèles changés depuis). L'ordre suit le sens et les mots ; sans %, ni injection par Mnemo.";
+		: "Ordre seul : aucune note apprise et validée sur tes jugements pour les modèles installés (note de départ à entraîner, pas encore apprise, refusée, ou modèles changés depuis). L'ordre suit le sens et les mots ; sans %, ni injection par Mnemo.";
 }
 
 /** Libellé à droite d'une fiche injectée et son info-bulle. */
@@ -88,18 +88,22 @@ function modeAffiche(m: ModeInjection | undefined, duDossier: boolean, seuil: nu
 	return { libelle: null, bulle: 'Injectée entière dans la session', auto: false };
 }
 
-/** Une note qui n'est pas un % calibré, montrée en gris en ordre seul : d'un modèle appris mais refusé, de la règle provisoire, ou d'une entrée ancienne. */
-type NoteNonCalibree = { valeur: number; origine: 'refusee' | 'provisoire' | 'ancienne' };
+/**
+ * Une note qui n'est pas un % calibré, montrée en gris en ordre seul : d'un modèle appris mais refusé, du modèle de départ livré
+ * avec Mnemo, de la règle provisoire, ou d'une entrée ancienne.
+ */
+type NoteNonCalibree = { valeur: number; origine: 'refusee' | 'depart' | 'provisoire' | 'ancienne' };
 
 const BULLES_NON_CALIBREES: Record<NoteNonCalibree['origine'], string> = {
 	refusee: "Note non calibrée : le modèle appris n'a pas passé les critères d'acceptation",
+	depart: 'Note non calibrée : note de départ, à entraîner (livrée avec Mnemo, pas encore apprise sur tes jugements)',
 	provisoire: 'Note non calibrée : la règle provisoire (sens et mots), aucun modèle de note appris',
 	ancienne: "Note non calibrée : celle d'une entrée d'avant le classement vivant",
 };
 
 /** La note non calibrée d'une ligne en ordre seul, si elle en a une (sinon ◇). */
 function noteNonCalibree(l: ClassementVue): { nonCalibree?: NoteNonCalibree } {
-	if (l.pNonCalibree !== undefined) return { nonCalibree: { valeur: l.pNonCalibree, origine: 'refusee' } };
+	if (l.pNonCalibree !== undefined) return { nonCalibree: { valeur: l.pNonCalibree, origine: l.depart === true ? 'depart' : 'refusee' } };
 	if (l.noteProvisoire !== undefined) return { nonCalibree: { valeur: l.noteProvisoire, origine: 'provisoire' } };
 	if (l.signaux === undefined && l.note !== null) return { nonCalibree: { valeur: l.note, origine: 'ancienne' } };
 	return {};
@@ -541,7 +545,8 @@ export function ClassementEnDirect(p: {
 	const jonctionVisible = separateurVisible || coupures.length > 0;
 	// au repos, le bouton des modèles dit l'état du classement : coupé, calibré (un niveau accepté injecte), sinon ordre seul
 	const repos = coupures.length > 0 ? 'injection coupée' : calibre ? 'calibré' : 'ordre seul';
-	const etatClassement = { affinage, ordreSeul: ordreSeul ? raisonOrdreSeul(coupes) : null, repos };
+	// ordre seul faute de note acceptée (et non parce que les modèles sont coupés) : le menu propose d'entraîner la note
+	const etatClassement = { affinage, ordreSeul: ordreSeul ? raisonOrdreSeul(coupes) : null, repos, entrainer: ordreSeul && !coupes };
 	const niveaux = [...new Set(coupures.map((x) => x.niveau))];
 	const libelleNiveau = (n: CoupureInjectionVue['niveau']) => (n === 'complets' ? 'modèles complets' : 'sens seul');
 

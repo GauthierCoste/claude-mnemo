@@ -322,6 +322,8 @@ describe('affiner avec une note de confiance apprise', () => {
 		expect(soumises).toHaveLength(30);
 		// sans note apprise : l'ordre provisoire du sens, la fiche 38 reste hors des 30
 		const sansNote = dependances({ logitDe: () => 0 });
+		// aucun modèle appris (ni les poids de départ du module livré)
+		sansNote.dep.note = () => ({ coefficients: { complets: modeleNonAppris(), sens: modeleNonAppris() }, installes: INSTALLES });
 		await affiner(sansNote.dep, etatFaux(100), demande({ classement: lignes, sens: false }));
 		expect(sansNote.appels.flatMap((a) => a.textes)).not.toContain('Fiche 38\n');
 	});

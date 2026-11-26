@@ -15,7 +15,7 @@ import type { IdMoteur } from '@mnemo/commun';
 import { ErreurApi } from '../../client/api.ts';
 import { useClient } from '../../client/contexte.tsx';
 import { useReglages } from '../../client/hooks.ts';
-import { enSaisie, enValeur, egales, modifications, valeurLisible, type Saisie } from '../../reglages/brouillon.ts';
+import { enSaisie, enValeur, egales, modifications, NON, OUI, valeurLisible, type Saisie } from '../../reglages/brouillon.ts';
 import { oublierSectionSysteme, sectionSystemeALire } from '../../reglages/onglet-retenu.ts';
 import { useNavigation } from '../../navigation.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
@@ -26,6 +26,7 @@ import s from './Reglages.module.css';
 
 const TITRES_GROUPES: Record<GroupeReglageVue, string> = {
 	contexte: 'Contexte injecté',
+	entrainement: 'Note de confiance',
 	memoire: 'Mémoire',
 	archiviste: 'Archiviste',
 	recherche: 'Recherche',
@@ -296,6 +297,9 @@ function Saisir(p: { champ: ChampReglageVue; id: string; saisie: Saisie; surSais
 		case 'decimal':
 			// texte, pas `type=number` : virgule ou point selon l'habitude, jamais effacés par le navigateur
 			return <input id={p.id} className={s.nombre} type="text" inputMode="decimal" spellCheck={false} value={texte} onChange={(e) => p.surSaisie(e.target.value)} />;
+		case 'booleen':
+			// nommée par le libellé du champ (`label` de la ligne au-dessus)
+			return <input id={p.id} type="checkbox" checked={texte === OUI} onChange={(e) => p.surSaisie(e.target.checked ? OUI : NON)} />;
 		case 'couleur':
 			return (
 				<span className={s.couleur}>

@@ -26,6 +26,8 @@ export type Reglages = {
 		poidsInjection: number;
 		demiVieInjection: number;
 	};
+	/** Réapprentissage de la note de confiance en fond, sur les gestes (spec « entraîner la note », D8). */
+	entrainement: { automatique: boolean };
 	/** Groupe « Mémoire » : ses réglages sont les règles de SCHEMA.md (`reglages-memoire.ts`), jamais dans ce fichier. */
 	memoire: Record<string, never>;
 	recherche: {
@@ -47,7 +49,7 @@ export type Reglages = {
 
 /** Quand une modification prend effet : tout de suite, au redémarrage du service, au prochain démarrage des modèles. */
 export type EffetReglage = 'immediat' | 'service' | 'modeles';
-export type ValeurReglage = number | string | string[];
+export type ValeurReglage = number | string | string[] | boolean;
 
 export type ChampReglage = {
 	/** `<groupe>.<nom>`, comme dans le fichier. */
@@ -56,7 +58,7 @@ export type ChampReglage = {
 	libelle: string;
 	/** Une ligne. */
 	explication: string;
-	genre: 'entier' | 'decimal' | 'liste' | 'choix' | 'choix-multiple' | 'couleur';
+	genre: 'entier' | 'decimal' | 'liste' | 'choix' | 'choix-multiple' | 'couleur' | 'booleen';
 	defaut: ValeurReglage;
 	min?: number;
 	max?: number;
@@ -96,7 +98,7 @@ export const CHAMPS_REGLAGES: readonly ChampReglage[] = [
 		cle: 'contexte.seuilPiste',
 		groupe: 'contexte',
 		libelle: 'Seuil des pistes',
-		explication: 'Note minimale d’une piste (carte proposée sans injecter la fiche dans la session), jamais au-dessus du seuil d’injection. Agit dès qu’une note est apprise, même refusée ; sans note apprise, les premières de l’ordre.',
+		explication: 'Note minimale d’une piste (carte proposée sans injecter la fiche dans la session), jamais au-dessus du seuil d’injection. Agit dès qu’une note est apprise ou livrée avec Mnemo, même refusée ; sans note apprise, les premières de l’ordre.',
 		genre: 'entier',
 		defaut: 10,
 		min: 0,
@@ -160,6 +162,15 @@ export const CHAMPS_REGLAGES: readonly ChampReglage[] = [
 		defaut: 0.45,
 		min: 0.1,
 		max: 0.95,
+		effet: 'immediat',
+	},
+	{
+		cle: 'entrainement.automatique',
+		groupe: 'entrainement',
+		libelle: 'Réapprentissage automatique de la note',
+		explication: 'Réapprendre la note en fond à partir de tes gestes (➤, ✗, fiches lues), au plus une fois par jour ; un modèle accepté n’est jamais remplacé par un refusé.',
+		genre: 'booleen',
+		defaut: true,
 		effet: 'immediat',
 	},
 	{
@@ -329,7 +340,7 @@ export const REGLAGES_RETIRES: readonly string[] = ['contexte.cartesPerimetre'];
 const MARQUEURS_MAX = 50;
 const MARQUEUR_LONGUEUR_MAX = 100;
 
-const decrire = (v: ValeurReglage): string => (Array.isArray(v) ? (v.length === 0 ? 'aucun' : v.join(', ')) : String(v));
+const decrire = (v: ValeurReglage): string => (Array.isArray(v) ? (v.length === 0 ? 'aucun' : v.join(', ')) : typeof v === 'boolean' ? (v ? 'oui' : 'non') : String(v));
 
 /** La valeur validée et normalisée, ou le motif du refus. */
 export function validerValeur(champ: ChampReglage, v: unknown): { ok: true; valeur: ValeurReglage } | { ok: false; motif: string } {
@@ -340,6 +351,10 @@ export function validerValeur(champ: ChampReglage, v: unknown): { ok: true; vale
 			if (typeof v !== 'number' || !Number.isFinite(v) || (entier && !Number.isInteger(v)) || v < champ.min! || v > champ.max!) {
 				return { ok: false, motif: `${entier ? 'entier' : 'nombre'} de ${champ.min} à ${champ.max} attendu` };
 			}
+			return { ok: true, valeur: v };
+		}
+		case 'booleen': {
+			if (typeof v !== 'boolean') return { ok: false, motif: 'vrai ou faux attendu' };
 			return { ok: true, valeur: v };
 		}
 		case 'couleur': {

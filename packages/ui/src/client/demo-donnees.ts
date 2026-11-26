@@ -962,9 +962,9 @@ export const CLASSEMENT_VIVANT_DEMO: { avant: MessageClasseDemo; suivants: Messa
 };
 
 /**
- * Classement en ordre seul (modèle de note appris mais refusé : aucun % calibré, ni injection par Mnemo ; les premières de l'ordre
- * en pistes) : le dernier message de la session « Écrire les tests du module achats ». Les notes sont celles du modèle refusé,
- * montrées en gris.
+ * Classement en ordre seul (modèle de note de départ, pas encore entraîné : aucun % calibré, ni injection par Mnemo ; les premières
+ * de l'ordre en pistes) : le dernier message de la session « Écrire les tests du module achats ». Les notes sont celles du modèle
+ * de départ, montrées en gris.
  */
 export const ORDRE_SEUL_DEMO: MessageClasseDemo = {
 	texte: 'Ajoute les cas de commande partiellement livrée.',
@@ -993,11 +993,12 @@ export const REGLAGES_DEMO: ChampReglageVue[] = [
 	{ cle: 'contexte.similariteRecherche', groupe: 'contexte', libelle: 'Similarité minimale (recherche)', explication: 'Proximité de sens minimale d’un résultat de recherche (outils, interface, CLI), de 0 à 1.', genre: 'decimal', defaut: 0.45, valeur: 0.45, min: 0.1, max: 0.95, effet: 'immediat' },
 	{ cle: 'contexte.seuilInjection', groupe: 'contexte', libelle: 'Seuil d’injection automatique', explication: 'Note minimale d’une fiche pour être injectée dans la session sans geste de ta part ; 100 % : jamais. Agit seulement avec une note calibrée (modèle de note accepté).', genre: 'entier', defaut: 90, valeur: 90, min: 50, max: 100, unite: '%', effet: 'immediat' },
 	{ cle: 'contexte.injectionsParMessage', groupe: 'contexte', libelle: 'Fiches injectées automatiquement par message', explication: 'Fiches injectées au plus dans la session à chaque message, les mieux notées d’abord, au-dessus du seuil d’injection ; 0 : jamais.', genre: 'entier', defaut: 2, valeur: 2, min: 0, max: 5, unite: 'fiches', effet: 'immediat' },
-	{ cle: 'contexte.seuilPiste', groupe: 'contexte', libelle: 'Seuil des pistes', explication: 'Note minimale d’une piste (carte proposée sans injecter la fiche dans la session), jamais au-dessus du seuil d’injection. Agit dès qu’une note est apprise, même refusée ; sans note apprise, les premières de l’ordre.', genre: 'entier', defaut: 10, valeur: 10, min: 0, max: 100, unite: '%', effet: 'immediat' },
+	{ cle: 'contexte.seuilPiste', groupe: 'contexte', libelle: 'Seuil des pistes', explication: 'Note minimale d’une piste (carte proposée sans injecter la fiche dans la session), jamais au-dessus du seuil d’injection. Agit dès qu’une note est apprise ou livrée avec Mnemo, même refusée ; sans note apprise, les premières de l’ordre.', genre: 'entier', defaut: 10, valeur: 10, min: 0, max: 100, unite: '%', effet: 'immediat' },
 	{ cle: 'contexte.pistesParMessage', groupe: 'contexte', libelle: 'Pistes par message', explication: 'Cartes (titre, chemin, première phrase) proposées au plus à chaque message pour des fiches nouvelles, à injecter dans la session d’un geste ; 0 : aucune.', genre: 'entier', defaut: 3, valeur: 3, min: 0, max: 10, unite: 'cartes', effet: 'immediat' },
 	{ cle: 'contexte.cartesNommees', groupe: 'contexte', libelle: 'Cartes des fiches nommées par message', explication: 'Cartes proposées au plus, à chaque message, pour les fiches dont le titre ou un alias est cité dans le message.', genre: 'entier', defaut: 5, valeur: 5, min: 0, max: 15, unite: 'cartes', effet: 'immediat' },
 	{ cle: 'contexte.poidsInjection', groupe: 'contexte', libelle: 'Poids d’une fiche injectée à la main sur ses voisines', explication: 'Ajouté à la note des fiches reliées à une fiche que tu injectes à la main, de 0 à 1 (0,25 : 25 points ; le sens du message vaut de 0 à 1).', genre: 'decimal', defaut: 0.25, valeur: 0.25, min: 0, max: 1, effet: 'immediat' },
 	{ cle: 'contexte.demiVieInjection', groupe: 'contexte', libelle: 'Demi-vie de ce poids, en messages', explication: 'Messages (hors messages muets) après lesquels le poids d’une fiche injectée à la main sur ses voisines a diminué de moitié.', genre: 'entier', defaut: 3, valeur: 3, min: 1, max: 20, unite: 'messages', effet: 'immediat' },
+	{ cle: 'entrainement.automatique', groupe: 'entrainement', libelle: 'Réapprentissage automatique de la note', explication: 'Réapprendre la note en fond à partir de tes gestes (➤, ✗, fiches lues), au plus une fois par jour ; un modèle accepté n’est jamais remplacé par un refusé.', genre: 'booleen', defaut: true, valeur: true, effet: 'immediat' },
 	{ cle: 'recherche.resultats', groupe: 'recherche', libelle: 'Résultats par recherche', explication: 'Résultats rendus par `chercher` quand la demande n’en fixe pas le nombre (outils, interface).', genre: 'entier', defaut: 10, valeur: 10, min: 1, max: 50, effet: 'immediat' },
 	{ cle: 'recherche.chronologie', groupe: 'recherche', libelle: 'Résultats de la chronologie', explication: 'Faits rendus par `chronologie` quand la demande n’en fixe pas le nombre.', genre: 'entier', defaut: 30, valeur: 30, min: 1, max: 200, effet: 'immediat' },
 	{ cle: 'recherche.graphe', groupe: 'recherche', libelle: 'Fiches suivies par le graphe', explication: 'Premières fiches de la recherche dont les liens sont suivis (un saut).', genre: 'entier', defaut: 5, valeur: 5, min: 0, max: 20, effet: 'immediat' },

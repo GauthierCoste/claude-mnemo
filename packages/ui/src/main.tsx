@@ -35,9 +35,11 @@ async function creerClient(): Promise<{ client: Client | null; depart?: Depart; 
 		const enPlus = { ...(archiviste ? { archiviste } : {}), ...(palette !== null ? { palette } : {}) };
 		const avecEnPlus = depart ? { ...depart, ...enPlus } : Object.keys(enPlus).length ? { vue: 'sessions' as const, ...enPlus } : undefined;
 		const modeles = parametres.get('modeles');
+		const entrainement = parametres.get('entrainement');
+		const departEntrainement = entrainement === 'vide' || entrainement === 'sansjuge' ? { entrainement: entrainement as 'vide' | 'sansjuge' } : {};
 		// classement vivant : `&coupure=1` (injection automatique coupée par le suivi), `&suggestion=1` (règle des 3 sessions)
 		const classement = { ...(parametres.get('coupure') === '1' ? { coupure: true } : {}), ...(parametres.get('suggestion') === '1' ? { suggestion: true } : {}) };
-		return { client: creerClientDemo({ ...conflit, ...classement, ...(modeles !== null ? { modeles } : {}) }), ...(avecEnPlus ? { depart: avecEnPlus } : {}) };
+		return { client: creerClientDemo({ ...conflit, ...classement, ...departEntrainement, ...(modeles !== null ? { modeles } : {}) }), ...(avecEnPlus ? { depart: avecEnPlus } : {}) };
 	}
 	// le jeton de la première ouverture : rangé dans le stockage de cette origine ; la session demandée (`#session=<id>`,
 	// seule ou avec le jeton) : ouverte une fois la liste reçue ; le fragment est retiré de l'adresse tout de suite
@@ -52,16 +54,17 @@ async function creerClient(): Promise<{ client: Client | null; depart?: Depart; 
 const FICHE_DEMO = 'projets/erp-saas/Module stocks.md';
 
 /**
- * Mode démo : `&vue=graphe` (ou `fichiers`, `archiviste`, `sessions`, `memoire`, `reglages`) ouvre directement une vue ou un onglet, `&zoom=n` la n-ième session en
+ * Mode démo : `&vue=graphe` (ou `fichiers`, `archiviste`, `entrainer`, `sessions`, `memoire`, `reglages`) ouvre directement une vue ou un onglet, `&zoom=n` la n-ième session en
  * grand ; `&fiche=<chemin>` ouvre une fiche dans Mémoire › Fichiers, `&edition=1` en édition, `&conflit=1` fait écrire la
  * fiche par une « autre fenêtre » 2,5 s après le départ (avis de conflit, 409 à l'enregistrement) ; `&archiviste=1` ouvre
  * le tiroir de l'archiviste, `&palette=<texte>` la palette avec ce texte ; `&modeles=<état>` l'état des modèles locaux
- * (`veille`, `chargement`, `prets`, `vectorisation`, `recherche`, `sens`, `coupes`, `echec`, ou `anime`) ; pour les captures.
+ * (`veille`, `chargement`, `prets`, `vectorisation`, `recherche`, `sens`, `coupes`, `echec`, ou `anime`) ; `&entrainement=`
+ * le départ de Mémoire › Entraîner (`vide`, `sansjuge`) ; pour les captures.
  */
 function departDemo(vue: string | null, zoom: number, fiche: string | null, edition: boolean): { depart?: Depart } {
 	const enGrand = zoom > 0 ? { zoom } : {};
 	if (fiche !== null) return { depart: { vue: 'memoire', ongletMemoire: 'fichiers', fiche, edition, ...enGrand } };
-	if (vue === 'graphe' || vue === 'fichiers' || vue === 'archiviste') return { depart: { vue: 'memoire', ongletMemoire: vue, ...enGrand } };
+	if (vue === 'graphe' || vue === 'fichiers' || vue === 'archiviste' || vue === 'entrainer') return { depart: { vue: 'memoire', ongletMemoire: vue, ...enGrand } };
 	if (vue === 'sessions' || vue === 'memoire' || vue === 'reglages') return { depart: { vue, ...enGrand } };
 	return zoom > 0 ? { depart: { vue: 'sessions', zoom } } : {};
 }

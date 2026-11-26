@@ -58,6 +58,9 @@ const PERMIS = new Set([
 	'composants/sessions/nouvelle/SceneAgents.module.css .fleche',
 	'composants/sessions/nouvelle/RangeeAgents.module.css .rangee',
 	'composants/sessions/nouvelle/RangeeAgents.module.css .vignette[data-eteint]::after',
+	// Mémoire › Entraîner : le nombre dans la pastille de l'onglet, le numéro de chaque étape dans son rond
+	'composants/memoire/Memoire.module.css .pastille',
+	'composants/memoire/entrainer/Entrainer.module.css .numero',
 ]);
 
 function trouves(): Map<string, string[]> {

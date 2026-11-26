@@ -199,6 +199,19 @@ describe('vue Réglages', () => {
 		expect(faux.api.remplacer).toHaveBeenCalledWith('/api/reglages', { valeurs: { 'contexte.similariteHooks': 0.7 } });
 	});
 
+	it('oui ou non : une case nommée par le libellé ; décochée, part à false', async () => {
+		const automatique = champ({ cle: 'entrainement.automatique', groupe: 'entrainement', libelle: 'Réapprentissage automatique de la note', explication: 'Réapprendre la note en fond.', genre: 'booleen', defaut: true, effet: 'immediat' });
+		const vue = { ...VUE, champs: [...VUE.champs, automatique] };
+		const { faux, page, groupe } = await ouvrirReglages({ '/api/reglages': vue, 'PUT /api/reglages': () => vue });
+		await groupe('Note de confiance');
+		const caseACocher = within(page).getByRole('checkbox', { name: 'Réapprentissage automatique de la note' }) as HTMLInputElement;
+		expect(caseACocher.checked).toBe(true);
+		expect(within(page).getByText('Défaut : oui')).toBeTruthy();
+		await act(async () => fireEvent.click(caseACocher));
+		await act(async () => within(page).getByRole('button', { name: 'Enregistrer' }).click());
+		expect(faux.api.remplacer).toHaveBeenCalledWith('/api/reglages', { valeurs: { 'entrainement.automatique': false } });
+	});
+
 	it('port fixé par MNEMO_PORT : dit dans le champ', async () => {
 		const { page, groupe } = await ouvrirReglages({ '/api/reglages': { ...VUE, champs: VUE.champs.map((c) => (c.cle === 'service.port' ? { ...c, fixePar: 'MNEMO_PORT' } : c)) } });
 		await groupe('Service');

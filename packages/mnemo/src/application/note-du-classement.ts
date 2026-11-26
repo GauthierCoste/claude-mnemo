@@ -4,12 +4,13 @@
  * et l'outil `contexte` l'appliquent tous trois : un même message donne la même note partout.
  *
  * - Modèle accepté : `p` (un % calibré) sur chaque ligne qu'il note, classement `calibree`.
- * - Modèle appris mais refusé (ou appris pour d'autres GGUF) : sa note ordonne et choisit les pistes, `p` reste null (aucun %
- *   calibré) ; elle est gardée à part (`pNonCalibree`), pour être montrée en gris.
+ * - Modèle appris mais refusé (ou appris pour d'autres GGUF), ou de départ : sa note ordonne et choisit les pistes, `p` reste
+ *   null (aucun % calibré) ; elle est gardée à part (`pNonCalibree`, avec `depart` pour un modèle de départ), pour être montrée
+ *   en gris.
  * - Aucun modèle appris, ou aucune ligne notée (le sens n'a pas répondu) : l'ordre donné (règle provisoire), inchangé.
  */
 import { COEFFICIENTS_NOTE } from '../domaine/coefficients-note.ts';
-import { echelleDesSignaux } from '../domaine/modele-de-note.ts';
+import { echelleDesSignaux, modeleNonAppris } from '../domaine/modele-de-note.ts';
 import type { RequeteDeNote } from '../domaine/modele-de-note.ts';
 import { REGLAGES_PAR_DEFAUT } from '../domaine/reglages.ts';
 import type { Reglages } from '../domaine/reglages.ts';
@@ -20,14 +21,16 @@ import type { Dependances } from './ports.ts';
 
 /**
  * Les modèles de note de la mémoire, avec leur état pour les modèles installés et l'échelle actuelle des signaux (réglages) ;
- * une lecture en panne vaut le module du dépôt. Lus une fois par message (`DemandeServir.modeles`).
+ * sans lecteur (`dep.note` absent), le module du dépôt (les modèles de départ) ; une lecture en panne vaut aucun modèle appris,
+ * comme un fichier abîmé (`coefficients-note-fichier.ts`) : les modèles de départ ne remplacent jamais ceux de la mémoire. Lus
+ * une fois par message (`DemandeServir.modeles`).
  */
 export function modelesActifs(dep: Pick<Dependances, 'note' | 'reglages'>): ModelesDeNote {
 	let charge: ReturnType<NonNullable<Dependances['note']>> | undefined;
 	try {
 		charge = dep.note?.();
 	} catch {
-		charge = undefined;
+		charge = { coefficients: { complets: modeleNonAppris(), sens: modeleNonAppris() }, installes: { sens: null, reranker: null } };
 	}
 	let contexte: Reglages['contexte'];
 	try {
@@ -61,16 +64,16 @@ export type ClassementNote = { lignes: LigneDeClassement[]; notes: ReadonlyMap<s
  * d'une note calibrée (modèle accepté, a priori lu s'il pèse) ; null sinon. `aprioriConnu` : l'a priori des gestes a été lu.
  */
 export function noterLeClassement(lignes: readonly LigneDeClassement[], modeles: ModelesDeNote, options: { aprioriConnu: boolean }): ClassementNote {
-	const sansNote = (): ClassementNote => ({ lignes: lignes.map(({ pSansApriori: _p, pNonCalibree: _n, ...l }) => ({ ...l, p: null })), notes: new Map(), parNote: false, calibree: false });
+	const sansNote = (): ClassementNote => ({ lignes: lignes.map(({ pSansApriori: _p, pNonCalibree: _n, depart: _d, ...l }) => ({ ...l, p: null })), notes: new Map(), parNote: false, calibree: false });
 	if (!noteApprise(modeles)) return sansNote();
 	const notes = new Map(lignes.map((l) => [l.chemin, noterLaCandidate(modeles, { ...l.signaux, logit: l.logit }, options)]));
 	if (![...notes.values()].some((n) => n !== null)) return { ...sansNote(), notes };
 	const rangees = ordonnerParNote(lignes, (l) => notes.get(l.chemin)?.p ?? null).map((l): LigneDeClassement => {
-		const { pSansApriori: _ancien, pNonCalibree: _ancienne, ...reste } = l;
+		const { pSansApriori: _ancien, pNonCalibree: _ancienne, depart: _depart, ...reste } = l;
 		const n = notes.get(l.chemin) ?? null;
 		const p = pCalibre(n);
 		if (p !== null) return { ...reste, p, pSansApriori: n!.pSansApriori };
-		return n === null ? { ...reste, p: null } : { ...reste, p: null, pNonCalibree: n.p };
+		return n === null ? { ...reste, p: null } : { ...reste, p: null, pNonCalibree: n.p, ...(n.depart === true ? { depart: true as const } : {}) };
 	});
 	return { lignes: rangees, notes, parNote: true, calibree: classementCalibre(notes.values()) };
 }

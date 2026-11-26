@@ -1,5 +1,6 @@
 /**
- * Vue Mémoire : barre d'onglets (Archiviste (N) | Fichiers | Graph 3D) et statistiques.
+ * Vue Mémoire : barre d'onglets (Archiviste (N) | Fichiers | Graph 3D | Entraîner, avec la pastille des messages à relire)
+ * et statistiques. Entraîner (`Entrainer`) : la note de confiance et son entraînement.
  * Archiviste (ouvert par défaut) : à faire, terminal de l'archiviste, enrichir (`PageArchiviste`). Fichiers (`#mFiles`) :
  * arbre | fiche | liens (arbre et liens redimensionnables, largeur gardée) ; ⌥L y localise la fiche ouverte dans l'arbre.
  * Le graphe (three.js, morceau à part) se charge à la première ouverture de son onglet, puis reste monté : positions et
@@ -7,7 +8,7 @@
  * statistiques.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { useFiche, useGraphe } from '../../client/hooks.ts';
+import { useEntrainement, useFiche, useGraphe } from '../../client/hooks.ts';
 import type { FicheGraphe } from '@mnemo/contrat';
 import { useAFaire } from '../../memoire/a-faire.ts';
 import { couleurDeBranche, rangsDesFiches } from '../../graphe/branches.ts';
@@ -20,6 +21,7 @@ import { cx } from '../commun/classes.ts';
 import { Separateur } from '../commun/Separateur.tsx';
 import { largeurMaxPanneau, useTailleGardee } from '../commun/taille-gardee.ts';
 import { ArbreFiches } from './ArbreFiches.tsx';
+import { Entrainer } from './entrainer/Entrainer.tsx';
 import { LiensFiche } from './LiensFiche.tsx';
 import s from './Memoire.module.css';
 import { FournisseurMemoire, useNavigationMemoire } from './navigation-memoire.tsx';
@@ -46,6 +48,7 @@ function CorpsMemoire(p: { visible: boolean; editionInitiale: boolean }): ReactN
 	const memoire = useNavigationMemoire();
 	const graphe = useGraphe();
 	const aFaire = useAFaire();
+	const aRelire = useEntrainement().donnees?.banc.aRelire ?? 0;
 	const largeurMax = largeurMaxPanneau(LARGEUR_LIENS.min);
 	const largeurArbre = useTailleGardee(LARGEUR_ARBRE, largeurMax);
 	const largeurLiens = useTailleGardee(LARGEUR_LIENS, largeurMax);
@@ -78,7 +81,7 @@ function CorpsMemoire(p: { visible: boolean; editionInitiale: boolean }): ReactN
 	// L'édition demandée au départ ne vaut que pour la fiche de départ.
 	const [ficheEditee, setFicheEditee] = useState(p.editionInitiale ? memoire.fiche : null);
 	if (ficheEditee !== null && memoire.fiche !== ficheEditee) setFicheEditee(null);
-	const onglet = (o: OngletMemoire, libelle: string) => (
+	const onglet = (o: OngletMemoire, libelle: string, pastille?: ReactNode) => (
 		<button
 			type="button"
 			role="tab"
@@ -89,6 +92,7 @@ function CorpsMemoire(p: { visible: boolean; editionInitiale: boolean }): ReactN
 			onClick={() => memoire.choisirOnglet(o)}
 		>
 			{libelle}
+			{pastille}
 		</button>
 	);
 
@@ -114,6 +118,16 @@ function CorpsMemoire(p: { visible: boolean; editionInitiale: boolean }): ReactN
 					{onglet('archiviste', `Archiviste (${aFaire.total})`)}
 					{onglet('fichiers', 'Fichiers')}
 					{onglet('graphe', 'Graph 3D')}
+					{onglet(
+						'entrainer',
+						'Entraîner',
+						aRelire > 0 && (
+							<span className={s.pastille} title={`${aRelire} message${aRelire > 1 ? 's' : ''} à relire`}>
+								<span aria-hidden="true">{aRelire}</span>
+								<span className={s.horsEcran}>{` (${aRelire} à relire)`}</span>
+							</span>
+						),
+					)}
 				</div>
 				<span className={s.espace} />
 				<StatistiquesMemoire donnees={graphe.donnees} className={s.statistiques} />
@@ -147,6 +161,9 @@ function CorpsMemoire(p: { visible: boolean; editionInitiale: boolean }): ReactN
 						</>
 					)}
 				</div>
+			</div>
+			<div role="tabpanel" id="panneau-memoire-entrainer" aria-labelledby="onglet-memoire-entrainer" className={s.panneau} hidden={memoire.onglet !== 'entrainer'}>
+				{memoire.onglet === 'entrainer' && <Entrainer />}
 			</div>
 			{grapheVisite && (
 				<div role="tabpanel" id="panneau-memoire-graphe" aria-labelledby="onglet-memoire-graphe" className={s.panneau} hidden={memoire.onglet !== 'graphe'}>

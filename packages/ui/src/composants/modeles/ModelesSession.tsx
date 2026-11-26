@@ -2,7 +2,8 @@
  * Niveau des modèles pour une session, aligné à droite de « Injecté dans la session » : un texte nu à gauche de l'icône, sans
  * cadre. Ce qui est en cours, avec un reflet : l'activité de la session (« Recherche… », prioritaire), l'étape du calcul du
  * message (« reranker… », « affinage 10/30… »), l'affinage du classement. Au repos, atténué : l'état du classement
- * (« ordre seul », sa raison en info-bulle et dans le menu ; « calibré » ; « injection coupée »). Un clic ouvre le menu : comme partout, complets, sens seul, coupés ; un niveau plus
+ * (« ordre seul », sa raison en info-bulle et dans le menu, avec « Entraîner la note » quand l'entraînement y remédie ;
+ * « calibré » ; « injection coupée »). Un clic ouvre le menu : comme partout, complets, sens seul, coupés ; un niveau plus
  * large que celui de partout est désactivé, avec son motif. Rien tant que l'état des modèles n'est pas connu ou qu'ils ne sont pas
  * installés.
  */
@@ -10,6 +11,7 @@ import { libelleEtapeCalcul, NIVEAUX_MODELES, niveauEffectif, plusLarge, type Ni
 import type { ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
 import { useEtapeSession, useModeles, useNiveauModelesSession } from '../../client/hooks.ts';
+import { useNavigation } from '../../navigation.tsx';
 import { cx } from '../commun/classes.ts';
 import { useToast } from '../Toast.tsx';
 import { IconeModeles } from './IconeModeles.tsx';
@@ -23,9 +25,10 @@ const TEXTES: Record<NiveauModeles, string> = { complets: '', sens: 'Sens', coup
 
 /**
  * L'état du classement du dernier message, dit par le bouton : affinage en cours, ordre seul (sa raison ; null : notes
- * calibrées) ; `repos` : le texte au repos (« ordre seul », « calibré », « injection coupée »).
+ * calibrées) ; `repos` : le texte au repos (« ordre seul », « calibré », « injection coupée ») ; `entrainer` : l'ordre seul
+ * vient de la note (de départ, pas apprise, refusée), le menu propose de l'entraîner.
  */
-export type EtatClassementSession = { affinage: boolean; ordreSeul: string | null; repos?: string };
+export type EtatClassementSession = { affinage: boolean; ordreSeul: string | null; repos?: string; entrainer?: boolean };
 
 const TITRE_AFFINAGE = "Le reranker affine le classement en arrière-plan ; les lignes glisseront à leur nouvelle place. Rien n'est injecté après coup.";
 
@@ -34,6 +37,7 @@ export function ModelesSession(p: { session: string; niveau: NiveauModeles | nul
 	const etape = useEtapeSession(p.session);
 	const changer = useNiveauModelesSession();
 	const toast = useToast();
+	const nav = useNavigation();
 	if (e?.installes !== true) {
 		// modèles inconnus ou non installés : pas de menu, mais l'état du classement reste dit
 		const ordre = p.classement?.ordreSeul ?? null;
@@ -102,6 +106,19 @@ export function ModelesSession(p: { session: string; niveau: NiveauModeles | nul
 			{(fermer) => (
 				<>
 					<div className={s.separateur} role="separator" />
+					{ordreSeul !== null && p.classement?.entrainer === true && (
+						<>
+							<ItemMenu
+								libelle="Entraîner la note"
+								detail="Mémoire › Entraîner : juge des messages, la note apprend à donner des %"
+								surChoix={() => {
+									fermer();
+									nav.ouvrirEntrainement();
+								}}
+							/>
+							<div className={s.separateur} role="separator" />
+						</>
+					)}
 					<GroupeMenu titre="Niveau pour cette session">
 						<ItemMenu
 							coche={propre === null}

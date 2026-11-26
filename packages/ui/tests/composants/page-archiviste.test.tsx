@@ -174,10 +174,10 @@ describe('Mémoire › Archiviste : onglets et navigation', () => {
 		await waitFor(() => expect(within(nav()).getByRole('button', { name: /Mémoire/ }).textContent).toContain('4'));
 	});
 
-	it('onglets dans l’ordre Archiviste (N) | Fichiers | Graph 3D ; Archiviste ouvert par défaut', async () => {
+	it('onglets dans l’ordre Archiviste (N) | Fichiers | Graph 3D | Entraîner ; Archiviste ouvert par défaut', async () => {
 		monter();
 		const onglets = () => within(screen.getByRole('tablist', { name: 'Mémoire' })).getAllByRole('tab');
-		await waitFor(() => expect(onglets().map((o) => o.textContent)).toEqual(['Archiviste (4)', 'Fichiers', 'Graph 3D']));
+		await waitFor(() => expect(onglets().map((o) => o.textContent)).toEqual(['Archiviste (4)', 'Fichiers', 'Graph 3D', 'Entraîner']));
 		expect(onglets()[0]!.getAttribute('aria-selected')).toBe('true');
 		expect(screen.queryByRole('tab', { name: /Documents/ })).toBeNull();
 	});

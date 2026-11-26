@@ -119,6 +119,7 @@ const ETAT_INERTE: EtatSessions = {
 	noterGeste: async () => {},
 	gestes: async () => [],
 	comptesGestes: async () => [],
+	nombreGestes: async () => 0,
 	ecarterToujours: async () => 'deja_ecartee',
 	retablirToujours: async () => null,
 	ecarteesToujours: async () => [],

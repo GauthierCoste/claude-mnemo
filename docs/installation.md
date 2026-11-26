@@ -253,7 +253,7 @@ Open the interface and click the gear at the bottom of the left rail (shortcut: 
 next to M on a US keyboard), then the **Système** tab (the **Profils** tab manages session profiles, see
 [usage.md](usage.md#managing-profiles); the **App Claude** tab, the MCP servers of the Claude app, see
 [usage.md](usage.md#connecting-the-claude-app)). The groups are listed on the left, by how often you will use them: injected
-context, memory, archivist, search, projects, models, service, interface; the last one, **Moteurs** (engines), shows
+context, confidence score (« Note de confiance »), memory, archivist, search, projects, models, service, interface; the last one, **Moteurs** (engines), shows
 the state of each engine (Claude Code, Codex, Mistral Vibe) on this computer and links it to Mnemo with « Lier à Mnemo »
 (see [usage.md](usage.md#engines)). Each setting shows a one-line explanation, its default, and "Rétablir le défaut" (reset to
 default); changes are saved only when you click "Enregistrer" (save; leaving the page with unsaved changes asks first).
@@ -266,11 +266,12 @@ falls back to its default with a warning, never a crash.
 | Minimum similarity of a search result by meaning, 0.1 to 0.95 (`contexte.similariteRecherche`) | 0.45 | immediately |
 | Threshold of automatic injection: score a note needs to be injected whole at the message, 50 to 100 %, 100: never; only with an accepted confidence score (`contexte.seuilInjection`) | 90 % | immediately |
 | Notes injected automatically per message, 0 to 5 (`contexte.injectionsParMessage`) | 2 | immediately |
-| Threshold of leads: score a new note needs to be proposed as a lead, 0 to 100 %, never above the threshold of injection (`contexte.seuilPiste`) | 10 % | immediately |
+| Threshold of leads: score a new note needs to be proposed as a lead, 0 to 100 %, never above the threshold of injection; acts as soon as a score is learned or shipped with Mnemo, even refused (`contexte.seuilPiste`) | 10 % | immediately |
 | Leads per message, 0 to 10 (`contexte.pistesParMessage`) | 3 | immediately |
 | Leads for the notes named in a message, 0 to 15, per message (`contexte.cartesNommees`) | 5 | immediately |
 | Weight of a note you inject by hand on the notes linked to it, 0 to 1 (`contexte.poidsInjection`) | 0.25 | immediately |
 | Half-life of that weight, in messages that are not mute, 1 to 20 (`contexte.demiVieInjection`) | 3 | immediately |
+| Relearn the confidence score in the background from your gestures (➤, ✗, notes read), at most once a day; an accepted model is never replaced by a refused one (`entrainement.automatique`, see [usage.md](usage.md#training-the-confidence-score)) | on | immediately |
 | Default number of results of `chercher`, 1 to 50 (`recherche.resultats`) | 10 | immediately |
 | Default number of results of `chronologie`, 1 to 200 (`recherche.chronologie`) | 30 | immediately |
 | First search results whose links are followed (one hop), 0 to 20 (`recherche.graphe`) | 5 | immediately |

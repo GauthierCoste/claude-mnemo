@@ -126,7 +126,7 @@ function vueClasse(c: Classe, titres: ReadonlyMap<string, string>): ClassementVu
 			? {}
 			: {
 					p: c.p ?? null,
-					...((c.p ?? null) === null && c.pNonCalibree !== undefined ? { pNonCalibree: c.pNonCalibree } : {}),
+					...((c.p ?? null) === null && c.pNonCalibree !== undefined ? { pNonCalibree: c.pNonCalibree, ...(c.depart === true ? { depart: true as const } : {}) } : {}),
 					// la note de la règle provisoire (sens et mots), quand aucun modèle appris ne note la ligne
 					...((c.p ?? null) === null && c.pNonCalibree === undefined && c.note !== null ? { noteProvisoire: c.note } : {}),
 					signaux: {
