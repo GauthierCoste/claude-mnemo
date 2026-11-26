@@ -154,6 +154,16 @@ describe('mnemo init --json', () => {
 		expect(a.installerCommande).not.toHaveBeenCalled();
 	});
 
+	it('sous Windows : la commande est sautée, même demandée, sans conseil de développeur', async () => {
+		const racine = await dossierTemporaire();
+		const a = actions();
+		const sortie = capture();
+		await commandeInit([racine, '--json', '--sans-mcp', '--commande', '--sans-lanceur'], { sortie: sortie.flux, plateforme: 'win32', actions: a });
+		const commande = lignesJson(sortie.texte()).filter((l) => (l as { etape?: string }).etape === 'commande');
+		expect(commande).toEqual([{ etape: 'commande', etat: 'saute', message: 'Commande « mnemo » : pas sous Windows.' }]);
+		expect(a.installerCommande).not.toHaveBeenCalled();
+	});
+
 	it('progression des modèles : au plus une ligne par seconde et par pièce', async () => {
 		const racine = await dossierTemporaire();
 		let t = 0;

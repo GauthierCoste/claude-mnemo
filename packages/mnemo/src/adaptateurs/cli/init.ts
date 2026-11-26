@@ -299,7 +299,8 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 
 		// hors du dossier : proposés (oui par défaut) seulement à qui répond ; ni avec --oui, ni sans terminal, ni en fin d'entrée
 		let commande = false;
-		if (plateforme === 'win32') j.evenement('commande', 'saute', 'Sous Windows, la commande s’installe depuis packages/mnemo : pnpm link --global.');
+		// sous Windows, pas de commande à installer : l'étape est sautée, sans conseil de développeur (l'app de bureau la tait)
+		if (plateforme === 'win32') j.evenement('commande', 'saute', 'Commande « mnemo » : pas sous Windows.');
 		else if (actions.commandeAJour()) {
 			commande = true;
 			// déjà là : une étape menée (`debut` puis `fait`, comme le dit le contrat), ou sautée sur --sans-commande
