@@ -189,7 +189,7 @@ describe('Réglages › Système › Moteurs', () => {
 				lectures++;
 			});
 			const codex = r.moteurs.find((m) => m.id === 'codex')!;
-			codex.poste![0] = { cle: 'commande', libelle: 'Commande', ok: false, etat: 'changée', detail: 'autre chemin', remede: { texte: 'mnemo arreter', dans: 'terminal', puis: 'mnemo ouvrir' } };
+			codex.poste![0] = { cle: 'commande', libelle: 'Commande', ok: false, etat: 'introuvable maintenant', detail: 'commande disparue' };
 			return r as never;
 		});
 		await ouvrirReglages(client);
@@ -205,9 +205,7 @@ describe('Réglages › Système › Moteurs', () => {
 		await act(async () => liberer());
 		await waitFor(() => expect(relire.disabled).toBe(false));
 		const point = within(within(section).getByRole('group', { name: 'Codex' })).getByText('Commande', { selector: 'span' }).closest('li')!;
-		expect(within(point).getByRole('button', { name: 'Copier « mnemo arreter »' })).toBeTruthy();
-		expect(within(point).getByText('puis')).toBeTruthy();
-		expect(within(point).getByRole('button', { name: 'Copier « mnemo ouvrir »' })).toBeTruthy();
+		expect(within(point).getByText('commande disparue')).toBeTruthy();
 		await act(async () => relire.click());
 		await waitFor(() => expect(lectures).toBe(2));
 		expect(relire.disabled).toBe(true);

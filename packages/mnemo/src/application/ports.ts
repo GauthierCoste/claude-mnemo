@@ -1173,7 +1173,10 @@ export type Moteur = MoteurDuPoste & {
 	telemetrie: TelemetrieDuMoteur;
 };
 
-/** Un moteur connu du service, et sa commande trouvée au démarrage (null : introuvable, mode dégradé). */
+/**
+ * Un moteur connu du service, et sa commande : trouvée au démarrage, ou adoptée depuis à la lecture du poste (Réglages ›
+ * Système › Moteurs, « Relire ») ; null : introuvable, mode dégradé.
+ */
 export type MoteurDuService = { moteur: Moteur; commande: CommandeMoteur | null };
 
 /**

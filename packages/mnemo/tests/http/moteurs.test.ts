@@ -84,15 +84,50 @@ describe('route moteurs', () => {
 		]);
 	});
 
-	it('poste : commande cherchée de nouveau ; installée ou changée depuis le démarrage → redémarrer le service', async () => {
-		const [installee] = await lire({ codex: { moteur: codex({ trouvee: COMMANDE }), commande: null } }, true);
-		expect(installee?.indisponible).toContain('Codex introuvable');
-		expect(installee?.poste?.[0]).toEqual({ cle: 'commande', libelle: 'Commande', ok: false, etat: 'trouvée depuis le démarrage', detail: expect.stringContaining('/opt/bin/codex'), remede: { texte: 'mnemo arreter', dans: 'terminal', puis: 'mnemo ouvrir' } });
-		const [changee] = await lire({ codex: { moteur: codex({ trouvee: { commande: '/autre/codex', avant: [] }, version: '0.171.0' }), commande: COMMANDE } }, true);
-		expect(changee?.poste?.[0]).toMatchObject({ ok: false, etat: 'changée', detail: expect.stringContaining('/autre/codex'), remede: { texte: 'mnemo arreter', puis: 'mnemo ouvrir' } });
-		const [retiree] = await lire({ 'claude-code': { moteur: claudeTrouve(null), commande: { commande: '/opt/bin/claude', avant: [] } } }, true);
-		expect(retiree?.poste?.[0]).toMatchObject({ ok: false, etat: 'introuvable maintenant' });
-		expect(retiree?.poste?.[0]?.remede).toBeUndefined();
+	it('poste : commande installée depuis le démarrage (null → trouvée) adoptée par le service, version relue pour elle', async () => {
+		const appels: unknown[][] = [];
+		const moteurs: Pilotage['moteurs'] = { codex: { moteur: codex({ trouvee: COMMANDE, version: '0.171.0', appels }), commande: null } };
+		const [cx] = await lire(moteurs, true);
+		expect(moteurs.codex?.commande).toEqual(COMMANDE);
+		expect(cx).toMatchObject({ indisponible: null, version: '0.171.0' });
+		expect(cx?.poste?.[0]).toEqual({ cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée', detail: '/opt/bin/codex' });
+		expect(cx?.poste?.some((p) => p.remede?.texte === 'mnemo arreter')).toBe(false);
+		expect(appels.map((a) => [a[0], a[3]])).toEqual([[COMMANDE, { relire: true }]]);
+	});
+
+	it('poste : commande changée depuis le démarrage adoptée par le service, version relue pour la nouvelle', async () => {
+		const appels: unknown[][] = [];
+		const autre = { commande: '/autre/codex', avant: [] };
+		const moteurs: Pilotage['moteurs'] = { codex: { moteur: codex({ trouvee: autre, version: '0.171.0', appels }), commande: COMMANDE } };
+		const [cx] = await lire(moteurs, true);
+		expect(moteurs.codex?.commande).toEqual(autre);
+		expect(cx?.poste?.[0]).toEqual({ cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée', detail: '/autre/codex' });
+		expect(appels.map((a) => [a[0], a[3]])).toEqual([[autre, { relire: true }]]);
+	});
+
+	it('poste : commande disparue depuis le démarrage non adoptée, le service garde la sienne', async () => {
+		const claude = { commande: '/opt/bin/claude', avant: [] };
+		const moteurs: Pilotage['moteurs'] = { 'claude-code': { moteur: claudeTrouve(null), commande: claude } };
+		const [retiree] = await lire(moteurs, true);
+		expect(moteurs['claude-code']?.commande).toEqual(claude);
+		expect(retiree?.poste?.[0]).toEqual({ cle: 'commande', libelle: 'Commande', ok: false, etat: 'introuvable maintenant', detail: expect.stringContaining('/opt/bin/claude') });
+	});
+
+	it('poste : la commande adoptée est celle du pilotage (sessions lancées ensuite) et de la vue suivante sans poste', async () => {
+		const pils: Pilotage[] = [];
+		const s = await serviceFaux({}, { pil: (p) => void pils.push(p) });
+		const pil = pils[0]!;
+		const moteurs = pil.moteurs;
+		moteurs.codex = { moteur: codex({ trouvee: COMMANDE, version: '0.171.0' }), commande: null };
+		const vue = async (poste: boolean): Promise<MoteurVue | undefined> => {
+			const r = await appeler(s.service.port, 'GET', `${ROUTES.moteurs}${poste ? '?poste=1' : ''}`, { jeton: s.service.jeton });
+			return (r.corps as ReponseMoteurs).moteurs.find((m) => m.id === 'codex');
+		};
+		expect((await vue(false))?.indisponible).toContain('Codex introuvable');
+		await vue(true);
+		expect(pil.moteurs).toBe(moteurs);
+		expect(pil.moteurs.codex?.commande).toEqual(COMMANDE);
+		expect(await vue(false)).toMatchObject({ indisponible: null, version: '0.171.0' });
 	});
 
 	it('poste : une seule vérification en vol, partagée entre les appels', async () => {

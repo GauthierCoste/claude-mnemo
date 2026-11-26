@@ -566,7 +566,7 @@ export const ROUTES = {
 
 /**
  * Un point vérifié d'un moteur sur le poste (`moteurs?poste=1`) : `cle` ; `libelle` à montrer ; `ok` (null : inconnu, à
- * vérifier) ; `etat`, court ; `detail`, le motif ; `remede` : la commande qui y remédie, `dans` un terminal ou dans le moteur, et celle à lancer `puis` (redémarrage du service).
+ * vérifier) ; `etat`, court ; `detail`, le motif ; `remede` : la commande qui y remédie, `dans` un terminal ou dans le moteur.
  */
 export type PointMoteurVue = {
 	cle: 'commande' | 'version' | 'mcp' | 'hooks' | 'approbation';
@@ -574,7 +574,7 @@ export type PointMoteurVue = {
 	ok: boolean | null;
 	etat: string;
 	detail?: string;
-	remede?: { texte: string; dans: 'terminal' | 'moteur'; puis?: string };
+	remede?: { texte: string; dans: 'terminal' | 'moteur' };
 };
 
 /**

@@ -84,12 +84,6 @@ function Point(p: { point: PointMoteurVue; moteur: string }): ReactNode {
 					<span className={s.remede}>
 						<span className={d.discret}>{x.remede.dans === 'terminal' ? 'À lancer dans un terminal :' : `À taper dans ${p.moteur} :`}</span>
 						<Commande texte={x.remede.texte} />
-						{x.remede.puis !== undefined && (
-							<>
-								<span className={d.discret}>puis</span>
-								<Commande texte={x.remede.puis} />
-							</>
-						)}
 					</span>
 				)}
 			</span>
