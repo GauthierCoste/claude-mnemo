@@ -1,6 +1,8 @@
 /* Vue Mémoire : barre d'onglets et colonnes. */
 .memoire {
 	display: grid;
+	/* la colonne ne s'élargit pas à la barre d'onglets : en vue étroite, la barre passe à la ligne */
+	grid-template-columns: minmax(0, 1fr);
 	grid-template-rows: auto 1fr;
 	min-height: 0;
 	min-width: 0;
@@ -13,6 +15,7 @@
 
 .barre {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 6px;
 	padding: var(--esp-2) var(--esp-4);
@@ -22,10 +25,12 @@
 
 .onglets {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 6px;
 }
 
 .onglet {
+	white-space: nowrap;
 	border: 0;
 	background: none;
 	color: var(--mu);
