@@ -90,9 +90,14 @@
 	animation: mnemo-pouls 2s infinite;
 }
 
+/* L'archiviste attend une réponse : pas seulement la couleur (WCAG 1.4.1) ; un anneau autour du point (visible même
+   sans animation) et un pouls plus rapide. */
 .pouls[data-attend='true'] {
 	background: var(--amber);
 	box-shadow: 0 0 0 0 color-mix(in srgb, var(--amber) 50%, transparent);
+	outline: 1.5px solid var(--amber);
+	outline-offset: 2px;
+	animation-duration: 1.2s;
 }
 
 /*
