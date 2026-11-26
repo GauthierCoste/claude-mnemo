@@ -416,7 +416,10 @@ to process).
 - **Sessions**: the grid of sessions, the Dossier panel (tree of all the folders of the root, two levels unfolded at
   start, with session status dots, git status and "+ session" on each folder) and the Contexte panel ("Injecté dans
   la session": one list for the selected session, see "Injected context"). The side panels are resized by dragging their
-  border (double-click: default width).
+  border (double-click: default width). In the session bar, left of the Dossier and Contexte switches, one small avatar
+  per agent (profile) with a live session, the archivist included: its most urgent state (waiting for an answer: amber
+  dot with a ring; working: pulsing dot; idle: hollow dot) and its number of sessions; a click goes to that session (the
+  archivist: its drawer). The row hides when the bar gets narrow.
 - **Mémoire › Archiviste**: one page to enrich the memory and decide, in three columns: to decide (facts to confirm,
   level raises and modifications proposed by a session) and to process (imported sources); the archivist terminal in the
   centre; on the right, the drop zone, the recent documents and "Appris aujourd'hui" (learned today: the commits of the
@@ -694,6 +697,12 @@ aside a note Mnemo injected counts as an error for the watch above.
   « seuil d’injection 90 % »; when it is cut, grey again, « seuil 90 % – coupé ». Under it, when cut, the notice and
   « Réactiver ». A note above the threshold that was not injected (refined later, or the cap per message reached) stays
   under the line: the session has not seen it.
+- Finding a note: the magnifier at the right of « Injecté dans la session » (or `/` in the panel) opens « Chercher une
+  fiche… » (find a note) just under the separator (at the top of what the session has not seen when nothing is
+  injected). From two characters, a targeted search of the memory (the same search as the palette, notes only) replaces
+  the list below it (the ◆ stay above), one line per note, without %; ➤ injects it, a click on the title opens it, a note
+  already injected is marked ◆, without ➤, and a note set aside says so. ↑/↓ move through the results; Escape empties
+  the field, then closes it. The magnifier stays lit while a search has text.
 - The ranking of the last meaningful message: on the left the calibrated score in %; in « ordre seul », the uncalibrated
   score in grey (« ≈ 42 % »: the refused model, the provisional rule, or an entry from before the live ranking), or ◇
   when there is none; the type dot and the title, with the reason under it and « piste » when the note was sent as a

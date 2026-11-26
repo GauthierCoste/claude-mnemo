@@ -8,6 +8,8 @@
 	background: var(--s1);
 	min-width: 0;
 	white-space: nowrap;
+	/* les agents en cours se masquent quand elle se resserre */
+	container: barre-etats / inline-size;
 }
 
 .decompte {

@@ -1,0 +1,140 @@
+/* Agents en cours : avatars miniatures (tuile teintée du profil, --profil), pastille d'état en coin, nombre de sessions en
+   exposant ; « +N » au-delà. La rangée disparaît quand la barre se resserre, avant de pousser les bascules. */
+.agents {
+	display: flex;
+	align-items: center;
+	/* la place du nombre en exposant */
+	gap: 10px;
+	flex: none;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.agents li {
+	display: flex;
+}
+
+.agent {
+	position: relative;
+	display: inline-grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 0;
+	border-radius: 7px;
+	background: none;
+	cursor: pointer;
+}
+
+.agent:hover .tuile {
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--profil) 70%, transparent);
+}
+
+.tuile {
+	display: inline-grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 7px;
+	background:
+		radial-gradient(120% 120% at 30% 20%, color-mix(in srgb, var(--profil) 24%, transparent), transparent 70%),
+		color-mix(in srgb, var(--profil) 10%, var(--s2));
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--profil) 35%, transparent);
+}
+
+/* pastille d'état, détachée de la tuile par un anneau de la couleur de la barre */
+.pastille {
+	position: absolute;
+	right: -2px;
+	bottom: -2px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	box-sizing: border-box;
+	box-shadow: 0 0 0 1.5px var(--s1);
+}
+
+/* au repos : creuse */
+.agent[data-etat='repos'] .pastille {
+	border: 1.5px solid var(--etat-en-pause);
+	background: var(--s1);
+}
+
+/* travaille : pleine, et elle pulse */
+.agent[data-etat='travaille'] .pastille {
+	background: var(--etat-travaille);
+}
+
+.agent[data-etat='travaille'] .pastille::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+	background: var(--etat-travaille);
+	animation: pouls 1.8s ease-out infinite;
+}
+
+/* attend une réponse : pleine, cerclée d'un anneau (comme le bouton Archiviste) */
+.agent[data-etat='attend'] .pastille {
+	background: var(--etat-attend);
+	outline: 1.5px solid var(--etat-attend);
+	outline-offset: 1.5px;
+}
+
+.nombre {
+	position: absolute;
+	top: -4px;
+	right: -5px;
+	min-width: 12px;
+	height: 12px;
+	padding: 0 2px;
+	border-radius: 6px;
+	background: var(--s3);
+	box-shadow: 0 0 0 1.5px var(--s1);
+	color: var(--tx);
+	font: 600 8.5px/12px var(--mono);
+	text-align: center;
+}
+
+.plus {
+	align-items: center;
+	padding: 0 2px;
+	font: 500 10.5px var(--mono);
+	color: var(--mu);
+	cursor: help;
+}
+
+.masque {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+@keyframes pouls {
+	from {
+		transform: scale(1);
+		opacity: 0.7;
+	}
+	to {
+		transform: scale(2.4);
+		opacity: 0;
+	}
+}
+
+/* la barre resserrée : les bascules et « + Nouvelle session » d'abord */
+@container barre-etats (max-width: 640px) {
+	.agents {
+		display: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.agent[data-etat='travaille'] .pastille::after {
+		animation: none;
+	}
+}
