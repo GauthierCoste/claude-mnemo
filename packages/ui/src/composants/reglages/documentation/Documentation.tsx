@@ -153,7 +153,7 @@ export function Documentation(): ReactNode {
 	}, []);
 	useEffect(() => () => window.clearTimeout(demande.current ?? undefined), []);
 
-	const aller = (e: MouseEvent<HTMLAnchorElement>, id: string) => {
+	const aller = (e: MouseEvent<HTMLButtonElement>, id: string) => {
 		e.preventDefault();
 		const section = document.getElementById(id);
 		if (section === null) return;
@@ -170,9 +170,9 @@ export function Documentation(): ReactNode {
 				<ul className={d.lignes}>
 					{SECTIONS_DOC.map((x) => (
 						<li key={x.id}>
-							<a href={`#${x.id}`} className={`${d.ligne} ${s.lien}`} aria-current={x.id === active ? 'true' : undefined} onClick={(e) => aller(e, x.id)}>
+							<button type="button" className={`${d.ligne} ${s.lien}`} aria-controls={x.id} aria-current={x.id === active ? 'true' : undefined} onClick={(e) => aller(e, x.id)}>
 								<span className={d.nom}>{x.titre}</span>
-							</a>
+							</button>
 						</li>
 					))}
 				</ul>

@@ -11,7 +11,7 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-const sommaire = () => within(screen.getByRole('navigation', { name: 'Sommaire' })).getAllByRole('link');
+const sommaire = () => within(screen.getByRole('navigation', { name: 'Sommaire' })).getAllByRole('button');
 const actif = () => sommaire().filter((a) => a.getAttribute('aria-current') === 'true').map((a) => a.textContent);
 const TITRES = ['Principe', 'Session', 'Agents', 'Rappel', 'Recherche', 'Confiance', 'Archiviste'];
 
@@ -33,7 +33,7 @@ describe('onglet Documentation', () => {
 		render(<Documentation />);
 		expect(sommaire().map((a) => a.textContent)).toEqual(TITRES);
 		expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(TITRES);
-		expect(sommaire()[0]!.getAttribute('href')).toBe('#doc-principe');
+		expect(sommaire()[0]!.getAttribute('aria-controls')).toBe('doc-principe');
 		expect(actif()).toEqual(['Principe']);
 	});
 

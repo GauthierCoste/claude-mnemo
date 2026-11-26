@@ -65,9 +65,11 @@ const PERMIS = new Set([
 	'composants/reglages/agents/Agents.module.css .case',
 	'composants/reglages/agents/Agents.module.css .symbole',
 	'composants/reglages/agents/EditeurSkill.module.css .icone',
-	// Documentation : la flèche entre deux étapes du schéma (tournée d'un quart quand il s'empile), le symbole dans son rond
-	'composants/reglages/documentation/Documentation.module.css .fleche',
-	'composants/reglages/documentation/Documentation.module.css .symbole',
+	// Sessions : la loupe du classement (icône dans son bouton carré), les agents en cours (avatar dans sa tuile, nombre en exposant)
+	'composants/sessions/RechercheFiche.module.css .boutonLoupe',
+	'composants/sessions/AgentsEnCours.module.css .agent',
+	'composants/sessions/AgentsEnCours.module.css .tuile',
+	'composants/sessions/AgentsEnCours.module.css .nombre',
 ]);
 
 function trouves(): Map<string, string[]> {
