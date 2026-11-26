@@ -56,6 +56,15 @@ const PERMIS = new Set([
 	'composants/sessions/nouvelle/SceneAgents.module.css .fleche',
 	'composants/sessions/nouvelle/RangeeAgents.module.css .rangee',
 	'composants/sessions/nouvelle/RangeeAgents.module.css .vignette[data-eteint]::after',
+	// Réglages › Agents : l'agent au milieu de son podium (et son sol), un logo, une forme d'avatar ou une rune au milieu de
+	// sa case carrée, une case d'inventaire (icône, nom, type empilés, comme une vignette), l'emoji d'une skill dans son champ
+	'composants/reglages/agents/Agents.module.css .podium',
+	'composants/reglages/agents/Agents.module.css .podium::after',
+	'composants/reglages/agents/Agents.module.css .blason',
+	'composants/reglages/agents/Agents.module.css .forme',
+	'composants/reglages/agents/Agents.module.css .case',
+	'composants/reglages/agents/Agents.module.css .rune',
+	'composants/reglages/agents/EditeurSkill.module.css .icone',
 ]);
 
 function trouves(): Map<string, string[]> {

@@ -1,8 +1,7 @@
 /**
- * Onglet Profils de la vue Réglages : la liste des profils à gauche, l'éditeur du profil choisi à droite (avec l'aperçu de
- * ce que reçoit une session). Changer de profil, ou en créer un, avec des modifications non enregistrées est retenu dans la
- * page. Pendant la saisie du nom d'un nouveau profil, aucun éditeur n'est ouvert : les réglages faits à droite iraient au
- * profil d'avant, pas au nouveau.
+ * Onglet Agents de la vue Réglages : la liste des agents (les profils de session) dans le panneau, le créateur de l'agent
+ * choisi à droite. Changer d'agent, ou en créer un, avec des modifications non enregistrées est retenu dans la page. Pendant
+ * la saisie du nom d'un nouvel agent, aucun créateur n'est ouvert : les réglages faits à droite iraient à l'agent d'avant.
  */
 import { ROUTES } from '@mnemo/contrat';
 import type { ProfilEditableVue, ReponseEcritureProfil } from '@mnemo/contrat';
@@ -12,12 +11,13 @@ import { ErreurApi } from '../../../client/api.ts';
 import { useClient } from '../../../client/contexte.tsx';
 import { avecId, useProfil, useProfils } from '../../../client/hooks.ts';
 import { Bouton } from '../../commun/Bouton.tsx';
-import { EditeurProfil } from './EditeurProfil.tsx';
-import { ListeProfils } from './ListeProfils.tsx';
-import s from './Profils.module.css';
+import c from '../Cartes.module.css';
+import d from '../Panneau.module.css';
+import { AtelierAgent } from './AtelierAgent.tsx';
+import { ListeAgents } from './ListeAgents.tsx';
 
-/** Valeurs d'un nouveau profil : celles par défaut du profil `travail` (consigne par défaut), avec un autre avatar. */
-const NOUVEAU_PROFIL: ProfilEditableVue = {
+/** Valeurs d'un nouvel agent : celles par défaut de `travail` (consigne par défaut), avec un autre avatar. */
+const NOUVEL_AGENT: ProfilEditableVue = {
 	avatar: { forme: 'renard', couleur: 'bleu' },
 	consigne: null,
 	lancement: 'projet',
@@ -28,10 +28,10 @@ const NOUVEAU_PROFIL: ProfilEditableVue = {
 	modele: '',
 };
 
-/** Où aller une fois les modifications en cours abandonnées : un autre profil, ou la création d'un profil. */
-type Demande = { vers: 'profil'; nom: string } | { vers: 'nouveau' };
+/** Où aller une fois les modifications en cours abandonnées : un autre agent, ou la création d'un agent. */
+type Demande = { vers: 'agent'; nom: string } | { vers: 'nouveau' };
 
-export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
+export function Agents(p: { surModifie(modifie: boolean): void }): ReactNode {
 	const { api } = useClient();
 	const profils = useProfils();
 	const [choisi, setChoisi] = useState<string>(PROFIL_TRAVAIL);
@@ -64,7 +64,7 @@ export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
 	};
 	const choisir = (nom: string) => {
 		if (nom === choisi && !creation) return;
-		if (modifie.current) setDemande({ vers: 'profil', nom });
+		if (modifie.current) setDemande({ vers: 'agent', nom });
 		else ouvrir(nom);
 	};
 	const demanderNouveau = () => {
@@ -73,9 +73,9 @@ export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
 	};
 
 	const creer = async (nom: string): Promise<string | null> => {
-		if (profils.donnees?.profils.some((x) => x.nom === nom)) return `Le profil « ${nom} » existe déjà.`;
+		if (profils.donnees?.profils.some((x) => x.nom === nom)) return `L’agent « ${nom} » existe déjà.`;
 		try {
-			await api.remplacer<ReponseEcritureProfil>(avecId(ROUTES.profil, nom), { editable: NOUVEAU_PROFIL, empreinte: null });
+			await api.remplacer<ReponseEcritureProfil>(avecId(ROUTES.profil, nom), { editable: NOUVEL_AGENT, empreinte: null });
 			profils.recharger();
 			ouvrir(nom);
 			return null;
@@ -85,12 +85,12 @@ export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
 	};
 
 	if (profils.donnees === undefined) {
-		return <p className={s.discret}>{profils.erreur ?? 'Chargement des profils…'}</p>;
+		return <p className={c.contenu}>{profils.erreur ?? 'Chargement des agents…'}</p>;
 	}
 	const ignores = profils.donnees.ignores;
 	return (
-		<div className={s.page}>
-			<ListeProfils
+		<div className={d.page}>
+			<ListeAgents
 				profils={profils.donnees.profils}
 				choisi={creation ? null : choisi}
 				creation={creation}
@@ -99,9 +99,9 @@ export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
 				surAnnulerNouveau={() => setCreation(false)}
 				surNouveau={creer}
 			/>
-			<div className={s.droite}>
+			<div className={c.contenu}>
 				{ignores.length > 0 && (
-					<ul className={s.avertissements} aria-label="Dossiers de profils ignorés">
+					<ul className={c.avis} aria-label="Dossiers d’agents ignorés">
 						{ignores.map((x) => (
 							<li key={x.nom}>
 								{DOSSIERS_FIXES.profils}/{x.nom}/ ignoré : {x.motif}
@@ -110,9 +110,9 @@ export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
 					</ul>
 				)}
 				{demande !== null && (
-					<div className={s.avis} role="alert">
-						<p>Modifications du profil « {choisi} » non enregistrées : les abandonner ?</p>
-						<div className={s.actions}>
+					<div className={c.avis} role="alert">
+						<p>Modifications de l’agent « {choisi} » non enregistrées : les abandonner ?</p>
+						<div className={c.actions}>
 							<Bouton onClick={() => (demande.vers === 'nouveau' ? nouveau() : ouvrir(demande.nom))}>Abandonner</Bouton>
 							<Bouton genre="primaire" onClick={() => setDemande(null)}>
 								Rester
@@ -121,11 +121,14 @@ export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
 					</div>
 				)}
 				{creation ? (
-					<p className={s.discret}>Nouveau profil : choisis son nom à gauche, puis Créer. Il tournera sur {NOMS_MOTEURS[NOUVEAU_PROFIL.moteur]} ; son avatar, son moteur et le reste se règlent ici une fois le profil créé.</p>
+					<p className={c.discret}>
+						Nouvel agent : choisis son nom à gauche, puis Créer. Il tournera sur {NOMS_MOTEURS[NOUVEL_AGENT.moteur]} ; son apparence, sa classe et le reste se
+						règlent ici une fois l’agent créé.
+					</p>
 				) : detail.donnees === undefined || detail.donnees.nom !== choisi ? (
-					<p className={s.discret}>{detail.erreur ?? 'Chargement du profil…'}</p>
+					<p className={c.discret}>{detail.erreur ?? 'Chargement de l’agent…'}</p>
 				) : (
-					<EditeurProfil
+					<AtelierAgent
 						key={choisi}
 						detail={detail.donnees}
 						recharger={() => {

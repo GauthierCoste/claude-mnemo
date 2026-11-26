@@ -12,7 +12,7 @@ import { attendUnGeste } from '../../moteurs/circuit.ts';
 import { ONGLETS_REGLAGES, ongletRetenu, retenirOnglet, type OngletReglages as Onglet } from '../../reglages/onglet-retenu.ts';
 import { Bouton } from '../commun/Bouton.tsx';
 import { OngletReglages } from './OngletReglages.tsx';
-import { Profils } from './profils/Profils.tsx';
+import { Agents } from './agents/Agents.tsx';
 import s from './Reglages.module.css';
 
 const TITRES_ONGLETS: Readonly<Record<Onglet, string>> = { agents: 'Agents', reglages: 'Réglages', documentation: 'Documentation' };
@@ -90,7 +90,7 @@ export function Reglages(): ReactNode {
 			)}
 			<div id={`panneau-${onglet}`} role="tabpanel" aria-labelledby={`onglet-${onglet}`} className={s.panneau}>
 				{onglet === 'agents' ? (
-					<Profils surModifie={surModifie} />
+					<Agents surModifie={surModifie} />
 				) : onglet === 'reglages' ? (
 					<OngletReglages surModifie={surModifie} />
 				) : (

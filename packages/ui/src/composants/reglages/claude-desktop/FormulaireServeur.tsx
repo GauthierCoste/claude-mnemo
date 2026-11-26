@@ -10,7 +10,7 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useNavigation } from '../../../navigation.tsx';
 import { demandeDe, SAISIE_VIDE, saisieDe, type SaisieServeur } from '../../../reglages/serveur-mcp.ts';
 import { Bouton } from '../../commun/Bouton.tsx';
-import d from '../profils/Profils.module.css';
+import d from '../champs/Saisie.module.css';
 import s from './AppClaude.module.css';
 
 export function FormulaireServeur(p: {
@@ -74,7 +74,7 @@ export function FormulaireServeur(p: {
 			<label className={s.champ}>
 				<span className={d.libelle}>Arguments</span>
 				<span className={d.discret}>Un par ligne.</span>
-				<textarea className={d.consigne} rows={3} spellCheck={false} value={saisie.args} onChange={changer('args')} />
+				<textarea className={d.texteLong} rows={3} spellCheck={false} value={saisie.args} onChange={changer('args')} />
 			</label>
 			<label className={s.champ}>
 				<span className={d.libelle}>Variables</span>
@@ -83,7 +83,7 @@ export function FormulaireServeur(p: {
 						? 'NOM=valeur, une par ligne. Les valeurs enregistrées ne sont jamais montrées : NOM seul garde la valeur actuelle, une ligne effacée retire la variable.'
 						: 'NOM=valeur, une par ligne.'}
 				</span>
-				<textarea className={d.consigne} rows={3} spellCheck={false} autoComplete="off" aria-describedby={`${id}-variables`} value={saisie.env} onChange={changer('env')} />
+				<textarea className={d.texteLong} rows={3} spellCheck={false} autoComplete="off" aria-describedby={`${id}-variables`} value={saisie.env} onChange={changer('env')} />
 			</label>
 			{nav.sortieRetenue && modifie && !p.autreBrouillon && (
 				<div className={d.avis} role="alert">

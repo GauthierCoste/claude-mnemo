@@ -1,0 +1,73 @@
+/* Champs de saisie des Réglages (serveur MCP, nouvel agent, skill) : libellé, texte, texte long, et leurs messages. */
+.libelle {
+	font-weight: 600;
+}
+
+.champTexte {
+	background: var(--s1);
+	border: 1px solid var(--bd);
+	border-radius: var(--r-2);
+	padding: 6px 9px;
+	color: var(--tx);
+	font-family: var(--mono);
+	font-size: 12px;
+	min-width: 0;
+}
+
+.texteLong {
+	width: 100%;
+	box-sizing: border-box;
+	resize: vertical;
+	background: var(--s1);
+	border: 1px solid var(--bd);
+	border-radius: var(--r-2);
+	padding: 8px 10px;
+	color: var(--tx);
+	font-family: var(--mono);
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+.champTexte:focus-visible,
+.texteLong:focus-visible {
+	outline: 2px solid var(--ac);
+	outline-offset: -1px;
+}
+
+.discret {
+	margin: 0;
+	color: var(--mu);
+	font-size: 12px;
+}
+
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--esp-2);
+}
+
+.erreur {
+	margin: 0;
+	color: var(--red);
+}
+
+.avis {
+	padding: var(--esp-3);
+	border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+	border-radius: var(--r-2);
+	background: color-mix(in srgb, var(--amber) 8%, transparent);
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-2);
+}
+
+.avis p {
+	margin: 0;
+}
+
+/* champ fixé (nom d'une skill fournie par Mnemo) : lisible, visiblement non modifiable */
+.champTexte:read-only {
+	color: var(--mu);
+	border-style: dashed;
+}

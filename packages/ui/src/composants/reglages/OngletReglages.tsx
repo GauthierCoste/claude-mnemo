@@ -27,7 +27,7 @@ import { AppClaude } from './claude-desktop/AppClaude.tsx';
 import { EtatService } from './EtatService.tsx';
 import { Moteurs } from './moteurs/Moteurs.tsx';
 import c from './Cartes.module.css';
-import d from './profils/Profils.module.css';
+import d from './Panneau.module.css';
 import r from './Reglages.module.css';
 
 const SECTIONS: readonly { cle: SectionReglages; titre: string; sous: string }[] = [
@@ -139,12 +139,12 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 	return (
 		<div className={d.page}>
 			<nav className={d.liste} aria-label="Sections des réglages">
-				<ul className={d.profils}>
+				<ul className={d.lignes}>
 					{SECTIONS.map((x) => (
 						<li key={x.cle}>
-							<button type="button" className={d.ligneProfil} aria-current={x.cle === section ? 'true' : undefined} onClick={() => setSection(x.cle)}>
+							<button type="button" className={d.ligne} aria-current={x.cle === section ? 'true' : undefined} onClick={() => setSection(x.cle)}>
 								<span className={d.identite}>
-									<span className={d.nomProfil}>
+									<span className={d.nom}>
 										{x.titre}
 										{marque(x.cle)}
 									</span>

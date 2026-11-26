@@ -1,0 +1,128 @@
+/*
+ * Onglets de la vue Réglages : le panneau latéral à gauche (agents, sections) et le contenu à droite, qui défile seul ; une
+ * colonne en petite largeur, le panneau au-dessus.
+ */
+.page {
+	flex: 1;
+	display: grid;
+	grid-template-columns: 260px minmax(0, 1fr);
+	min-width: 0;
+	min-height: 0;
+}
+
+.liste {
+	border-right: 1px solid var(--bd);
+	padding: var(--esp-4) var(--esp-3);
+	overflow: auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-3);
+}
+
+.groupe {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.titreGroupe {
+	margin: 0 8px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--mu);
+}
+
+.lignes {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.ligne {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: var(--esp-2);
+	padding: 8px;
+	border: 1px solid transparent;
+	border-radius: var(--r-2);
+	background: none;
+	color: var(--tx);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.ligne:hover {
+	background: var(--s2);
+}
+
+.ligne[aria-current='true'] {
+	background: var(--s2);
+	border-color: var(--bd2);
+}
+
+.ligne:focus-visible {
+	outline: 2px solid var(--ac);
+	outline-offset: -2px;
+}
+
+/* « + Nouvel agent » : une ligne discrète sous la liste */
+.ligne.ajout {
+	color: var(--mu);
+}
+
+.identite {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.nom {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	font-weight: 600;
+}
+
+.description {
+	color: var(--mu);
+	font-size: 12px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.badge {
+	padding: 0 6px;
+	border-radius: var(--r-pastille);
+	background: color-mix(in srgb, var(--ac) 16%, transparent);
+	color: var(--ac);
+	font-size: 10px;
+	font-weight: 500;
+}
+
+.discret {
+	margin: 0;
+	color: var(--mu);
+	font-size: 12px;
+}
+
+@media (max-width: 720px) {
+	.page {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr);
+	}
+
+	.liste {
+		border-right: none;
+		border-bottom: 1px solid var(--bd);
+		max-height: 40vh;
+	}
+}
