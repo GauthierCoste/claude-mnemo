@@ -1,5 +1,7 @@
 // Paires implicites tirées du journal des gestes (spec « entraîner la note », D8) : de quoi réapprendre la note de confiance
 // sur l'usage, jamais de quoi la mesurer. Pur.
+// Appariement par session, pas par message : le `rangMessage` d'un ➤ est celui du message qui porte la fiche (le suivant de
+// celui dont le classement l'a montrée), et ✗ toujours ou une lecture prennent le dernier message de la session.
 //
 // Choix :
 // - utile : ➤ (`injectee_main`), lue après une carte ; pas utile : ✗ ici ou toujours ; `injectee_auto` n'est pas un jugement
@@ -10,7 +12,7 @@
 // - exposition : une ligne d'un classement (session, message, fiche ; la dernière si le message a plusieurs classements), hors
 //   lignes déjà injectées ou lues et injections de Mnemo. `propensionParRang` : part des lignes exposées de ce rang dont la
 //   fiche a reçu ➤, ✗ ou une lecture dans la session ; plancher 0,05 ; rang jamais exposé : pas de correction (1).
-// - poids : poids de base / propension du rang, plafonné à 5.
+// - poids : poids de base × min(5, 1 / propension du rang) : un pas utile faible pèse au plus 1,5, jamais plus qu'un geste.
 // - un geste sans rang ou sans signaux lisibles (note ancienne) est écarté et compté.
 
 import type { Geste, NoteDuGeste } from './gestes.ts';
@@ -90,7 +92,7 @@ export function propensionParRang(gestes: readonly GesteDuJournal[], classements
 /** Les paires implicites des gestes et des classements servis, et le nombre de gestes écartés faute de rang ou de signaux. */
 export function pairesDesGestes(gestes: readonly GesteDuJournal[], classements: readonly ClassementServi[]): PairesDesGestes {
 	const propension = propensionParRang(gestes, classements);
-	const poids = (base: number, rang: number) => Math.min(POIDS_IMPLICITE_MAX, base / (propension.get(rang) ?? 1));
+	const poids = (base: number, rang: number) => base * Math.min(POIDS_IMPLICITE_MAX, 1 / (propension.get(rang) ?? 1));
 	const utiles = gestesUtiles(gestes);
 
 	// le dernier jugement (ou rétablissement) de chaque fiche dans chaque session

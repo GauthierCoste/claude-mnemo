@@ -96,17 +96,27 @@ describe('pairesDesGestes', () => {
 		expect(rare.paires.find((p) => p.origine === 'ecartee_ici')!.poids).toBe(5);
 	});
 
-	it('top 3 sans geste ni lecture dans la session : pas utile faible (0,3 / propension) ; rangs 4 et suivants laissés', () => {
+	it('top 3 sans geste ni lecture dans la session : pas utile faible (0,3 × min(5, 1 / propension)) ; rangs 4 et suivants laissés', () => {
 		const classements = session('S1', 2);
 		const { paires } = pairesDesGestes([geste('injectee_main', 'S1', 'notes/S1-a.md', 1, 1)], classements);
 		const faibles = paires.filter((p) => p.origine === 'sans_geste');
 		expect(faibles.map((p) => `${p.fiche}#${p.rangMessage}`).sort()).toEqual(['notes/S1-b.md#1', 'notes/S1-b.md#2', 'notes/S1-c.md#1', 'notes/S1-c.md#2']);
 		for (const p of faibles) {
 			expect(p.y).toBe(false);
-			// rangs 2 et 3 : aucun geste, propension au plancher : 0,3 / 0,05 = 6, plafonné à 5
-			expect(p.poids).toBe(5);
+			// rangs 2 et 3 : aucun geste, propension au plancher : 1 / 0,05 = 20 plafonné à 5, × 0,3 : 1,5 (jamais plus qu'un geste)
+			expect(p.poids).toBeCloseTo(1.5, 12);
 		}
 		expect(faibles[0]!.signaux.cosinusRelatif).toBeCloseTo(0.2);
+	});
+
+	it('pas utile faible sous le plafond : 0,3 / propension', () => {
+		// rang 2 : la fiche b reçoit un ✗ dans S1, pas dans S2 ni S3 ni S4 : propension 1 / 4, poids 0,3 × 4 = 1,2
+		const classements = [...session('S1', 1), ...session('S2', 1), ...session('S3', 1), ...session('S4', 1)];
+		const { paires } = pairesDesGestes([geste('ecartee_ici', 'S1', 'notes/S1-b.md', 1, 2)], classements);
+		const faibleB = paires.filter((p) => p.origine === 'sans_geste' && p.rang === 2);
+		expect(faibleB).toHaveLength(3);
+		for (const p of faibleB) expect(p.poids).toBeCloseTo(1.2, 12);
+		expect(paires.find((p) => p.origine === 'ecartee_ici')!.poids).toBeCloseTo(4, 12);
 	});
 
 	it('pas utile faible : jamais pour une fiche lue, injectée, ou touchée par un geste quelconque dans la session', () => {

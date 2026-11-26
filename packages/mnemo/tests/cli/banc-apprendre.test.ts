@@ -49,6 +49,9 @@ describe('mnemo banc contexte --apprendre', () => {
 		expect(texte).not.toContain('paires implicites');
 		const avecImplicites = { ...rapport, niveaux: rapport.niveaux.map((n) => ({ ...n, implicites: { utilisees: 7, ecartees: 2 } })) };
 		expect(rapportEnTexte(avecImplicites, []).match(/paires implicites des gestes : 7 apprises, 2 laissées/gu)).toHaveLength(2);
+		// niveau non appris (aucune paire du banc) : son refus le dit, pas les paires implicites
+		const nonAppris = { ...avecImplicites, niveaux: avecImplicites.niveaux.map((n) => ({ ...n, retenue: null })) };
+		expect(rapportEnTexte(nonAppris, [])).not.toContain('paires implicites');
 		for (const contenu of [ecrit, coefficients, json, texte]) {
 			expect(contenu).not.toContain('Atelier');
 			expect(contenu).not.toContain('Devis');

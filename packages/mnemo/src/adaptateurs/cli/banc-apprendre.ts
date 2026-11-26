@@ -53,10 +53,10 @@ export function rapportEnTexte(r: RapportDApprentissage, ecrits: readonly string
 	for (const n of r.niveaux) {
 		const m = n.modele;
 		lignes.push('', `${NOMS[n.niveau]} : ${m.accepte ? 'ACCEPTÉ' : 'refusé'}${m.refus.length === 0 ? '' : ` (${m.refus.join(' ; ')})`}`);
+		if (n.retenue === null) continue;
 		if (n.implicites.utilisees + n.implicites.ecartees > 0) {
 			lignes.push(`  paires implicites des gestes : ${n.implicites.utilisees} apprises, ${n.implicites.ecartees} laissées (une variable de la configuration manque)`);
 		}
-		if (n.retenue === null) continue;
 		const poids = Object.entries(m.poids).map(([v, w]) => `${v} ${w.toFixed(3)}`).join(', ');
 		lignes.push(`  modèle : biais ${m.biais.toFixed(3)} ; ${poids} ; λ ${m.lambda} ; ${m.converge ? 'convergé' : 'NON CONVERGÉ'} ; ${m.paires} paires, ${m.messages} messages, ${m.sessions} sessions`);
 		if (n.mediane !== null) lignes.push(`  médiane des découpages (seuil 90 %) : ${mesuresEnTexte(n.mediane)} ; pire précision ${pourcent(n.pirePrecision)}`);
