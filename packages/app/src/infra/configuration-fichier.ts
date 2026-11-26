@@ -1,16 +1,18 @@
 /**
- * Fichier de configuration de l'app : `~/Library/Application Support/Mnemo/config.json` (0600, écrit par l'assistant ou par
+ * Fichier de configuration de l'app : `config.json` du dossier de l'app (`dossierApp` : `~/Library/Application Support/Mnemo`
+ * sous macOS, `%APPDATA%\Mnemo` sous Windows ; 0600, écrit par l'assistant ou par
  * `pnpm installer-dev`), lu puis validé par le domaine. Le dossier personnel est passé par l'appelant (`os.homedir()`, voir
  * `dossiers.ts` ; un dossier temporaire dans les tests).
  */
 import { randomBytes } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { dossierApp } from './dossiers.ts';
 import { type Configuration, type Lancement, type ResultatConfiguration, validerConfiguration } from '../domaine/configuration.ts';
 
-/** Chemin de `config.json` sous le dossier personnel `home`. */
+/** Chemin de `config.json` dans le dossier de l'app de `home`. */
 export function cheminConfiguration(home: string): string {
-	return join(home, 'Library', 'Application Support', 'Mnemo', 'config.json');
+	return join(dossierApp(home), 'config.json');
 }
 
 /**

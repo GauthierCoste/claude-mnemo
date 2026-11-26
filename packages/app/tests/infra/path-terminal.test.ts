@@ -74,6 +74,8 @@ describe('PATH du terminal', () => {
 		const windows = await lirePathTerminal({ home: HOME, base: BASE, plateforme: 'win32', lanceur: async () => ((appele = true), '') });
 		expect(windows).toMatchObject({ origine: 'defaut' });
 		expect(appele).toBe(false);
+		// sous Windows, la variable s'appelle `Path` : lue sans tenir compte de la casse, prise telle quelle
+		expect(await lirePathTerminal({ home: HOME, base: { Path: 'C:\\Windows;C:\\Git\\cmd' }, plateforme: 'win32' })).toMatchObject({ path: 'C:\\Windows;C:\\Git\\cmd', origine: 'defaut' });
 	});
 
 	it('environnement minimal : quelques variables de l’app, rien d’autre', () => {

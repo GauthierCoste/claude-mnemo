@@ -6,6 +6,7 @@
  */
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { variable } from '@mnemo/commun';
 import { argumentsShell, lirePathDeSortie, marqueurs, shellDeConnexion } from '../domaine/path-terminal.ts';
 import { pathParDefaut } from './emplacement.ts';
 import type { Journal } from './journal-app.ts';
@@ -111,11 +112,12 @@ export type PathTerminal = { path: string; origine: 'shell' } | { path: string; 
 /** Le `PATH` du shell de connexion ; sinon (Windows, échec, sortie sans `PATH`) `pathParDefaut`, et la raison au journal. */
 export async function lirePathTerminal(o: OptionsPathTerminal): Promise<PathTerminal> {
 	const base = o.base ?? process.env;
+	const plateforme = o.plateforme ?? process.platform;
 	const repli = (raison: string): PathTerminal => {
 		o.journal?.(`PATH du terminal non lu (${raison}) : PATH par défaut.`);
-		return { path: pathParDefaut(o.home, base['PATH']), origine: 'defaut', raison };
+		return { path: pathParDefaut(o.home, variable(base, 'PATH', plateforme), plateforme), origine: 'defaut', raison };
 	};
-	if ((o.plateforme ?? process.platform) === 'win32') return repli('Windows : pas de shell de connexion.');
+	if (plateforme === 'win32') return repli('Windows : pas de shell de connexion.');
 	const shell = shellDeConnexion(base['SHELL']);
 	const m = marqueurs(randomBytes(8).toString('hex'));
 	let sortie: string;

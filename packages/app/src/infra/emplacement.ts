@@ -43,9 +43,11 @@ export function emplacementProvisoire(ressources: string): boolean {
 /**
  * `PATH` de repli quand celui du terminal n'a pas pu être lu (`lirePathTerminal`) : ouverte depuis le Finder, l'app reçoit
  * le `PATH` minimal de macOS, sans `claude` ni le `git` de Homebrew ; les dossiers habituels sont donc ajoutés devant
- * (`~/.local/bin`, celui de la commande `mnemo` et de l'installateur de Claude Code ; Homebrew), sans doublon.
+ * (`~/.local/bin`, celui de la commande `mnemo` et de l'installateur de Claude Code ; Homebrew), sans doublon. Sous
+ * Windows, l'app reçoit le `Path` complet du compte : il est pris tel quel (sans doublon), sans dossier POSIX.
  */
-export function pathParDefaut(home: string, path: string | undefined): string {
+export function pathParDefaut(home: string, path: string | undefined, plateforme: NodeJS.Platform = process.platform): string {
+	if (plateforme === 'win32') return [...new Set((path ?? '').split(';').filter((d) => d !== ''))].join(';');
 	const dossiers = [join(home, '.local', 'bin'), '/opt/homebrew/bin', '/usr/local/bin', ...(path ?? '').split(delimiter), '/usr/bin', '/bin', '/usr/sbin', '/sbin'];
 	return [...new Set(dossiers.filter((d) => d !== ''))].join(delimiter);
 }

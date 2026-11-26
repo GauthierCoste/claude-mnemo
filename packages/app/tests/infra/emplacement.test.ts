@@ -45,4 +45,9 @@ describe('emplacement du Node et du main.ts', () => {
 		expect(pathParDefaut('/maison/exemple', '/usr/bin:/bin:/opt/homebrew/bin')).toBe('/maison/exemple/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin');
 		expect(pathParDefaut('/maison/exemple', undefined)).toBe('/maison/exemple/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin');
 	});
+
+	it('PATH par défaut sous Windows : le Path du processus tel quel, sans doublon ni dossier POSIX', () => {
+		expect(pathParDefaut('D:\\Profils\\exemple', 'C:\\Windows;C:\\Git\\cmd;;C:\\Windows', 'win32')).toBe('C:\\Windows;C:\\Git\\cmd');
+		expect(pathParDefaut('D:\\Profils\\exemple', undefined, 'win32')).toBe('');
+	});
 });

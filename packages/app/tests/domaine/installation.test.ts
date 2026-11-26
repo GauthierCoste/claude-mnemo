@@ -25,15 +25,23 @@ describe('ce que Mnemo a installé', () => {
 	});
 
 	it('entrée MCP : la nôtre, celle de Mnemo ailleurs, ou une autre', () => {
-		expect(etatEntreeMcp(undefined, ATTENDU)).toBe('absent');
-		expect(etatEntreeMcp({ type: 'stdio', command: ATTENDU.node, args: [ATTENDU.main, 'mcp'] }, ATTENDU)).toBe('nous');
-		expect(etatEntreeMcp({ command: ATTENDU.node, args: [ATTENDU.main, 'mcp'], env: { MNEMO_RACINE: '/x' } }, ATTENDU)).toBe('nous');
-		expect(etatEntreeMcp({ command: '/vieux/node', args: [DEPOT, 'mcp'] }, ATTENDU)).toBe('ailleurs');
-		expect(etatEntreeMcp({ command: 'C:\\node.exe', args: ['C:\\depot\\packages\\mnemo\\src\\adaptateurs\\cli\\main.ts', 'mcp'] }, ATTENDU)).toBe('ailleurs');
-		expect(etatEntreeMcp({ command: 'npx', args: ['autre-serveur', 'mcp'] }, ATTENDU)).toBe('autre');
-		expect(etatEntreeMcp({ command: ATTENDU.node, args: [ATTENDU.main] }, ATTENDU)).toBe('autre');
-		expect(etatEntreeMcp({ url: 'https://exemple.test/mcp' }, ATTENDU)).toBe('autre');
-		expect(etatEntreeMcp('texte', ATTENDU)).toBe('autre');
+		expect(etatEntreeMcp(undefined, ATTENDU, 'darwin')).toBe('absent');
+		expect(etatEntreeMcp({ type: 'stdio', command: ATTENDU.node, args: [ATTENDU.main, 'mcp'] }, ATTENDU, 'darwin')).toBe('nous');
+		expect(etatEntreeMcp({ command: ATTENDU.node, args: [ATTENDU.main, 'mcp'], env: { MNEMO_RACINE: '/x' } }, ATTENDU, 'darwin')).toBe('nous');
+		expect(etatEntreeMcp({ command: '/vieux/node', args: [DEPOT, 'mcp'] }, ATTENDU, 'darwin')).toBe('ailleurs');
+		expect(etatEntreeMcp({ command: 'C:\\node.exe', args: ['C:\\depot\\packages\\mnemo\\src\\adaptateurs\\cli\\main.ts', 'mcp'] }, ATTENDU, 'darwin')).toBe('ailleurs');
+		expect(etatEntreeMcp({ command: 'npx', args: ['autre-serveur', 'mcp'] }, ATTENDU, 'darwin')).toBe('autre');
+		expect(etatEntreeMcp({ command: ATTENDU.node, args: [ATTENDU.main] }, ATTENDU, 'darwin')).toBe('autre');
+		expect(etatEntreeMcp({ url: 'https://exemple.test/mcp' }, ATTENDU, 'darwin')).toBe('autre');
+		expect(etatEntreeMcp('texte', ATTENDU, 'darwin')).toBe('autre');
+	});
+
+	it('entrée MCP sous Windows : chemins comparés sans casse ni sens des séparateurs ; à l’identique sous macOS', () => {
+		const windows = { node: 'C:\\Program Files\\Mnemo\\resources\\node\\node.exe', main: 'C:\\Program Files\\Mnemo\\resources\\mnemo\\src\\adaptateurs\\cli\\main.ts' };
+		const ecrite = { command: 'c:/program files/mnemo/resources/node/node.exe', args: ['C:/Program Files/Mnemo/resources/mnemo/src/adaptateurs/cli/main.ts', 'mcp'] };
+		expect(etatEntreeMcp(ecrite, windows, 'win32')).toBe('nous');
+		expect(etatEntreeMcp(ecrite, windows, 'darwin')).toBe('ailleurs');
+		expect(etatEntreeMcp({ command: ATTENDU.node.toUpperCase(), args: [ATTENDU.main, 'mcp'] }, ATTENDU, 'darwin')).toBe('ailleurs');
 	});
 
 	it('entrée « mnemo » d’un fichier de configuration', () => {

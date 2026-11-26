@@ -8,6 +8,7 @@
  * installation depuis le dépôt) ; ce qui est absent ou n'est pas de Mnemo n'est jamais touché.
  */
 import type { Lancement } from './configuration.ts';
+import { memeChemin, type PlateformeApp } from './plateforme.ts';
 
 /**
  * `absent` ; `nous` : lance ce Node et ce `main.ts` ; `ailleurs` : de Mnemo, mais un autre Node ou un autre `main.ts` ;
@@ -39,13 +40,16 @@ export function etatCommande(texte: string | null, attendu: Attendu): EtatElemen
 
 const MAIN_MNEMO = /adaptateurs[\\/]cli[\\/]main\.ts$/u;
 
-/** État d'une entrée MCP `mnemo` (`{ command, args, … }`, `undefined` : absente). */
-export function etatEntreeMcp(entree: unknown, attendu: Lancement): EtatElement {
+/**
+ * État d'une entrée MCP `mnemo` (`{ command, args, … }`, `undefined` : absente). Sous Windows, les chemins se comparent sans
+ * tenir compte de la casse ni du sens des séparateurs (`memeChemin`).
+ */
+export function etatEntreeMcp(entree: unknown, attendu: Lancement, plateforme: PlateformeApp): EtatElement {
 	if (entree === undefined) return 'absent';
 	if (typeof entree !== 'object' || entree === null || Array.isArray(entree)) return 'autre';
 	const { command, args } = entree as Record<string, unknown>;
 	if (typeof command !== 'string' || !Array.isArray(args) || args.length < 2 || args[1] !== 'mcp' || typeof args[0] !== 'string') return 'autre';
-	if (command === attendu.node && args[0] === attendu.main) return 'nous';
+	if (memeChemin(command, attendu.node, plateforme) && memeChemin(args[0], attendu.main, plateforme)) return 'nous';
 	return MAIN_MNEMO.test(args[0]) ? 'ailleurs' : 'autre';
 }
 

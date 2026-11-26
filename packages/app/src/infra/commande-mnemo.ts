@@ -4,6 +4,7 @@
  * du terminal : `claude`, `git`).
  */
 import { execFile } from 'node:child_process';
+import { avecVariable } from '@mnemo/commun';
 import type { SortieDeclarer } from '@mnemo/contrat';
 import type { Lancement } from '../domaine/configuration.ts';
 
@@ -19,7 +20,7 @@ const premiereLigne = (texte: string): string => texte.trim().split('\n').find((
 
 export function lancerMnemo(lancement: Lancement, args: readonly string[], path: string, base: NodeJS.ProcessEnv = process.env): Promise<ResultatCommande> {
 	return new Promise((resoudre) => {
-		execFile(lancement.node, [lancement.main, ...args], { env: { ...base, PATH: path }, timeout: DELAI_COMMANDE_MS, windowsHide: true }, (erreur, sortie, erreurs) => {
+		execFile(lancement.node, [lancement.main, ...args], { env: avecVariable(base, 'PATH', path, process.platform), timeout: DELAI_COMMANDE_MS, windowsHide: true }, (erreur, sortie, erreurs) => {
 			if (erreur) resoudre({ ok: false, raison: premiereLigne(`${erreurs}`) || premiereLigne(`${sortie}`) || erreur.message, sortie: `${sortie}` });
 			else resoudre({ ok: true, sortie: `${sortie}` });
 		}).stdin?.end();

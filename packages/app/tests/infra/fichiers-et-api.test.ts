@@ -10,6 +10,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { demanderArret, requeteLocale, santeService, suiteDeLaDemande } from '../../src/infra/api-service.ts';
 import { cheminConfiguration, lireConfiguration } from '../../src/infra/configuration-fichier.ts';
 import { environnementOuvrir } from '../../src/infra/demarrage.ts';
+import { dossierApp } from '../../src/infra/dossiers.ts';
+import { cheminsInstallation } from '../../src/infra/installation-fichiers.ts';
 import { cheminServiceJson, lireServiceJson, processusVivant } from '../../src/infra/service-local.ts';
 
 const JETON = 'c'.repeat(64);
@@ -24,6 +26,19 @@ const temporaire = () => {
 	dossiers.push(d);
 	return d;
 };
+
+describe('dossiers selon la plateforme', () => {
+	it('dossier de l’app : Library/Application Support sous macOS, %APPDATA%\\Mnemo sous Windows (APPDATA de travail possible)', () => {
+		expect(dossierApp('/maison/exemple', 'darwin', {})).toBe('/maison/exemple/Library/Application Support/Mnemo');
+		expect(dossierApp('D:\\Profils\\exemple', 'win32', { APPDATA: 'D:\\essai\\Roaming' })).toBe('D:\\essai\\Roaming\\Mnemo');
+		expect(dossierApp('D:\\Profils\\exemple', 'win32', {})).toBe('D:\\Profils\\exemple\\AppData\\Roaming\\Mnemo');
+	});
+
+	it('configuration de l’app Claude : même règle que le service', () => {
+		expect(cheminsInstallation('/maison/exemple', 'darwin', {}).appClaude).toBe('/maison/exemple/Library/Application Support/Claude/claude_desktop_config.json');
+		expect(cheminsInstallation('D:\\Profils\\exemple', 'win32', { APPDATA: 'D:\\Profils\\exemple\\AppData\\Roaming' }).appClaude).toBe('D:\\Profils\\exemple\\AppData\\Roaming\\Claude\\claude_desktop_config.json');
+	});
+});
 
 describe('configuration', () => {
 	it('chemin sous Library/Application Support/Mnemo du HOME donné ; absente, non JSON, invalide : erreurs qui nomment le fichier', async () => {
@@ -54,6 +69,8 @@ describe('configuration', () => {
 		const base = { HOME: '/h', PATH: '/autre', MNEMO_PORT: '7' };
 		expect(environnementOuvrir({ racine: '/r', node: '/n', main: '/m', path: '/bin' }, base)).toEqual({ HOME: '/h', PATH: '/bin', MNEMO_PORT: '7', MNEMO_SANS_NAVIGATEUR: '1' });
 		expect(environnementOuvrir({ racine: '/r', node: '/n', main: '/m', path: '/bin', port: 4321 }, base)).toMatchObject({ MNEMO_PORT: '4321' });
+		// Windows : la clé `Path` du système est remplacée, jamais doublée d'une clé `PATH`
+		expect(environnementOuvrir({ racine: 'C:\\r', node: 'C:\\n', main: 'C:\\m', path: 'C:\\Git\\cmd' }, { Path: 'C:\\Windows', USERPROFILE: 'C:\\h' }, 'win32')).toEqual({ Path: 'C:\\Git\\cmd', USERPROFILE: 'C:\\h', MNEMO_SANS_NAVIGATEUR: '1' });
 	});
 });
 

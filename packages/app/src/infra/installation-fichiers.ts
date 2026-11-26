@@ -1,23 +1,26 @@
 /**
  * Les fichiers que Mnemo installe hors de l'app, lus tels quels (l'app n'importe pas le code de `mnemo`) : la commande
  * `~/.local/bin/mnemo`, `~/.claude.json` (déclarations MCP de Claude Code, portée utilisateur) et la configuration de l'app
- * Claude. Le dossier personnel est passé par l'appelant (un dossier temporaire dans les tests). Rien ici ne lève : un
+ * Claude (même règle de chemin que le service, `@mnemo/commun` : sous Windows, `%APPDATA%\Claude`). Le dossier personnel
+ * est passé par l'appelant (un dossier temporaire dans les tests ; sous Windows, `APPDATA` aussi). Rien ici ne lève : un
  * fichier illisible vaut « autre » (jamais touché).
  */
 import { randomBytes } from 'node:crypto';
 import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { fichierConfigClaudeDesktop } from '@mnemo/commun';
 import type { Lancement } from '../domaine/configuration.ts';
+import { plateformeApp } from '../domaine/plateforme.ts';
 import { type Attendu, entreeMnemo, type EtatElement, etatCommande, etatEntreeMcp, type EtatInstallation, texteSansEntreeMnemo } from '../domaine/installation.ts';
 
 export type CheminsInstallation = { commande: string; claudeCode: string; appClaude: string };
 
-export function cheminsInstallation(home: string): CheminsInstallation {
+export function cheminsInstallation(home: string, plateforme: NodeJS.Platform = process.platform, env: NodeJS.ProcessEnv = process.env): CheminsInstallation {
 	return {
 		commande: join(home, '.local', 'bin', 'mnemo'),
 		claudeCode: join(home, '.claude.json'),
-		appClaude: join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json'),
+		appClaude: fichierConfigClaudeDesktop(plateforme, home, env),
 	};
 }
 
@@ -41,7 +44,7 @@ function etatFichierMcp(chemin: string, lancement: Lancement): EtatElement {
 	if (texte === null) return 'absent';
 	if (texte === 'illisible') return 'autre';
 	try {
-		return etatEntreeMcp(entreeMnemo(JSON.parse(texte)), lancement);
+		return etatEntreeMcp(entreeMnemo(JSON.parse(texte)), lancement, plateformeApp(process.platform));
 	} catch {
 		return 'autre';
 	}
@@ -77,7 +80,7 @@ export function retirerEntreeAppClaude(fichier: string, lancement: Lancement): '
 	if (texte === null) return 'absent';
 	if (texte === 'illisible') throw new Error(`${fichier} illisible.`);
 	const brut = JSON.parse(texte) as unknown;
-	if (etatEntreeMcp(entreeMnemo(brut), lancement) !== 'nous') return 'absent';
+	if (etatEntreeMcp(entreeMnemo(brut), lancement, plateformeApp(process.platform)) !== 'nous') return 'absent';
 	const provisoire = join(dirname(fichier), `.${basename(fichier)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`);
 	try {
 		writeFileSync(provisoire, texteSansEntreeMnemo(brut as Record<string, unknown>), { mode: 0o600, flag: 'wx' });

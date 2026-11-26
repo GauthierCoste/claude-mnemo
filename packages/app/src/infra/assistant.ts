@@ -9,6 +9,7 @@ import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve, sep } from 'node:path';
+import { avecVariable } from '@mnemo/commun';
 import type { EtapeInit, EvenementInit, FinInit, LigneInit } from '@mnemo/contrat';
 import { argumentsInit, argumentsVerifierPoste, DOSSIER_MEMOIRE, lirePoste, type ChoixInstallation, type DossierChoisi, type ExecutableMnemo } from '../domaine/assistant.ts';
 import { appliquerLigne, decoupeurLignes, installationVide, lireLigneInit, peutTerminer, type EtatInstallation, type ResultatInstallation } from '../domaine/assistant-lignes.ts';
@@ -28,9 +29,12 @@ const LIGNES_ERREUR = 5;
 export const MESSAGE_SANS_MNEMO =
 	'Cette app ne sait pas encore où est Mnemo. Depuis le dépôt de l’app, dans un terminal, lance « pnpm installer-dev <dossier Mnemo> » (il écrit sa configuration), puis rouvre Mnemo.';
 
-/** Environnement de `mnemo` : celui de l'app, avec le `PATH` du terminal (sans lui, ni `git` ni `claude` ne sont trouvés). */
-export function environnementMnemo(executable: ExecutableMnemo, base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-	return { ...base, PATH: executable.path };
+/**
+ * Environnement de `mnemo` : celui de l'app, avec le `PATH` du terminal (sans lui, ni `git` ni `claude` ne sont trouvés) ;
+ * sous Windows, sous la clé déjà présente (`Path`), sans doublon.
+ */
+export function environnementMnemo(executable: ExecutableMnemo, base: NodeJS.ProcessEnv, plateforme: NodeJS.Platform = process.platform): NodeJS.ProcessEnv {
+	return avecVariable(base, 'PATH', executable.path, plateforme);
 }
 
 /** La racine a une mémoire Mnemo (`_mnemo/SCHEMA.md`). */
