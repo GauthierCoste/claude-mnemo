@@ -15,7 +15,8 @@ describe('fichier des préférences', () => {
 		const p = { ...PREFERENCES_DEFAUT, quitter: 'laisser' as const, fenetre: { x: 10, y: 30, largeur: 1000, hauteur: 700 }, verificationVersionsMs: 5 };
 		ecrirePreferencesFichier(chemin, p);
 		expect(lirePreferencesFichier(chemin)).toEqual(p);
-		expect(statSync(chemin).mode & 0o777).toBe(0o600);
+		// droits POSIX : sous Windows, le mode ne dit rien des droits d'accès
+		if (process.platform !== 'win32') expect(statSync(chemin).mode & 0o777).toBe(0o600);
 		expect(readFileSync(chemin, 'utf8')).toMatch(/\n$/u);
 		writeFileSync(chemin, '{ abîmé');
 		expect(lirePreferencesFichier(chemin)).toEqual(PREFERENCES_DEFAUT);

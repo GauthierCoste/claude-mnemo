@@ -59,7 +59,8 @@ async function installer(args: string[], options: Partial<OptionsInstallerDev> &
 
 const lireConfiguration = (home: string): unknown => JSON.parse(readFileSync(cheminConfiguration(home), 'utf8'));
 
-describe('chemins et PATH', () => {
+// `pnpm installer-dev` est un outil de développement de macOS : PATH à « : » et paquet Mnemo.app
+describe.skipIf(process.platform === 'win32')('chemins et PATH', () => {
 	it('le paquet est celui de construire-app ; le main.ts, celui du paquet mnemo', () => {
 		expect(PAQUET.endsWith(join('app', 'dist', 'Mnemo.app'))).toBe(true);
 		expect(existsSync(MAIN)).toBe(true);

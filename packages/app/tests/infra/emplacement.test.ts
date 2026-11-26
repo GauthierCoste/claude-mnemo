@@ -43,7 +43,8 @@ describe('emplacement du Node et du main.ts', () => {
 		expect(emplacementProvisoire('/Volumes/Mnemo 1.5.0/Mnemo.app/Contents/Resources', 'win32')).toBe(false);
 	});
 
-	it('PATH par défaut : dossiers habituels devant, sans doublon', () => {
+	// `node:path` de la machine qui exécute (séparateurs de chemins et du PATH) : attendus POSIX
+	it.skipIf(process.platform === 'win32')('PATH par défaut : dossiers habituels devant, sans doublon', () => {
 		expect(pathParDefaut('/maison/exemple', '/usr/bin:/bin:/opt/homebrew/bin')).toBe('/maison/exemple/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin');
 		expect(pathParDefaut('/maison/exemple', undefined)).toBe('/maison/exemple/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin');
 	});

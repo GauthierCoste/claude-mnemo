@@ -38,7 +38,8 @@ describe('node-pty emporté', () => {
 		const racine = nodePty();
 		elaguerNodePty(racine, { plateforme: 'darwin', arch: 'arm64' });
 		expect(existsSync(join(racine, 'prebuilds', 'darwin-arm64', 'pty.node'))).toBe(true);
-		expect(lstatSync(join(racine, 'prebuilds', 'darwin-arm64', 'spawn-helper')).mode & 0o111).not.toBe(0);
+		// droit d'exécution POSIX : sans objet sous Windows
+		if (process.platform !== 'win32') expect(lstatSync(join(racine, 'prebuilds', 'darwin-arm64', 'spawn-helper')).mode & 0o111).not.toBe(0);
 		for (const autre of ['darwin-x64', 'win32-x64', 'win32-arm64']) expect(existsSync(join(racine, 'prebuilds', autre))).toBe(false);
 		expect(existsSync(join(racine, 'src'))).toBe(false);
 		expect(existsSync(join(racine, 'lib'))).toBe(true);
@@ -71,7 +72,9 @@ describe('arbre emporté', () => {
 		expect(dependancesSansChemin({}, versions, 'package.json')).toEqual({});
 	});
 
-	it('aucun lien symbolique accepté, même relatif et interne', () => {
+	// créer un lien symbolique demande sous Windows un droit que le compte n'a pas forcément ; la construction sous Windows
+	// vérifie elle-même l'arbre réel
+	it.skipIf(process.platform === 'win32')('aucun lien symbolique accepté, même relatif et interne', () => {
 		mkdirSync(join(dossier, 'a', 'b'), { recursive: true });
 		writeFileSync(join(dossier, 'a', 'b', 'f'), 'x');
 		verifierSansLien(dossier);

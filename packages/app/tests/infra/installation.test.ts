@@ -3,7 +3,7 @@
 // (HOME temporaire) ; `claude` est introuvable (MNEMO_CLAUDE des tests) : la déclaration MCP échoue, sans arrêter le reste.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { declarer, lancerMnemo } from '../../src/infra/commande-mnemo.ts';
@@ -38,7 +38,7 @@ function installer(home: string, o: { commande?: string; claudeCode?: unknown; a
 	}
 	if (o.claudeCode !== undefined) writeFileSync(c.claudeCode, JSON.stringify({ autre: 1, mcpServers: { mnemo: o.claudeCode } }));
 	if (o.appClaude !== undefined) {
-		mkdirSync(join(home, 'Library', 'Application Support', 'Claude'), { recursive: true });
+		mkdirSync(dirname(c.appClaude), { recursive: true });
 		writeFileSync(c.appClaude, JSON.stringify({ preferences: { x: true }, mcpServers: { avant: { command: 'a' }, mnemo: o.appClaude } }, null, 2));
 	}
 }
@@ -71,7 +71,8 @@ describe('vérification au lancement', () => {
 		expect(existsSync(join(home, '.local'))).toBe(false);
 	});
 
-	it('refait la commande par « mnemo commande » ; chaque élément indépendant, tout au journal', async () => {
+	// la commande « mnemo » (script à shebang de ~/.local/bin) n'existe pas sous Windows : `mnemo commande` y refuse
+	it.skipIf(process.platform === 'win32')('refait la commande par « mnemo commande » ; chaque élément indépendant, tout au journal', async () => {
 		const home = maison();
 		installer(home, { commande: script(ANCIEN), claudeCode: entree(ANCIEN), appClaude: entree(ANCIEN) });
 		const avantAppClaude = readFileSync(cheminsInstallation(home).appClaude, 'utf8');
@@ -125,7 +126,7 @@ describe('désinstallation', () => {
 		installer(home, { appClaude: entree(NOUS) });
 		expect(retirerEntreeAppClaude(fichier, NOUS)).toBe('retire');
 		expect(JSON.parse(readFileSync(fichier, 'utf8'))).toEqual({ preferences: { x: true }, mcpServers: { avant: { command: 'a' } } });
-		expect(statSync(fichier).mode & 0o777).toBe(0o600);
+		if (process.platform !== 'win32') expect(statSync(fichier).mode & 0o777).toBe(0o600);
 	});
 
 	it('étapes indépendantes : un échec n’arrête pas les suivantes ; commande et configuration retirées', async () => {
@@ -180,6 +181,9 @@ describe('journal de l’app', () => {
 		journal('un');
 		journal('deux\nlignes');
 		expect(readFileSync(chemin, 'utf8')).toBe('2026-11-24T10:00:00.000Z un\n2026-11-24T10:00:00.000Z deux lignes\n');
-		expect(() => journalFichier(join('/dev/null', 'x', 'y.log'))('rien')).not.toThrow();
+		// dossier impossible à créer (sous un fichier), sur tout système
+		const fichier = join(home, 'fichier');
+		writeFileSync(fichier, '');
+		expect(() => journalFichier(join(fichier, 'x', 'y.log'))('rien')).not.toThrow();
 	});
 });

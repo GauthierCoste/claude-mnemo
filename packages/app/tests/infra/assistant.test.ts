@@ -2,7 +2,7 @@
 // tient lieu de `verifier-poste` et d'`init` ; la configuration est écrite sous un HOME temporaire, jamais le vrai.
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { LigneInit } from '@mnemo/contrat';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CHOIX_PAR_DEFAUT, type ExecutableMnemo } from '../../src/domaine/assistant.ts';
@@ -149,13 +149,15 @@ describe('contrôleur de l’assistant', () => {
 		expect(resultat).toEqual({ fin: { fin: true, racine: e.projets, ok: false }, erreur: null });
 		expect(e.lignes.map((l) => ('fin' in l ? 'fin' : `${l.etape}:${l.etat}`))).toEqual(['memoire:debut', 'memoire:fait', 'modeles:progression', 'mcp:echec', 'fin']);
 		const lance = JSON.parse((e.lignes[0] as { message: string }).message) as { options: string[]; path: string; cwd: string };
-		expect(lance).toEqual({ options: ['--json', '--mcp', '--modeles', '--commande', '--sans-lanceur'], path: e.executable.path, cwd: e.projets });
+		// sous Windows, jamais de commande « mnemo » (test suivant)
+		const commande = process.platform === 'win32' ? '--sans-commande' : '--commande';
+		expect(lance).toEqual({ options: ['--json', '--mcp', '--modeles', commande, '--sans-lanceur'], path: e.executable.path, cwd: e.projets });
 
 		expect(await c.terminer()).toEqual({ ok: true });
 		const configuration = { racine: e.projets, node: e.executable.node, main: e.executable.main, path: e.executable.path, port: 4747 };
 		expect(e.termines).toEqual([{ configuration, ouvrirALaSession: true }]);
 		const chemin = cheminConfiguration(e.home);
-		expect(statSync(chemin).mode & 0o777).toBe(0o600);
+		if (process.platform !== 'win32') expect(statSync(chemin).mode & 0o777).toBe(0o600);
 		expect(readFileSync(chemin, 'utf8')).toBe(`${JSON.stringify(configuration, null, '\t')}\n`);
 		expect(await lireConfiguration(e.home)).toEqual({ ok: true, configuration });
 
@@ -352,7 +354,7 @@ describe('configuration écrite', () => {
 		const home = temporaire();
 		await expect(remplacerPathConfiguration(home, '/bin')).rejects.toThrow();
 		const chemin = cheminConfiguration(home);
-		mkdirSync(join(home, 'Library', 'Application Support', 'Mnemo'), { recursive: true });
+		mkdirSync(dirname(chemin), { recursive: true });
 		// configuration de l'app empaquetée : sans node ni main, et une clé inconnue
 		writeFileSync(chemin, JSON.stringify({ racine: '/a', path: '/bin', port: 4747, autre: 'gardée' }));
 		const paquet = { node: '/App/node', main: '/App/main.ts' };
@@ -360,7 +362,7 @@ describe('configuration écrite', () => {
 		await expect(remplacerPathConfiguration(home, '', paquet)).rejects.toThrow('Configuration refusée');
 		await remplacerPathConfiguration(home, '/maison/.nvm/versions/node/v26/bin:/usr/bin:/bin', paquet);
 		expect(JSON.parse(readFileSync(chemin, 'utf8'))).toEqual({ racine: '/a', path: '/maison/.nvm/versions/node/v26/bin:/usr/bin:/bin', port: 4747, autre: 'gardée' });
-		expect(statSync(chemin).mode & 0o777).toBe(0o600);
+		if (process.platform !== 'win32') expect(statSync(chemin).mode & 0o777).toBe(0o600);
 		writeFileSync(chemin, '[1]');
 		await expect(remplacerPathConfiguration(home, '/bin', paquet)).rejects.toThrow('n’est pas un objet JSON');
 	});
@@ -383,8 +385,8 @@ describe('configuration écrite', () => {
 		expect(await decisionAuLancement(home, paquet, '/usr/bin:/bin', true)).toMatchObject({ assistant: true, executable: null, provisoire: true });
 		const racine = temporaire();
 		// configuration sans node ni main (ou avec ceux d'une autre installation) : ceux du paquet
-		mkdirSync(join(home, 'Library', 'Application Support', 'Mnemo'), { recursive: true });
-		writeFileSync(join(home, 'Library', 'Application Support', 'Mnemo', 'config.json'), JSON.stringify({ racine, path: '/bin' }));
+		mkdirSync(dirname(cheminConfiguration(home)), { recursive: true });
+		writeFileSync(cheminConfiguration(home), JSON.stringify({ racine, path: '/bin' }));
 		expect(await decisionAuLancement(home, paquet, '/x')).toMatchObject({ assistant: true, executable: { ...paquet, path: '/bin' } });
 		mkdirSync(join(racine, '_mnemo'));
 		writeFileSync(join(racine, '_mnemo', 'SCHEMA.md'), '#');

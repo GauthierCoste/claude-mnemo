@@ -51,10 +51,10 @@ describe('dossiers selon la plateforme', () => {
 });
 
 describe('configuration', () => {
-	it('chemin sous Library/Application Support/Mnemo du HOME donné ; absente, non JSON, invalide : erreurs qui nomment le fichier', async () => {
+	it('chemin sous Library/Application Support/Mnemo du HOME donné (Windows : AppData\\Roaming\\Mnemo) ; absente, non JSON, invalide : erreurs qui nomment le fichier', async () => {
 		const home = temporaire();
 		const chemin = cheminConfiguration(home);
-		expect(chemin).toBe(join(home, 'Library', 'Application Support', 'Mnemo', 'config.json'));
+		expect(chemin).toBe(process.platform === 'win32' ? join(home, 'AppData', 'Roaming', 'Mnemo', 'config.json') : join(home, 'Library', 'Application Support', 'Mnemo', 'config.json'));
 		const absente = await lireConfiguration(home);
 		expect(absente).toEqual({ ok: false, erreurs: [`Configuration absente : ${chemin} (l’assistant ou « pnpm installer-dev » l’écrit).`] });
 		mkdirSync(dirname(chemin), { recursive: true });

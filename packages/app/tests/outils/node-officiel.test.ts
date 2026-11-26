@@ -43,7 +43,8 @@ describe('Node officiel emporté par l’app', () => {
 		}
 	});
 
-	it('extraction : bin/node et LICENSE seuls, fichiers ordinaires ; un lien à la place de bin/node est refusé', async () => {
+	// archive de macOS : droits POSIX (0755) et lien symbolique vers /bin/sh, sans objet sous Windows
+	it.skipIf(process.platform === 'win32')('extraction : bin/node et LICENSE seuls, fichiers ordinaires ; un lien à la place de bin/node est refusé', async () => {
 		const dossier = mkdtempSync(join(tmpdir(), 'mnemo-extraire-node-'));
 		try {
 			const prefixe = 'node-v1.2.3-darwin-arm64';

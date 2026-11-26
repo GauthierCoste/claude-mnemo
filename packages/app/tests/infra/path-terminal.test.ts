@@ -57,7 +57,7 @@ describe('PATH du terminal', () => {
 	});
 
 	it('repli sur le PATH par défaut, journalisé : échec, délai dépassé, sortie sans marqueurs ou sans chemin absolu, Windows', async () => {
-		const defaut = pathParDefaut(HOME, BASE.PATH);
+		const defaut = pathParDefaut(HOME, BASE.PATH, 'darwin');
 		const cas: [string, LanceurShell][] = [
 			['échec', async () => Promise.reject(new Error('spawn /bin/bash ENOENT'))],
 			['sans marqueurs', async () => 'zsh: command not found: printf'],
@@ -83,7 +83,9 @@ describe('PATH du terminal', () => {
 	});
 });
 
-describe('vrai lanceur, sur un faux shell', () => {
+// propre à macOS (aucun shell de connexion lu sous Windows) : faux shell à shebang rendu exécutable, groupe de processus tué
+// par un pid négatif, rien de cela n'existe sous Windows
+describe.skipIf(process.platform === 'win32')('vrai lanceur, sur un faux shell', () => {
 	/** Faux shell : un script Node exécutable (`script`), à la place du shell de l'utilisateur. */
 	function fauxShell(script: string): string {
 		const d = temporaire();
