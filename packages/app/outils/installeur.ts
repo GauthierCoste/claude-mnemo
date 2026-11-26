@@ -14,12 +14,15 @@ export function nomInstalleur(version: string): string {
 	return `${NOM_APP}-Setup-${version}-x64.exe`;
 }
 
-/** Configuration d'electron-builder ; `icone` : le `.ico` de l'app, `sortie` : le dossier où écrire l'installeur. */
-export function configurationInstalleur(version: string, electron: string, icone: string, sortie: string): Configuration {
+/**
+ * Configuration d'electron-builder ; `icone` : le `.ico` de l'app, `sortie` : le dossier où écrire l'installeur, `annee` :
+ * celle du copyright.
+ */
+export function configurationInstalleur(version: string, electron: string, icone: string, sortie: string, annee: number = new Date().getFullYear()): Configuration {
 	return {
 		appId: IDENTIFIANT_APP,
 		productName: NOM_APP,
-		copyright: NOM_APP,
+		copyright: `Copyright © ${annee} ${NOM_APP}`,
 		electronVersion: electron,
 		directories: { output: sortie },
 		npmRebuild: false,

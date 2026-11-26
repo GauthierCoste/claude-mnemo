@@ -40,10 +40,11 @@ describe('installeur Windows', () => {
 	});
 
 	it('NSIS à étapes, par utilisateur, dossier modifiable, raccourcis ; même identifiant que l’app ; ni publication ni recompilation', () => {
-		const config = configurationInstalleur('1.8.0', '45.4.1', 'C:/icone.ico', 'C:/sortie');
+		const config = configurationInstalleur('1.8.0', '45.4.1', 'C:/icone.ico', 'C:/sortie', 2026);
 		expect(config).toMatchObject({
 			appId: IDENTIFIANT_APP,
 			productName: 'Mnemo',
+			copyright: 'Copyright © 2026 Mnemo',
 			electronVersion: '45.4.1',
 			publish: null,
 			npmRebuild: false,
