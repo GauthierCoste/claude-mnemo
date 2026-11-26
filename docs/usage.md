@@ -735,7 +735,7 @@ validate them, and your gestures help it learn, never measure it.
 wait for your review. From top to bottom:
 
 - **The state of the score**, for each level (« Complets », « Sens seul »; one line when both say the same): a word
-  (« Accepté », « Refusé », « De départ »…), a sentence, where it comes from (« livrée avec Mnemo » for the starting
+  (« Acceptée », « Refusée », « De départ »…), a sentence, where it comes from (« livrée avec Mnemo » for the starting
   score) and its date. The ⋯ menu holds « Revenir au modèle d’avant » (back to the previous model; below).
 - **The task under way**, if any: its name, its progress (« 12 sur 30 ») and « Arrêter » (stop). Only one task runs at
   a time; the others wait, greyed, with the task as their reason.
