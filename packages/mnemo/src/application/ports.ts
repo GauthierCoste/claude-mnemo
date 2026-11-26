@@ -926,9 +926,10 @@ export type CommandeMoteur = { commande: string; avant: string[] };
 
 /**
  * Réglages d'une exécution : dossier courant, environnement complet (remplace celui du processus), délai avant de tuer,
- * signal d'abandon (levé : le processus est tué, la promesse rejette).
+ * signal d'abandon (levé : le processus est tué, la promesse rejette), texte écrit sur l'entrée du programme (`entree`, puis
+ * l'entrée est fermée ; sans lui, elle est fermée aussitôt).
  */
-export type OptionsExecution = { cwd?: string; env?: Record<string, string>; delaiMs?: number; signal?: AbortSignal };
+export type OptionsExecution = { cwd?: string; env?: Record<string, string>; delaiMs?: number; signal?: AbortSignal; entree?: string };
 /** Lance un programme sans shell : rend son code de sortie ; rejette s'il ne se lance pas, ne répond pas à temps ou est abandonné. */
 export type Executer = (commande: string, args: string[], options?: OptionsExecution) => Promise<{ code: number; sortie: string; erreur: string }>;
 

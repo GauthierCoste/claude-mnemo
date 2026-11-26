@@ -26,8 +26,13 @@ const lancerReel: Lancer = (commande, args, fin, options = {}) => {
 		},
 		(erreur, sortie, erreurSortie) => fin(erreur, sortie, erreurSortie),
 	);
-	// rien à lire sur l'entrée : fermée tout de suite (un `claude -p` qui lit l'entrée n'attend pas)
-	enfant.stdin?.end();
+	// l'entrée reçoit `entree`, ou rien : fermée tout de suite (un `claude -p` qui lit l'entrée n'attend pas)
+	if (options.entree === undefined) enfant.stdin?.end();
+	else {
+		// programme déjà sorti ou qui ne lit pas son entrée : l'écriture échoue sans rien changer au résultat
+		enfant.stdin?.on('error', () => {});
+		enfant.stdin?.end(options.entree);
+	}
 };
 
 /**
