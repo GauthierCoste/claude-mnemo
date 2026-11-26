@@ -231,7 +231,8 @@ describe('mode démo', () => {
 		const recus: VueEntrainement[] = [];
 		connexion.surMessage((m) => m.type === 'entrainement' && void recus.push(m.etat));
 		const depart = await api.lire<VueEntrainement>(ROUTES.entrainement);
-		expect(depart.banc).toMatchObject({ messages: 6, valides: 2, aJuger: 4, aRelire: 2, aPrejuger: 2 });
+		// les 2 validés l'ont été avant le dernier apprentissage : rien de nouveau
+		expect(depart.banc).toMatchObject({ messages: 6, valides: 2, aJuger: 4, aRelire: 2, aPrejuger: 2, nouveauxDepuisApprentissage: 0 });
 		expect(depart.note).toMatchObject({ avant: true });
 		expect(depart.historique.map((l) => l.origine)).toEqual(['automatique', 'manuel']);
 		expect(depart.historique[0]!.erreur).toBeTruthy();
@@ -249,6 +250,7 @@ describe('mode démo', () => {
 		await expect(api.envoyer(ROUTES.entrainementMessage, { indice: premier.indice, jugements: { [premier.candidates[0]!.chemin]: 'pertinente' }, resteNonUtile: true, silence: true })).rejects.toMatchObject({ statut: 409 });
 		const r = await api.envoyer<ReponseReponseMessage>(ROUTES.entrainementMessage, { indice: premier.indice, jugements: { [premier.candidates[0]!.chemin]: 'pertinente' }, resteNonUtile: true });
 		expect(r.suivant).not.toBe(premier.indice);
+		expect((await api.lire<VueEntrainement>(ROUTES.entrainement)).banc.nouveauxDepuisApprentissage).toBe(1);
 		// pré-juger : une tâche qui progresse, une deuxième refusée (409)
 		expect((await api.envoyer<VueEntrainement>(ROUTES.entrainementPrejuger)).tache).toMatchObject({ genre: 'prejuger', total: 2 });
 		await expect(api.envoyer(ROUTES.entrainementApprendre)).rejects.toMatchObject({ statut: 409 });
@@ -265,6 +267,7 @@ describe('mode démo', () => {
 		expect(appris.resultat!.niveaux[0]!.criteres.join(' ')).toContain('il en faut 25');
 		expect(appris.historique).toHaveLength(3);
 		expect(appris.historique[0]).toMatchObject({ origine: 'manuel', remplace: true });
+		expect(appris.banc.nouveauxDepuisApprentissage).toBe(0);
 		// revenir : les modèles s'échangent
 		const avant = appris.note.niveaux[0]!.date;
 		const revenu = await api.envoyer<VueEntrainement>(ROUTES.entrainementRevenir);

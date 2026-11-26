@@ -43,6 +43,8 @@ type Cas = {
 	propositions: Record<string, PropositionDuJugeVue> | null;
 	jugements: Record<string, JugementVue>;
 	valide: boolean;
+	/** Date de validation (ISO) : les messages validés après le dernier apprentissage sont nouveaux. */
+	valideLe?: string;
 	silence: boolean;
 	saute: boolean;
 };
@@ -71,18 +73,20 @@ const CLAIRE = fiche('personnes/Claire Martin.md', 'Développeuse front, kit UI.
 const nouveau = (message: string, candidates: Candidate[], precedent: string | null = null): Cas => ({ message, precedent, candidates, propositions: null, jugements: {}, valide: false, silence: false, saute: false });
 const propose = (jugement: JugementVue, confiance: number, raison: string): PropositionDuJugeVue => ({ jugement, confiance, raison });
 
-/** Le banc de départ : 2 validés, 2 pré-jugés à relire (l'un sûr, l'autre non), 2 à juger. */
-function bancDeDepart(): Cas[] {
+/** Le banc de départ : 2 validés (le `valideLe` donné, avant le dernier apprentissage), 2 pré-jugés à relire (l'un sûr, l'autre non), 2 à juger. */
+function bancDeDepart(valideLe: string): Cas[] {
 	return [
 		{
 			...nouveau('Ajoute l’export CSV des mouvements de stock, avec le même séparateur que l’export des commandes.', [EXPORT_CSV, STOCKS, COMMANDES, MAINTENANCE]),
 			jugements: { [EXPORT_CSV.chemin]: 'pertinente', [STOCKS.chemin]: 'pertinente', [COMMANDES.chemin]: 'non_pertinente', [MAINTENANCE.chemin]: 'non_pertinente' },
 			valide: true,
+			valideLe,
 		},
 		{
 			...nouveau('Le client veut décaler la mise en production à vendredi soir, on fait comment ?', [VENDREDI, MAINTENANCE, ERP]),
 			jugements: { [VENDREDI.chemin]: 'pertinente', [MAINTENANCE.chemin]: 'indecise', [ERP.chemin]: 'non_pertinente' },
 			valide: true,
+			valideLe,
 		},
 		{
 			...nouveau('oui, vas-y', [MULTI, POSTGRES, SYMFONY], 'On part sur un schéma PostgreSQL par client pour le multi-tenant ?'),
@@ -172,9 +176,9 @@ function apprentissageRefuse(date: string, messages: number, sessions: number, p
 
 export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, depart?: DepartEntrainementDemo) {
 	const vide = depart === 'vide';
-	let banc: Cas[] = vide ? [] : bancDeDepart();
-	let journal = journalRestant();
 	const avantHier = new Date(Date.now() - 2 * JOUR).toISOString();
+	let banc: Cas[] = vide ? [] : bancDeDepart(new Date(Date.now() - 3 * JOUR).toISOString());
+	let journal = journalRestant();
 	const appris = apprentissageRefuse(avantHier, 2, 2, 6);
 	let note: NoteDuNiveauVue[] = vide ? structuredClone(DEPART) : appris.note;
 	let avant: NoteDuNiveauVue[] | null = vide ? null : structuredClone(DEPART);
@@ -203,9 +207,16 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 	const aJuger = (c: Cas) => !c.valide && !c.silence && !c.saute;
 	const aRelire = (c: Cas) => aJuger(c) && c.propositions !== null;
 	const paires = (c: Cas) => (c.valide ? Object.values(c.jugements).filter((j) => j !== 'indecise').length : 0);
+	/** Comme le service : l'essai réussi le plus récent de l'historique, sinon la date d'une note apprise ; null : jamais appris. */
+	const dernierApprentissage = (): string | null => {
+		const dates = historique.filter((l) => l.erreur === undefined).map((l) => l.date);
+		const sources = dates.length > 0 ? dates : note.flatMap((n) => (n.origine === 'appris' && n.date !== null ? [n.date] : []));
+		return sources.reduce<string | null>((a, d) => (a === null || d > a ? d : a), null);
+	};
 
 	function vue(): VueEntrainement {
 		const presents = banc.filter((c) => !c.saute);
+		const depuis = dernierApprentissage();
 		return {
 			note: { niveaux: structuredClone(note), avant: avant !== null },
 			banc: {
@@ -217,6 +228,7 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 				silences: banc.filter((c) => c.silence).length,
 				sautes: banc.filter((c) => c.saute).length,
 				paires: banc.reduce((n, c) => n + paires(c), 0),
+				nouveauxDepuisApprentissage: presents.filter((c) => c.valide && (depuis === null || (c.valideLe !== undefined && c.valideLe > depuis))).length,
 			},
 			tache: tache === null ? null : { ...tache },
 			historique: structuredClone(historique),
@@ -368,7 +380,7 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 			const reste = corps['silence'] === true || corps['resteNonUtile'] === true ? Object.fromEntries(chemins.map((x) => [x, 'non_pertinente' as const])) : {};
 			const silence = corps['silence'] === true;
 			c.jugements = silence ? Object.fromEntries(chemins.map((x) => [x, fusion[x] === 'indecise' ? 'indecise' : 'non_pertinente'])) : { ...reste, ...fusion };
-			Object.assign(c, { silence, valide: true, saute: false });
+			Object.assign(c, { silence, valide: true, valideLe: new Date().toISOString(), saute: false });
 		}
 		changer();
 		return { suivant: prochain() };
@@ -391,6 +403,7 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 			// un jugement déjà donné à la main est gardé
 			c.jugements = { ...Object.fromEntries(c.candidates.map((x) => [x.chemin, p[x.chemin]!.jugement])), ...c.jugements };
 			c.valide = true;
+			c.valideLe = new Date().toISOString();
 		});
 		if (avantGeste.length > 0) {
 			annulations.push(avantGeste);

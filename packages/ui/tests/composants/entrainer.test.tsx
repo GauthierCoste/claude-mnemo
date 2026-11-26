@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { afterEach, describe, expect, it } from 'vitest';
 import { ErreurApi } from '../../src/client/api.ts';
 import { Entrainer } from '../../src/composants/memoire/entrainer/Entrainer.tsx';
-import { etapeUtile, lignesDeNote, suiteDuVerdict } from '../../src/memoire/entrainement.ts';
+import { etapeUtile, jugesDepuisApprentissage, lignesDeNote, suiteDuVerdict } from '../../src/memoire/entrainement.ts';
 import { FournisseurNavigation } from '../../src/navigation.tsx';
 import { creerFauxClient, rendreAvecClient } from '../aides/faux-client.tsx';
 
@@ -21,7 +21,8 @@ function vue(o: Partial<Omit<VueEntrainement, 'banc'>> & { banc?: Partial<VueEnt
 			niveaux: (['complets', 'sens'] as const).map((niveau) => ({ niveau, etat: 'depart', origine: 'depart', date: '2026-11-25T18:00:00.000Z', verdict: DEPART, criteres: [], refus: [] })),
 			avant: false,
 		},
-		banc: { messages: 0, valides: 0, aJuger: 0, aRelire: 0, aPrejuger: 0, silences: 0, sautes: 0, paires: 0, ...banc },
+		// sans apprentissage, tous les messages validés sont nouveaux
+		banc: { messages: 0, valides: 0, aJuger: 0, aRelire: 0, aPrejuger: 0, silences: 0, sautes: 0, paires: 0, nouveauxDepuisApprentissage: banc?.valides ?? 0, ...banc },
 		tache: null,
 		historique: [],
 		juge: { disponible: true },
@@ -141,7 +142,7 @@ describe('Mémoire › Entraîner', () => {
 		monter(
 			vue({
 				note: { niveaux: note, avant: true },
-				banc: { messages: 12, valides: 12, paires: 40 },
+				banc: { messages: 12, valides: 12, paires: 40, nouveauxDepuisApprentissage: 0 },
 				resultat: RESULTAT,
 				historique: [
 					{ date: '2026-11-26T11:00:00.000Z', origine: 'automatique', verdicts: { complets: 'refuse', sens: 'refuse' }, remplace: false, erreur: 'Le reranker n’a pas répondu.' },
@@ -163,8 +164,9 @@ describe('Mémoire › Entraîner', () => {
 		expect(lignes[2]!.textContent).toBe('Le reranker n’a pas répondu.');
 		expect(lignes[3]!.textContent).toContain('Manuel');
 		expect(lignes[3]!.textContent).toContain('Remplacé');
-		// tout est jugé, l'apprentissage date d'avant : rien de neuf, Préparer est mis en avant
+		// tout est jugé, l'apprentissage date d'avant : rien de neuf, Préparer est mis en avant, la carte Apprendre le dit
 		expect((await etape(/Préparer des messages/)).getAttribute('aria-current')).toBe('step');
+		expect((await etape(/Apprendre/)).textContent).toContain('Aucun message jugé depuis le dernier apprentissage');
 	});
 
 	it('résultat gardé : le verdict en clair de chaque niveau (il diffère de la note actuelle)', async () => {
@@ -310,12 +312,23 @@ describe('règles de la page Entraîner', () => {
 		expect(lignesDeNote([n[0]!, { ...n[1]!, etat: 'refuse', verdict: REFUSE }]).map((l) => l.niveaux)).toEqual([['complets'], ['sens']]);
 	});
 
-	it('étape utile : préparer, juger, apprendre (jugements pas encore appris), puis préparer encore', () => {
+	it('étape utile : préparer, juger, apprendre (messages jugés depuis le dernier apprentissage), puis préparer encore', () => {
 		const b = vue().banc;
-		expect(etapeUtile({ banc: b, resultat: null })).toBe(1);
-		expect(etapeUtile({ banc: { ...b, messages: 3, aJuger: 1 }, resultat: null })).toBe(2);
-		expect(etapeUtile({ banc: { ...b, messages: 3, valides: 3, paires: 5 }, resultat: null })).toBe(3);
-		expect(etapeUtile({ banc: { ...b, messages: 3, valides: 3, paires: 5 }, resultat: { ...RESULTAT!, messages: 2 } })).toBe(3);
-		expect(etapeUtile({ banc: { ...b, messages: 3, valides: 3, paires: 5 }, resultat: { ...RESULTAT!, messages: 3 } })).toBe(1);
+		expect(etapeUtile({ banc: b })).toBe(1);
+		expect(etapeUtile({ banc: { ...b, messages: 3, aJuger: 1 } })).toBe(2);
+		expect(etapeUtile({ banc: { ...b, messages: 3, valides: 3, paires: 5, nouveauxDepuisApprentissage: 3 } })).toBe(3);
+		expect(etapeUtile({ banc: { ...b, messages: 3, valides: 3, paires: 5, nouveauxDepuisApprentissage: 1 } })).toBe(3);
+		// appris sur 2 messages retenus de 3 validés (le jeu en écarte un) : rien de nouveau, Apprendre n'est plus mis en avant
+		expect(etapeUtile({ banc: { ...b, messages: 3, valides: 3, paires: 5, nouveauxDepuisApprentissage: 0 } })).toBe(1);
+	});
+
+	it('carte Apprendre : les messages jugés depuis le dernier apprentissage, dits seulement après un apprentissage', () => {
+		expect(jugesDepuisApprentissage(vue({ banc: { valides: 3, nouveauxDepuisApprentissage: 3 } }))).toBeNull();
+		const appris = vue({ banc: { valides: 3, nouveauxDepuisApprentissage: 0 }, resultat: { ...RESULTAT!, messages: 2 } });
+		expect(jugesDepuisApprentissage(appris)).toBe('Aucun message jugé depuis le dernier apprentissage');
+		expect(jugesDepuisApprentissage({ ...appris, banc: { ...appris.banc, nouveauxDepuisApprentissage: 2 } })).toBe('2 messages jugés depuis le dernier apprentissage');
+		// un essai en échec n'est pas un apprentissage
+		const echec = vue({ historique: [{ date: '2026-11-26T10:00:00.000Z', origine: 'automatique', verdicts: { complets: 'depart', sens: 'depart' }, remplace: false, erreur: 'panne' }] });
+		expect(jugesDepuisApprentissage(echec)).toBeNull();
 	});
 });

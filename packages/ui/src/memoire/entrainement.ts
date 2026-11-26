@@ -77,15 +77,25 @@ export type Etape = 1 | 2 | 3;
 
 /**
  * L'étape à mettre en avant : rien de préparé → Préparer ; des messages attendent un jugement → Juger ; tout est jugé et des
- * jugements n'ont pas encore servi (aucun apprentissage, ou un apprentissage sur moins de messages que ceux validés) →
- * Apprendre ; sinon, préparer d'autres messages.
+ * messages ont été jugés depuis le dernier apprentissage (ou il n'y en a pas eu) → Apprendre ; sinon, préparer d'autres messages.
  */
-export function etapeUtile(v: Pick<VueEntrainement, 'banc' | 'resultat'>): Etape {
+export function etapeUtile(v: Pick<VueEntrainement, 'banc'>): Etape {
 	const b = v.banc;
 	if (b.messages === 0) return 1;
 	if (b.aJuger > 0) return 2;
-	if (b.paires > 0 && (v.resultat === null || v.resultat.messages < b.valides)) return 3;
+	if (b.paires > 0 && b.nouveauxDepuisApprentissage > 0) return 3;
 	return 1;
+}
+
+/** Vrai si la note a déjà été apprise sur cette mémoire : un essai réussi dans l'historique, un rapport, ou un modèle appris. */
+export const dejaAppris = (v: Pick<VueEntrainement, 'historique' | 'resultat' | 'note'>): boolean =>
+	v.resultat !== null || v.historique.some((l) => l.erreur === undefined) || v.note.niveaux.some((n) => n.origine === 'appris');
+
+/** Les messages jugés depuis le dernier apprentissage, dits sur la carte Apprendre (null : jamais appris, rien de plus à dire). */
+export function jugesDepuisApprentissage(v: Pick<VueEntrainement, 'banc' | 'historique' | 'resultat' | 'note'>): string | null {
+	if (!dejaAppris(v)) return null;
+	const n = v.banc.nouveauxDepuisApprentissage;
+	return n === 0 ? 'Aucun message jugé depuis le dernier apprentissage' : `${accorder(n, 'message jugé', 'messages jugés')} depuis le dernier apprentissage`;
 }
 
 /** Un pourcentage entier (« 82 % ») d'une part de 0 à 1. */

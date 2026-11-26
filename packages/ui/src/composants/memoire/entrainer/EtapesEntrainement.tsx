@@ -2,14 +2,15 @@
  * Les trois étapes de l'entraînement, en cartes numérotées ; l'étape utile (`etapeUtile`) est mise en avant et porte le seul
  * bouton principal de la page. 1. Préparer des messages (jauge : validés sur ~100 conseillés). 2. Juger (« Juger » ou
  * « Relire (n) » ouvre l'écran de jugement ; « Accepter les sûres » s'il y a des propositions à relire, annulable ;
- * « Pré-juger avec Claude », son coût dit avant : un appel par message). 3. Apprendre. Un geste indisponible est grisé avec sa
- * raison sous lui (pendant une tâche : le bandeau de la tâche). Un refus du service s'affiche dans la carte de son geste.
+ * « Pré-juger avec Claude », son coût dit avant : un appel par message). 3. Apprendre (avec les messages jugés depuis le
+ * dernier apprentissage). Un geste indisponible est grisé avec sa raison sous lui (pendant une tâche : le bandeau de la tâche).
+ * Un refus du service s'affiche dans la carte de son geste.
  * `focusAuRetour` (retour de l'écran de jugement) : le focus va au bouton principal de l'étape utile.
  */
 import type { VueEntrainement } from '@mnemo/contrat';
 import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { useActionsEntrainement } from '../../../client/hooks.ts';
-import { accorder, etapeUtile, MESSAGES_CONSEILLES, NOMBRE_A_PREPARER, PREPARER_MAX, type Etape } from '../../../memoire/entrainement.ts';
+import { accorder, etapeUtile, jugesDepuisApprentissage, MESSAGES_CONSEILLES, NOMBRE_A_PREPARER, PREPARER_MAX, type Etape } from '../../../memoire/entrainement.ts';
 import { Bouton } from '../../commun/Bouton.tsx';
 import { cx } from '../../commun/classes.ts';
 import r from '../../commun/Reflet.module.css';
@@ -62,6 +63,7 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 	const sansMessage = raisonJuger !== null && v.juge.disponible;
 	const raisonClaude = !v.juge.disponible ? (v.juge.raison ?? 'Claude Code est introuvable sur ce poste.') : b.aPrejuger === 0 && !sansMessage ? 'Chaque message à juger a déjà ses propositions.' : null;
 	const raisonApprendre = b.paires === 0 ? 'Aucun jugement validé : juge des messages d’abord.' : null;
+	const depuisApprentissage = jugesDepuisApprentissage(v);
 
 	return (
 		<ol ref={liste} className={s.etapes} aria-label="Étapes de l’entraînement">
@@ -155,6 +157,7 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 					{accorder(b.paires, 'fiche jugée', 'fiches jugées')}
 					<span className={s.discret}>{` dans ${accorder(b.valides, 'message validé', 'messages validés')}`}</span>
 				</p>
+				{depuisApprentissage !== null && <p className={s.aide}>{depuisApprentissage}</p>}
 				<div className={s.gestes}>
 					<Bouton
 						genre={genre(3)}

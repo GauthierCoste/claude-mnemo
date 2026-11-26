@@ -1016,9 +1016,11 @@ export type NoteDuNiveauVue = { niveau: NiveauNoteVue; etat: EtatNoteVue; origin
 /**
  * Le banc des messages à juger : `messages` préparés (sautés exclus), `valides` (jugés : validés, silence ou toutes leurs fiches
  * jugées), `aJuger`, `aRelire` (propositions du juge en attente de relecture), `aPrejuger` (messages sans proposition : autant
- * d'appels au juge), `silences`, `sautes`, `paires` validées (fiches jugées utiles ou pas utiles).
+ * d'appels au juge), `silences`, `sautes`, `paires` validées (fiches jugées utiles ou pas utiles), `nouveauxDepuisApprentissage` :
+ * messages jugés depuis le dernier apprentissage (tous les jugés s'il n'y en a pas eu ; un message jugé au terminal, sans date de
+ * validation, compte s'il a été préparé après).
  */
-export type BancEntrainementVue = { messages: number; valides: number; aJuger: number; aRelire: number; aPrejuger: number; silences: number; sautes: number; paires: number };
+export type BancEntrainementVue = { messages: number; valides: number; aJuger: number; aRelire: number; aPrejuger: number; silences: number; sautes: number; paires: number; nouveauxDepuisApprentissage: number };
 /** La tâche longue en cours (une seule à la fois) : `fait` sur `total` (0 : pas encore connu), `depuis` (ISO). */
 export type TacheEntrainementVue = { genre: 'preparer' | 'prejuger' | 'apprendre'; fait: number; total: number; depuis: string };
 /** Une ligne de l'historique des apprentissages (les 10 derniers) : `remplace` : le nouveau modèle a remplacé l'ancien. */

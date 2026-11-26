@@ -739,8 +739,10 @@ wait for your review. From top to bottom:
   score) and its date. The ⋯ menu holds « Revenir au modèle d’avant » (back to the previous model; below).
 - **The task under way**, if any: its name, its progress (« 12 sur 30 ») and « Arrêter » (stop). Only one task runs at
   a time; the others wait, greyed, with the task as their reason.
-- **Three steps**, as numbered cards; the useful one is highlighted and carries the main button. A gesture that is not
-  available is greyed, with its reason under it.
+- **Three steps**, as numbered cards; the useful one is highlighted and carries the main button: « Préparer » when
+  nothing is prepared, « Juger » while messages wait for a judgement, « Apprendre » when messages were judged since the
+  last learning (or there was none), otherwise « Préparer » again. A gesture that is not available is greyed, with its
+  reason under it.
 - **The last learning** and the **history**, once there is one (below).
 
 **1. Préparer des messages** (prepare messages). Mnemo takes real messages from your last sessions (varied,
@@ -785,7 +787,10 @@ thread of the service (the sessions are not slowed down), and checks the accepta
 [Benchmarks](#benchmarks)). Not available without a validated judgement. The new model replaces the current one, even
 refused; a level with no judged pair (for example « Complets » when the messages were prepared without the reranker)
 keeps its current model, so it never falls back to the provisional rule for lack of data. The service takes the new model
-at the next message, without a restart. « Arrêter » leaves the current model in place.
+at the next message, without a restart. « Arrêter » leaves the current model in place. Once the score has been learned,
+the card says how many messages were judged since the last learning (the latest successful line of the history, or the
+date of a learned model): a message counts from its validation; one judged in the terminal with `--juger`, which has no
+validation date, counts only if it was prepared after the last learning.
 
 **The verdict, in plain words.** « Accepté : les % sont justes et Mnemo injecte seul au-dessus de 90 % »; « Refusé : la
 note ordonne le classement, sans % », with each missed criterion in plain words (for example « trop peu de fiches

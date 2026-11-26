@@ -15,7 +15,7 @@
 import type { BilanExtraction, MessageAExtraire } from './banc-extraire.ts';
 import { fusionnerCas, messagesAExtraire } from './banc-extraire.ts';
 import type { CasContexte, Jugement } from './banc-contexte.ts';
-import { accepterSures, aJuger, messagesARelire, ordreDePresentation, prochainMessage, progression, repondreMessage } from './banc-juger.ts';
+import { accepterSures, aJuger, estJuge, messagesARelire, ordreDePresentation, prochainMessage, progression, repondreMessage } from './banc-juger.ts';
 import type { ReponseMessage } from './banc-juger.ts';
 import { jeuDApprentissage } from './apprendre-note.ts';
 import type { Implicite, JeuDApprentissage, OptionsApprentissage, RapportDApprentissage } from './apprendre-note.ts';
@@ -88,7 +88,8 @@ export type LigneHistorique = { date: string; origine: OrigineApprentissage; ver
 /** Les paires implicites des gestes, données ou calculées au début de la tâche (sous son exclusion, arrêtables). */
 export type ImplicitesDApprentissage = readonly Implicite[] | ((signal: AbortSignal) => Promise<readonly Implicite[]>);
 export type NoteDuNiveau = { niveau: NiveauDeNote; etat: EtatDuModele; origine: 'appris' | 'depart' | 'non_appris'; date: string | null; verdict: string; criteres: string[]; refus: string[] };
-export type BancEntrainement = { messages: number; valides: number; aJuger: number; aRelire: number; aPrejuger: number; silences: number; sautes: number; paires: number };
+/** `nouveauxDepuisApprentissage` : messages jugés depuis le dernier apprentissage (`nouveauxDepuis`), tous sans apprentissage. */
+export type BancEntrainement = { messages: number; valides: number; aJuger: number; aRelire: number; aPrejuger: number; silences: number; sautes: number; paires: number; nouveauxDepuisApprentissage: number };
 /** `remplace` : le modèle de cet essai a remplacé le modèle d'alors (faux : l'ancien est gardé). */
 export type ResultatApprentissage = {
 	date: string;
@@ -153,6 +154,35 @@ type Annulation = { avant: { indice: number; cas: CasContexte }[] };
 
 /** L'origine d'un modèle de note : appris sur la mémoire, de départ, jamais appris. */
 const origineDu = (m: ModeleDeNote, etat: EtatDuModele): NoteDuNiveau['origine'] => (etat === 'non_appris' ? 'non_appris' : m.origine === 'depart' ? 'depart' : 'appris');
+
+/**
+ * La date du dernier apprentissage : la ligne la plus récente de l'historique, hors essai en échec (il n'a rien appris) ; sans
+ * historique, le plus récent `apprisLe` d'un modèle appris sur cette mémoire (pas un modèle de départ) ; null : aucun.
+ */
+export function dateDuDernierApprentissage(historique: readonly LigneHistorique[], modeles: ModelesDeNote): string | null {
+	const plusRecente = (dates: readonly string[]): string | null => dates.reduce<string | null>((a, d) => (Number.isNaN(Date.parse(d)) ? a : a === null || Date.parse(d) > Date.parse(a) ? d : a), null);
+	const lignes = plusRecente(historique.filter((l) => l.erreur === undefined).map((l) => l.date));
+	if (lignes !== null) return lignes;
+	return plusRecente(NIVEAUX_DE_NOTE.flatMap((n) => {
+		const { modele, etat } = modeles[n];
+		return origineDu(modele, etat) === 'appris' && modele.apprisLe !== null ? [modele.apprisLe] : [];
+	}));
+}
+
+/**
+ * Les messages jugés après `depuis` (null : aucun apprentissage, tous les messages jugés). Un message validé depuis l'interface
+ * a sa date (`valideLe`). Un message jugé fiche à fiche au terminal (`--juger`) n'en a pas : il ne compte que s'il a été extrait
+ * après `depuis` (il a forcément été jugé après) ; extrait avant, on ne sait pas quand il a été jugé : compté comme déjà appris.
+ */
+export function nouveauxDepuis(cas: readonly CasContexte[], depuis: string | null): number {
+	const juges = cas.filter(estJuge);
+	if (depuis === null) return juges.length;
+	const limite = Date.parse(depuis);
+	return juges.filter((c) => {
+		const date = c.valideLe ?? c.extraitLe;
+		return date !== undefined && Date.parse(date) > limite;
+	}).length;
+}
 
 export type Entrainement = {
 	etat(): Promise<EtatEntrainement>;
@@ -314,6 +344,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 			const [cas, modeles, avant, historique, rapport] = await Promise.all([p.banc.lire(), p.note.modeles(), p.note.avant(), p.historique.lire(), p.note.rapport()]);
 			const pr = progression(cas);
 			const juge = p.juge();
+			const depuis = dateDuDernierApprentissage(historique, modeles);
 			return {
 				note: { niveaux: NIVEAUX_DE_NOTE.map((n) => noteDuNiveau(n, modeles)), avant },
 				banc: {
@@ -325,6 +356,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 					silences: pr.silences,
 					sautes: pr.sautes,
 					paires: pr.pairesValidees,
+					nouveauxDepuisApprentissage: nouveauxDepuis(cas, depuis),
 				},
 				tache,
 				historique: historique.slice(0, HISTORIQUE_MAX),

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CasContexte, Prejugement } from '../../src/application/banc-contexte.ts';
 import type { BilanExtraction, MessageAExtraire } from '../../src/application/banc-extraire.ts';
 import type { RapportDApprentissage } from '../../src/application/apprendre-note.ts';
-import { creerEntrainement, ErreurEntrainement, HISTORIQUE_MAX } from '../../src/application/entrainement.ts';
+import { creerEntrainement, dateDuDernierApprentissage, ErreurEntrainement, HISTORIQUE_MAX, nouveauxDepuis } from '../../src/application/entrainement.ts';
 import type { LigneHistorique, PortsEntrainement } from '../../src/application/entrainement.ts';
 import { modeleNonAppris, REFUS_DEPART } from '../../src/domaine/modele-de-note.ts';
 import type { CoefficientsNote, ModeleDeNote } from '../../src/domaine/modele-de-note.ts';
@@ -139,7 +139,8 @@ describe("entraînement de la note : l'état", () => {
 		};
 		const { e } = faux(cas, { modeles, avant: true });
 		const etat = await e.etat();
-		expect(etat.banc).toEqual({ messages: 3, valides: 1, aJuger: 2, aRelire: 1, aPrejuger: 1, silences: 0, sautes: 1, paires: 2 });
+		// validé le 25/11, après le modèle appris le 20/11 : nouveau
+		expect(etat.banc).toEqual({ messages: 3, valides: 1, aJuger: 2, aRelire: 1, aPrejuger: 1, silences: 0, sautes: 1, paires: 2, nouveauxDepuisApprentissage: 1 });
 		expect(etat.note.avant).toBe(true);
 		expect(etat.note.niveaux).toEqual([
 			{
@@ -165,6 +166,41 @@ describe("entraînement de la note : l'état", () => {
 		expect(etat.tache).toBeNull();
 		expect(etat.resultat).toBeNull();
 		expect(etat.derniereErreur).toBeUndefined();
+	});
+
+	it('messages jugés depuis le dernier apprentissage : tous sans apprentissage ; après un apprentissage, seuls ceux validés depuis', async () => {
+		// 3 validés : le jeu d'apprentissage n'en retient que 2 (rapport : 2 messages), aucun n'est nouveau après lui
+		let maintenant = MAINTENANT;
+		const { e } = faux([valide('a', ['a.md']), valide('b', ['b.md']), valide('c', ['c.md']), unCas('j', ['j.md'])], {
+			maintenant: () => maintenant,
+			apprenti: { apprendre: async () => ({ ...rapportFactice(), messages: 2 }) },
+		});
+		expect((await e.etat()).banc).toMatchObject({ valides: 3, nouveauxDepuisApprentissage: 3 });
+		await (await e.apprendre({ origine: 'manuel' })).fin;
+		expect((await e.etat()).banc).toMatchObject({ valides: 3, nouveauxDepuisApprentissage: 0 });
+		maintenant = new Date('2026-11-26T11:00:00.000Z');
+		await e.repondre(3, { jugements: { 'j.md': 'pertinente' }, resteNonUtile: true });
+		expect((await e.etat()).banc).toMatchObject({ valides: 4, nouveauxDepuisApprentissage: 1 });
+	});
+
+	it('date du dernier apprentissage : l’essai réussi le plus récent de l’historique, sinon un modèle appris sur la mémoire (pas de départ)', () => {
+		const ligne = (date: string, erreur?: string): LigneHistorique => ({ date, origine: 'automatique', verdicts: { complets: 'refuse', sens: 'refuse' }, remplace: false, ...(erreur === undefined ? {} : { erreur }) });
+		const aucun: ModelesDeNote = { complets: { modele: modeleNonAppris(), etat: 'non_appris' }, sens: { modele: modeleNonAppris(), etat: 'non_appris' } };
+		const depart: ModelesDeNote = { ...aucun, sens: { modele: appris({ origine: 'depart' }), etat: 'depart' } };
+		const refuse: ModelesDeNote = { complets: { modele: appris({ apprisLe: '2026-11-21T10:00:00.000Z' }), etat: 'refuse' }, sens: { modele: appris(), etat: 'refuse' } };
+		expect(dateDuDernierApprentissage([], aucun)).toBeNull();
+		expect(dateDuDernierApprentissage([], depart)).toBeNull();
+		expect(dateDuDernierApprentissage([], refuse)).toBe('2026-11-21T10:00:00.000Z');
+		// un essai en échec n'a rien appris
+		expect(dateDuDernierApprentissage([ligne('2026-11-25T10:00:00.000Z', 'panne')], refuse)).toBe('2026-11-21T10:00:00.000Z');
+		expect(dateDuDernierApprentissage([ligne('2026-11-25T10:00:00.000Z', 'panne'), ligne('2026-11-22T10:00:00.000Z'), ligne('2026-11-23T10:00:00.000Z')], refuse)).toBe('2026-11-23T10:00:00.000Z');
+	});
+
+	it('un message jugé au terminal (sans date de validation) ne compte que s’il a été préparé après le dernier apprentissage', () => {
+		const juge = (nom: string, extra: Partial<CasContexte>) => unCas(nom, ['a.md'], { jugements: { 'a.md': 'pertinente' }, ...extra });
+		const cas = [juge('avant', { extraitLe: '2026-11-20T10:00:00.000Z' }), juge('apres', { extraitLe: '2026-11-25T10:00:00.000Z' }), juge('sans', {}), unCas('aJuger', ['a.md'], { extraitLe: '2026-11-25T10:00:00.000Z' })];
+		expect(nouveauxDepuis(cas, null)).toBe(3);
+		expect(nouveauxDepuis(cas, '2026-11-22T10:00:00.000Z')).toBe(1);
 	});
 });
 
