@@ -378,7 +378,7 @@ describe('entraînement de la note : apprendre et revenir (D6)', () => {
 		expect(vue.note.avant).toBe(true);
 		expect(vue.resultat).toMatchObject({ date: MAINTENANT.toISOString(), messages: 12, sessions: 4 });
 		expect(vue.resultat!.niveaux[0]).toMatchObject({ niveau: 'complets', accepte: false, verdict: 'Refusé : la note ordonne le classement, sans %', criteres: ['trop peu de fiches au-dessus de 90 % : 3, il en faut 25'], paires: 40 });
-		expect(vue.resultat!.niveaux[1]!.criteres).toEqual(["trop peu de messages « Rien d'utile ici » : 2 venus de 1 sessions, il en faut 20 venus de 5"]);
+		expect(vue.resultat!.niveaux[1]!.criteres).toEqual(["trop peu de messages « Rien d'utile ici » : 2 venus de 1 session, il en faut 20 venus de 5"]);
 		expect(vue.historique[0]!.origine).toBe('manuel');
 	});
 

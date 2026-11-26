@@ -29,6 +29,10 @@ export function verdictEnClair(etat: EtatDuModele): string {
 /** Nombre écrit à la française (virgule décimale). */
 const fr = (texte: string): string => texte.replace(/(\d)\.(\d)/gu, '$1,$2');
 
+/** Accords : « 1 venu de 1 session », « 4 venus de 2 sessions ». */
+const venus = (n: string): string => (Number(n) > 1 ? 'venus' : 'venu');
+const sessions = (n: string): string => `${n} ${Number(n) > 1 ? 'sessions' : 'session'}`;
+
 /** Chaque forme de critère manqué et sa phrase simple. */
 const TRADUCTIONS: readonly [RegExp, (...m: string[]) => string][] = [
 	[/^(\d+) injections simulées \(au moins (\d+)\)$/u, (n, min) => `trop peu de fiches au-dessus de ${SEUIL} : ${n}, il en faut ${min}`],
@@ -40,7 +44,7 @@ const TRADUCTIONS: readonly [RegExp, (...m: string[]) => string][] = [
 	[/^pente de calibration (.+) \(entre (.+) et (.+)\)$/u, (x, a, b) => `les % ne suivent pas assez ce qui est utile (pente ${fr(x)}, attendue entre ${fr(a)} et ${fr(b)})`],
 	[
 		/^pas assez de messages silence : (\d+) de (\d+) sessions réelles \(au moins (\d+) de (\d+)\)$/u,
-		(n, s, min, smin) => `trop peu de messages « Rien d'utile ici » : ${n} venus de ${s} sessions, il en faut ${min} venus de ${smin}`,
+		(n, s, min, smin) => `trop peu de messages « Rien d'utile ici » : ${n} ${venus(n)} de ${sessions(s)}, il en faut ${min} ${venus(min)} de ${smin}`,
 	],
 	[/^(.+) des messages silence servis \(au plus (.+)\)$/u, (x, max) => `Mnemo injecterait une fiche dans ${fr(x)} des messages où rien n'est utile, ${fr(max)} au plus`],
 	[/^(.+) injection par message \(au plus (.+)\)$/u, (x, max) => `trop d'injections par message : ${fr(x)}, ${fr(max)} au plus`],

@@ -52,6 +52,8 @@ describe('verdict de la note en mots simples (D9)', () => {
 		]);
 		const servis = accepter({ ...MAUVAISES, silences: 30, sessionsSilence: 8, partSilencesAvecInjection: 0.1 }).refus.find((r) => r.includes('silence'))!;
 		expect(critereEnClair(servis)).toBe("Mnemo injecterait une fiche dans 10 % des messages où rien n'est utile, 5 % au plus");
+		// accords au singulier
+		expect(critereEnClair('pas assez de messages silence : 1 de 1 sessions réelles (au moins 5 de 3)')).toBe("trop peu de messages « Rien d'utile ici » : 1 venu de 1 session, il en faut 5 venus de 3");
 	});
 
 	it('les refus de l’apprentissage et des modèles de départ ; inconnu : tel quel', () => {

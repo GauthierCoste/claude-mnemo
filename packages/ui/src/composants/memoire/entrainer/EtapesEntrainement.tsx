@@ -50,8 +50,8 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 		});
 
 	const raisonJuger = b.messages === 0 ? 'Prépare d’abord des messages.' : b.aJuger === 0 ? 'Tous les messages préparés sont jugés.' : null;
-	// rien de préparé : la raison de « Juger » vaut aussi pour Claude (dite une fois)
-	const sansMessage = b.messages === 0 && v.juge.disponible;
+	// rien à juger (rien de préparé, ou tout est jugé) : la raison de « Juger » vaut aussi pour Claude (dite une fois)
+	const sansMessage = raisonJuger !== null && v.juge.disponible;
 	const raisonClaude = !v.juge.disponible ? (v.juge.raison ?? 'Claude Code est introuvable sur ce poste.') : b.aPrejuger === 0 && !sansMessage ? 'Chaque message à juger a déjà ses propositions.' : null;
 	const raisonApprendre = b.paires === 0 ? 'Aucun jugement validé : juge des messages d’abord.' : null;
 

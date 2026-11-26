@@ -600,21 +600,31 @@ export function useLots(): Ressource<LotVue[]> {
 
 /**
  * État de l'entraînement de la note de confiance (Mémoire › Entraîner, et la pastille de son onglet) : lu une fois, puis
- * remplacé par chaque message `entrainement` du service (progression d'une tâche, jugements, nouveau modèle).
+ * remplacé par chaque message `entrainement` du service (progression d'une tâche, jugements, nouveau modèle) ; relu après
+ * une reconnexion (le service ne l'envoie pas à l'accueil : une tâche finie ou un service redémarré pendant la coupure ne
+ * laisse pas une tâche « en cours » à l'écran).
  */
 export function useEntrainement(): Ressource<VueEntrainement> {
 	const { api, connexion } = useClient();
 	const cache = useCacheRessources();
 	const base = useRessource(CLE_ENTRAINEMENT, () => api.lire<VueEntrainement>(ROUTES.entrainement));
+	const { recharger } = base;
 	useEffect(() => connexion.surMessage((m) => m.type === 'entrainement' && publierRessource(cache, CLE_ENTRAINEMENT, m.etat)), [connexion, cache]);
+	useEffect(() => {
+		let precedent = connexion.etat();
+		return connexion.surEtat((e) => {
+			if (e === 'ouverte' && precedent === 'reconnexion') recharger();
+			precedent = e;
+		});
+	}, [connexion, recharger]);
 	return base;
 }
 const CLE_ENTRAINEMENT = 'entrainement';
 
 /**
  * Les gestes de la page Entraîner. Lancer une tâche (préparer, pré-juger, apprendre), l'arrêter ou revenir au modèle d'avant :
- * la vue que rend le service remplace celle du cache. « Accepter les sûres » et « Annuler » rendent leur nombre ou leur indice ;
- * l'état est relu (le service le diffuse aussi). Chacun rejette une `ErreurApi` (409 : occupé, sans juge, rien à annuler…).
+ * la vue que rend le service remplace celle du cache, sauf si une diffusion plus récente est arrivée entre-temps. « Accepter
+ * les sûres » et « Annuler » rendent leur nombre ou leur indice ; l'état est relu (le service le diffuse aussi). Chacun rejette une `ErreurApi` (409 : occupé, sans juge, rien à annuler…).
  */
 export type ActionsEntrainement = {
 	preparer(nombre: number): Promise<void>;
@@ -627,11 +637,19 @@ export type ActionsEntrainement = {
 };
 
 export function useActionsEntrainement(): ActionsEntrainement {
-	const { api } = useClient();
+	const { api, connexion } = useClient();
 	const cache = useCacheRessources();
 	const { recharger } = useRessource(CLE_ENTRAINEMENT, () => api.lire<VueEntrainement>(ROUTES.entrainement));
+	/** Diffusions reçues : la vue d'une réponse arrivée après une diffusion plus récente ne la remplace pas. */
+	const diffusions = useRef(0);
+	useEffect(() => connexion.surMessage((m) => void (m.type === 'entrainement' && diffusions.current++)), [connexion]);
 	return useMemo(() => {
-		const vue = async (route: string, corps?: unknown) => publierRessource(cache, CLE_ENTRAINEMENT, await api.envoyer<VueEntrainement>(route, corps));
+		const vue = async (route: string, corps?: unknown) => {
+			const avant = diffusions.current;
+			const r = await api.envoyer<VueEntrainement>(route, corps);
+			// une tâche vite finie : sa fin, diffusée avant la réponse, n'est pas écrasée par la tâche « en cours » de la réponse
+			if (diffusions.current === avant) publierRessource(cache, CLE_ENTRAINEMENT, r);
+		};
 		return {
 			preparer: (nombre) => vue(ROUTES.entrainementPreparer, { nombre } satisfies DemandePreparer),
 			prejuger: () => vue(ROUTES.entrainementPrejuger),

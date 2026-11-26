@@ -254,6 +254,8 @@ describe('mode démo', () => {
 		await expect(api.envoyer(ROUTES.entrainementApprendre)).rejects.toMatchObject({ statut: 409 });
 		await vi.advanceTimersByTimeAsync(3000);
 		expect(recus.at(-1)).toMatchObject({ tache: null, banc: { aPrejuger: 0 } });
+		// arrêter sans tâche : 409, comme le service
+		await expect(api.envoyer(ROUTES.entrainementArreter)).rejects.toMatchObject({ statut: 409 });
 		// apprendre : un verdict refusé crédible, le modèle remplacé, une ligne d'historique manuelle
 		await api.envoyer(ROUTES.entrainementApprendre);
 		await vi.advanceTimersByTimeAsync(3000);

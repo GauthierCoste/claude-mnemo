@@ -141,7 +141,7 @@ const DEPART: NoteDuNiveauVue[] = (['complets', 'sens'] as const).map((niveau) =
 function apprentissageRefuse(date: string, messages: number, sessions: number, paires: number): { note: NoteDuNiveauVue[]; resultat: ResultatApprentissageVue } {
 	const complets = {
 		refus: ['2 injections simulées (au moins 25)', 'pas assez de messages silence : 1 de 1 sessions réelles (au moins 5 de 3)'],
-		criteres: ['trop peu de fiches au-dessus de 90 % : 2, il en faut 25', "trop peu de messages « Rien d'utile ici » : 1 venus de 1 sessions, il en faut 5 venus de 3"],
+		criteres: ['trop peu de fiches au-dessus de 90 % : 2, il en faut 25', "trop peu de messages « Rien d'utile ici » : 1 venu de 1 session, il en faut 5 venus de 3"],
 	};
 	const sens = { refus: ['précision - (au moins 0.85)'], criteres: ['aucune fiche au-dessus de 90 % pour mesurer si les % sont justes'] };
 	const fiabilite = (decalage: number) =>
@@ -290,12 +290,12 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 	}
 
 	function arreter(): VueEntrainement {
+		// comme le service : 409 sans tâche (déjà finie, ou arrêtée ailleurs)
+		if (tache === null) throw new ErreurApi('Aucune tâche en cours.', 409);
 		if (minuteur !== null) clearTimeout(minuteur);
 		minuteur = null;
-		if (tache !== null) {
-			tache = null;
-			changer();
-		}
+		tache = null;
+		changer();
 		return vue();
 	}
 

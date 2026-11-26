@@ -215,6 +215,53 @@ describe('Mémoire › Entraîner', () => {
 		await waitFor(() => expect(screen.queryByRole('button', { name: 'Autres actions sur la note' })).toBeNull());
 	});
 
+	it('double clic sur « Préparer » : une seule demande, aucun refus affiché', async () => {
+		let finir!: (v: VueEntrainement) => void;
+		const faux = monter(vue(), { [ROUTES.entrainementPreparer]: () => new Promise<VueEntrainement>((r) => (finir = r)) });
+		const carte = await etape(/Préparer des messages/);
+		const bouton = within(carte).getByRole('button', { name: 'Préparer' });
+		await act(async () => {
+			bouton.click();
+			bouton.click();
+		});
+		expect(faux.api.envoyer).toHaveBeenCalledTimes(1);
+		await act(async () => finir(vue({ tache: { genre: 'preparer', fait: 0, total: 30, depuis: '2026-11-26T10:00:00.000Z' } })));
+		expect(await screen.findByRole('progressbar', { name: 'Préparation des messages' })).toBeTruthy();
+		expect(within(carte).queryByRole('alert')).toBeNull();
+	});
+
+	it('une tâche vite finie : sa fin diffusée avant la réponse n’est pas écrasée par la tâche « en cours » de la réponse', async () => {
+		let finir!: (v: VueEntrainement) => void;
+		const faux = monter(vue({ banc: { messages: 2, aJuger: 2, aPrejuger: 2 } }), { [ROUTES.entrainementPrejuger]: () => new Promise<VueEntrainement>((r) => (finir = r)) });
+		const bouton = within(await etape(/Juger/)).getByRole('button', { name: 'Pré-juger avec Claude' });
+		await act(async () => bouton.click());
+		act(() => faux.connexion.emettre({ type: 'entrainement', etat: vue({ banc: { messages: 2, aJuger: 2, aRelire: 2 } }) }));
+		await act(async () => finir(vue({ banc: { messages: 2, aJuger: 2, aPrejuger: 2 }, tache: { genre: 'prejuger', fait: 0, total: 2, depuis: '2026-11-26T10:00:00.000Z' } })));
+		expect(screen.queryByRole('progressbar')).toBeNull();
+		expect(screen.getByRole('button', { name: 'Relire (2)' })).toBeTruthy();
+	});
+
+	it('reconnexion : l’état est relu (une tâche finie pendant la coupure ne reste pas affichée)', async () => {
+		let lue = vue({ banc: { messages: 2, aJuger: 2, aPrejuger: 2 }, tache: { genre: 'prejuger', fait: 1, total: 2, depuis: '2026-11-26T10:00:00.000Z' } });
+		const faux = monter(vue(), { [ROUTES.entrainement]: () => structuredClone(lue) });
+		await screen.findByRole('progressbar');
+		lue = vue({ banc: { messages: 2, aJuger: 2, aRelire: 2 } });
+		act(() => faux.connexion.passerA('reconnexion'));
+		act(() => faux.connexion.passerA('ouverte'));
+		await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
+		expect(screen.getByRole('button', { name: 'Relire (2)' })).toBeTruthy();
+	});
+
+	it('tout est jugé : « Pré-juger avec Claude » renvoie à la raison de « Juger », sans coût affiché', async () => {
+		monter(vue({ banc: { messages: 3, valides: 3, paires: 5 } }));
+		const juger = await etape(/Juger/);
+		const claude = within(juger).getByRole('button', { name: 'Pré-juger avec Claude' });
+		expect(claude.getAttribute('aria-disabled')).toBe('true');
+		expect(document.getElementById(claude.getAttribute('aria-describedby')!)!.textContent).toBe('Tous les messages préparés sont jugés.');
+		expect(juger.textContent).not.toContain('propositions');
+		expect(juger.textContent).not.toContain('appel');
+	});
+
 	it('« Juger » ouvre l’écran de jugement dans la page ; Échap y revient', async () => {
 		monter(vue({ banc: { messages: 1, aJuger: 1 } }));
 		const juger = within(await etape(/Juger/)).getByRole('button', { name: 'Juger' });
