@@ -840,6 +840,8 @@ export interface EtatSessions {
 	noterGeste(geste: GesteANoter): Promise<void>;
 	/** Nombre de gestes par sorte et par fiche, sans lire messages ni vecteurs. */
 	comptesGestes(): Promise<GesteCompte[]>;
+	/** Nombre de gestes du journal depuis `depuisMs` (inclus), de ces `sortes` seulement, sans lire une ligne. */
+	nombreGestes(filtre: { depuisMs?: number; sortes?: readonly Geste[] }): Promise<number>;
 	/**
 	 * Gestes du journal durable, les plus récents d'abord : ceux de `fiche`, de `session`, depuis `depuisMs` (inclus), de rang `depuisRang` ou
 	 * plus (ordre d'écriture), de ces `sortes` seulement, dont la note porte ce `niveau` (`note.niveau` : injections

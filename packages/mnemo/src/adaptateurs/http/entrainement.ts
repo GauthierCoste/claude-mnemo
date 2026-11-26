@@ -156,6 +156,7 @@ export function reapprentissageDuService(s: Pick<ServicePourEntrainement, 'racin
 		modeles: () => modelesSuivis(pil.etat, modelesActifs(dep), s.suivi),
 		banc: () => banc.lire(),
 		gestes: (f) => pil.etat.gestes({ ...f, sansVecteur: true, limite: null }),
+		nombreGestes: (f) => pil.etat.nombreGestes(f),
 		servis: (session) => pil.etat.servis(session, SERVIS_PAR_SESSION, 'message', { classement: 'tous' }),
 		sensInstalle: () => (dep.note?.().installes ?? ggufInstalles()).sens,
 		maintenantMs: () => dep.systeme.maintenant().getTime(),

@@ -266,6 +266,8 @@ describe('réapprentissage en fond dans le service', () => {
 			{
 				pil: (p) => {
 					p.etat.gestes = async () => gestes;
+					// la vérification compte les gestes, sans les lire
+					p.etat.nombreGestes = async () => gestes.length;
 				},
 				avant: async (_etat, racine, dep) => {
 					await writeFile(fichierBanc(racine), JSON.stringify(banc));

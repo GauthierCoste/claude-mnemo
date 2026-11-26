@@ -160,7 +160,8 @@ describe('réapprentissage en fond : la vérification dans le service (ports fac
 	function faux(o: { actif?: boolean; tache?: boolean; calculs?: { enCours: number; dernierMs: number }; historique?: LigneHistorique[]; banc?: CasContexte[]; gestes?: GesteNote[]; apprendre?: Entrainement['apprendre'] } = {}) {
 		const gestes = o.gestes ?? Array.from({ length: GESTES_NOUVEAUX_MIN }, (_, i) => geste('ecartee_ici', `S${i % 3}`, `f${i}.md`, MAINTENANT - HEURE + i, i + 1));
 		const appels: { origine: string; implicites?: ImplicitesDApprentissage; remplacer?: unknown }[] = [];
-		const lectures = { gestes: [] as unknown[], servis: [] as string[], historique: 0 };
+		const lectures = { gestes: [] as unknown[], comptes: [] as unknown[], servis: [] as string[], historique: 0 };
+		const filtrer = (f: { depuisMs?: number; sortes?: readonly Geste[] }) => gestes.filter((g) => (f.depuisMs === undefined || g.horodatageMs >= f.depuisMs) && (f.sortes === undefined || f.sortes.includes(g.geste)));
 		const ports: PortsReapprentissage = {
 			actif: () => o.actif ?? true,
 			entrainement: {
@@ -181,7 +182,11 @@ describe('réapprentissage en fond : la vérification dans le service (ports fac
 			banc: async () => o.banc ?? [valide],
 			gestes: async (f) => {
 				lectures.gestes.push(f);
-				return gestes.filter((g) => (f.depuisMs === undefined || g.horodatageMs >= f.depuisMs) && (f.sortes === undefined || f.sortes.includes(g.geste)));
+				return filtrer(f);
+			},
+			nombreGestes: async (f) => {
+				lectures.comptes.push(f);
+				return filtrer(f).length;
 			},
 			servis: async (session) => {
 				lectures.servis.push(session);
@@ -229,10 +234,13 @@ describe('réapprentissage en fond : la vérification dans le service (ports fac
 		const anciens = Array.from({ length: 30 }, (_, i) => geste('injectee_main', 'S', `a${i}.md`, depuis - 1000, i));
 		const recents = Array.from({ length: 25 }, (_, i) => geste(i < 10 ? 'retablie' : 'lue_apres_carte', 'S', `r${i}.md`, depuis + 1000, 100 + i));
 		const ligne: LigneHistorique = { date: new Date(depuis).toISOString(), origine: 'manuel', verdicts: { complets: 'refuse', sens: 'refuse' }, remplace: true };
-		const { ports, appels } = faux({ gestes: [...anciens, ...recents], historique: [ligne] });
+		const { ports, appels, lectures } = faux({ gestes: [...anciens, ...recents], historique: [ligne] });
 		// 15 lectures après carte seulement (les rétablissements ne jugent pas)
 		expect(await reapprendreSiPret(ports)).toEqual({ lance: false, motif: '15 geste(s) nouveau(x), il en faut 20' });
 		expect(appels).toEqual([]);
+		// comptés, jamais lus : la vérification ne lit pas le journal
+		expect(lectures.comptes).toHaveLength(1);
+		expect(lectures.gestes).toEqual([]);
 	});
 
 	it.each<[string, Parameters<typeof faux>[0], string]>([
@@ -250,7 +258,7 @@ describe('réapprentissage en fond : la vérification dans le service (ports fac
 	it('réglage coupé : rien n’est lu', async () => {
 		const { ports, lectures } = faux({ actif: false });
 		await reapprendreSiPret(ports);
-		expect(lectures).toEqual({ gestes: [], servis: [], historique: 0 });
+		expect(lectures).toEqual({ gestes: [], comptes: [], servis: [], historique: 0 });
 	});
 
 	it('jamais de rejet : verrou du banc tenu ailleurs (attente), panne d’une lecture (erreur)', async () => {
@@ -259,6 +267,32 @@ describe('réapprentissage en fond : la vérification dans le service (ports fac
 		const panne = faux();
 		panne.ports.banc = vi.fn(async () => Promise.reject(new Error('fichier des jugements illisible')));
 		expect(await reapprendreSiPret(panne.ports)).toEqual({ lance: false, motif: 'fichier des jugements illisible', erreur: true });
+	});
+
+	it('paires implicites : la main rendue à la boucle d’événements entre deux sessions (un hook arrivé entre-temps n’attend pas)', async () => {
+		const { ports, appels } = faux();
+		await reapprendreSiPret(ports);
+		const vus: boolean[] = [];
+		let minuteur = false;
+		const servis = ports.servis;
+		ports.servis = async (session) => {
+			vus.push(minuteur);
+			minuteur = false;
+			setTimeout(() => (minuteur = true), 0);
+			return servis(session);
+		};
+		setTimeout(() => (minuteur = true), 0);
+		await (appels[0]!.implicites as (s: AbortSignal) => Promise<unknown>)(new AbortController().signal);
+		expect(vus).toEqual([true, true, true]);
+	});
+
+	it('jamais de lecture du journal ni d’un banc sans jugement quand une condition bon marché manque', async () => {
+		for (const o of [{ actif: false }, { tache: true }, { calculs: { enCours: 1, dernierMs: MAINTENANT } }, { banc: [{ ...valide, jugements: {} }] }] satisfies Parameters<typeof faux>[0][]) {
+			const { ports, lectures } = faux(o);
+			await reapprendreSiPret(ports);
+			expect(lectures.gestes).toEqual([]);
+			expect(lectures.comptes).toEqual([]);
+		}
 	});
 
 	it('paires implicites arrêtées : la lecture des sessions s’interrompt', async () => {

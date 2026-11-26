@@ -1238,6 +1238,12 @@ describe('etat.sqlite', () => {
 			{ geste: 'injectee_main', fiche: 'd.md', nombre: 1 },
 			{ geste: 'injectee_auto', fiche: 'e.md', nombre: 1 },
 		]);
+		// nombre de gestes (sans lire une ligne) : mêmes filtres que la lecture
+		for (const f of [{}, { depuisMs: 22 }, { sortes: ['ecartee_ici', 'injectee_main'] as const }, { depuisMs: 21, sortes: ['ecartee_ici'] as const }]) {
+			expect(await etat.nombreGestes(f)).toBe((await etat.gestes({ ...f, limite: null })).length);
+		}
+		expect(await etat.nombreGestes({ sortes: ['ecartee_ici'] })).toBe(2);
+		expect(await etat.nombreGestes({ sortes: [] })).toBe(0);
 	});
 
 	it('lue après carte : seulement après une proposition, une fois par proposition, même après /clear ; une nouvelle proposition recompte', async () => {

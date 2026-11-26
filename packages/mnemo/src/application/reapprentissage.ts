@@ -135,6 +135,8 @@ export type PortsReapprentissage = {
 	banc(): Promise<CasContexte[]>;
 	/** Gestes du journal, sans leurs vecteurs (modèle du vecteur compris), les plus récents d'abord. */
 	gestes(filtre: { depuisMs?: number; sortes?: readonly Geste[] }): Promise<GesteNote[]>;
+	/** Nombre de gestes du journal (sans lire une ligne : la vérification ne lit jamais le journal). */
+	nombreGestes(filtre: { depuisMs?: number; sortes?: readonly Geste[] }): Promise<number>;
 	/** Les entrées servies aux messages porteurs de la session, classements entiers. */
 	servis(session: string): Promise<EntreeServie[]>;
 	/** Identité du modèle de sens installé (fichier GGUF) ; null : inconnue. */
@@ -145,6 +147,11 @@ export type PortsReapprentissage = {
 export type ResultatVerification = { lance: true; fin: Promise<void> } | { lance: false; motif: string; erreur?: true };
 
 const arret = (): Error => Object.assign(new Error('réapprentissage arrêté'), { name: 'AbortError' });
+/**
+ * Rend la main à la boucle d'événements : l'état des sessions se lit de façon synchrone (SQLite), une suite de lectures sans
+ * pause retiendrait un hook arrivé entre-temps.
+ */
+const rendreLaMain = (): Promise<void> => new Promise((resoudre) => setTimeout(resoudre, 0));
 
 /** Les paires implicites de tout le journal des gestes (voir l'en-tête). */
 export async function implicitesDuJournal(p: Pick<PortsReapprentissage, 'gestes' | 'servis' | 'sensInstalle'>, signal: AbortSignal) {
@@ -152,9 +159,12 @@ export async function implicitesDuJournal(p: Pick<PortsReapprentissage, 'gestes'
 	const sessions = [...new Set(gestes.filter((g) => g.session !== '' && GESTES_QUI_JUGENT.includes(g.geste)).map((g) => g.session))].slice(0, SESSIONS_MAX);
 	const entrees: EntreeServie[] = [];
 	for (const session of sessions) {
+		await rendreLaMain();
 		if (signal.aborted) throw arret();
 		entrees.push(...(await p.servis(session)));
 	}
+	await rendreLaMain();
+	if (signal.aborted) throw arret();
 	return pairesDesGestes(gestes, classementsServis(entrees), { sens: p.sensInstalle() }).paires;
 }
 
@@ -173,7 +183,7 @@ export async function reapprendreSiPret(p: PortsReapprentissage): Promise<Result
 		const immediate = attenteImmediate({ ...base, dernierApprentissageMs: dernier });
 		if (immediate !== null) return { lance: false, motif: immediate };
 		const pairesValidees = progression(await p.banc()).pairesValidees;
-		const gestesNouveaux = pairesValidees === 0 ? 0 : (await p.gestes({ sortes: GESTES_QUI_JUGENT, ...(dernier === null ? {} : { depuisMs: dernier + 1 }) })).length;
+		const gestesNouveaux = pairesValidees === 0 ? 0 : await p.nombreGestes({ sortes: GESTES_QUI_JUGENT, ...(dernier === null ? {} : { depuisMs: dernier + 1 }) });
 		const donnees = attenteDesDonnees({ pairesValidees, gestesNouveaux });
 		if (donnees !== null) return { lance: false, motif: donnees };
 		const { fin } = await p.entrainement.apprendre({ origine: 'automatique', implicites: (signal) => implicitesDuJournal(p, signal), remplacer: remplacerAutomatiquement });

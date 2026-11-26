@@ -1084,6 +1084,22 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 			);
 		},
 
+		async nombreGestes(filtre) {
+			const conditions: string[] = [];
+			const parametres: (string | number)[] = [];
+			if (filtre.depuisMs !== undefined) {
+				conditions.push('horodatage_ms >= ?');
+				parametres.push(filtre.depuisMs);
+			}
+			if (filtre.sortes !== undefined) {
+				if (filtre.sortes.length === 0) return 0;
+				conditions.push(`geste IN (${filtre.sortes.map(() => '?').join(', ')})`);
+				parametres.push(...filtre.sortes);
+			}
+			const ou = conditions.length === 0 ? '' : `WHERE ${conditions.join(' AND ')}`;
+			return reessayer(() => Number((base.prepare(`SELECT COUNT(*) AS nombre FROM gestes ${ou}`).get(...parametres) as Ligne).nombre));
+		},
+
 		async gestes(filtre) {
 			const conditions: string[] = [];
 			const parametres: (string | number)[] = [];
