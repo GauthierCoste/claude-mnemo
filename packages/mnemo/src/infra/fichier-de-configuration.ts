@@ -35,7 +35,7 @@ export async function lireConfiguration(chemin: string): Promise<ConfigurationLu
 	try {
 		reel = await realpath(chemin);
 	} catch (erreur) {
-		if (lien) return { echec: `${chemin} est un lien symbolique dont la cible est introuvable (${message(erreur)}) : rétablissez sa cible ou retirez le lien ; Mnemo ne le remplace pas.` };
+		if (lien) return { echec: `${chemin} est un lien symbolique dont la cible est introuvable (${message(erreur)}) : rétablir sa cible ou retirer le lien ; Mnemo ne le remplace pas.` };
 		// absent : écrit à son chemin
 	}
 	try {
@@ -58,7 +58,7 @@ export async function ecrireAtomique(reel: string, attendu: string | null, texte
 	const provisoire = join(dirname(reel), `.${basename(reel)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`);
 	try {
 		await writeFile(provisoire, texte, { mode, flag: 'wx' });
-		if ((await texteOuAbsent(reel)) !== attendu) throw new Error(`${reel} a changé pendant l’écriture : relancez la commande.`);
+		if ((await texteOuAbsent(reel)) !== attendu) throw new Error(`${reel} a changé pendant l’écriture : relancer la commande.`);
 		await rename(provisoire, reel);
 	} finally {
 		await rm(provisoire, { force: true });

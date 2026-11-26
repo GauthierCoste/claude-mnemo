@@ -52,10 +52,10 @@ const TRADUCTIONS: readonly [RegExp, (...m: string[]) => string][] = [
 		/^un découpage des sessions donne une précision de (.+) \(au moins (.+) à chaque découpage\)$/u,
 		(x, min) => `précision instable selon les sessions mises de côté : ${fr(x)} au pire, il en faut ${fr(min)}`,
 	],
-	[/^modèles installés inconnus$/u, () => 'les modèles locaux de cette machine sont inconnus : installe-les (Réglages › Modèles)'],
+	[/^modèles installés inconnus$/u, () => 'les modèles locaux de cette machine sont inconnus : les installer (mnemo modeles installer)'],
 	[
 		/^identité des modèles absente sur (\d+) cas/u,
-		(n) => `${n} messages préparés sans l'identité des modèles locaux : prépare-les de nouveau (mnemo banc contexte --completer)`,
+		(n) => `${n} messages préparés sans l'identité des modèles locaux : les préparer de nouveau (mnemo banc contexte --completer)`,
 	],
 	[/^aucune paire jugée pour ce niveau$/u, () => 'aucune fiche jugée utile ou pas utile pour ce niveau'],
 	[/^pas encore appris$/u, () => 'pas encore entraînée'],
@@ -63,7 +63,7 @@ const TRADUCTIONS: readonly [RegExp, (...m: string[]) => string][] = [
 
 /** Un critère manqué en clair ; inconnu : tel quel. */
 export function critereEnClair(refus: string): string {
-	if (refus === REFUS_DEPART) return 'note de départ livrée avec Mnemo, pas encore entraînée sur tes jugements';
+	if (refus === REFUS_DEPART) return 'note de départ livrée avec Mnemo, pas encore entraînée sur les jugements';
 	for (const [forme, phrase] of TRADUCTIONS) {
 		const m = forme.exec(refus);
 		if (m !== null) return phrase(...m.slice(1));

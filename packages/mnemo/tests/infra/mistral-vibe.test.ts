@@ -91,7 +91,7 @@ describe('déclaration MCP dans config.toml de Mistral Vibe', () => {
 		// retirer celle de ce Mnemo qui porte des réglages personnels : refus motivé, fichier intact
 		const avecEnv = `${blocDeDeclaration(NODE, MAIN)}\n[mcp_servers.env]\nA = "1"\n`;
 		await writeFile(join(home, 'config.toml'), avecEnv);
-		expect(await DECLARATION_MCP_MISTRAL_VIBE.retirer(appelDeclaration(home))).toEqual({ echec: expect.stringMatching(/réglages personnels \(env\) : Mnemo ne la retire pas ; retirez-la à la main/u) });
+		expect(await DECLARATION_MCP_MISTRAL_VIBE.retirer(appelDeclaration(home))).toEqual({ echec: expect.stringMatching(/réglages personnels \(env\) : Mnemo ne la retire pas ; la retirer à la main/u) });
 		expect(await readFile(join(home, 'config.toml'), 'utf8')).toBe(avecEnv);
 
 		await writeFile(join(home, 'config.toml'), `${blocDeDeclaration(NODE, MAIN)}disabled = true\n`);

@@ -1,5 +1,5 @@
 /**
- * Saisie d'un serveur MCP de l'app Claude (Réglages › App Claude) : nom, commande, arguments (un par ligne), variables
+ * Saisie d'un serveur MCP de l'app Claude (Réglages › Branchements › App Claude) : nom, commande, arguments (un par ligne), variables
  * (`NOM=valeur`, une par ligne). En modification, les valeurs existantes ne sont jamais montrées : `NOM` seul garde la
  * valeur actuelle (`null` dans la demande), une variable effacée est retirée. Le reste de la validation est au service.
  */
@@ -35,7 +35,7 @@ export function demandeDe(saisie: SaisieServeur, existantes: readonly string[]):
 			return { ok: false, motif: `Variables, ligne ${i + 1} : nom invalide (lettres, chiffres et « _ », sans chiffre au début), à écrire NOM=valeur.` };
 		if (Object.hasOwn(env, nom)) return { ok: false, motif: `Variable « ${nom} » écrite deux fois.` };
 		if (egal < 0) {
-			if (!existantes.includes(nom)) return { ok: false, motif: `Variable « ${nom} » sans valeur : écris ${nom}=valeur.` };
+			if (!existantes.includes(nom)) return { ok: false, motif: `Variable « ${nom} » sans valeur : écrire ${nom}=valeur.` };
 			env[nom] = null;
 		} else env[nom] = ligne.slice(egal + 1);
 	}

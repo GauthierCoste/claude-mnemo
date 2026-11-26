@@ -34,7 +34,7 @@ function detailServi(e: EntreeServieVue): string {
 }
 
 /**
- * Activité de l'archiviste : les `servi` reçus depuis l'ouverture (« Ce qu'il a fait pour tes sessions », Mémoire ›
+ * Activité de l'archiviste : les `servi` reçus depuis l'ouverture (« Ce qu'il a fait pour les sessions », Mémoire ›
  * Archiviste) et les commits du fil du jour (activité minimale du tiroir), mêlés par date (plus récents d'abord).
  */
 export function activiteArchiviste(servis: readonly EntreeServieVue[], commits: FilVue['commits'], sessions: readonly SessionVue[]): Activite {

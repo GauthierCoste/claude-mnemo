@@ -6,7 +6,14 @@
 
 ## Done
 
-- **Train the confidence score from the interface (26/11/2026, 1.9.0).** Mémoire › Entraîner: prepare real messages
+- **Settings redesign (26/11/2026, 1.10.0).** Three tabs, Agents · Réglages · Documentation: an agent is edited like a
+  game character (appearance, class, equipment, powers, mission); Réglages holds Branchements (engines, Claude app),
+  Mémoire (Rappel, Confiance) and Système; Documentation is a one-page technical reference. The skills of the
+  memory and of an agent are created, edited, renamed and deleted from the interface (icon in `metadata.icone`); a
+  skill provided by Mnemo can be edited or reverted, not renamed or deleted. The screens named below are the ones of
+  their time: Settings › Système › Moteurs is now Settings › Réglages › Branchements. See
+  [usage.md](usage.md#settings).
+- **Train the confidence score from the interface (26/11/2026, 1.10.0).** Mémoire › Entraîner: prepare real messages
   from your sessions, judge each one whole (« Utile », « Pas utile », « Je ne sais pas », « Rien d’utile ici »; keyboard
   too), have Claude pre-judge them (one Claude Code call per message, on your subscription, without tools or MCP) and
   validate them, « Accepter les sûres » at 90 % or more, then learn: the verdict in plain words, the missed criteria,

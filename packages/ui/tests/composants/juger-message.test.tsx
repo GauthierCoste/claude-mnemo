@@ -128,7 +128,7 @@ describe('écran de jugement', () => {
 		await act(async () => (screen.getByRole('checkbox', { name: /Le reste n’est pas utile/ }) as HTMLInputElement).click());
 		const valider = screen.getByRole('button', { name: 'Valider' });
 		expect(valider.getAttribute('aria-disabled')).toBe('true');
-		expect(document.getElementById(valider.getAttribute('aria-describedby')!)!.textContent).toContain('Réponds pour une fiche au moins');
+		expect(document.getElementById(valider.getAttribute('aria-describedby')!)!.textContent).toContain('Répondre pour une fiche au moins');
 		await act(async () => valider.click());
 		expect(envois(faux)).toHaveLength(1);
 	});

@@ -150,7 +150,7 @@ describe.skipIf(!MAC)('mnemo lanceur (HOME factice, rien n’est lancé)', () =>
 		// le chemin de node et de main.ts est affiché, avec la consigne de recréer le lanceur s'ils bougent
 		expect(r.out).toContain(process.execPath);
 		expect(r.out).toContain(MAIN);
-		expect(r.out).toMatch(/relancez « mnemo lanceur »/u);
+		expect(r.out).toMatch(/relancer « mnemo lanceur »/u);
 
 		const plist = readFileSync(join(app, 'Contents', 'Info.plist'), 'utf8');
 		expect(plist).toMatch(/<key>CFBundleExecutable<\/key>\s*<string>mnemo-lanceur<\/string>/u);
@@ -194,7 +194,7 @@ describe.skipIf(!MAC)('mnemo lanceur (HOME factice, rien n’est lancé)', () =>
 		const encore = await mnemo(racine, home, ['lanceur']);
 		expect(encore.code, encore.err).toBe(0);
 		expect(encore.out).toMatch(/remplacé/u);
-		expect(encore.out).toContain('ouvrez une fois dans votre navigateur par défaut');
+		expect(encore.out).toContain('ouvrir une fois dans le navigateur par défaut');
 		const retire = await mnemo(racine, home, ['lanceur', '--retirer']);
 		expect(retire.code, retire.err).toBe(0);
 		expect(existsSync(app)).toBe(false);

@@ -1,4 +1,4 @@
-// Profils qui peuvent être lancés (dialogue Nouvelle session, Réglages › Moteurs) : ce qui les décrit et leur équipement.
+// Profils qui peuvent être lancés (dialogue Nouvelle session, Réglages › Agents) : ce qui les décrit et leur équipement.
 import { DOSSIERS_FIXES, MOTEUR_PAR_DEFAUT } from '@mnemo/commun';
 import { estNomDeProfil, lanceurPropreSansChemin, moteurOuModeleInvalides, MOTIF_LANCEUR_PROPRE, MOTIF_NOM_DE_PROFIL, PROFILS_PAR_DEFAUT } from '../domaine/profil.ts';
 import type { Profil } from '../domaine/profil.ts';
@@ -9,7 +9,7 @@ import type { Dependances, PluginInstalle } from './ports.ts';
 import { chargerProfil, dossierSkillsDuProfil, ficheDeProfil, profilParDefaut } from './profil.ts';
 
 /**
- * Équipement d'un profil, compté comme le montre l'aperçu de Réglages › Profils : `skills`, celles que ses sessions reçoivent
+ * Équipement d'un profil, compté comme le montre l'aperçu de Réglages › Agents : `skills`, celles que ses sessions reçoivent
  * (comme `skillsRetenues` sans projet : celles du profil, puis celles de la mémoire qu'il retient, celle du profil gagnant à
  * nom égal) ; `plugins`, les plugins Claude Code installés qu'il allume (`enabledPluginsDe`, seulement avec ce moteur) ;
  * `hooks`, ses événements de hook de Mnemo.
@@ -44,6 +44,15 @@ async function equipementDuProfil(dep: Dependances, profil: Profil, skillsMemoir
 	return { skills: duProfil.length + deLaMemoire.length, plugins: allumes, hooks: [...profil.hooks] };
 }
 
+/** Noms des dossiers de `profils/`, valides ou non. */
+const dossiersDeProfils = async (dep: Dependances): Promise<string[]> => (await dep.coffre.lister(DOSSIERS_FIXES.profils)).dossiers.map((d) => d.slice(d.lastIndexOf('/') + 1));
+
+/** Noms des profils, triés : ceux du paquet et chaque dossier de `profils/` au nom accepté par `estNomDeProfil`. */
+const nomsDesProfils = (dossiers: readonly string[]): string[] => [...new Set([...Object.keys(PROFILS_PAR_DEFAUT), ...dossiers.filter(estNomDeProfil)])].sort();
+
+/** Noms des profils de la mémoire, triés (`nomsDesProfils`). */
+export const profilsDeLaMemoire = async (dep: Dependances): Promise<string[]> => nomsDesProfils(await dossiersDeProfils(dep));
+
 /**
  * Profils qui peuvent être lancés, triés par nom : ceux du paquet et chaque dossier de `profils/`, lus par `chargerProfil`.
  * Un dossier au nom refusé par `estNomDeProfil` est rendu dans `ignores` avec son motif ; un profil lu autrement qu'il ne
@@ -52,8 +61,8 @@ async function equipementDuProfil(dep: Dependances, profil: Profil, skillsMemoir
 export async function profilsDisponibles(
 	dep: Dependances,
 ): Promise<{ profils: ProfilDisponible[]; ignores: { nom: string; motif: string }[]; avertissements: { nom: string; motif: string }[] }> {
-	const dossiers = (await dep.coffre.lister(DOSSIERS_FIXES.profils)).dossiers.map((d) => d.slice(d.lastIndexOf('/') + 1));
-	const noms = [...new Set([...Object.keys(PROFILS_PAR_DEFAUT), ...dossiers.filter(estNomDeProfil)])].sort();
+	const dossiers = await dossiersDeProfils(dep);
+	const noms = nomsDesProfils(dossiers);
 	const profils: ProfilDisponible[] = [];
 	const skillsMemoire = await nomsDesSkills(dep, DOSSIERS_FIXES.skills);
 	// plugins illisibles : aucun compté, la liste des profils reste lisible

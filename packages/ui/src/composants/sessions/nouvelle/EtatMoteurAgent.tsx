@@ -1,6 +1,6 @@
 /**
  * État du moteur d'un agent, en bas de sa fiche : « Prêt », ou ce qui bloque son lancement avec le geste qui le débloque
- * (« Lier à Mnemo », comme Réglages › Système › Moteurs) et « Voir dans Réglages » ; un point à régler qui n'empêche pas de
+ * (« Lier à Mnemo », comme Réglages › Branchements) et « Voir dans Réglages » ; un point à régler qui n'empêche pas de
  * lancer ; la vérification du poste en cours, discrète (le choix reste libre). Le retour d'une liaison (déclaration laissée,
  * échec) reste dit quel que soit l'état qui suit. `idRaison` : l'élément qui dit pourquoi « Lancer » est indisponible.
  * L'annonce aux lecteurs d'écran est faite par la fiche : aucune région vivante ici, hors du retour de liaison.
@@ -47,7 +47,7 @@ export function EtatMoteurAgent(p: Props): ReactNode {
 		return (
 			<div className={s.etat} data-genre={e.genre === 'pret' ? 'pret' : 'attention'}>
 				<p className={s.ligne}>
-					{e.genre === 'pret' ? `✓ Prêt : ${p.moteur} trouvé et lié à Mnemo.` : `${p.moteur} introuvable ici : la session sera suivie, et tu la lanceras toi-même dans un terminal.`}
+					{e.genre === 'pret' ? `✓ Prêt : ${p.moteur} trouvé et lié à Mnemo.` : `${p.moteur} introuvable ici : la session sera suivie, et à lancer à la main dans un terminal.`}
 					{enVerification}
 				</p>
 				{retourLiaison}

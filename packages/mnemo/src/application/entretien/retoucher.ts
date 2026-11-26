@@ -13,7 +13,7 @@ export type DemandeRetouche = { action: 'retoucher_information'; id: string; anc
 
 /** Motif de refus de la forme d'une retouche (texte et catégorie donnés), sinon null. */
 function motifRetoucheInvalide(demande: DemandeRetouche): string | null {
-	if (demande.texte === undefined && demande.categorie === undefined) return 'Rien à retoucher : donne un `texte`, une `categorie`, ou les deux.';
+	if (demande.texte === undefined && demande.categorie === undefined) return 'Rien à retoucher : donner un `texte`, une `categorie`, ou les deux.';
 	if (demande.texte !== undefined) {
 		const texte = demande.texte.trim();
 		if (texte === '') return 'Le texte de l\'information est vide.';
@@ -65,7 +65,7 @@ export async function retoucherInformation(dep: Dependances, demande: DemandeRet
 	if (apres.categorie !== undefined) fait.categorie = apres.categorie;
 	const lignes = ecrireFait(fait);
 	if (!faitsEgaux(lireFait(lignes[0]!, ...lignes.slice(1)), fait)) {
-		return refuse('Cette information ne survivrait pas à sa relecture depuis la fiche : reformule le texte ou la catégorie.');
+		return refuse('Cette information ne survivrait pas à sa relecture depuis la fiche : reformuler le texte ou la catégorie.');
 	}
 	fiche.updated = aujourdhui(dep);
 	const commit = await ecrireEtCommiter(dep, [enFichier(dep, fiche)], `mnemo: retouche ${chemin}#^${vise.ancre}`);

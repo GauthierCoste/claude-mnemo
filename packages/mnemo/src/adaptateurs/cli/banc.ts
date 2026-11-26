@@ -468,12 +468,12 @@ async function commandeArchiviste(genre: 'consignes' | GenreArchiviste, args: st
 	}
 	if (!reel) {
 		throw new ErreurCli(
-			`Le banc « ${genre} » lance le vrai \`claude -p\` (profil archiviste) : il consomme votre abonnement Claude et écrit une session dans ~/.claude. Lancez-le vous-même avec : mnemo banc ${genre} --reel`,
+			`Le banc « ${genre} » lance le vrai \`claude -p\` (profil archiviste) : il consomme l’abonnement Claude et écrit une session dans ~/.claude. Le lancer à la main avec : mnemo banc ${genre} --reel`,
 			2,
 		);
 	}
 	if (trouverClaude(process.env, process.platform) === null) throw new ErreurCli(CLAUDE_INTROUVABLE);
-	console.error(`Attention : « mnemo banc ${genre} --reel » lance le vrai claude -p sur votre abonnement (plusieurs minutes, 30 au plus) ; la session est enregistrée dans ~/.claude.`);
+	console.error(`Attention : « mnemo banc ${genre} --reel » lance le vrai claude -p sur l’abonnement Claude (plusieurs minutes, 30 au plus) ; la session est enregistrée dans ~/.claude.`);
 	const r = await mesurerArchiviste(genre, executeurReel(), banc);
 	if (json) console.log(JSON.stringify(r, null, 2));
 	else if (r.genre === 'extraction') console.log([`Extraction : fidélité ${pourcent(r.fidelite)}, couverture ${pourcent(r.couverture)}, couverture fidèle ${pourcent(r.couvertureFidele)} (${r.faits} informations extraites)`, ...r.details.map((d) => `  ${d}`)].join('\n'));

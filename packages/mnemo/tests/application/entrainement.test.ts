@@ -158,7 +158,7 @@ describe("entraînement de la note : l'état", () => {
 				origine: 'depart',
 				date: '2026-11-20T10:00:00.000Z',
 				verdict: 'Note de départ, à entraîner : elle ordonne le classement, sans %',
-				criteres: ['note de départ livrée avec Mnemo, pas encore entraînée sur tes jugements'],
+				criteres: ['note de départ livrée avec Mnemo, pas encore entraînée sur les jugements'],
 				refus: [REFUS_DEPART],
 			},
 		]);

@@ -137,7 +137,7 @@ const DEPART: NoteDuNiveauVue[] = (['complets', 'sens'] as const).map((niveau) =
 	origine: 'depart',
 	date: '2026-11-25T18:00:00.000Z',
 	verdict: VERDICTS.depart,
-	criteres: ['note de départ livrée avec Mnemo, pas encore entraînée sur tes jugements'],
+	criteres: ['note de départ livrée avec Mnemo, pas encore entraînée sur les jugements'],
 	refus: ['note de départ, à entraîner'],
 }));
 
@@ -241,7 +241,7 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 	const NOMS = { preparer: 'préparer des messages', prejuger: 'pré-juger avec Claude', apprendre: 'apprendre la note' } as const;
 	/** Lance une fausse tâche : `pas` fait avancer d'un cran et rend faux quand elle est finie. */
 	function lancer(genre: TacheEntrainementVue['genre'], total: number, delai: number, pas: (fait: number) => boolean): VueEntrainement {
-		if (tache !== null) throw new ErreurApi(`Une tâche est déjà en cours (${NOMS[tache.genre]}) : attends sa fin ou arrête-la.`, 409);
+		if (tache !== null) throw new ErreurApi(`Une tâche est déjà en cours (${NOMS[tache.genre]}) : attendre sa fin ou l’arrêter.`, 409);
 		derniereErreur = undefined;
 		tache = { genre, fait: 0, total, depuis: new Date().toISOString() };
 		const suivant = () => {
@@ -265,7 +265,7 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 		const choisis = Math.min(nombre, journal.length);
 		return lancer('preparer', choisis, PREPARER_MS, (fait) => {
 			if (choisis === 0) {
-				derniereErreur = "Aucun message nouveau dans le journal des sessions : utilise Mnemo, puis prépares-en d'autres.";
+				derniereErreur = "Aucun message nouveau dans le journal des sessions : utiliser Mnemo, puis en préparer d'autres.";
 				return false;
 			}
 			banc = [...banc, journal.shift()!];
@@ -288,7 +288,7 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 	}
 
 	function apprendre(): VueEntrainement {
-		if (banc.reduce((n, c) => n + paires(c), 0) === 0) throw new ErreurApi('Aucun jugement validé : juge des messages avant d’apprendre.', 409);
+		if (banc.reduce((n, c) => n + paires(c), 0) === 0) throw new ErreurApi('Aucun jugement validé : juger des messages avant d’apprendre.', 409);
 		return lancer('apprendre', 0, APPRENDRE_MS, () => {
 			const date = new Date().toISOString();
 			const valides = banc.filter((c) => c.valide);
@@ -312,7 +312,7 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 	}
 
 	function revenir(): VueEntrainement {
-		if (tache?.genre === 'apprendre') throw new ErreurApi('Un apprentissage est en cours : attends sa fin ou arrête-le.', 409);
+		if (tache?.genre === 'apprendre') throw new ErreurApi('Un apprentissage est en cours : attendre sa fin ou l’arrêter.', 409);
 		if (avant === null) throw new ErreurApi("Aucun modèle d'avant.", 409);
 		[note, avant] = [avant, note];
 		changer();

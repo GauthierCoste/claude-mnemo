@@ -46,10 +46,8 @@ const PERMIS = new Set([
 	'composants/sessions/GrilleSessions.module.css .rail > .railb',
 	// la créature du profil au milieu de sa tuile carrée (avatar d'une session)
 	'composants/sessions/AvatarSession.module.css .tuile',
-	// Réglages › Moteurs : la lettre du fournisseur dans son emblème, le nœud de chaque étape du circuit et son nom dessous
-	'composants/reglages/moteurs/Moteurs.module.css .embleme',
-	'composants/reglages/moteurs/Moteurs.module.css .etape',
-	'composants/reglages/moteurs/Moteurs.module.css .noeud',
+	// Réglages : le logo (moteur, initiale d'un serveur MCP, pouls du service) au milieu de sa case carrée
+	'composants/reglages/Cartes.module.css .logo',
 	// Nouvelle session : la scène est symétrique autour de l'agent choisi (lui, son sol, son nom), la rangée centrée sous
 	// elle ; la marque « ! » d'une vignette et la flèche dans son bouton rond
 	'composants/sessions/nouvelle/SceneAgents.module.css .carrousel::after',
@@ -61,6 +59,20 @@ const PERMIS = new Set([
 	// Mémoire › Entraîner : le nombre dans la pastille de l'onglet, le numéro de chaque étape dans son rond
 	'composants/memoire/Memoire.module.css .pastille',
 	'composants/memoire/entrainer/Entrainer.module.css .numero',
+	// Réglages › Agents : l'agent au milieu de son podium (et son sol), un logo, une forme d'avatar ou un symbole au milieu de
+	// sa case carrée, une case d'inventaire (icône, nom, type empilés, comme une vignette), l'emoji d'une skill dans son champ
+	'composants/reglages/agents/Agents.module.css .podium',
+	'composants/reglages/agents/Agents.module.css .podium::after',
+	'composants/reglages/agents/Agents.module.css .blason',
+	'composants/reglages/agents/Agents.module.css .forme',
+	'composants/reglages/agents/Agents.module.css .case',
+	'composants/reglages/agents/Agents.module.css .symbole',
+	'composants/reglages/agents/EditeurSkill.module.css .icone',
+	// Sessions : la loupe du classement (icône dans son bouton carré), les agents en cours (avatar dans sa tuile, nombre en exposant)
+	'composants/sessions/RechercheFiche.module.css .boutonLoupe',
+	'composants/sessions/AgentsEnCours.module.css .agent',
+	'composants/sessions/AgentsEnCours.module.css .tuile',
+	'composants/sessions/AgentsEnCours.module.css .nombre',
 ]);
 
 function trouves(): Map<string, string[]> {

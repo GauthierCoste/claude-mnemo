@@ -24,6 +24,7 @@ import { dossiersRacine } from '../../infra/dossiers.ts';
 import { dossiersAAmorcer } from '../../application/dossiers.ts';
 import { lireReglagesMemoire, modifierReglagesMemoire } from '../../application/reglages-memoire.ts';
 import { routesProfils } from './profils.ts';
+import { routesSkills } from './skills.ts';
 import { routesReglages } from './reglages.ts';
 import { routesClaudeDesktop } from './claude-desktop.ts';
 import { routesMoteurs } from './moteurs.ts';
@@ -426,6 +427,7 @@ export async function demarrerService(options: {
 			calculs,
 		}),
 		...routesProfils(dep, () => hub.diffuser({ type: 'memoire', modifieeMs: Date.now() })),
+		...routesSkills(dep, () => hub.diffuser({ type: 'memoire', modifieeMs: Date.now() })),
 		...routesLots(dep, hub.diffuser),
 		...routesEntrainement(entrainement, { enFond }),
 		...routesClaudeDesktop({

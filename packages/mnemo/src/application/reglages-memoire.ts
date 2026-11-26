@@ -1,4 +1,4 @@
-// Réglages du groupe « Mémoire » : les règles de SCHEMA.md, lues et modifiées pour Réglages › Système (un commit par écriture).
+// Réglages du groupe « Mémoire » : les règles de SCHEMA.md, lues et modifiées pour Réglages › Mémoire (un commit par écriture).
 import { modifierSchema, valeursMemoire } from '../domaine/reglages-memoire.ts';
 import { ecrireEtCommiter, sousVerrou } from './commun.ts';
 import type { Dependances } from './ports.ts';

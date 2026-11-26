@@ -1,9 +1,10 @@
-/** Choix de l'avatar d'un profil : la forme (12 petites créatures) et la couleur, choisies séparément. */
+/** Apparence d'un agent : la forme de son avatar (12 petites créatures) et sa couleur, choisies séparément. */
 import { COULEURS_AVATAR, FORMES_AVATAR } from '@mnemo/commun';
 import type { Avatar, CouleurAvatar, FormeAvatar } from '@mnemo/commun';
 import type { ReactNode } from 'react';
 import { AvatarProfil, JETONS_COULEUR } from '../../commun/AvatarProfil.tsx';
-import s from './Profils.module.css';
+import s from './Agents.module.css';
+import { Bloc } from './Bloc.tsx';
 
 const NOMS_FORMES: Record<FormeAvatar, string> = {
 	robot: 'Robot',
@@ -22,21 +23,13 @@ const NOMS_FORMES: Record<FormeAvatar, string> = {
 
 const NOMS_COULEURS: Record<CouleurAvatar, string> = { vert: 'Vert', violet: 'Violet', bleu: 'Bleu', ambre: 'Ambre', rouge: 'Rouge' };
 
-export function ChoixAvatar(p: { avatar: Avatar; surChoix(a: Avatar): void }): ReactNode {
+export function BlocApparence(p: { avatar: Avatar; surChoix(a: Avatar): void }): ReactNode {
 	return (
-		<div className={s.choixAvatar}>
+		<Bloc titre="Apparence" sous="son avatar dans Mnemo (rail, sessions, lancement)">
 			<div role="radiogroup" aria-label="Forme de l’avatar" className={s.formes}>
 				{FORMES_AVATAR.map((forme) => (
-					<button
-						key={forme}
-						type="button"
-						role="radio"
-						aria-checked={p.avatar.forme === forme}
-						title={NOMS_FORMES[forme]}
-						className={s.forme}
-						onClick={() => p.surChoix({ ...p.avatar, forme })}
-					>
-						<AvatarProfil avatar={{ forme, couleur: p.avatar.couleur }} taille={32} titre={NOMS_FORMES[forme]} />
+					<button key={forme} type="button" role="radio" aria-checked={p.avatar.forme === forme} title={NOMS_FORMES[forme]} className={s.forme} onClick={() => p.surChoix({ ...p.avatar, forme })}>
+						<AvatarProfil avatar={{ forme, couleur: p.avatar.couleur }} taille="pleine" sansFond titre={NOMS_FORMES[forme]} />
 					</button>
 				))}
 			</div>
@@ -55,6 +48,6 @@ export function ChoixAvatar(p: { avatar: Avatar; surChoix(a: Avatar): void }): R
 					/>
 				))}
 			</div>
-		</div>
+		</Bloc>
 	);
 }

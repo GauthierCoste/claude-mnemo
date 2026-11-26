@@ -29,7 +29,7 @@ export async function corroborer(dep: Dependances, demande: DemandeCorroboration
 	if (typeof source === 'string') return refuse(source);
 	const citation = demande.citation?.trim();
 	if (citation !== undefined) {
-		if (citation === '') return refuse('La citation est vide : omets-la, ou donne le passage cité.');
+		if (citation === '') return refuse('La citation est vide : l’omettre, ou donner le passage cité.');
 		if (citation.length > LONGUEUR_MAX_CITATION) return refuse(`La citation dépasse ${LONGUEUR_MAX_CITATION} caractères.`);
 		if (/[\r\n]/u.test(citation)) return refuse('La citation doit tenir sur une seule ligne.');
 	}
@@ -70,7 +70,7 @@ export async function corroborer(dep: Dependances, demande: DemandeCorroboration
 	fait.corroborations = [...(fait.corroborations ?? []), corroboration];
 	const lignes = ecrireFait(fait);
 	if (!faitsEgaux(lireFait(lignes[0]!, ...lignes.slice(1)), fait)) {
-		return refuse('Cette source ne survivrait pas à sa relecture depuis la fiche : reformule la référence ou la citation.');
+		return refuse('Cette source ne survivrait pas à sa relecture depuis la fiche : reformuler la référence ou la citation.');
 	}
 	fiche.updated = jour;
 

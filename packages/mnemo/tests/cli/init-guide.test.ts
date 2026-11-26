@@ -150,7 +150,7 @@ describe('mnemo init interactif (entrées simulées)', () => {
 		expect(a.installerModeles).not.toHaveBeenCalled();
 		expect(a.installerCommande).toHaveBeenCalledOnce();
 		expect(a.creerLanceur).toHaveBeenCalledWith(racine);
-		expect(sortie.texte()).toContain('ouvrez l’application Mnemo');
+		expect(sortie.texte()).toContain('ouvrir l’application Mnemo');
 	});
 
 	it('commande déjà à jour : pas reproposée ; fin de l’entrée : ni commande ni application', async () => {

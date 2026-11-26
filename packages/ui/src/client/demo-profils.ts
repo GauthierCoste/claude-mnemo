@@ -1,6 +1,6 @@
 /**
  * Profils du mode démo (`?demo&vue=reglages`) : une imitation en mémoire des routes de gestion des profils du service
- * (détail, enregistrement avec empreinte, duplication, suppression, aperçu), pour voir Réglages › Profils sans service.
+ * (détail, enregistrement avec empreinte, duplication, suppression, aperçu), pour voir Réglages › Agents sans service.
  */
 import { PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import type { IdMoteur } from '@mnemo/commun';
@@ -25,11 +25,6 @@ const PLUGINS: PluginInstalleVue[] = [
 	{ id: 'pdf-viewer@claude-plugins', nom: 'pdf-viewer', version: '1.0.2', portee: 'utilisateur', skills: [{ nom: 'open', description: 'Ouvrir un PDF.' }], hooks: false },
 ];
 
-const SKILLS_MEMOIRE: SkillVue[] = [
-	{ nom: 'devis', description: 'Rédiger un devis au format de la maison.' },
-	{ nom: 'relecture', description: 'Relire un courrier avant envoi.' },
-];
-
 /** Ce que lit, hors Mnemo, un moteur sans plugins de session (ses skills sont listées dans la consigne), comme le service. */
 type ElementApercuVue = NonNullable<BlocApercuVue['elements']>[number];
 const HORS_MNEMO_SANS_PLUGINS: Partial<Record<IdMoteur, readonly ElementApercuVue[]>> = {
@@ -47,7 +42,11 @@ const HOOKS_TOUS: EvenementHookVue[] = ['debut', 'message', 'outil', 'apres_outi
 
 type Etat = { editable: ProfilEditableVue; consigneParDefaut: string; ecrit: boolean; version: number };
 
-export function creerProfilsDemo() {
+/** Les skills de la démo (celles de `creerSkillsDemo`) : de la mémoire, propres à un profil (copiées avec lui, retirées avec lui). */
+export type SkillsPourProfils = { memoire(): SkillVue[]; duProfil(nom: string): SkillVue[]; copierProfil(source: string, cible: string): void; retirerProfil(nom: string): void };
+
+export function creerProfilsDemo(skills: SkillsPourProfils) {
+	const skillsMemoire = () => skills.memoire();
 	const profils = new Map<string, Etat>([
 		[PROFIL_TRAVAIL, { editable: { avatar: { forme: 'robot', couleur: 'vert' }, consigne: null, lancement: 'projet', hooks: [...HOOKS_TOUS], skillsMemoire: 'tous', plugins: [], moteur: 'claude-code', modele: '' }, consigneParDefaut: CONSIGNE_TRAVAIL, ecrit: true, version: 1 }],
 		[PROFIL_ARCHIVISTE, { editable: { avatar: { forme: 'chouette', couleur: 'violet' }, consigne: null, lancement: 'memoire', hooks: ['debut', 'arret', 'fin'], skillsMemoire: [], plugins: [], moteur: 'claude-code', modele: '' }, consigneParDefaut: CONSIGNE_ARCHIVISTE, ecrit: false, version: 1 }],
@@ -87,11 +86,11 @@ export function creerProfilsDemo() {
 	};
 	const consigne = (e: Etat) => e.editable.consigne ?? e.consigneParDefaut;
 	const empreinte = (nom: string, e: Etat) => (e.ecrit ? `${nom}-${e.version}` : null);
-	const skillsDuProfil = (nom: string): SkillVue[] => (nom === 'redaction' ? [{ nom: 'signature', description: 'Signer un courrier.' }] : []);
+	const skillsDuProfil = (nom: string): SkillVue[] => skills.duProfil(nom);
 	/** Comme le service : les skills du profil puis celles de la mémoire qu'il retient (le profil gagne à nom égal), les plugins installés qu'il allume, avec Claude Code seulement. */
 	const equipement = (nom: string, e: Etat): EquipementProfilVue => {
 		const duProfil = skillsDuProfil(nom).map((x) => x.nom);
-		const retenues = SKILLS_MEMOIRE.filter((x) => !duProfil.includes(x.nom) && (e.editable.skillsMemoire === 'tous' || e.editable.skillsMemoire.includes(x.nom)));
+		const retenues = skillsMemoire().filter((x) => !duProfil.includes(x.nom) && (e.editable.skillsMemoire === 'tous' || e.editable.skillsMemoire.includes(x.nom)));
 		return { skills: duProfil.length + retenues.length, plugins: e.editable.moteur === 'claude-code' ? PLUGINS.filter((x) => e.editable.plugins.includes(x.id)).length : 0, hooks: [...e.editable.hooks] };
 	};
 	const verifierNom = (nom: string) => {
@@ -99,6 +98,26 @@ export function creerProfilsDemo() {
 	};
 
 	return {
+		existe: (nom: string): boolean => profils.has(nom),
+
+		/** Profils qui reçoivent la skill `nom` de la mémoire : ils la retiennent et n'ont pas de skill propre du même nom. */
+		equipes(nom: string): string[] {
+			return [...profils.entries()]
+				.filter(([p, e]) => (e.editable.skillsMemoire === 'tous' || e.editable.skillsMemoire.includes(nom)) && !skillsDuProfil(p).some((x) => x.nom === nom))
+				.map(([p]) => p)
+				.sort();
+		},
+
+		/** La liste `skillsMemoire` de chaque profil suit la skill `ancien` : renommée en `nouveau`, ou retirée (null). */
+		suivreSkill(ancien: string, nouveau: string | null): void {
+			for (const e of profils.values()) {
+				const liste = e.editable.skillsMemoire;
+				if (liste === 'tous' || !liste.includes(ancien)) continue;
+				e.editable.skillsMemoire = [...new Set(liste.flatMap((x) => (x === ancien ? (nouveau === null ? [] : [nouveau]) : [x])))];
+				e.version++;
+			}
+		},
+
 		liste(): ReponseProfils {
 			return {
 				profils: [...profils.entries()]
@@ -129,7 +148,7 @@ export function creerProfilsDemo() {
 				supprimable: nom !== PROFIL_TRAVAIL && nom !== PROFIL_ARCHIVISTE,
 				lancementModifiable: nom !== PROFIL_ARCHIVISTE,
 				empreinte: empreinte(nom, e),
-				skillsMemoireDisponibles: SKILLS_MEMOIRE,
+				skillsMemoireDisponibles: skillsMemoire(),
 				skillsDuProfil: skillsDuProfil(nom),
 				pluginsInstalles: PLUGINS,
 				avertissements: [],
@@ -140,7 +159,7 @@ export function creerProfilsDemo() {
 			verifierNom(nom);
 			const { editable, empreinte: lue } = corps as { editable: ProfilEditableVue; empreinte: string | null };
 			const e = profils.get(nom);
-			if ((e === undefined ? null : empreinte(nom, e)) !== lue) throw new ErreurApi('La fiche du profil a changé depuis son ouverture : rechargez-la.', 409);
+			if ((e === undefined ? null : empreinte(nom, e)) !== lue) throw new ErreurApi('La fiche du profil a changé depuis son ouverture : à recharger.', 409);
 			if (editable.hooks.length === 0) throw new ErreurApi('Profil refusé : au moins un événement, parmi ceux de Mnemo', 400);
 			if (editable.moteur !== 'claude-code' && editable.plugins.length > 0) throw new ErreurApi('Profil refusé : les plugins ne valent que pour Claude Code', 400);
 			if (editable.moteur !== 'claude-code' && nom === PROFIL_ARCHIVISTE) throw new ErreurApi('Profil refusé : l’archiviste reste sur Claude Code', 400);
@@ -156,6 +175,7 @@ export function creerProfilsDemo() {
 			const e = etat(source);
 			if (profils.has(nom)) throw new ErreurApi(`Profil refusé : le profil « ${nom} » existe déjà`, 400);
 			profils.set(nom, { editable: { ...structuredClone(e.editable), consigne: consigne(e) }, consigneParDefaut: CONSIGNE_TRAVAIL, ecrit: true, version: 1 });
+			skills.copierProfil(source, nom);
 			return { commit: 'demo0002' };
 		},
 
@@ -163,6 +183,7 @@ export function creerProfilsDemo() {
 			if (nom === PROFIL_TRAVAIL || nom === PROFIL_ARCHIVISTE) throw new ErreurApi(`Profil refusé : le profil « ${nom} » ne se supprime pas`, 400);
 			etat(nom);
 			profils.delete(nom);
+			skills.retirerProfil(nom);
 			return { commit: 'demo0003' };
 		},
 
@@ -174,7 +195,7 @@ export function creerProfilsDemo() {
 			const sansPlugins = horsMnemo !== undefined;
 			const titreConsigne = d.consigne === null ? 'Consigne du profil (par défaut)' : 'Consigne du profil (personnalisée)';
 			// sans plugins (Codex, Mistral Vibe) : la consigne reçue porte la liste des skills, lues par l'outil `lire` (comme le service)
-			const listeSkills = SKILLS_MEMOIRE.filter((s) => retenue(s.nom)).map((s) => `- ${s.nom} : ${s.description} (\`skills/${s.nom}/SKILL.md\`)`);
+			const listeSkills = skillsMemoire().filter((s) => retenue(s.nom)).map((s) => `- ${s.nom} : ${s.description} (\`skills/${s.nom}/SKILL.md\`)`);
 			const texteAvecSkills = [consigne(e).trim(), '', '## Skills de Mnemo', '', 'Ces skills sont dans la mémoire Mnemo, pas sur le disque du projet. Quand l’une s’applique à ta tâche, lis d’abord son `SKILL.md` avec l’outil `lire` de Mnemo (identifiant entre parenthèses), puis suis-la.', '', ...listeSkills, ''].join('\n');
 			const blocs: BlocApercuVue[] = [
 				sansPlugins
@@ -186,7 +207,7 @@ export function creerProfilsDemo() {
 					origine: 'memoire',
 					titre: sansPlugins ? 'Skills de la mémoire (listées dans la consigne, lues par l’outil lire)' : 'Skills de la mémoire',
 					reglable: true,
-					elements: SKILLS_MEMOIRE.map((s) => ({ nom: s.nom, detail: retenue(s.nom) ? s.description : `${s.description} — non retenue par le profil`, actif: retenue(s.nom) })),
+					elements: skillsMemoire().map((s) => ({ nom: s.nom, detail: retenue(s.nom) ? s.description : `${s.description} — non retenue par le profil`, actif: retenue(s.nom) })),
 				},
 				...(sansPlugins ? [] : [{ origine: 'plugin', titre: 'Plugins Claude Code', reglable: true, elements: PLUGINS.map((p) => ({ nom: p.id, detail: `version ${p.version}`, actif: d.plugins.includes(p.id) })) } satisfies BlocApercuVue]),
 				{

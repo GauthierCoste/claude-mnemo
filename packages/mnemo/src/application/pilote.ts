@@ -583,7 +583,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		if (duService === null) return { refus: `Le profil « ${profil.nom} » utilise le moteur « ${profil.moteur} », pas encore pris en charge par ce service.` };
 		const { moteur: duProfil, commande } = duService;
 		if (commande === null && duProfil.sansCommande === 'refus') {
-			return { refus: `Le profil « ${profil.nom} » utilise ${NOMS_MOTEURS[duProfil.id]}, introuvable sur ce poste (commande « ${duProfil.commandeParDefaut} ») : installe-le, puis « Relire » dans Réglages › Système › Moteurs.` };
+			return { refus: `Le profil « ${profil.nom} » utilise ${NOMS_MOTEURS[duProfil.id]}, introuvable sur ce poste (commande « ${duProfil.commandeParDefaut} ») : l’installer, puis « Relire » dans Réglages › Branchements.` };
 		}
 		// une version trop ancienne du moteur est refusée ; illisible, elle n'empêche rien
 		if (commande !== null && duProfil.version !== undefined && duProfil.refusDeVersion !== undefined) {
@@ -799,7 +799,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			if (!vivants.has(id) && s.etat === 'en_pause') return s;
 			// une pause qu'aucune reprise ne suivrait : refusée, que la session tourne ici ou non ; l'abandon reste possible
 			const sansReprise = motifSansReprise(s);
-			if (sansReprise !== null) throw new ErreurRepriseImpossible(`Pause impossible : ${sansReprise} ; abandonne-la à la place.`);
+			if (sansReprise !== null) throw new ErreurRepriseImpossible(`Pause impossible : ${sansReprise} ; l’abandonner à la place.`);
 			if (!vivants.has(id)) {
 				// rien à arrêter ici (mode dégradé, processus fini) : la session n'est plus relancée au démarrage
 				if (s.pid !== null && (await pil.hote.processus(s.pid, marqueDe(s))) === 'session') return s;

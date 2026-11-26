@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { avertissementNonCherchable, consigneATraiter, estIdMoteur, IDS_MOTEURS, NOMS_MOTEURS } from '@mnemo/commun';
-import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EtatModelesVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseEcarteesToujours, type ReponseServis, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseMoteurs, type ReponseProfils, type ReponseQuotas, type ReponseValidationLot, type SessionTermineeVue, type SessionVue, type ReponseAccepterSures, type ReponseAnnulation, type ReponseMessageAJuger, type ReponseReponseMessage, type VueEntrainement } from '@mnemo/contrat';
+import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EtatModelesVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseEcarteesToujours, type ReponseServis, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseMoteurs, type ProfilDetailVue, type ReponseEcritureSkill, type ReponseProfils, type SkillDetailVue, type ReponseQuotas, type ReponseValidationLot, type SessionTermineeVue, type SessionVue, type ReponseAccepterSures, type ReponseAnnulation, type ReponseMessageAJuger, type ReponseReponseMessage, type VueEntrainement } from '@mnemo/contrat';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ErreurApi } from '../../src/client/api.ts';
@@ -15,11 +15,16 @@ afterEach(() => {
 	vi.useRealTimers();
 });
 
+/** Corps d'un `PUT` de skill, comme l'écran l'envoie : les champs réglables et l'empreinte, rien d'autre. */
+const corpsDe = (d: SkillDetailVue) => ({ nom: d.nom, description: d.description, icone: d.icone, contenu: d.contenu, empreinte: d.empreinte });
+
 describe('mode démo', () => {
-	it('nourrit la coquille sans jeton : racine, pastilles, connexion ouverte', async () => {
+	it('alimente la coquille sans jeton : racine, pastilles, connexion ouverte', async () => {
 		const client = creerClientDemo();
 		render(<Application client={client} />);
-		expect(await within(screen.getByRole('banner')).findByText('~/Developer')).toBeTruthy();
+		// le dossier Mnemo est dans la barre d'état, plus dans la barre de titre
+		expect(await screen.findByText('coffre ~/Developer')).toBeTruthy();
+		expect(within(screen.getByRole('banner')).queryByText('~/Developer')).toBeNull();
 		const nav = screen.getByRole('navigation');
 		await screen.findByText('service connecté');
 		expect(within(nav).getByRole('button', { name: /Sessions/ }).textContent).toContain('4');
@@ -148,6 +153,77 @@ describe('mode démo', () => {
 		expect(fil.commits.length).toBeGreaterThan(0);
 		expect(fil.aConfirmer.length).toBeGreaterThan(0);
 		expect(fil.montees.length).toBe(2);
+	});
+
+	it('skills de la mémoire : détail avec icône et agents, créer, renommer (profils suivis), supprimer', async () => {
+		const { api } = creerClientDemo();
+		const chemin = (route: string, nom: string) => route.replace(':id', encodeURIComponent(nom));
+		const detailProfil = await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'redaction'));
+		expect(detailProfil.skillsMemoireDisponibles.every((x) => x.icone !== undefined)).toBe(true);
+		const relecture = await api.lire<SkillDetailVue>(chemin(ROUTES.skill, 'relecture'));
+		expect(relecture).toMatchObject({ nom: 'relecture', origine: 'memoire', modifiee: false });
+		expect(relecture.agents).toContain('redaction');
+		expect(relecture.motifFixe).toBeNull();
+		await expect(api.envoyer(chemin(ROUTES.skillOrigine, 'relecture'))).rejects.toMatchObject({ statut: 400 });
+
+		const cree = await api.envoyer<ReponseEcritureSkill>(ROUTES.skills, { nom: 'courrier', description: 'Écrire un courrier.', icone: '✉️', contenu: '# Courrier' });
+		expect(cree.nom).toBe('courrier');
+		await expect(api.envoyer(ROUTES.skills, { nom: 'courrier', description: 'x', icone: null, contenu: '' })).rejects.toMatchObject({ statut: 400 });
+		await expect(api.envoyer(ROUTES.skills, { nom: 'autre', description: ' ', icone: null, contenu: '' })).rejects.toMatchObject({ statut: 400 });
+
+		const renommee = await api.remplacer<ReponseEcritureSkill>(chemin(ROUTES.skill, 'relecture'), { ...corpsDe(relecture), nom: 'relecture-finale' });
+		expect(renommee.nom).toBe('relecture-finale');
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'redaction'))).editable.skillsMemoire).toEqual(['relecture-finale']);
+		await expect(api.lire(chemin(ROUTES.skill, 'relecture'))).rejects.toMatchObject({ statut: 404 });
+		await expect(api.remplacer(chemin(ROUTES.skill, 'relecture-finale'), corpsDe(relecture))).rejects.toMatchObject({ statut: 409 });
+
+		await api.supprimer<ReponseEcritureSkill>(chemin(ROUTES.skill, 'relecture-finale'));
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'redaction'))).editable.skillsMemoire).toEqual([]);
+		await expect(api.supprimer(chemin(ROUTES.skill, 'relecture-finale'))).rejects.toMatchObject({ statut: 404 });
+	});
+
+	it('skills d’un profil (?profil=) : celles de l’archiviste fournies par Mnemo, modifiées puis rétablies, ni supprimées ni renommées ; une skill propre créée et supprimée', async () => {
+		const { api } = creerClientDemo();
+		const chemin = (route: string, nom: string) => route.replace(':id', encodeURIComponent(nom));
+		const archiviste = await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'archiviste'));
+		expect(archiviste.skillsDuProfil.length).toBeGreaterThan(0);
+		expect(archiviste.skillsDuProfil.every((x) => x.origine === 'mnemo')).toBe(true);
+		const menage = await api.lire<SkillDetailVue>(chemin(ROUTES.skill, 'menage'), { profil: 'archiviste' });
+		expect(menage).toMatchObject({ profil: 'archiviste', origine: 'mnemo', modifiee: false, agents: ['archiviste'] });
+		expect(menage.motifFixe).toMatch(/fournie par Mnemo/u);
+		await expect(api.lire(chemin(ROUTES.skill, 'menage'))).rejects.toMatchObject({ statut: 404 });
+		const ici = `${chemin(ROUTES.skill, 'menage')}?profil=archiviste`;
+		await api.remplacer(ici, { ...corpsDe(menage), contenu: 'À ma façon.' });
+		expect((await api.lire<SkillDetailVue>(ici)).modifiee).toBe(true);
+		await expect(api.remplacer(ici, { ...corpsDe(await api.lire<SkillDetailVue>(ici)), nom: 'menage-perso' })).rejects.toMatchObject({ statut: 400 });
+		await expect(api.supprimer(chemin(ROUTES.skill, 'menage'), { profil: 'archiviste' })).rejects.toMatchObject({ statut: 400 });
+		await api.envoyer(`${chemin(ROUTES.skillOrigine, 'menage')}?profil=archiviste`);
+		expect((await api.lire<SkillDetailVue>(ici)).modifiee).toBe(false);
+
+		await api.envoyer(`${ROUTES.skills}?profil=archiviste`, { nom: 'factures', description: 'Ranger une facture.', icone: '🧾', contenu: '' });
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'archiviste'))).skillsDuProfil.find((x) => x.nom === 'factures')).toMatchObject({ icone: '🧾', origine: 'memoire' });
+		await api.supprimer(chemin(ROUTES.skill, 'factures'), { profil: 'archiviste' });
+		await expect(api.envoyer(`${ROUTES.skills}?profil=inconnu`, { nom: 'x', description: 'x', icone: null, contenu: '' })).rejects.toMatchObject({ statut: 404 });
+	});
+
+	it('skills (démo) : mêmes refus que le service (clés inconnues, bornes), 400 avant 409 ; un profil dupliqué emporte ses skills, supprimé les retire', async () => {
+		const { api } = creerClientDemo();
+		const chemin = (route: string, nom: string) => route.replace(':id', encodeURIComponent(nom));
+		const devis = await api.lire<SkillDetailVue>(chemin(ROUTES.skill, 'devis'));
+		await expect(api.remplacer(chemin(ROUTES.skill, 'devis'), devis)).rejects.toMatchObject({ statut: 400 });
+		await expect(api.envoyer(ROUTES.skills, { nom: 'x', description: 'x', icone: null, contenu: '', pirate: 1 })).rejects.toMatchObject({ statut: 400 });
+		for (const refuse of [{ description: 'deux\nlignes' }, { description: 'x'.repeat(1025) }, { icone: 'x'.repeat(17) }, { icone: '\u0007' }, { contenu: 'x'.repeat(100_001) }]) {
+			await expect(api.envoyer(ROUTES.skills, { nom: 'neuve', description: 'Neuve.', icone: null, contenu: '', ...refuse })).rejects.toMatchObject({ statut: 400 });
+		}
+		// empreinte périmée et champ refusé : le refus du champ (400) passe avant le conflit (409)
+		await expect(api.remplacer(chemin(ROUTES.skill, 'devis'), { ...corpsDe(devis), empreinte: 'perimee', description: '' })).rejects.toMatchObject({ statut: 400 });
+		await expect(api.remplacer(chemin(ROUTES.skill, 'devis'), { ...corpsDe(devis), empreinte: 'perimee' })).rejects.toMatchObject({ statut: 409 });
+
+		await api.envoyer(chemin(ROUTES.profilDupliquer, 'redaction'), { nom: 'courriers' });
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'courriers'))).skillsDuProfil.map((x) => x.nom)).toEqual(['signature']);
+		await api.supprimer(chemin(ROUTES.profil, 'courriers'));
+		await api.envoyer(chemin(ROUTES.profilDupliquer, 'travail'), { nom: 'courriers' });
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'courriers'))).skillsDuProfil).toEqual([]);
 	});
 
 	it('moteurs : les trois du catalogue dans /api/moteurs, chaque profil et chaque session sur un moteur connu, avec un modèle proposé ; sans quotas pour Vibe', async () => {

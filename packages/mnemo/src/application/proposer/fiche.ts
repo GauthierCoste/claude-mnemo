@@ -21,13 +21,13 @@ function motifDuLien(type: TypeFiche, donnees: Record<string, unknown>): string 
 	if (Object.hasOwn(donnees, CLE_DOSSIER_PROJET)) {
 		const lu = dossierProjetPropose(donnees[CLE_DOSSIER_PROJET]);
 		if ('motif' in lu) return lu.motif;
-		if (lu.valeur !== donnees[CLE_DOSSIER_PROJET]) return `« ${CLE_DOSSIER_PROJET} » : écris-le « ${lu.valeur} » (séparé par « / », sans « / » aux extrémités).`;
+		if (lu.valeur !== donnees[CLE_DOSSIER_PROJET]) return `« ${CLE_DOSSIER_PROJET} » : l’écrire « ${lu.valeur} » (séparé par « / », sans « / » aux extrémités).`;
 		if (!estTypeDeLieu(type)) return `« ${CLE_DOSSIER_PROJET} » se pose sur une fiche ${TYPES_DE_LIEU_EN_CLAIR}.`;
 	}
 	if (Object.hasOwn(donnees, CLE_PORTEE)) {
 		const lue = porteeDeLieuProposee(donnees[CLE_PORTEE]);
 		if ('motif' in lue) return lue.motif;
-		if (lue.valeur !== donnees[CLE_PORTEE]) return `« ${CLE_PORTEE} » : écris-la « ${lue.valeur} ».`;
+		if (lue.valeur !== donnees[CLE_PORTEE]) return `« ${CLE_PORTEE} » : l’écrire « ${lue.valeur} ».`;
 	}
 	if (Object.hasOwn(donnees, CLE_PERIME_LE)) {
 		const jour = donnees[CLE_PERIME_LE];
@@ -63,7 +63,7 @@ export async function proposerFiche(dep: Dependances, demande: DemandeFiche): Pr
 		const relue = lireFiche(chemin, texte);
 		if (relue.titre !== titre || relue.synthese !== synthese || JSON.stringify(relue.donnees) !== JSON.stringify(fiche.donnees)) throw new Error('différence');
 	} catch {
-		return refuse('Cette fiche ne survivrait pas à sa relecture : reformule le titre, la synthèse ou les données.');
+		return refuse('Cette fiche ne survivrait pas à sa relecture : reformuler le titre, la synthèse ou les données.');
 	}
 	const dossiers = await dossiersManquants(dep, chemin);
 	if (typeof dossiers === 'string') return refuse(dossiers);

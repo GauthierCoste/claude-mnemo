@@ -131,7 +131,7 @@ export async function proposerConsigne(dep: Dependances, demande: DemandeConsign
 
 	const base = ficheVide(dep, chemin, 'consigne', tronquer(texte, 80), { source: source.mention });
 	const fiche = avecConsigne(base, { texte, portee, niveau: 'rappelee', repetitions: [] });
-	if (!survitALaRelecture(fiche)) return refuse('Cette consigne ne survivrait pas à sa relecture depuis la fiche : reformule le texte.');
+	if (!survitALaRelecture(fiche)) return refuse('Cette consigne ne survivrait pas à sa relecture depuis la fiche : reformuler le texte.');
 	const dossiers = await dossiersManquants(dep, chemin);
 	if (typeof dossiers === 'string') return refuse(dossiers);
 	const aEcrire = [enFichier(dep, fiche), ...dossiers.map((f) => enFichier(dep, f))];

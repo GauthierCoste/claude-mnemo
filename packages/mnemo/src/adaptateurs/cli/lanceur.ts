@@ -39,7 +39,7 @@ function icones(): { type: TypeIcns; png: Buffer }[] {
 export async function commandeLanceur(args: string[], racineDonnee?: string, ecrire: (ligne: string) => void = (ligne) => console.log(ligne)): Promise<void> {
 	const inconnues = args.filter((a) => a !== '--retirer');
 	if (inconnues.length > 0) throw new ErreurCli(`Option inconnue : « ${inconnues[0]} ».\n${USAGE}`, 2);
-	if (process.platform !== 'darwin') throw new ErreurCli('Le lanceur est une application macOS : ailleurs, installez Mnemo depuis le navigateur (« Installer Mnemo »).');
+	if (process.platform !== 'darwin') throw new ErreurCli('Le lanceur est une application macOS : ailleurs, installer Mnemo depuis le navigateur (« Installer Mnemo »).');
 	const applications = join(homedir(), 'Applications');
 
 	if (args.includes('--retirer')) {
@@ -63,9 +63,9 @@ export async function commandeLanceur(args: string[], racineDonnee?: string, ecr
 	});
 	if ('refus' in r) throw new ErreurCli(r.refus);
 	ecrire(`${r.remplace ? 'Lanceur remplacé' : 'Lanceur créé'} : ${r.app} (dossier ${racine}).`);
-	ecrire(`Il appelle ${process.execPath} et ${MAIN} : si Node ou le code de Mnemo change de place, relancez « mnemo lanceur ».`);
-	if (lues.length === 0) ecrire('Sans icône : construisez l’interface (pnpm construire), puis relancez « mnemo lanceur ».');
+	ecrire(`Il appelle ${process.execPath} et ${MAIN} : si Node ou le code de Mnemo change de place, relancer « mnemo lanceur ».`);
+	if (lues.length === 0) ecrire('Sans icône : construire l’interface (pnpm construire), puis relancer « mnemo lanceur ».');
 	const navigateur = navigateurInstalle(lireReglagesDuDossier(racine).reglages.service.navigateur, posteCourant());
-	ecrire(`Première fois : ouvrez une fois dans ${navigateur?.nom ?? 'votre navigateur par défaut'} l’adresse donnée par « mnemo jeton », pour que la fenêtre soit reconnue.`);
+	ecrire(`Première fois : ouvrir une fois dans ${navigateur?.nom ?? 'le navigateur par défaut'} l’adresse donnée par « mnemo jeton », pour que la fenêtre soit reconnue.`);
 	ecrire('Le retirer : mnemo lanceur --retirer.');
 }

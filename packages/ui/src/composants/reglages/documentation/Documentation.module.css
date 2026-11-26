@@ -1,0 +1,169 @@
+/*
+ * Onglet Documentation : une seule page qui défile à droite du sommaire, colonne de lecture de 760px au plus. Définitions,
+ * étapes, tableaux ; un tableau trop large défile dans son cadre, jamais la page (container queries).
+ */
+
+.contenu {
+	overflow: auto;
+	overscroll-behavior: contain;
+	padding: 16px 22px 40px;
+	min-width: 0;
+	container-type: inline-size;
+	scroll-padding-top: 12px;
+}
+
+.lien {
+	text-decoration: none;
+}
+
+.section {
+	max-width: 760px;
+	min-width: 0;
+	padding-bottom: 18px;
+	margin-bottom: 18px;
+	border-bottom: 1px solid var(--bd);
+}
+
+.section:last-child {
+	border-bottom: none;
+}
+
+.titre {
+	margin: 0 0 8px;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.titre:focus-visible {
+	outline: 2px solid var(--ac);
+	outline-offset: 2px;
+}
+
+.titre:focus:not(:focus-visible) {
+	outline: none;
+}
+
+.intertitre {
+	margin: 14px 0 6px;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.section code {
+	font: 12px var(--mono);
+	color: var(--tx);
+}
+
+.note,
+.etapes,
+.definitions dd,
+.tableau td {
+	color: var(--mu);
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+
+.note {
+	margin: 8px 0 0;
+	font-size: 12.5px;
+}
+
+.etapes {
+	margin: 0 0 10px;
+	padding-left: 18px;
+}
+
+.etapes li {
+	margin: 2px 0;
+}
+
+/* définitions : le terme à gauche, la définition à droite ; l'un sous l'autre en petite largeur */
+.definitions {
+	margin: 0;
+	display: grid;
+	grid-template-columns: 130px minmax(0, 1fr);
+	gap: 6px 14px;
+}
+
+.definitions dt {
+	font-weight: 600;
+}
+
+.definitions dd {
+	margin: 0;
+}
+
+@container (max-width: 520px) {
+	.definitions {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0;
+	}
+
+	.definitions dd {
+		margin-bottom: 8px;
+	}
+}
+
+/* tableaux : le cadre défile seul si le tableau ne tient pas */
+.cadre {
+	overflow-x: auto;
+	max-width: 100%;
+	margin: 4px 0 6px;
+}
+
+.cadre:focus-visible {
+	outline: 2px solid var(--ac);
+	outline-offset: 2px;
+}
+
+.tableau {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12.5px;
+}
+
+.tableau caption {
+	text-align: left;
+	color: var(--mu);
+	font-size: 12px;
+	padding-bottom: 4px;
+}
+
+.tableau th,
+.tableau td {
+	text-align: left;
+	vertical-align: top;
+	padding: 5px 10px 5px 0;
+	border-top: 1px solid var(--bd);
+}
+
+.tableau thead th {
+	border-top: none;
+	color: var(--mu);
+	font-weight: 500;
+	font-size: 11.5px;
+	white-space: nowrap;
+}
+
+.tableau tbody th {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+@container (max-width: 520px) {
+	.tableau {
+		min-width: 460px;
+	}
+
+	.tableau tbody th {
+		white-space: normal;
+	}
+}
+
+.symbole {
+	color: var(--ac);
+}
+
+.tableau code {
+	white-space: nowrap;
+}

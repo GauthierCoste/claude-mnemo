@@ -1,0 +1,553 @@
+/*
+ * Onglet Réglages : la section choisie à droite du panneau (Branchements, Mémoire, Système), en cartes. Une carte : titre,
+ * sous-titre, puis des groupes séparés d'un filet. Lignes à logo (moteurs, app Claude, service), curseurs parlants (valeur à
+ * droite, phrase d'effet dessous), barres compactes, interrupteurs, puces, nuancier ; le pied Annuler / Enregistrer collé en bas.
+ * Les cartes se règlent sur la largeur de la colonne (container queries), pas sur celle de l'écran.
+ */
+
+.contenu {
+	overflow: auto;
+	overscroll-behavior: contain;
+	padding: 20px 22px 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-4);
+	min-width: 0;
+	container-type: inline-size;
+}
+
+/* une section cachée (attribut hidden) le reste, quel que soit son affichage */
+.contenu > [hidden] {
+	display: none;
+}
+
+.seule {
+	max-width: 760px;
+}
+
+/* Mémoire : Rappel, Recherche et Confiance côte à côte, l'une sous l'autre quand elles ne tiennent plus */
+.duo {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(26rem, 100%), 1fr));
+	gap: var(--esp-4);
+	align-items: start;
+}
+
+.carte {
+	border: 1px solid var(--bd);
+	border-radius: 16px;
+	background: var(--s2);
+	padding: 16px 18px;
+	min-width: 0;
+}
+
+.titreCarte {
+	margin: 0 0 2px;
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.sous {
+	margin: 0 0 14px;
+	color: var(--mu);
+	font-size: 12.5px;
+}
+
+.groupe {
+	padding: 12px 0;
+	border-top: 1px solid var(--bd);
+	min-width: 0;
+}
+
+.groupe:first-of-type {
+	border-top: none;
+	padding-top: 0;
+}
+
+.groupe:last-child {
+	padding-bottom: 0;
+}
+
+.teteGroupe {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--esp-2);
+	margin-bottom: 8px;
+}
+
+.titreGroupe {
+	margin: 0;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--mu);
+}
+
+.teteGroupe .titreGroupe {
+	margin-right: auto;
+}
+
+.groupe > .titreGroupe {
+	margin-bottom: 8px;
+}
+
+.discret {
+	margin: 0;
+	color: var(--mu);
+	font-size: 12px;
+}
+
+/* ---------- ligne à logo : logo, nom et détail, état ou geste à droite ; le détail d'un geste sous le nom ---------- */
+.lignes {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.prise {
+	display: grid;
+	grid-template-columns: 36px minmax(0, 1fr) auto;
+	gap: 4px 10px;
+	align-items: center;
+	padding: 9px 0;
+	border-top: 1px solid var(--bd);
+}
+
+.prise:first-child {
+	border-top: none;
+}
+
+.logo {
+	width: 36px;
+	height: 36px;
+	border-radius: var(--r-3);
+	display: grid;
+	place-items: center;
+	background: var(--s3);
+	color: var(--tx);
+	font: 700 14px var(--mono);
+}
+
+.ident {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.nom {
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.detailLigne {
+	color: var(--mu);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+
+.droite {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 6px;
+}
+
+.pret {
+	color: var(--vert);
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+/* sous le nom, sur toute la largeur restante : pourquoi ça bloque, le retour d'une liaison, la commande en repli */
+.sousLigne {
+	grid-column: 2 / -1;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.pouls {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--vert);
+	box-shadow: 0 0 0 0 color-mix(in srgb, var(--vert) 50%, transparent);
+	animation: mnemo-pouls 2s infinite;
+}
+
+/* ---------- curseur parlant : libellé, valeur à droite, le curseur, la phrase d'effet, le défaut ---------- */
+.curseur {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 2px 10px;
+	align-items: baseline;
+	padding: 6px 0;
+}
+
+.libelle {
+	font-weight: 500;
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.valeur {
+	font: 600 13px var(--mono);
+	color: var(--ac);
+	white-space: nowrap;
+}
+
+.curseur input[type='range'] {
+	grid-column: 1 / -1;
+	width: 100%;
+	accent-color: var(--ac);
+}
+
+.effet,
+.defaut {
+	grid-column: 1 / -1;
+	margin: 0;
+	font-size: 11.5px;
+	color: var(--mu);
+}
+
+/* « Rétablir » : un lien dans la phrase du défaut */
+.lien {
+	padding: 0;
+	border: none;
+	background: none;
+	color: var(--ac);
+	font: inherit;
+	cursor: pointer;
+}
+
+.lien:focus-visible {
+	outline: 2px solid var(--ac);
+	outline-offset: 2px;
+}
+
+/* ce qui ne vaut qu'au redémarrage (ou au prochain démarrage des modèles), ou qu'une variable d'environnement fixe */
+.badge {
+	padding: 1px 8px;
+	border-radius: var(--r-pastille);
+	background: color-mix(in srgb, var(--amber) 14%, transparent);
+	color: var(--amber);
+	font-size: 11px;
+	font-weight: 400;
+}
+
+/* ---------- barres compactes (fiabilités, poids) : libellé, barre, valeur sur une ligne ---------- */
+.barres {
+	display: grid;
+	gap: 6px;
+}
+
+.barre {
+	display: grid;
+	grid-template-columns: minmax(0, 9rem) minmax(0, 1fr) 3rem;
+	gap: 2px 10px;
+	align-items: center;
+	font-size: 12.5px;
+}
+
+.barre label {
+	color: var(--mu);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.barre input[type='range'] {
+	width: 100%;
+	min-width: 0;
+	accent-color: var(--violet);
+}
+
+.barres[data-ton='accent'] .barre input[type='range'] {
+	accent-color: var(--ac);
+}
+
+.barre .valeur {
+	font-size: 12px;
+	color: var(--tx);
+	text-align: right;
+}
+
+.barre .defaut {
+	grid-column: 2 / -1;
+}
+
+.barre .badge {
+	grid-column: 1 / -1;
+	justify-self: start;
+}
+
+@container (max-width: 22rem) {
+	.barre {
+		grid-template-columns: minmax(0, 1fr) 3rem;
+	}
+
+	.barre input[type='range'] {
+		grid-column: 1 / -1;
+		grid-row: 2;
+	}
+
+	.barre .defaut {
+		grid-column: 1 / -1;
+	}
+}
+
+.fins summary {
+	color: var(--mu);
+	font-size: 12.5px;
+	cursor: pointer;
+}
+
+.fins[open] summary {
+	margin-bottom: 10px;
+}
+
+/* ---------- interrupteurs et lignes de choix : libellé à gauche, commande à droite ---------- */
+.bascule {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 4px 10px;
+	padding: 6px 0;
+}
+
+.libelleBascule {
+	flex: 1;
+	min-width: min(10rem, 100%);
+	display: flex;
+	flex-direction: column;
+}
+
+.libelleBascule small {
+	color: var(--mu);
+	font-size: 11.5px;
+}
+
+.bascule .defaut {
+	flex-basis: 100%;
+}
+
+.choix {
+	max-width: 100%;
+	height: 28px;
+	background: var(--s3);
+	border: 1px solid var(--bd2);
+	border-radius: 7px;
+	padding: 0 6px;
+	color: var(--tx);
+	font: inherit;
+	font-size: 12.5px;
+}
+
+.nombre {
+	width: 7rem;
+	height: 28px;
+	background: var(--s3);
+	border: 1px solid var(--bd2);
+	border-radius: 7px;
+	padding: 0 8px;
+	color: var(--tx);
+	font: 12.5px var(--mono);
+}
+
+/* ---------- puces (marqueurs de projet) ---------- */
+.puces {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.puce {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 6px 3px 10px;
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-pastille);
+	background: var(--s3);
+	font: 12px var(--mono);
+	max-width: 100%;
+	overflow-wrap: anywhere;
+}
+
+.puce button {
+	padding: 0 2px;
+	border: none;
+	background: none;
+	color: var(--dim);
+	font: inherit;
+	cursor: pointer;
+}
+
+.puce button:hover {
+	color: var(--tx);
+}
+
+.ajout {
+	padding: 3px 10px;
+	border: 1px dashed var(--bd2);
+	border-radius: var(--r-pastille);
+	background: none;
+	color: var(--mu);
+	font: 12px var(--mono);
+	cursor: pointer;
+}
+
+.saisiePuce {
+	width: 11rem;
+	max-width: 100%;
+	padding: 3px 10px;
+	border: 1px solid var(--ac);
+	border-radius: var(--r-pastille);
+	background: var(--s1);
+	color: var(--tx);
+	font: 12px var(--mono);
+	outline: none;
+}
+
+/* ---------- nuancier : la couleur principale ---------- */
+.nuancier {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.nuance {
+	width: 34px;
+	height: 34px;
+	padding: 0;
+	border: 2px solid transparent;
+	border-radius: var(--r-3);
+	background: var(--c);
+	cursor: pointer;
+}
+
+.nuance[aria-pressed='true'] {
+	border-color: var(--tx);
+}
+
+.nuance:focus-visible {
+	outline: 2px solid var(--tx);
+	outline-offset: 2px;
+}
+
+/* couleur choisie à la main : le sélecteur du système, dans une case du nuancier */
+.autre {
+	position: relative;
+	width: 34px;
+	height: 34px;
+	border: 2px dashed var(--bd2);
+	border-radius: var(--r-3);
+	background: var(--c);
+	cursor: pointer;
+}
+
+.autre[data-choisie] {
+	border-style: solid;
+	border-color: var(--tx);
+}
+
+.autre:focus-within {
+	outline: 2px solid var(--tx);
+	outline-offset: 2px;
+}
+
+.autre input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.avertissement {
+	margin: 8px 0 0;
+	font-size: 12px;
+	color: var(--amber);
+}
+
+.horsEcran {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* ---------- pied : un seul Annuler / Enregistrer pour Mémoire et Système ---------- */
+.pied {
+	position: sticky;
+	bottom: 0;
+	margin-top: auto;
+	padding: var(--esp-3) 0 var(--esp-4);
+	background: var(--s1);
+	border-top: 1px solid var(--bd);
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-2);
+}
+
+.actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: var(--esp-2);
+}
+
+.etat {
+	margin: 0 auto 0 0;
+	font-size: 12.5px;
+	color: var(--amber);
+}
+
+.statut {
+	margin: 0 auto 0 0;
+	font-size: 12.5px;
+	color: var(--ac);
+}
+
+.erreur {
+	margin: 0;
+	color: var(--red);
+}
+
+.avis {
+	padding: var(--esp-3);
+	border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+	border-radius: var(--r-2);
+	background: color-mix(in srgb, var(--amber) 8%, transparent);
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-2);
+}
+
+.avis p {
+	margin: 0;
+}
+
+.avis ul {
+	margin: 0;
+	padding-left: 18px;
+}
+
+@media (max-width: 720px) {
+	.contenu {
+		padding: var(--esp-4) 16px 0;
+	}
+}

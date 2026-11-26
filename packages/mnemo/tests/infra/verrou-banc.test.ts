@@ -61,7 +61,7 @@ describe('verrou du banc entre le service et le CLI (D7)', () => {
 		}
 		expect(refus).toBeInstanceOf(ErreurCli);
 		expect((refus as ErreurCli).message).toBe(
-			`Le fichier des jugements est utilisé par le service Mnemo (pré-juger avec Claude, processus ${process.ppid}, depuis 2026-11-26T10:00:00.000Z) : attendez la fin de la tâche ou arrêtez-la (Mémoire › Entraîner) avant de lancer --juger.`,
+			`Le fichier des jugements est utilisé par le service Mnemo (pré-juger avec Claude, processus ${process.ppid}, depuis 2026-11-26T10:00:00.000Z) : attendre la fin de la tâche ou l’arrêter (Mémoire › Entraîner) avant de lancer --juger.`,
 		);
 	});
 });

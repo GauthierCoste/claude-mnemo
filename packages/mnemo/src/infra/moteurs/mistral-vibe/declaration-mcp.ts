@@ -67,7 +67,7 @@ async function remplacer(a: AppelDeclaration): Promise<ResultatRedeclaration> {
 	if (deCeMnemo(d, node, a.main)) return 'deja';
 	if (!deMnemo(d)) return 'autre';
 	if (d.reglages.length > 0) {
-		return { echec: `la déclaration MCP « mnemo » de Mistral Vibe porte des réglages personnels (${d.reglages.join(', ')}) : mettez-la à jour à la main dans ${e.chemin}, bloc [[mcp_servers]] name = "mnemo" : ${lignesTomlMistralVibe(node, a.main)}.` };
+		return { echec: `la déclaration MCP « mnemo » de Mistral Vibe porte des réglages personnels (${d.reglages.join(', ')}) : la mettre à jour à la main dans ${e.chemin}, bloc [[mcp_servers]] name = "mnemo" : ${lignesTomlMistralVibe(node, a.main)}.` };
 	}
 	const echec = await ecrireConfiguration(e.chemin, e.lu, texteAvecDeclaration(e.lu.texte, node, a.main, d.plages));
 	return echec ?? 'remplace';
@@ -85,7 +85,7 @@ async function retirer(a: AppelDeclaration): Promise<ResultatRetraitMcp> {
 	if (d === null) return 'absent';
 	if (!deCeMnemo(d, nodeDurable(a.plateforme as NodeJS.Platform), a.main)) return 'autre';
 	if (d.reglages.length > 0) {
-		return { echec: `la déclaration MCP « mnemo » de Mistral Vibe porte des réglages personnels (${d.reglages.join(', ')}) : Mnemo ne la retire pas ; retirez-la à la main de ${e.chemin} (bloc [[mcp_servers]] name = "mnemo" et ses sous-tables).` };
+		return { echec: `la déclaration MCP « mnemo » de Mistral Vibe porte des réglages personnels (${d.reglages.join(', ')}) : Mnemo ne la retire pas ; la retirer à la main de ${e.chemin} (bloc [[mcp_servers]] name = "mnemo" et ses sous-tables).` };
 	}
 	const echec = await ecrireConfiguration(e.chemin, e.lu, texteSansDeclaration(e.lu.texte!, d.plages));
 	return echec ?? 'retire';

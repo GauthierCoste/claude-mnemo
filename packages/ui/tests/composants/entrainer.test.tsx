@@ -76,7 +76,7 @@ describe('Mémoire › Entraîner', () => {
 		const juger = await etape(/Juger/);
 		const boutonJuger = within(juger).getByRole('button', { name: 'Juger' });
 		expect(boutonJuger.getAttribute('aria-disabled')).toBe('true');
-		expect(document.getElementById(boutonJuger.getAttribute('aria-describedby')!)!.textContent).toBe('Prépare d’abord des messages.');
+		expect(document.getElementById(boutonJuger.getAttribute('aria-describedby')!)!.textContent).toBe('Préparer d’abord des messages.');
 		expect(within(juger).getByRole('button', { name: 'Pré-juger avec Claude' }).getAttribute('aria-disabled')).toBe('true');
 		const apprendre = await etape(/Apprendre/);
 		const boutonApprendre = within(apprendre).getByRole('button', { name: 'Apprendre la note' });
@@ -93,7 +93,7 @@ describe('Mémoire › Entraîner', () => {
 		expect(juger.getAttribute('aria-current')).toBe('step');
 		expect(within(juger).getByRole('button', { name: 'Relire (2)' }).getAttribute('aria-disabled')).toBeNull();
 		expect(within(juger).getByRole('button', { name: 'Accepter les sûres' })).toBeTruthy();
-		expect(juger.textContent).toContain('2 appels à Claude Code, un par message, sur ton abonnement.');
+		expect(juger.textContent).toContain('2 appels à Claude Code, un par message, sur l’abonnement Claude.');
 		expect(juger.textContent).toContain('dont 2 pré-jugés par Claude, à relire');
 	});
 
@@ -194,7 +194,7 @@ describe('Mémoire › Entraîner', () => {
 	it('refus du service (409) : dit dans la carte du geste', async () => {
 		monter(vue({ banc: { messages: 2, valides: 2, paires: 3 } }), {
 			[ROUTES.entrainementApprendre]: () => {
-				throw new ErreurApi('Une tâche est déjà en cours (préparer des messages) : attends sa fin ou arrête-la.', 409);
+				throw new ErreurApi('Une tâche est déjà en cours (préparer des messages) : attendre sa fin ou l’arrêter.', 409);
 			},
 		});
 		const carte = await etape(/Apprendre/);

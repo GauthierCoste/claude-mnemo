@@ -38,9 +38,9 @@ const vivant = (pid: number): boolean => {
 function motifDuRefus(t: TenantDuVerrou, operation: string): string {
 	const depuis = t.depuis ?? '?';
 	if (t.service) {
-		return `Le fichier des jugements est utilisé par le service Mnemo (${t.operation}, processus ${t.pid ?? '?'}, depuis ${depuis}) : attendez la fin de la tâche ou arrêtez-la (Mémoire › Entraîner) avant de lancer ${operation}.`;
+		return `Le fichier des jugements est utilisé par le service Mnemo (${t.operation}, processus ${t.pid ?? '?'}, depuis ${depuis}) : attendre la fin de la tâche ou l’arrêter (Mémoire › Entraîner) avant de lancer ${operation}.`;
 	}
-	return `Le fichier des jugements est ouvert par « mnemo banc contexte ${t.operation} » (processus ${t.pid ?? '?'}, depuis ${depuis}) : terminez-le (q) avant de lancer ${operation}.`;
+	return `Le fichier des jugements est ouvert par « mnemo banc contexte ${t.operation} » (processus ${t.pid ?? '?'}, depuis ${depuis}) : le terminer (q) avant de lancer ${operation}.`;
 }
 
 function lireTenant(chemin: string): TenantDuVerrou | null {

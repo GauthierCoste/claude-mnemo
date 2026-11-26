@@ -75,12 +75,12 @@ describe('commande mnemo', () => {
 		expect(messagesInit('/m', { statut: 'existante', profil: 'abc' }, null)).toEqual([expect.stringContaining('profil travail ajouté (commit abc)')]);
 		expect(messagesInit('/m', { statut: 'cree', commit: 'abc' }, 'deja')[1]).toBe('Serveur MCP déjà déclaré.');
 		expect(messagesInit('/m', existante, { perime: true, manuel: 'claude mcp add X' })[1]).toBe(
-			'Serveur MCP déclaré avec un autre chemin : lancez `claude mcp remove mnemo --scope user` puis : claude mcp add X',
+			'Serveur MCP déclaré avec un autre chemin : lancer `claude mcp remove mnemo --scope user` puis : claude mcp add X',
 		);
 		expect(messagesInit('/m', existante, { perime: true, manuel: 'claude mcp add X', portee: 'Local config', scope: 'local' })[1]).toBe(
-			'Serveur MCP déclaré avec un autre chemin (portée : Local config) : lancez `claude mcp remove mnemo --scope local` puis : claude mcp add X',
+			'Serveur MCP déclaré avec un autre chemin (portée : Local config) : lancer `claude mcp remove mnemo --scope local` puis : claude mcp add X',
 		);
-		expect(messagesInit('/m', existante, { manuel: 'M', introuvable: true, raison: '' })[1]).toBe('Claude Code introuvable : lancez vous-même : M');
+		expect(messagesInit('/m', existante, { manuel: 'M', introuvable: true, raison: '' })[1]).toBe('Claude Code introuvable : à lancer à la main : M');
 	});
 
 	it('liste affiche la fiche du dossier, lit affiche la fiche brute', async () => {

@@ -160,14 +160,14 @@ describe('tiroir de l’archiviste', () => {
 		expect(tiroir.getAttribute('data-ouvert')).toBe('false');
 	});
 
-	it('tiroir minimal : ni suggestions, ni zone de dépôt visible, ni « Ce qu’il a fait pour tes sessions » ; « N à faire » → Mémoire › Archiviste, tiroir fermé', async () => {
+	it('tiroir minimal : ni suggestions, ni zone de dépôt visible, ni « Ce qu’il a fait pour les sessions » ; « N à faire » → Mémoire › Archiviste, tiroir fermé', async () => {
 		const { faux, tiroir } = monter();
 		await act(async () => altA());
 		await within(tiroir).findByLabelText('terminal arch');
 		expect(within(tiroir).queryByRole('button', { name: 'Range les documents déposés' })).toBeNull();
-		expect(within(tiroir).queryByText('Dépose n\'importe quoi')).toBeNull();
+		expect(within(tiroir).queryByText('Déposer n\'importe quoi')).toBeNull();
 		expect(tiroir.querySelector('[data-depot]')).toBeNull();
-		expect(within(tiroir).queryByRole('list', { name: 'Ce qu\'il a fait pour tes sessions' })).toBeNull();
+		expect(within(tiroir).queryByRole('list', { name: 'Ce qu\'il a fait pour les sessions' })).toBeNull();
 		// le servi d'une session n'est plus dans le tiroir
 		await act(async () =>
 			faux.connexion.emettre({ type: 'servi', entree: { session: 'stocks', moment: 'message', horodatageMs: A(10, 27), ids: ['a.md'], texte: '', ms: 3, sens: false, classement: [], muet: null, cartes: [] } }),
@@ -231,7 +231,7 @@ describe('tiroir de l’archiviste', () => {
 		expect(tiroir.querySelector('[data-calque-depot]')).toBeNull();
 		await act(async () => fireEvent.dragEnter(terminal, { dataTransfer: { types: ['Files'], files: [] } }));
 		const calque = tiroir.querySelector<HTMLElement>('[data-calque-depot]')!;
-		expect(within(calque).getByText('Dépose n\'importe quoi')).toBeTruthy();
+		expect(within(calque).getByText('Déposer n\'importe quoi')).toBeTruthy();
 		// défaut : la racine ; un dossier caché profond est une destination comme une autre
 		const destination = within(calque).getByRole('group', { name: 'Destination' });
 		expect(within(destination).getByText('Destination : Developer')).toBeTruthy();

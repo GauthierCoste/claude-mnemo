@@ -304,7 +304,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 	/** Réserve la place de la tâche (synchrone : deux demandes ne la prennent jamais toutes deux) ; le verrou est pris ensuite, dans la file. */
 	const reserver = (genre: GenreTache): (() => void) => {
 		if (ferme) throw new ErreurEntrainement('refuse', 'Le service Mnemo s’arrête : aucune tâche ne démarre.');
-		if (tache !== null) throw new ErreurEntrainement('occupe', `Une tâche est déjà en cours (${OPERATIONS[tache.genre]}) : attends sa fin ou arrête-la.`);
+		if (tache !== null) throw new ErreurEntrainement('occupe', `Une tâche est déjà en cours (${OPERATIONS[tache.genre]}) : attendre sa fin ou l’arrêter.`);
 		tache = { genre, fait: 0, total: 0, depuis: p.maintenant().toISOString() };
 		controle = new AbortController();
 		return () => {
@@ -431,7 +431,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 						faits += paquet.length;
 						avancer(faits, choisis.length);
 					}
-					if (choisis.length === 0) throw new Error("Aucun message nouveau dans le journal des sessions : utilise Mnemo, puis prépares-en d'autres.");
+					if (choisis.length === 0) throw new Error("Aucun message nouveau dans le journal des sessions : utiliser Mnemo, puis en préparer d'autres.");
 					if (sansModele > 0 && !signal.aborted) noterErreur(`${sansModele} message(s) laissé(s) : un modèle local n'a pas répondu (repris à la prochaine préparation).`, false);
 				},
 			);
@@ -490,7 +490,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 					enFile(async () => {
 						const date = p.maintenant().toISOString();
 						const cas = (await p.banc.lire()).filter((c) => c.candidates !== undefined);
-						if (progression(cas).pairesValidees === 0) throw new ErreurEntrainement('refuse', 'Aucun jugement validé : juge des messages avant d’apprendre.');
+						if (progression(cas).pairesValidees === 0) throw new ErreurEntrainement('refuse', 'Aucun jugement validé : juger des messages avant d’apprendre.');
 						return { cas, date };
 					}),
 				async ({ cas, date }, signal) => {
@@ -517,7 +517,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 			// mêmes fichiers, tient) : pris après les écritures en cours, jamais refusé par l'une d'elles
 			return enFileNote(() =>
 				enFile(async () => {
-					if (tache?.genre === 'apprendre') throw new ErreurEntrainement('occupe', 'Un apprentissage est en cours : attends sa fin ou arrête-le.');
+					if (tache?.genre === 'apprendre') throw new ErreurEntrainement('occupe', 'Un apprentissage est en cours : attendre sa fin ou l’arrêter.');
 					const rendre = rendreVerrou === null ? verrouiller(REVENIR) : null;
 					try {
 						if (!(await p.note.revenir())) throw new ErreurEntrainement('refuse', "Aucun modèle d'avant.");

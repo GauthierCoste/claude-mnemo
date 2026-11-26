@@ -56,21 +56,24 @@ describe('Application', () => {
 		expect(within(nav).getByRole('button', { name: /Mémoire/ }).textContent).toContain('2');
 	});
 
-	it('l’archiviste qui attend une réponse (dialogue ouvert) : signalé sur son bouton et dans son tiroir ; au repos après un arrêt, non', async () => {
+	it('l’archiviste qui attend une réponse (dialogue ouvert) : signalé sur son bouton (pouls en couleur d’avertissement, sans texte) et dans son tiroir ; au repos après un arrêt, non', async () => {
 		const faux = creerFauxClient(REPONSES);
 		render(<Application client={faux.client} />);
 		const bouton = screen.getByRole('button', { name: /Archiviste/ });
 		await act(async () => faux.connexion.emettre({ type: 'sessions', sessions: [session('d', 'travaille', 'archiviste')] }));
-		expect(bouton.textContent).not.toContain('attend ta réponse');
+		expect(bouton.getAttribute('aria-label')).toBeNull();
 		// repos après `arret` : état `attend`, aucun dialogue
 		await act(async () => faux.connexion.emettre({ type: 'session', session: session('d', 'attend', 'archiviste') }));
-		expect(bouton.textContent).not.toContain('attend ta réponse');
+		expect(bouton.getAttribute('aria-label')).toBeNull();
 		await act(async () => fireEvent.click(bouton));
 		const tiroir = screen.getByRole('complementary', { name: 'Archiviste' });
-		expect(within(tiroir).queryByText('attend ta réponse')).toBeNull();
+		expect(within(tiroir).queryByText('attend une réponse')).toBeNull();
 		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...session('d', 'attend', 'archiviste'), dialogueOuvert: true } }));
-		expect(bouton.textContent).toContain('attend ta réponse');
-		expect(within(tiroir).getByText('attend ta réponse')).toBeTruthy();
+		// jamais de texte visible sur le bouton : le pouls passe en couleur d'avertissement, le nom accessible le dit
+		expect(bouton.textContent).not.toContain('attend une réponse');
+		expect(bouton.getAttribute('aria-label')).toBe('Archiviste, attend une réponse');
+		expect(bouton.querySelector('[data-attend="true"]')).not.toBeNull();
+		expect(within(tiroir).getByText('attend une réponse')).toBeTruthy();
 		expect(within(screen.getByRole('navigation')).getByRole('button', { name: /Sessions/ }).textContent).not.toMatch(/\d/);
 	});
 

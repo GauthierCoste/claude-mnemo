@@ -1,5 +1,5 @@
 /**
- * Routes de l'app Claude (Claude Desktop, Réglages › App Claude) : brancher la mémoire Mnemo, gérer les autres serveurs MCP
+ * Routes de l'app Claude (Claude Desktop, Réglages › Branchements › App Claude) : brancher la mémoire Mnemo, gérer les autres serveurs MCP
  * de son fichier de configuration. Chaque écriture relit le fichier, le transforme (domaine) et le réécrit d'un trait, sans
  * attente entre lecture et écriture. Les valeurs des variables d'environnement ne sont jamais rendues. Mêmes protections que
  * toute route de l'API (jeton, `Host`, `Origin` : vérifiés par le serveur).

@@ -8,7 +8,8 @@ import { creerEntrainementDemo, type DepartEntrainementDemo } from './demo-entra
 import { lotsDemo } from './demo-lots.ts';
 import { creerModelesDemo } from './demo-modeles.ts';
 import { creerClaudeDesktopDemo } from './demo-claude-desktop.ts';
-import { creerProfilsDemo } from './demo-profils.ts';
+import { creerProfilsDemo, type SkillsPourProfils } from './demo-profils.ts';
+import { creerSkillsDemo } from './demo-skills.ts';
 import { creerMoteursDemo } from './demo-moteurs.ts';
 import type { Connexion, EtatConnexion, FluxTerminal } from './connexion.ts';
 import type { Client } from './contexte.tsx';
@@ -67,6 +68,7 @@ import {
 	type ReglagesVue,
 	type ReponseDocuments,
 	type ReponseLots,
+	type ReponseEcritureSkill,
 	type ReponseRejetLot,
 	type ReponseValidationLot,
 	type ReponseMarquerTraite,
@@ -78,7 +80,7 @@ import {
 	type ReponseFenetres,
 	type ReponseQuotas,
 } from '@mnemo/contrat';
-import { A_TRAITER_MAX, avecAvertissements, consigneATraiter, demandeTout, DOCUMENTS_MAX, estIdMoteur, estNiveauModeles, ECHANTILLON_NATURE, motifSiNonCherchable, plier, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL, TAILLE_MAX_DOCUMENT, tailleLisible } from '@mnemo/commun';
+import { A_TRAITER_MAX, avecAvertissements, consigneATraiter, demandeTout, DOCUMENTS_MAX, DOSSIERS_FIXES, estIdMoteur, estNiveauModeles, ECHANTILLON_NATURE, motifSiNonCherchable, plier, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL, TAILLE_MAX_DOCUMENT, tailleLisible } from '@mnemo/commun';
 
 const MINUTE = 60_000;
 const LATENCE_MS = 90;
@@ -609,7 +611,7 @@ function creerConnexionDemo(monde: Monde): FausseConnexion {
 		monde.servis.set(entree.session, [entree, ...(monde.servis.get(entree.session) ?? []).filter((e) => e.horodatageMs !== entree.horodatageMs)]);
 		diffuser({ type: 'servi', entree });
 	}
-	// Peu après l'ouverture, l'archiviste sert une session (message `servi`, tiroir « Ce qu'il a fait pour tes sessions »).
+	// Peu après l'ouverture, l'archiviste sert une session (message `servi`, tiroir « Ce qu'il a fait pour les sessions »).
 	const servie = SESSIONS_DEMO.find((s) => s.objectif === 'Faire passer les tests du dépôt SFTP');
 	if (servie)
 		setTimeout(() => {
@@ -929,6 +931,8 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 		if (apercu !== undefined) return profilsDemo.apercu(apercu);
 		const profil = profilDe(ROUTES.profil, chemin);
 		if (profil !== undefined) return profilsDemo.detail(profil);
+		const skill = skillDe(ROUTES.skill, chemin, params);
+		if (skill !== undefined) return skillsDemo.detail(skill.nom, skill.profil);
 		const servis = sessionDe(chemin, 'servis');
 		if (servis) return { servis: monde.servis.get(servis) ?? [], lues: luesDemo(servis), coupures: monde.coupures, injections: monde.injections.get(servis) ?? [] };
 		const ecartes = sessionDe(chemin, 'ecartes');
@@ -972,7 +976,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			case ROUTES.reglages:
 				return reglagesDemo();
 			case ROUTES.sante:
-				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.9.2' } satisfies SanteVue;
+				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.10.0' } satisfies SanteVue;
 			case ROUTES.graphe:
 				return graphe(monde.memoire);
 			case ROUTES.fiche:
@@ -1078,6 +1082,10 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 		}
 		const copie = profilDe(ROUTES.profilDupliquer, chemin);
 		if (copie !== undefined) return ecritureProfil(profilsDemo.dupliquer(copie, corps), String(corps['nom']));
+		const aRetablir = skillDe(ROUTES.skillOrigine, chemin);
+		if (aRetablir !== undefined) return ecritureSkill(skillsDemo.revenir(aRetablir.nom, aRetablir.profil), 'retablit', aRetablir.profil);
+		const aCreer = skillDe(ROUTES.skills, chemin);
+		if (aCreer !== undefined) return ecritureSkill(skillsDemo.creer(corps, aCreer.profil), 'cree', aCreer.profil);
 		const demandeur = sessionDe(chemin, 'a-servir');
 		if (demandeur) {
 			const fiche = String(corps['chemin'] ?? '');
@@ -1104,7 +1112,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			if (i < 0) throw introuvable('Session');
 			const avant = monde.sessions[i]!;
 			// comme le service : une session que son moteur ne peut pas reprendre n'a ni pause, ni reprise, ni bilan
-			if (action !== 'abandon' && avant.sansReprise !== undefined) throw new ErreurApi(`${action === 'bilan' ? 'Bilan' : action === 'pause' ? 'Pause' : 'Reprise'} impossible : ${avant.sansReprise} ; abandonne-la à la place.`, 409);
+			if (action !== 'abandon' && avant.sansReprise !== undefined) throw new ErreurApi(`${action === 'bilan' ? 'Bilan' : action === 'pause' ? 'Pause' : 'Reprise'} impossible : ${avant.sansReprise} ; l’abandonner à la place.`, 409);
 			const s = {
 				...avecEtat(avant, etat),
 				bilanDemandeMs: action === 'bilan' ? Date.now() : avant.bilanDemandeMs,
@@ -1240,7 +1248,22 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 	}
 
 	// Réglages de la démo : en mémoire ; comme le service, le port changé attend un redémarrage
-	const profilsDemo = creerProfilsDemo();
+	// les profils lisent les skills, qui font suivre aux profils le renommage ou la suppression d'une skill de la mémoire
+	const lienSkills: SkillsPourProfils = { memoire: () => [], duProfil: () => [], copierProfil: () => {}, retirerProfil: () => {} };
+	const profilsDemo = creerProfilsDemo(lienSkills);
+	const skillsDemo = creerSkillsDemo(profilsDemo);
+	lienSkills.memoire = skillsDemo.memoire;
+	lienSkills.duProfil = skillsDemo.duProfil;
+	lienSkills.copierProfil = skillsDemo.copierProfil;
+	lienSkills.retirerProfil = skillsDemo.retirerProfil;
+	/** Une route de skill : l'identifiant de `route` dans le chemin (requête ôtée), et la portée `?profil=` (du chemin ou de `params`). */
+	const skillDe = (route: string, chemin: string, params?: Record<string, string>): { nom: string; profil: string | null } | undefined => {
+		const [sansRequete, requete] = chemin.split('?') as [string, string | undefined];
+		const nom = route.includes(':id') ? profilDe(route, sansRequete) : sansRequete === route ? '' : undefined;
+		if (nom === undefined) return undefined;
+		const profil = params?.['profil'] ?? new URLSearchParams(requete ?? '').get('profil');
+		return { nom, profil: profil === null || profil === '' ? null : profil };
+	};
 	const modelesDemo = creerModelesDemo(connexion.diffuser, { depart: o.modeles ?? null, session: monde.sessions.find((x) => x.etat !== 'terminee')?.id ?? null });
 	/** Niveau des modèles propre à une session (null : comme partout), diffusé comme le fait le service. */
 	const niveauDeSession = (id: string, corps: unknown): { session: SessionVue } => {
@@ -1263,6 +1286,16 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 	};
 	const ecritureProfil = (r: { commit: string | null }, nom: string) => {
 		if (r.commit !== null) memoireChangee(`mnemo: profil profils/${nom}/${nom}.md`, []);
+		return r;
+	};
+	/** Une écriture de skill réussie, annoncée comme le service la commite (`action` : cree, modifie, supprime, retablit). */
+	const ecritureSkill = (r: ReponseEcritureSkill, action: string, profil: string | null, ancien = r.nom) => {
+		const dossier = profil === null ? DOSSIERS_FIXES.skills : `${DOSSIERS_FIXES.profils}/${profil}/${DOSSIERS_FIXES.skills}`;
+		if (r.commit !== null) {
+			const message =
+				ancien !== r.nom ? `mnemo: renomme ${dossier}/${ancien} → ${dossier}/${r.nom}` : action === 'supprime' ? `mnemo: supprime ${dossier}/${r.nom}/` : `mnemo: ${action} ${dossier}/${r.nom}/SKILL.md`;
+			memoireChangee(message, []);
+		}
 		return r;
 	};
 	let reglages = structuredClone(REGLAGES_DEMO);
@@ -1314,6 +1347,8 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 				if (app !== undefined) return app as T;
 				const profil = profilDe(ROUTES.profil, chemin);
 				if (profil !== undefined) return ecritureProfil(profilsDemo.enregistrer(profil, corps), profil) as T;
+				const skill = skillDe(ROUTES.skill, chemin);
+				if (skill !== undefined) return ecritureSkill(skillsDemo.modifier(skill.nom, corps, skill.profil), 'modifie', skill.profil, skill.nom) as T;
 				if (chemin === ROUTES.modelesNiveau) return modelesDemo.niveau(corps) as T;
 				const reglee = sessionDe(chemin, 'modeles');
 				if (reglee) return niveauDeSession(reglee, corps) as T;
@@ -1326,6 +1361,8 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 				if (app !== undefined) return app as T;
 				const profil = profilDe(ROUTES.profil, chemin);
 				if (profil !== undefined) return ecritureProfil(profilsDemo.supprimer(profil), profil) as T;
+				const skill = skillDe(ROUTES.skill, chemin, params);
+				if (skill !== undefined) return ecritureSkill(skillsDemo.supprimer(skill.nom, skill.profil), 'supprime', skill.profil) as T;
 				// comme le service : seule une session terminée est retirée de l'historique
 				const retiree = /^\/api\/sessions\/([^/]+)$/.exec(chemin)?.[1];
 				if (retiree) {

@@ -1,21 +1,22 @@
 /**
- * Barre du haut de la vue Sessions (`.stop`) : décompte, « N terminées » (ouvre la liste des terminées), bascules Dossier et
- * Contexte, « + Nouvelle session ».
+ * Barre du haut de la vue Sessions (`.stop`) : décompte, « N terminées » (ouvre la liste des terminées), les agents en cours
+ * (`AgentsEnCours`, juste à gauche des bascules), bascules Dossier et Contexte, « + Nouvelle session ».
  */
 import type { SessionVue } from '@mnemo/contrat';
 import type { ReactNode } from 'react';
 import { libelleTerminees } from '../../sessions/etats.ts';
 import { Bascule } from '../commun/Bascule.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
+import { AgentsEnCours } from './AgentsEnCours.tsx';
 import s from './BarreEtats.module.css';
 
-/** « 8 sessions | 2 attendent ta réponse | 2 travaillent », au singulier quand il le faut. */
+/** « 8 sessions | 2 attendent une réponse | 2 travaillent », au singulier quand il le faut. */
 export function decompte(sessions: readonly SessionVue[]): string {
 	const attendent = sessions.filter((x) => x.etat === 'attend').length;
 	const travaillent = sessions.filter((x) => x.etat === 'travaille').length;
 	return [
 		`${sessions.length} session${sessions.length > 1 ? 's' : ''}`,
-		`${attendent} ${attendent > 1 ? 'attendent' : 'attend'} ta réponse`,
+		`${attendent} ${attendent > 1 ? 'attendent' : 'attend'} une réponse`,
 		`${travaillent} ${travaillent > 1 ? 'travaillent' : 'travaille'}`,
 	].join(' | ');
 }
@@ -30,6 +31,10 @@ export function BarreEtats(p: {
 	surDossier(actif: boolean): void;
 	surContexte(actif: boolean): void;
 	surNouvelle(): void;
+	/** Sessions vivantes de tous les profils, archiviste compris (les agents en cours) ; absent : pas de rangée. */
+	agents?: readonly SessionVue[];
+	/** Clic sur un agent : sa session la plus urgente. */
+	surAgent?(session: string, profil: string): void;
 }): ReactNode {
 	return (
 		<div className={s.barre}>
@@ -40,6 +45,7 @@ export function BarreEtats(p: {
 				</button>
 			)}
 			<span className={s.espace} />
+			{p.agents !== undefined && p.surAgent !== undefined && <AgentsEnCours sessions={p.agents} surAgent={p.surAgent} />}
 			<Bascule actif={p.dossier} surChangement={p.surDossier}>
 				Dossier
 			</Bascule>

@@ -90,7 +90,7 @@ export function distancePermise(longueur: number): number {
 	return Math.min(DISTANCE_MAX_RETOUCHE, Math.max(DISTANCE_MIN_RETOUCHE, Math.floor(longueur * PART_MAX_RETOUCHE)));
 }
 
-const CONSEIL = 'Pour changer le sens d\'une information, utilise `proposer` (genre `fait`) avec `remplace` : l\'ancienne est barrée, la nouvelle garde son historique.';
+const CONSEIL = 'Pour changer le sens d\'une information, utiliser `proposer` (genre `fait`) avec `remplace` : l\'ancienne est barrée, la nouvelle garde son historique.';
 
 /**
  * Motif du refus si la retouche `avant` → `apres` change le sens de l'information, sinon null : un nombre, une date, une

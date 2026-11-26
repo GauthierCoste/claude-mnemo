@@ -1,0 +1,69 @@
+/**
+ * Logo du fournisseur de chaque moteur, embarqué (aucun chargement réseau) : tracés repris de `@lobehub/icons-static-svg`
+ * 1.40.0 (licence MIT). Anthropic et OpenAI monochromes, en `currentColor` (la couleur du texte autour) ; Mistral en couleur,
+ * ses cinq bandes posées en jetons (`--logo-mistral-1` à `5`, jetons.css). Décoratif : le nom du moteur est toujours écrit à
+ * côté, le logo est caché aux lecteurs d'écran.
+ *
+ * Avis de la licence des tracés (https://github.com/lobehub/lobe-icons) :
+ *
+ * MIT License
+ *
+ * Copyright (c) 2023 LobeHub
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+import { FOURNISSEURS_MOTEURS } from '@mnemo/commun';
+import type { FournisseurMoteur, IdMoteur } from '@mnemo/commun';
+import type { ReactNode } from 'react';
+
+const TRACES: Readonly<Record<FournisseurMoteur, ReactNode>> = {
+	Anthropic: (
+		<path
+			fill="currentColor"
+			fillRule="evenodd"
+			d="M13.827 3.52h3.603L24 20h-3.603l-6.57-16.48zm-7.258 0h3.767L16.906 20h-3.674l-1.343-3.461H5.017l-1.344 3.46H0L6.57 3.522zm4.132 9.959L8.453 7.687 6.205 13.48H10.7z"
+		/>
+	),
+	OpenAI: (
+		<path
+			fill="currentColor"
+			fillRule="evenodd"
+			d="M21.55 10.004a5.416 5.416 0 00-.478-4.501c-1.217-2.09-3.662-3.166-6.05-2.66A5.59 5.59 0 0010.831 1C8.39.995 6.224 2.546 5.473 4.838A5.553 5.553 0 001.76 7.496a5.487 5.487 0 00.691 6.5 5.416 5.416 0 00.477 4.502c1.217 2.09 3.662 3.165 6.05 2.66A5.586 5.586 0 0013.168 23c2.443.006 4.61-1.546 5.361-3.84a5.553 5.553 0 003.715-2.66 5.488 5.488 0 00-.693-6.497v.001zm-8.381 11.558a4.199 4.199 0 01-2.675-.954c.034-.018.093-.05.132-.074l4.44-2.53a.71.71 0 00.364-.623v-6.176l1.877 1.069c.02.01.033.029.036.05v5.115c-.003 2.274-1.87 4.118-4.174 4.123zM4.192 17.78a4.059 4.059 0 01-.498-2.763c.032.02.09.055.131.078l4.44 2.53c.225.13.504.13.73 0l5.42-3.088v2.138a.068.068 0 01-.027.057L9.9 19.288c-1.999 1.136-4.552.46-5.707-1.51h-.001zM3.023 8.216A4.15 4.15 0 015.198 6.41l-.002.151v5.06a.711.711 0 00.364.624l5.42 3.087-1.876 1.07a.067.067 0 01-.063.005l-4.489-2.559c-1.995-1.14-2.679-3.658-1.53-5.63h.001zm15.417 3.54l-5.42-3.088L14.896 7.6a.067.067 0 01.063-.006l4.489 2.557c1.998 1.14 2.683 3.662 1.529 5.633a4.163 4.163 0 01-2.174 1.807V12.38a.71.71 0 00-.363-.623zm1.867-2.773a6.04 6.04 0 00-.132-.078l-4.44-2.53a.731.731 0 00-.729 0l-5.42 3.088V7.325a.068.068 0 01.027-.057L14.1 4.713c2-1.137 4.555-.46 5.707 1.513.487.833.664 1.809.499 2.757h.001zm-11.741 3.81l-1.877-1.068a.065.065 0 01-.036-.051V6.559c.001-2.277 1.873-4.122 4.181-4.12.976 0 1.92.338 2.671.954-.034.018-.092.05-.131.073l-4.44 2.53a.71.71 0 00-.365.623l-.003 6.173v.002zm1.02-2.168L12 9.25l2.414 1.375v2.75L12 14.75l-2.415-1.375v-2.75z"
+		/>
+	),
+	Mistral: (
+		<>
+			<path fill="var(--logo-mistral-1)" d="M3.428 3.4h3.429v3.428H3.428V3.4zm13.714 0h3.43v3.428h-3.43V3.4z" />
+			<path fill="var(--logo-mistral-2)" d="M3.428 6.828h6.857v3.429H3.429V6.828zm10.286 0h6.857v3.429h-6.857V6.828z" />
+			<path fill="var(--logo-mistral-3)" d="M3.428 10.258h17.144v3.428H3.428v-3.428z" />
+			<path fill="var(--logo-mistral-4)" d="M3.428 13.686h3.429v3.428H3.428v-3.428zm6.858 0h3.429v3.428h-3.429v-3.428zm6.856 0h3.43v3.428h-3.43v-3.428z" />
+			<path fill="var(--logo-mistral-5)" d="M0 17.114h10.286v3.429H0v-3.429zm13.714 0H24v3.429H13.714v-3.429z" />
+		</>
+	),
+};
+
+/** Logo du fournisseur du moteur, carré de `taille` pixels. */
+export function LogoMoteur(p: { moteur: IdMoteur; taille?: number; className?: string }): ReactNode {
+	const taille = p.taille ?? 20;
+	return (
+		<svg viewBox="0 0 24 24" width={taille} height={taille} className={p.className} aria-hidden="true" focusable="false" data-fournisseur={FOURNISSEURS_MOTEURS[p.moteur]}>
+			{TRACES[FOURNISSEURS_MOTEURS[p.moteur]]}
+		</svg>
+	);
+}

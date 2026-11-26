@@ -225,8 +225,24 @@ A `profil` note (`profils/<name>/<name>.md`) describes a kind of session. Its su
 | `moteur` | the coding agent that runs the sessions: `claude-code`, `codex` or `mistral-vibe`. The archivist runs on `claude-code` only, and `plugins` must be empty with another engine | `claude-code` | `claude-code` |
 | `modele` | the model of the engine (`--model` for Claude Code and Mistral Vibe, `-m` for Codex); empty: the engine's default | empty | empty |
 
-An empty summary means the default instruction of Mnemo, which follows Mnemo updates; a summary equal to a current or past default instruction is read the same way. The old key `skills` is still read when `skills_memoire` is missing: `projet` gives `tous`, `profil` gives `[]`; it is removed at the next save from Settings › Profiles, which rewrites these keys and keeps the rest of the note. The skills of `profils/<name>/skills/` are always given to the session, and win over a skill of `skills/` with the same name.
+An empty summary means the default instruction of Mnemo, which follows Mnemo updates; a summary equal to a current or past default instruction is read the same way. The old key `skills` is still read when `skills_memoire` is missing: `projet` gives `tous`, `profil` gives `[]`; it is removed at the next save from Settings › Agents, which rewrites these keys and keeps the rest of the note. The skills of `profils/<name>/skills/` are always given to the session, and win over a skill of `skills/` with the same name.
 
 The hooks `debut`, `message`, `arret` and `fin` are always declared, because they keep the state of the session; the list decides what they do: `message` injects the context only when listed, `apres_outil` only notes the notes the agent reads or writes (nothing is injected after a tool), `outil` (action check) is declared only when listed. `debut` injects nothing. A missing or unreadable note, or a note of another type, gives the default profile of the package; a missing or invalid key (empty summary included) gives its default value, never an error. Another profile name starts from the values of `travail`.
 
 A skill is a `<name>/` folder that contains a `SKILL.md` (Claude Code format). In `skills/`, a `projets` field (text or list) in the frontmatter of `SKILL.md` limits the skill to the sessions of these projects; without this field, it applies everywhere. The default skills of the archivist (`emails`, `specs`, `comptes-rendus`, `menage`) are placed in `profils/archiviste/skills/` at its first launch if they are missing; afterwards, a skill is rewritten only while its text is still a past default version (`ANCIENNES_SKILLS`), so a skill changed by the user or an agent is never touched. Only the `.md` files of a skill are copied into the session plugin (Claude Code). A Codex session gets no copy: its instruction lists the skills (name, description, path of `SKILL.md`), which it reads with `lire` when they apply; nothing is written into the project.
+
+Since 1.9, the description of `menage` is « Faire le ménage dans la mémoire Mnemo (doublons, fiches inutiles, liens cassés ou faux, fiches mal nommées). », in parentheses rather than after a colon, so that the frontmatter line stays valid YAML; the former text is a past default version, replaced at the next launch.
+
+The skills of `skills/` and of `profils/<name>/skills/` can be created, edited, renamed and deleted from Settings › Agents (editor of a skill), each gesture one commit under the lock (`mnemo: cree`, `modifie`, `renomme <old> → <new>`, `supprime`, `retablit`); a rename or a deletion also rewrites the `skills_memoire` list of the profiles that name the skill, in the same commit. A name is lowercase letters, digits and hyphens (`^[a-z0-9][a-z0-9-]{0,39}$`), unique in its folder; the description is required. The icon of a skill is stored under `metadata` (a key the Agent Skills specification allows), never as a top-level key:
+
+```yaml
+---
+name: compte-rendu-client
+description: Rédiger le compte rendu d'une réunion client.
+metadata:
+  icone: "📝"
+---
+```
+
+A default skill of the archivist can be edited (it then stops following Mnemo updates) and brought back to its current default text, but neither renamed nor deleted: the next launch would place it again. A skill whose text is still a past default version is presented as the current one. Plugin skills are read-only.
+

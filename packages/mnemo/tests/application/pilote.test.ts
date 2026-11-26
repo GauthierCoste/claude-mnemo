@@ -710,7 +710,7 @@ describe('Pilote : sessions Codex', () => {
 		await expect(c.pilote.confier(s.id, 'Fais ceci')).rejects.toThrow(ErreurSessionNonCommencee);
 		await expect(c.pilote.terminer(s.id, { bilan: true })).rejects.toThrow(/Bilan impossible : la session n'a pas encore commencé/u);
 		await expect(c.pilote.pause(s.id)).rejects.toThrow(ErreurRepriseImpossible);
-		await expect(c.pilote.pause(s.id)).rejects.toThrow(/^Pause impossible : .*identifiant chez Codex est inconnu.*abandonne-la/u);
+		await expect(c.pilote.pause(s.id)).rejects.toThrow(/^Pause impossible : .*identifiant chez Codex est inconnu.*l’abandonner/u);
 		expect(c.pilote.motifSansReprise((await c.etat.lire(s.id))!)).toMatch(/identifiant chez Codex est inconnu/u);
 		expect(t.ecrits).toEqual([]);
 		expect(await c.etat.lire(s.id)).toMatchObject({ arretAttendu: null, bilanDemandeMs: null });

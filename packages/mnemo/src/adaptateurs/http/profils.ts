@@ -1,5 +1,5 @@
 /**
- * Routes de gestion des profils (Réglages › Profils) : détail, enregistrement, duplication, suppression, aperçu. Canal de
+ * Routes de gestion des profils (Réglages › Agents) : détail, enregistrement, duplication, suppression, aperçu. Canal de
  * l'utilisateur seulement (le serveur MCP n'expose rien de tout cela) ; mêmes protections que toute route de l'API.
  */
 import { MODELE_MAX } from '@mnemo/commun';
@@ -14,7 +14,7 @@ import { ErreurHttp } from './routes.ts';
 import type { Reponse, Route } from './routes.ts';
 
 /** Message d'un conflit d'écriture (409). */
-export const MOTIF_CONFLIT_PROFIL = 'La fiche du profil a changé depuis son ouverture : rechargez-la.';
+export const MOTIF_CONFLIT_PROFIL = 'La fiche du profil a changé depuis son ouverture : à recharger.';
 
 const CLES_EDITABLES = ['avatar', 'consigne', 'lancement', 'hooks', 'skillsMemoire', 'plugins', 'moteur', 'modele'] as const;
 

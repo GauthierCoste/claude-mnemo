@@ -85,7 +85,7 @@ export function useReglages(): Ressource<ReglagesVue> {
 	return useRessource('reglages', () => api.lire<ReglagesVue>(ROUTES.reglages));
 }
 
-/** Configuration de l'app Claude (Claude Desktop), lue à l'ouverture de Réglages › App Claude ; jamais de valeur de variable. */
+/** Configuration de l'app Claude (Claude Desktop), lue à l'ouverture de Réglages › Branchements ; jamais de valeur de variable. */
 export function useClaudeDesktop(): Ressource<ClaudeDesktopVue> {
 	const { api } = useClient();
 	return useRessource('claude-desktop', () => api.lire<ClaudeDesktopVue>(ROUTES.claudeDesktop));
@@ -93,7 +93,7 @@ export function useClaudeDesktop(): Ressource<ClaudeDesktopVue> {
 
 /**
  * Moteurs du service (agents de code) : trouvés ou non, version, modèles proposés ; `poste` : avec l'état du poste
- * (déclaration MCP, hooks), plus lent, pour Réglages › Système.
+ * (déclaration MCP, hooks), plus lent, pour Réglages › Branchements.
  */
 export function useMoteurs(poste = false): Ressource<ReponseMoteurs> {
 	const { api } = useClient();
@@ -126,7 +126,7 @@ export function useProfils(): Ressource<ReponseProfils> {
 	return useRessource(ROUTES.profils, () => api.lire<ReponseProfils>(ROUTES.profils), { memoire: true });
 }
 
-/** Détail éditable d'un profil (Réglages › Profils) ; relu quand la mémoire change. `nom` null : rien à lire. */
+/** Détail éditable d'un profil (Réglages › Agents) ; relu quand la mémoire change. `nom` null : rien à lire. */
 export function useProfil(nom: string | null): Ressource<ProfilDetailVue> {
 	const { api } = useClient();
 	return useRessource(nom === null ? null : `profil:${nom}`, () => api.lire<ProfilDetailVue>(avecId(ROUTES.profil, nom!)), { memoire: true });

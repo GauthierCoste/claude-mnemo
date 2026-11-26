@@ -153,7 +153,7 @@ export async function modelesSuivis(etat: Pick<EtatSessions, 'gestes'>, modeles:
 /** Le suivi n'a pas pu être lu : l'état de coupure des niveaux est inconnu, rien n'est réactivé. */
 export class SuiviIllisible extends Error {
 	constructor() {
-		super('Suivi des injections illisible : réessaie.');
+		super('Suivi des injections illisible : réessayer.');
 		this.name = 'SuiviIllisible';
 	}
 }

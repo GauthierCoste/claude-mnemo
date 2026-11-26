@@ -122,18 +122,18 @@ describe('vue Sessions', () => {
 		const lignes = [...document.querySelectorAll('[data-ligne]')].map((l) => l.getAttribute('data-ligne'));
 		expect(lignes).toEqual(['erp-saas', 'api', 'agent']);
 		expect(carte('arch')).toBeNull();
-		expect(screen.getByText('4 sessions | 1 attend ta réponse | 1 travaille')).toBeTruthy();
+		expect(screen.getByText('4 sessions | 1 attend une réponse | 1 travaille')).toBeTruthy();
 		expect(within(carte('s1')).getByText('⌥1')).toBeTruthy();
 		expect(within(carte('s3')).getByText('⌥3')).toBeTruthy();
 	});
 
-	it('un message `session` passe une carte de « Travaille » à « Attend ta réponse », la pastille suit', async () => {
+	it('un message `session` passe une carte de « Travaille » à « Attend une réponse », la pastille suit', async () => {
 		const faux = await monter();
 		const nav = screen.getByRole('navigation');
 		expect(within(carte('s2')).getByRole('img', { name: 'Travaille' })).toBeTruthy();
 		expect(within(nav).getByRole('button', { name: /Sessions/ }).textContent).toContain('1');
 		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[1]!, etat: 'attend' } }));
-		expect(within(carte('s2')).getByRole('img', { name: 'Attend ta réponse' })).toBeTruthy();
+		expect(within(carte('s2')).getByRole('img', { name: 'Attend une réponse' })).toBeTruthy();
 		expect(within(nav).getByRole('button', { name: /Sessions/ }).textContent).toContain('2');
 	});
 
@@ -253,7 +253,7 @@ describe('vue Sessions', () => {
 	it('« Mettre en pause » → POST pause de la session choisie', async () => {
 		const faux = await monter();
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
-		expect(within(contexte).getByText('Attend ta réponse')).toBeTruthy();
+		expect(within(contexte).getByText('Attend une réponse')).toBeTruthy();
 		await act(async () => within(contexte).getByRole('button', { name: 'Mettre en pause' }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions/s1/pause', undefined);
 	});
@@ -356,6 +356,23 @@ describe('vue Sessions', () => {
 		await act(async () => fireEvent.keyDown(document.body, { code: 'KeyM', altKey: true }));
 		expect(screen.getByRole('main').getAttribute('data-vue')).toBe('memoire');
 		expect(screen.getByText('consignes / Tests.md')).toBeTruthy();
+	});
+
+	it('barre des états : un avatar par agent en cours (l’archiviste compris), juste à gauche des bascules ; clic → sa session la plus urgente, ou le tiroir de l’archiviste', async () => {
+		await monter();
+		const rangee = await screen.findByRole('list', { name: 'Agents en cours' });
+		const [travail, archiviste] = within(rangee).getAllByRole('button') as [HTMLElement, HTMLElement];
+		expect(travail.getAttribute('aria-label')).toBe('travail : 4 sessions, 1 travaille, 1 attend une réponse, 2 au repos');
+		expect(archiviste.getAttribute('aria-label')).toBe('archiviste : 1 session, 1 travaille');
+		expect(rangee.nextElementSibling).toBe(screen.getByRole('switch', { name: 'Dossier' }).closest('label') ?? screen.getByRole('switch', { name: 'Dossier' }));
+		await act(async () => within(ligneDossier('api')).getByRole('button', { name: /^api/ }).click());
+		expect(screen.getByLabelText('terminal s3').getAttribute('data-actif')).toBe('true');
+		await act(async () => travail.click());
+		expect(screen.getByLabelText('terminal s1').getAttribute('data-actif')).toBe('true');
+		const tiroir = document.querySelector<HTMLElement>('aside[data-ouvert][aria-label="Archiviste"]')!;
+		expect(tiroir.getAttribute('data-ouvert')).toBe('false');
+		await act(async () => archiviste.click());
+		expect(tiroir.getAttribute('data-ouvert')).toBe('true');
 	});
 
 	it('panneau Dossier : puce git, clic sur un dossier → sa première session choisie', async () => {
@@ -593,7 +610,7 @@ describe('vue Sessions', () => {
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions', { profil: 'redaction', dossier: 'erp-saas' });
 	});
 
-	it('Nouvelle session : « Voir dans Réglages » ferme le dialogue et ouvre Réglages › Système, section Moteurs', async () => {
+	it('Nouvelle session : « Voir dans Réglages » ferme le dialogue et ouvre l’onglet Réglages, section Branchements', async () => {
 		const profils = { ...PROFILS, profils: PROFILS.profils.map((x) => ({ ...x, moteur: x.nom === PROFIL_TRAVAIL ? 'codex' : 'claude-code', modele: '' })) };
 		const moteurs = { moteurs: [{ id: 'codex', nom: 'Codex', indisponible: 'Codex introuvable sur ce poste (codex).', manuel: false, version: null, modeles: [] }] };
 		const valeurs = stockage();
@@ -602,9 +619,10 @@ describe('vue Sessions', () => {
 		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
 		await cliquerQuandAffiche(within(dialogue).findByRole('button', { name: 'Voir dans Réglages' }));
 		expect(screen.queryByRole('dialog', { name: 'Nouvelle session' })).toBeNull();
-		expect(valeurs.get('mnemo.reglages.onglet')).toBe('systeme');
+		expect(valeurs.get('mnemo.reglages.onglet')).toBe('reglages');
 		const reglages = await screen.findByRole('region', { name: 'Réglages' });
-		expect(within(reglages).getByRole('tab', { name: 'Système' }).getAttribute('aria-selected')).toBe('true');
+		expect(within(reglages).getByRole('tab', { name: 'Réglages' }).getAttribute('aria-selected')).toBe('true');
+		expect(within(within(reglages).getByRole('navigation', { name: 'Sections des réglages' })).getByRole('button', { name: /^Branchements/u }).getAttribute('aria-current')).toBe('true');
 		expect(await within(reglages).findByRole('heading', { name: 'Moteurs' })).toBeTruthy();
 	});
 

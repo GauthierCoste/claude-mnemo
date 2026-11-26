@@ -19,7 +19,7 @@ import { GroupeMenu, ItemMenu, MenuModeles } from './MenuModeles.tsx';
 import r from '../commun/Reflet.module.css';
 import s from './Modeles.module.css';
 
-export const ENCORE_EN_CHARGEMENT = 'Des modèles chargent encore : réessayez dans un instant.';
+export const ENCORE_EN_CHARGEMENT = 'Des modèles chargent encore : réessayer dans un instant.';
 const COUPES_PARTOUT = 'Les modèles sont coupés partout';
 
 export function BoutonModeles(): ReactNode {

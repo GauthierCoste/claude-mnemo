@@ -17,7 +17,7 @@ import { ErreurApi } from '../../client/api.ts';
 import { useClient } from '../../client/contexte.tsx';
 import { useMoteurs, useProfils } from '../../client/hooks.ts';
 import { useNavigation } from '../../navigation.tsx';
-import { demanderMoteursDansReglages } from '../../reglages/onglet-retenu.ts';
+import { demanderBranchementsDansReglages } from '../../reglages/onglet-retenu.ts';
 import { etatDuMoteur, resumeDeLaSession } from '../../sessions/agents.ts';
 import { JETONS_COULEUR } from '../commun/AvatarProfil.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
@@ -93,7 +93,7 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 	};
 
 	const voirReglages = () => {
-		demanderMoteursDansReglages();
+		demanderBranchementsDansReglages();
 		fermer();
 		nav.aller('reglages');
 	};
@@ -205,7 +205,7 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 					</>
 				) : (
 					<div className={s.manuel}>
-						<p className={s.mu}>Les terminaux ne sont pas disponibles dans Mnemo : la session est suivie, lance-la toi-même dans un terminal.</p>
+						<p className={s.mu}>Les terminaux ne sont pas disponibles dans Mnemo : la session est suivie, à lancer à la main dans un terminal.</p>
 						<code className={s.commande}>{manuel}</code>
 						<div className={s.boutonsManuel}>
 							<Bouton className={s.bouton} onClick={copier}>

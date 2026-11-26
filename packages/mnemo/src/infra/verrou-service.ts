@@ -40,7 +40,7 @@ export function estLigneDuService(commande: string): boolean {
 /** Un fichier du verrou qu'on ne peut pas lire (dossier, droits, propriétaire root) : jamais repris, refus explicite. */
 export class ErreurVerrouIllisible extends Error {
 	constructor(chemin: string, code: string) {
-		super(`Verrou du service illisible : ${chemin} (${code}). Vérifiez ses droits (créé par un autre utilisateur, par sudo ?) ou retirez-le.`);
+		super(`Verrou du service illisible : ${chemin} (${code}). Vérifier ses droits (créé par un autre utilisateur, par sudo ?) ou le retirer.`);
 	}
 }
 

@@ -58,18 +58,18 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 			setAcceptes(null);
 		});
 
-	const raisonJuger = b.messages === 0 ? 'Prépare d’abord des messages.' : b.aJuger === 0 ? 'Tous les messages préparés sont jugés.' : null;
+	const raisonJuger = b.messages === 0 ? 'Préparer d’abord des messages.' : b.aJuger === 0 ? 'Tous les messages préparés sont jugés.' : null;
 	// rien à juger (rien de préparé, ou tout est jugé) : la raison de « Juger » vaut aussi pour Claude (dite une fois)
 	const sansMessage = raisonJuger !== null && v.juge.disponible;
 	const raisonClaude = !v.juge.disponible ? (v.juge.raison ?? 'Claude Code est introuvable sur ce poste.') : b.aPrejuger === 0 && !sansMessage ? 'Chaque message à juger a déjà ses propositions.' : null;
-	const raisonApprendre = b.paires === 0 ? 'Aucun jugement validé : juge des messages d’abord.' : null;
+	const raisonApprendre = b.paires === 0 ? 'Aucun jugement validé : juger des messages d’abord.' : null;
 	const depuisApprentissage = jugesDepuisApprentissage(v);
 
 	return (
 		<ol ref={liste} className={s.etapes} aria-label="Étapes de l’entraînement">
 			<li className={s.etape} data-utile={utile === 1 || undefined} aria-current={utile === 1 ? 'step' : undefined}>
 				<TitreEtape numero={1} titre="Préparer des messages" />
-				<p className={s.aide}>Tirés de tes dernières sessions, avec les fiches que Mnemo aurait proposées.</p>
+				<p className={s.aide}>Tirés des dernières sessions, avec les fiches que Mnemo aurait proposées.</p>
 				<Jauge valides={b.valides} />
 				<p className={s.chiffres}>{accorder(b.messages, 'message préparé', 'messages préparés')}</p>
 				<form className={s.gestes} onSubmit={preparer} noValidate>
@@ -123,7 +123,7 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 				)}
 				{acceptes !== null && (
 					<p className={s.fait} role="status">
-						{acceptes === 0 ? 'Aucun message sûr à 90 % ou plus : relis-les.' : `${accorder(acceptes, 'message validé', 'messages validés')} avec les propositions sûres.`}
+						{acceptes === 0 ? 'Aucun message sûr à 90 % ou plus : les relire.' : `${accorder(acceptes, 'message validé', 'messages validés')} avec les propositions sûres.`}
 						{acceptes > 0 && (
 							<Bouton petit className={s.cible} disabled={geste.enCours !== null} onClick={annuler}>
 								{libelle('annuler', 'Annuler')}
@@ -144,7 +144,7 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 					</Bouton>
 					{!sansMessage && (
 						<p id={`${id}-claude`} className={s.aide}>
-							{raisonClaude ?? `${accorder(b.aPrejuger, 'appel')} à Claude Code, un par message, sur ton abonnement.`}
+							{raisonClaude ?? `${accorder(b.aPrejuger, 'appel')} à Claude Code, un par message, sur l’abonnement Claude.`}
 						</p>
 					)}
 				</div>
@@ -171,7 +171,7 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 					</Bouton>
 				</div>
 				<p id={`${id}-apprendre`} className={s.aide}>
-					{raisonApprendre ?? 'Le nouveau modèle remplace l’actuel, même refusé ; tu peux revenir au modèle d’avant (menu ⋯).'}
+					{raisonApprendre ?? 'Le nouveau modèle remplace l’actuel, même refusé ; le modèle d’avant reste à portée (menu ⋯).'}
 				</p>
 				<Refus geste={geste} ou="apprendre" />
 			</li>

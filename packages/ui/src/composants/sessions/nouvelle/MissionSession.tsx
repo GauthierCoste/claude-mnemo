@@ -51,7 +51,7 @@ export function MissionSession(p: Props): ReactNode {
 							<div id={`${id}-arbre`} className={s.arbre} data-arbre>
 								<ArbreDossiers
 									presentation="cadre"
-									entete={<span className={s.lbl}>Choisis le dossier</span>}
+									entete={<span className={s.lbl}>Choisir le dossier</span>}
 									choisi={p.dossier}
 									surChoisir={(chemin) => {
 										p.surDossier(chemin);

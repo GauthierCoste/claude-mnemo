@@ -109,7 +109,7 @@ describe('prejugerLeBanc', () => {
 		const texte = bilanPrejugementEnTexte({ juges: 3, echecs: 1, restants: 2, motifs: ['claude -p a échoué (code 1) : quota'] }, 'f.json');
 		expect(texte).toContain('3 message(s) pré-jugé(s), 1 en échec, 2 non faits (arrêté)');
 		expect(texte).toContain('échec : claude -p a échoué (code 1) : quota');
-		expect(texte).toMatch(/Relancez --prejuger/u);
+		expect(texte).toMatch(/Relancer --prejuger/u);
 		expect(texte).toMatch(/qu'une fois validées/u);
 	});
 });

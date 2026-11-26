@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { lstat, mkdir, readdir, readFile, realpath, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, readdir, readFile, realpath, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Coffre, EtatFichier } from '../application/ports.ts';
 import { EXTENSION_MARKDOWN } from '../domaine/chemin.ts';
@@ -101,6 +101,28 @@ export function coffreFichiers(racineMemoire: string, options: OptionsCoffre = {
 		if ((erreur as NodeJS.ErrnoException).code !== 'ENOENT') throw erreur;
 	};
 
+	/**
+	 * Source et cible d'un déplacement ou d'une copie de dossier, parent de la cible créé. Lève si l'un des deux est la racine
+	 * ou traverse un lien symbolique, si `de` n'est pas un dossier, ou si `vers` existe déjà.
+	 */
+	async function sourceEtCible(de: string, vers: string): Promise<{ source: string; cible: string }> {
+		const source = absolu(de);
+		const cible = absolu(vers);
+		if (source === racine || cible === racine) throw new Error('La racine de la mémoire ne se déplace ni ne se copie.');
+		if ((await traverseUnLien(de)) || (await traverseUnLien(vers))) throw new Error(`Refusé : ${de} ou ${vers} passe par un lien symbolique.`);
+		if (!(await lstat(source)).isDirectory()) throw new Error(`${de} n'est pas un dossier.`);
+		const existe = await lstat(cible).then(
+			() => true,
+			(erreur: unknown) => {
+				sansAbsent(erreur);
+				return false;
+			},
+		);
+		if (existe) throw new Error(`${vers} existe déjà.`);
+		await mkdir(dirname(cible), { recursive: true });
+		return { source, cible };
+	}
+
 	async function toutesLesFiches(): Promise<string[]> {
 		const resultat: string[] = [];
 		async function parcourir(complet: string): Promise<void> {
@@ -173,6 +195,24 @@ export function coffreFichiers(racineMemoire: string, options: OptionsCoffre = {
 				}
 			}
 			return 'retire';
+		},
+
+		async deplacerDossier(de, vers) {
+			const { source, cible } = await sourceEtCible(de, vers);
+			await reessayer(() => renommer(source, cible), delais);
+		},
+
+		async copierDossier(de, vers) {
+			const { source, cible } = await sourceEtCible(de, vers);
+			// un lien symbolique n'est ni suivi ni copié
+			await cp(source, cible, { recursive: true, errorOnExist: true, force: false, filter: async (chemin) => !(await lstat(chemin)).isSymbolicLink() });
+		},
+
+		async retirerDossier(dossier) {
+			const complet = absolu(dossier);
+			if (complet === racine) throw new Error('La racine de la mémoire ne se retire pas.');
+			if (await traverseUnLien(dossier)) throw new Error(`Retrait refusé : ${dossier} passe par un lien symbolique.`);
+			await rm(complet, { recursive: true, force: true });
 		},
 
 		async lister(dossier) {

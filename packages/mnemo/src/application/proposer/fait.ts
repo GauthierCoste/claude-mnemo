@@ -147,7 +147,7 @@ export async function proposerFait(dep: Dependances, demande: DemandeFait): Prom
 
 	const lignes = ecrireFait(fait);
 	if (!faitsEgaux(lireFait(lignes[0]!, ...lignes.slice(1)), fait)) {
-		return refuse('Cette information ne survivrait pas à sa relecture depuis la fiche : reformule le texte, la catégorie ou la source.');
+		return refuse('Cette information ne survivrait pas à sa relecture depuis la fiche : reformuler le texte, la catégorie ou la source.');
 	}
 	fiche.faits.push({ fait });
 

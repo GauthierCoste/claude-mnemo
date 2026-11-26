@@ -107,7 +107,7 @@ export function JugerMessage(p: { surFermer(): void }): ReactNode {
 				{!fin && affiche !== null && <p className={s.progression}>{progression(faits + 1, affiche.m)}</p>}
 				<div className={s.gestesTete}>
 					{annulables > 0 && (
-						<Bouton petit className={s.cible} disabled={geste.enCours !== null} title="Rouvre le message de ta dernière réponse, sans elle" onClick={annuler}>
+						<Bouton petit className={s.cible} disabled={geste.enCours !== null} title="Rouvre le message de la dernière réponse, sans elle" onClick={annuler}>
 							{geste.enCours === 'annuler' ? <span className={r.reflet}>Annuler le dernier</span> : 'Annuler le dernier'}
 						</Bouton>
 					)}
@@ -152,7 +152,7 @@ function MessageAJuger(p: { m: VueMessageAJuger; inerte: boolean; geste: Geste; 
 
 	const restantes = sansReponse(m.candidates, choix);
 	const repondues = m.candidates.length - restantes;
-	const raisonValider = repondues === 0 && !reste ? 'Réponds pour une fiche au moins, ou coche « Le reste n’est pas utile ».' : null;
+	const raisonValider = repondues === 0 && !reste ? 'Répondre pour une fiche au moins, ou cocher « Le reste n’est pas utile ».' : null;
 	const raisonSilence = marqueeUtile(choix) ? 'Une fiche est marquée « Utile ».' : null;
 
 	const choisir = (chemin: string, j: JugementVue) => setChoix((c) => ({ ...c, [chemin]: j }));
@@ -233,7 +233,7 @@ function MessageAJuger(p: { m: VueMessageAJuger; inerte: boolean; geste: Geste; 
 			<blockquote className={s.message} aria-label="Message à juger">
 				{m.message}
 			</blockquote>
-			{(m.valide || m.silence || m.saute) && <p className={s.aide}>{m.saute ? 'Passé auparavant : ta réponse le remet parmi les messages jugés.' : 'Déjà validé : ta réponse remplace la précédente.'}</p>}
+			{(m.valide || m.silence || m.saute) && <p className={s.aide}>{m.saute ? 'Passé auparavant : une réponse le remet parmi les messages jugés.' : 'Déjà validé : une nouvelle réponse remplace la précédente.'}</p>}
 
 			<ol ref={liste} className={s.fiches} aria-label="Fiches proposées pour ce message" onFocus={(e) => (courante.current = Math.max(0, fiches().findIndex((li) => li.contains(e.target))))}>
 				{m.candidates.map((c) => (
@@ -303,7 +303,7 @@ function Fin(p: { faits: number; sautes: number; surFermer(): void }): ReactNode
 	useEffect(() => gestes.current?.querySelector('button')?.focus(), []);
 	return (
 		<div className={s.fin}>
-			<p className={s.texteFin}>{p.faits > 0 ? 'Tes réponses sont enregistrées. Reviens à l’entraînement pour apprendre la note.' : 'Aucun message n’attend de jugement : prépares-en d’autres.'}</p>
+			<p className={s.texteFin}>{p.faits > 0 ? 'Réponses enregistrées. Retour à l’entraînement pour apprendre la note.' : 'Aucun message n’attend de jugement : en préparer d’autres.'}</p>
 			{p.sautes > 0 && <p className={s.aide}>{`${accorder(p.sautes, 'message passé reste', 'messages passés restent')} de côté.`}</p>}
 			<div ref={gestes}>
 				<Bouton genre="primaire" className={s.cible} onClick={p.surFermer}>

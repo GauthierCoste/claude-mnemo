@@ -31,6 +31,19 @@ export interface Coffre {
 	 */
 	retirerDossierVide(dossier: string): Promise<RetraitDossier>;
 	/**
+	 * Déplace le dossier `de` entier (tous ses fichiers, `.md` ou non) vers `vers` (relatifs à `_mnemo/`), dossiers parents
+	 * créés. Lève si `de` n'est pas un dossier, si `vers` existe déjà, si l'un des deux est la racine ou traverse un lien
+	 * symbolique.
+	 */
+	deplacerDossier(de: string, vers: string): Promise<void>;
+	/**
+	 * Copie le dossier `de` entier (tous ses fichiers, `.md` ou non, octet pour octet) vers `vers`, dossiers parents créés ;
+	 * les liens symboliques ne sont ni suivis ni copiés. Mêmes refus que `deplacerDossier`.
+	 */
+	copierDossier(de: string, vers: string): Promise<void>;
+	/** Retire le dossier `dossier` et tout ce qu'il contient (liens symboliques retirés, jamais suivis). Absent : sans erreur. Lève pour la racine ou un chemin qui traverse un lien symbolique. */
+	retirerDossier(dossier: string): Promise<void>;
+	/**
 	 * Fiches `.md` et sous-dossiers directs de `dossier` (« » = racine), sans les entrées cachées (« . »).
 	 * Chemins RELATIFS à `_mnemo/` (pas à `dossier`), séparés par « / », triés. Dossier absent : listes vides.
 	 * Liens symboliques jamais suivis : ni listés, ni parcourus (`dossier` atteint par un lien : listes vides).
@@ -317,7 +330,11 @@ export interface Lots {
 	fermer(): void;
 }
 
-export type SkillInstallee = { nom: string; description: string };
+/**
+ * Une skill installée ; `icone` : celle de `metadata.icone` de son frontmatter, s'il y en a une ; `origine` : présente pour
+ * une skill éditable (de la mémoire ou d'un profil), `mnemo` si Mnemo la fournit ; absente pour une skill de plugin.
+ */
+export type SkillInstallee = { nom: string; description: string; icone?: string; origine?: 'mnemo' | 'memoire' };
 
 /** Un plugin Claude Code installé : `id` (`nom@place`), `portee` (`scope` de l'installation, vide si absente). */
 export type PluginInstalle = { id: string; nom: string; version: string; portee: string; skills: SkillInstallee[]; hooks: boolean };
@@ -1118,7 +1135,7 @@ export type TelemetrieDuMoteur = {
 };
 
 /**
- * Ce que Mnemo dit d'un moteur sur le poste (`mnemo init`, `verifier-poste`, `declarer`, Réglages › Système, avertissements de
+ * Ce que Mnemo dit d'un moteur sur le poste (`mnemo init`, `verifier-poste`, `declarer`, Réglages › Branchements, avertissements de
  * session) ; les commandes `mnemo` qui y remédient sont celles de `remedesDuMoteur`.
  * `recherche` : où sa commande est cherchée (dit quand elle est introuvable) ; `desactivation` : le réglage qui éteint sa
  * déclaration MCP ; `retraitManuel` : comment retirer une déclaration « mnemo » qui ne lance pas Mnemo ; `approbation` : ce
@@ -1182,7 +1199,7 @@ export type Moteur = MoteurDuPoste & {
 
 /**
  * Un moteur connu du service, et sa commande : trouvée au démarrage, ou adoptée depuis à la lecture du poste (Réglages ›
- * Système › Moteurs, « Relire ») ; null : introuvable, mode dégradé.
+ * Branchements, « Relire ») ; null : introuvable, mode dégradé.
  */
 export type MoteurDuService = { moteur: Moteur; commande: CommandeMoteur | null };
 

@@ -35,6 +35,8 @@
 	--sur-toast: #0b0c0f;
 	--ombre: 0 30px 80px rgba(0, 0, 0, 0.6);
 	--ombre-tiroir: -30px 0 60px rgba(0, 0, 0, 0.5);
+	--ombre-avatar: 0 10px 18px rgba(0, 0, 0, 0.5); /* l'agent sur son podium */
+	--ombre-pied: 0 -8px 20px rgba(0, 0, 0, 0.35); /* pied collé en bas, au-dessus du contenu qui défile */
 	--barre-defilement: rgba(255, 255, 255, 0.08);
 	--fond-tiroir: rgba(15, 16, 19, 0.96);
 	--fond-panneau: rgba(15, 16, 19, 0.82);
@@ -45,7 +47,7 @@
 	--c: var(--dim);
 	/* Autres propriétés posées par un composant (style en ligne), ici leur valeur par défaut. */
 	--profil: var(--vert); /* couleur du profil d'une session (avatar, en-tête du panneau Contexte) */
-	--couleur-profil: var(--ac); /* couleur du profil dans l'éditeur de profils */
+	--perso: var(--ac); /* couleur de l'agent dans le créateur d'agent (Réglages › Agents) */
 	--etat: var(--dim); /* pastille d'état sur l'avatar d'une session */
 	--part: 0; /* part remplie de la jauge de la fenêtre de contexte, de 0 à 1 */
 	--l-a-faire: 340px; /* largeurs des panneaux redimensionnables : Archiviste */
@@ -60,10 +62,16 @@
 	--etat-en-pause: var(--dim);
 	--etat-terminee: var(--dim);
 
-	/* --- Fournisseurs des moteurs (Réglages › Système › Moteurs) : seul endroit où chacun reçoit sa couleur --- */
+	/* --- Fournisseurs des moteurs (Nouvelle session, Agents) : seul endroit où chacun reçoit sa couleur --- */
 	--fournisseur-anthropic: var(--amber);
 	--fournisseur-openai: var(--blue);
 	--fournisseur-mistral: var(--pink);
+	/* Logo de Mistral (moteurs/logos.tsx, d'après @lobehub/icons-static-svg, MIT) : ses cinq bandes, du haut vers le bas */
+	--logo-mistral-1: #ffd700;
+	--logo-mistral-2: #ffaf00;
+	--logo-mistral-3: #ff8205;
+	--logo-mistral-4: #fa500f;
+	--logo-mistral-5: #e10500;
 
 	/* --- Branches de l'arbre (premier niveau, dans l'ordre de l'arbre) --- */
 	--branche-1: #a394ff;

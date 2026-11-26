@@ -128,12 +128,12 @@ export async function proposerLot(dep: Dependances, demande: DemandeLot): Promis
 		if (autre.fiche === chemin && autre.empreinte !== empreinteFiche) await dep.lots.decider(autre.id, { sort: 'perime' }, dep.systeme.maintenant().getTime());
 		else enAttente.push(autre);
 	}
-	if (enAttente.length >= LOTS_EN_ATTENTE_MAX) return refus(`${enAttente.length} lots attendent déjà l'utilisateur (${LOTS_EN_ATTENTE_MAX} au plus) : signale-les-lui, et propose la suite après ses décisions.`);
+	if (enAttente.length >= LOTS_EN_ATTENTE_MAX) return refus(`${enAttente.length} lots attendent déjà l'utilisateur (${LOTS_EN_ATTENTE_MAX} au plus) : les lui signaler, et proposer la suite après ses décisions.`);
 	const visees = new Set(lignes.flatMap(ancresDeLigne));
 	for (const autre of enAttente) {
 		if (autre.fiche !== chemin) continue;
 		const commune = autre.lignes.flatMap(ancresDeLigne).find((a) => visees.has(a));
-		if (commune !== undefined) return refus(`Le lot ${autre.id}, en attente de l'utilisateur, vise déjà ^${commune} de ${chemin} : attends sa décision.`);
+		if (commune !== undefined) return refus(`Le lot ${autre.id}, en attente de l'utilisateur, vise déjà ^${commune} de ${chemin} : attendre sa décision.`);
 	}
 	const decidesTous = await dep.lots.decides(-1, 200);
 	const precedente = Math.max(-1, ...enAttente.map((l) => l.proposeMs), ...decidesTous.map((l) => l.proposeMs));
@@ -182,7 +182,7 @@ export async function lotsEnAttente(dep: Dependances): Promise<LotDetaille[]> {
 
 /** Motif d'un choix de lignes invalide (vide, en double, hors du lot, non entier), sinon null. */
 function motifDuChoix(indices: readonly number[], nombre: number): string | null {
-	if (indices.length === 0) return 'Aucune ligne choisie : coche au moins une ligne, ou rejette le lot.';
+	if (indices.length === 0) return 'Aucune ligne choisie : cocher au moins une ligne, ou rejeter le lot.';
 	if (new Set(indices).size !== indices.length) return 'Une ligne est choisie deux fois.';
 	const hors = indices.find((i) => !Number.isInteger(i) || i < 0 || i >= nombre);
 	return hors === undefined ? null : `Ligne ${String(hors)} : hors du lot (indices de 0 à ${nombre - 1}).`;

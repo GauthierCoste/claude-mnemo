@@ -495,7 +495,7 @@ export async function extraireSource(dep: Dependances, demande: DemandeSource): 
 	const type: TypeSource = demande.type ?? typeSourceParDefaut(chemin);
 	if (!estTypeSource(type)) return refuse(`Type de source inconnu : « ${String(type)} » (attendu l'un de ${TYPES_SOURCE.join(', ')}).`);
 	if (!estDocument(type)) {
-		return refuse(`Le type « ${type} » désigne une personne ou une session, pas un document : choisis un type de document (${TYPES_SOURCE.filter(estDocument).join(', ')}).`);
+		return refuse(`Le type « ${type} » désigne une personne ou une session, pas un document : choisir un type de document (${TYPES_SOURCE.filter(estDocument).join(', ')}).`);
 	}
 
 	let versionDe: string | null = null;

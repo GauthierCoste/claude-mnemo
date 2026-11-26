@@ -42,12 +42,12 @@ export async function prejugerLeBanc(fichier: string, o: OptionsPrejugerLeBanc):
 
 /** Le bilan en mots. */
 export function bilanPrejugementEnTexte(b: BilanPrejuger, fichier: string): string {
-	if (b.juges + b.echecs + b.restants === 0) return `Aucun message à pré-juger dans ${fichier} (tous ont déjà des propositions, ou sont jugés). Ajoutez-en avec --extraire.`;
+	if (b.juges + b.echecs + b.restants === 0) return `Aucun message à pré-juger dans ${fichier} (tous ont déjà des propositions, ou sont jugés). En ajouter avec --extraire.`;
 	return [
 		`${b.juges} message(s) pré-jugé(s), ${b.echecs} en échec${b.restants === 0 ? '' : `, ${b.restants} non faits (arrêté)`} ; propositions enregistrées dans ${fichier}.`,
 		...b.motifs.slice(0, 5).map((m) => `  échec : ${m}`),
-		...(b.juges === 0 ? [] : ["Ensuite : relisez et validez les propositions (Mémoire › Entraîner) : elles ne comptent qu'une fois validées."]),
-		...(b.echecs + b.restants === 0 ? [] : ['Relancez --prejuger pour reprendre les messages restants.']),
+		...(b.juges === 0 ? [] : ["Ensuite : relire et valider les propositions (Mémoire › Entraîner) : elles ne comptent qu'une fois validées."]),
+		...(b.echecs + b.restants === 0 ? [] : ['Relancer --prejuger pour reprendre les messages restants.']),
 	].join('\n');
 }
 

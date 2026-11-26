@@ -309,7 +309,7 @@ async function apprendre(racine: string, fichier: string, o: Options): Promise<v
 	const rendre = o.depart ? () => {} : prendreVerrouBanc(fichier, '--apprendre');
 	try {
 		const cas = (await lireCasDuFichier(fichier)).filter((c) => c.candidates !== undefined);
-		if (cas.length === 0) throw new ErreurCli(`Aucun message jugé dans ${fichier}. Ajoutez-en avec --extraire, puis --juger.`);
+		if (cas.length === 0) throw new ErreurCli(`Aucun message jugé dans ${fichier}. En ajouter avec --extraire, puis --juger.`);
 		const dep = dependancesEnLecture(racine);
 		let empreinteDe: Map<string, string>;
 		try {
@@ -371,13 +371,13 @@ export async function commandeContexte(args: string[]): Promise<void> {
 		const rendre = prendreVerrouBanc(fichier, '--juger');
 		try {
 			const existants = await lireCasDuFichier(fichier);
-			if (progression(existants).messages === 0) throw new ErreurCli(`Aucun message à juger dans ${fichier}. Ajoutez-en avec --extraire.`);
+			if (progression(existants).messages === 0) throw new ErreurCli(`Aucun message à juger dans ${fichier}. En ajouter avec --extraire.`);
 			// copie de sûreté du fichier tel qu'il était au lancement
 			await copyFile(fichier, `${fichier}.bak`);
 			const fin = await jugerAuTerminal(fichier, existants, { entree: process.stdin, sortie: process.stdout }).catch((e: unknown) => {
 				throw enErreurCli(e);
 			});
-			const suite = fin.messagesJuges === fin.messages ? ' Tout est jugé : --extraire pour en ajouter.' : ' Relancez --juger pour reprendre.';
+			const suite = fin.messagesJuges === fin.messages ? ' Tout est jugé : --extraire pour en ajouter.' : ' Relancer --juger pour reprendre.';
 			console.log(`${fin.messagesJuges} / ${fin.messages} messages jugés (${fin.silences} silence, ${fin.sautes} sautés), enregistrés dans ${fichier} (copie d'avant la séance : ${fichier}.bak).${suite}`);
 		} finally {
 			rendre();
@@ -387,7 +387,7 @@ export async function commandeContexte(args: string[]): Promise<void> {
 	const existants = await lireCasDuFichier(fichier);
 	const etiquetes = existants.filter((c) => c.candidates === undefined);
 	const avecCandidates = existants.filter((c) => c.candidates !== undefined);
-	if (existants.length === 0) throw new ErreurCli(`Aucun cas dans ${fichier}. Ajoutez-en avec --extraire.`);
+	if (existants.length === 0) throw new ErreurCli(`Aucun cas dans ${fichier}. En ajouter avec --extraire.`);
 	// index en lecture seule et jamais synchronisé : le rejeu n'écrit rien dans `.mnemo`
 	const gestes = o.recalculer && avecCandidates.length > 0 ? await gestesEnLecture(racine) : undefined;
 	const dep = dependancesEnLecture(racine);

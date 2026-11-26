@@ -1,0 +1,157 @@
+/* Éditeur de skill, en modale : champs les uns sous les autres, l'icône à côté du nom ; Supprimer à gauche du pied. */
+.dialogue {
+	width: min(620px, calc(100vw - 32px));
+	max-height: calc(100vh - 32px);
+	padding: 0;
+	border: 1px solid var(--bd2);
+	border-radius: 16px;
+	background: var(--s1);
+	color: var(--tx);
+	box-shadow: var(--ombre);
+	overflow: auto;
+}
+
+.dialogue::backdrop {
+	background: color-mix(in srgb, var(--fond-page) 70%, transparent);
+}
+
+.ed {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 18px 20px;
+	container-type: inline-size;
+}
+
+.titre {
+	margin: 0;
+	font-size: 16px;
+}
+
+.champ {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-weight: 500;
+	font-size: 12.5px;
+	min-width: 0;
+}
+
+.champ small {
+	color: var(--mu);
+	font-weight: 400;
+	font-size: 11.5px;
+}
+
+.deuxC {
+	display: flex;
+	gap: 12px;
+}
+
+.large {
+	flex: 1;
+}
+
+.icone {
+	width: 56px;
+	text-align: center;
+	font-family: var(--sans);
+	font-size: 16px;
+}
+
+.contenu {
+	min-height: 180px;
+}
+
+.portee {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 18px;
+}
+
+.portee legend {
+	margin-bottom: 6px;
+	font-size: 12.5px;
+}
+
+.choix {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 6px;
+	cursor: pointer;
+	font-size: 12.5px;
+}
+
+.choix small {
+	display: block;
+	color: var(--mu);
+	font-size: 11.5px;
+}
+
+.choix input {
+	flex-shrink: 0;
+}
+
+.avis {
+	margin: 0;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--amber) 9%, transparent);
+	border: 1px solid color-mix(in srgb, var(--amber) 25%, transparent);
+	font-size: 12.5px;
+}
+
+ul.avis {
+	padding-left: 26px;
+}
+
+.lien {
+	border: 0;
+	background: none;
+	color: var(--amber);
+	text-decoration: underline;
+	cursor: pointer;
+	padding: 0;
+	font: inherit;
+}
+
+.lien:focus-visible {
+	outline: 2px solid var(--ac);
+	outline-offset: 2px;
+}
+
+.actionsEd {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	margin-top: 4px;
+}
+
+.espace {
+	flex: 1;
+}
+
+.supprimer {
+	color: var(--red);
+}
+
+@container (max-width: 26rem) {
+	.deuxC {
+		flex-direction: column;
+	}
+}
+
+/* « Quand l'utiliser » : une phrase, pas un identifiant */
+.prose {
+	font-family: var(--sans);
+	font-size: 13px;
+}
+
+/* pourquoi Créer / Enregistrer est indisponible, sous les actions, à droite */
+.raison {
+	text-align: right;
+}
