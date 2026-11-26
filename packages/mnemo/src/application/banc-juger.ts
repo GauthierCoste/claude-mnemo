@@ -44,7 +44,8 @@ export function prochaine(cas: readonly CasContexte[]): AJuger | null {
 
 /**
  * Messages jugés et total des messages à juger (sautés exclus), sautés, silences, messages à relire (propositions du juge en
- * attente) et paires validées (fiches jugées utiles ou pas utiles des messages jugés ; les indécises n'en sont pas).
+ * attente) et paires validées : fiches candidates jugées utiles ou pas utiles des messages non sautés, même jugés en partie
+ * (comme le rejeu et l'apprentissage les prennent) ; les indécises n'en sont pas.
  */
 export type Progression = { messagesJuges: number; messages: number; sautes: number; silences: number; aRelire: number; pairesValidees: number };
 
@@ -56,7 +57,7 @@ export function progression(cas: readonly CasContexte[]): Progression {
 		sautes: avecCandidates.filter((c) => c.saute === true).length,
 		silences: avecCandidates.filter((c) => c.saute !== true && c.silence).length,
 		aRelire: messagesARelire(cas).length,
-		pairesValidees: avecCandidates.filter(estJuge).reduce((n, c) => n + (c.candidates ?? []).filter((x) => c.jugements?.[x.chemin] === 'pertinente' || c.jugements?.[x.chemin] === 'non_pertinente').length, 0),
+		pairesValidees: avecCandidates.filter((c) => c.saute !== true).reduce((n, c) => n + (c.candidates ?? []).filter((x) => c.jugements?.[x.chemin] === 'pertinente' || c.jugements?.[x.chemin] === 'non_pertinente').length, 0),
 	};
 }
 
@@ -100,12 +101,19 @@ export function annuler(cas: readonly CasContexte[], annulation: Annulation): Ca
 /** Les propositions du juge pour les candidates du message (celles d'autres chemins sont ignorées). */
 const propositions = (c: CasContexte): Prejugement[] => (c.candidates ?? []).flatMap((x) => (c.prejugements?.[x.chemin] === undefined ? [] : [c.prejugements[x.chemin]!]));
 
+/**
+ * Confiance moyenne sur toutes les candidates du message : une candidate sans proposition compte 0 (un message aux propositions
+ * incomplètes est plus incertain, donc relu plus tôt).
+ */
 const confianceMoyenne = (c: CasContexte): number => {
-	const p = propositions(c);
-	return p.reduce((n, x) => n + x.confiance, 0) / p.length;
+	const candidates = c.candidates ?? [];
+	return candidates.reduce((n, x) => n + (c.prejugements?.[x.chemin]?.confiance ?? 0), 0) / candidates.length;
 };
 
-/** Indices des messages à juger qui ont des propositions du juge, les plus incertains d'abord (confiance moyenne la plus basse). */
+/**
+ * Indices des messages à juger qui ont au moins une proposition du juge, les plus incertains d'abord (confiance moyenne la plus
+ * basse, une candidate sans proposition comptant 0).
+ */
 export function messagesARelire(cas: readonly CasContexte[]): number[] {
 	return cas
 		.flatMap((c, indice) => (aJuger(c) && propositions(c).length > 0 ? [{ indice, confiance: confianceMoyenne(c) }] : []))
@@ -132,11 +140,13 @@ export type OptionsValidation = { maintenant?: string };
 /**
  * Applique la réponse au message `indice` : rend les cas modifiés (copie) et l'annulation. Un message validé (ni passé) porte
  * `valideLe` et il est jugé (`estJuge`). Les jugements donnés pour un chemin qui n'est pas candidate sont ignorés. Le silence est
- * refusé (null) si une fiche est jugée pertinente, déjà ou dans la réponse.
+ * refusé (null) si une fiche est jugée pertinente, déjà ou dans la réponse ; null aussi pour un indice hors des cas ou un message
+ * sans candidates (étiqueté à la main). Un message rouvert par son indice (sauté) puis validé ou marqué silence compte à nouveau.
  */
 export function repondreMessage(cas: readonly CasContexte[], indice: number, reponse: ReponseMessage, options: OptionsValidation = {}): { cas: CasContexte[]; annulation: Annulation } | null {
-	const avant = cas[indice]!;
-	const chemins = (avant.candidates ?? []).map((x) => x.chemin);
+	const avant = cas[indice];
+	if (avant?.candidates === undefined || avant.candidates.length === 0) return null;
+	const chemins = avant.candidates.map((x) => x.chemin);
 	let apres: CasContexte;
 	if (reponse.passer === true) {
 		apres = { ...avant, saute: true };
@@ -144,15 +154,14 @@ export function repondreMessage(cas: readonly CasContexte[], indice: number, rep
 		const donnes = Object.fromEntries(Object.entries(reponse.jugements).filter(([chemin]) => chemins.includes(chemin)));
 		const fusion: Record<string, Jugement> = { ...avant.jugements, ...donnes };
 		const valideLe = options.maintenant ?? new Date().toISOString();
+		const { saute: _saute, ...reste } = avant;
 		if (reponse.silence === true) {
 			if (Object.values(fusion).includes('pertinente')) return null;
 			// une fiche jugée indécise le reste : « rien d'utile » ne tranche que les autres
 			const jugements: Record<string, Jugement> = Object.fromEntries(chemins.map((c) => [c, fusion[c] === 'indecise' ? 'indecise' : 'non_pertinente']));
-			apres = { ...avant, silence: true, jugements, valideLe };
+			apres = { ...reste, silence: true, jugements, valideLe };
 		} else {
 			const jugements: Record<string, Jugement> = reponse.resteNonUtile ? { ...Object.fromEntries(chemins.map((c) => [c, 'non_pertinente'])), ...fusion } : fusion;
-			// un message rouvert (par son indice) puis validé compte à nouveau
-			const { saute: _saute, ...reste } = avant;
 			apres = { ...reste, silence: false, jugements, valideLe };
 		}
 	}

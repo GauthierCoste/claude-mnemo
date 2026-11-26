@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CasContexte, Prejugement } from '../../src/application/banc-contexte.ts';
 import { accepterSures, annuler, estJuge, messagesARelire, ordreDePresentation, prochaine, prochainMessage, progression, repondre, repondreMessage } from '../../src/application/banc-juger.ts';
-import type { AJuger } from '../../src/application/banc-juger.ts';
+import type { AJuger, ReponseMessage } from '../../src/application/banc-juger.ts';
 
 const aJuger = (nom: string, chemins: string[], extra: Partial<CasContexte> = {}): CasContexte => ({
 	nom,
@@ -47,7 +47,8 @@ describe('jugement une fiche à la fois', () => {
 		// reprise : la même liste relue (fichier) donne la fiche suivante, pas la première
 		const relue = JSON.parse(JSON.stringify(cas)) as CasContexte[];
 		expect(prochaine(relue)).toMatchObject({ indice: 1, place: 2 });
-		expect(progression(cas)).toEqual({ messagesJuges: 0, messages: 2, sautes: 0, silences: 0, aRelire: 0, pairesValidees: 0 });
+		// la fiche jugée fait déjà une paire (le rejeu prend les messages jugés en partie)
+		expect(progression(cas)).toEqual({ messagesJuges: 0, messages: 2, sautes: 0, silences: 0, aRelire: 0, pairesValidees: 1 });
 		cas = jugerLeMessage(cas, 'indecise');
 		expect(estJuge(cas[1]!)).toBe(true);
 		expect(prochaine(cas)).toMatchObject({ indice: 2, place: 1, sur: 1 });
@@ -140,6 +141,38 @@ describe('jugement d’un message entier', () => {
 		expect(annuler(fait.cas, fait.annulation)).toEqual(CAS);
 	});
 
+	it('annuler une validation ou un silence rend le message tel qu’il était', () => {
+		const partiel = [{ ...CAS[0]!, jugements: { 'b.md': 'indecise' as const } }, CAS[1]!];
+		const reponses: ReponseMessage[] = [{ jugements: { 'a.md': 'pertinente' }, resteNonUtile: true }, { jugements: {}, resteNonUtile: true, silence: true }];
+		for (const reponse of reponses) {
+			const fait = repondreMessage(partiel, 0, reponse, { maintenant: MAINTENANT })!;
+			expect(annuler(fait.cas, fait.annulation)).toEqual(partiel);
+		}
+	});
+
+	it('un message sauté rouvert par son indice : validé ou marqué silence, il compte à nouveau', () => {
+		const sautes = [{ ...CAS[0]!, saute: true }];
+		const valide = repondreMessage(sautes, 0, { jugements: {}, resteNonUtile: true }, { maintenant: MAINTENANT })!.cas[0]!;
+		const silence = repondreMessage(sautes, 0, { jugements: {}, resteNonUtile: true, silence: true }, { maintenant: MAINTENANT })!.cas[0]!;
+		for (const c of [valide, silence]) {
+			expect(c).not.toHaveProperty('saute');
+			expect(estJuge(c)).toBe(true);
+		}
+		expect(progression([silence])).toMatchObject({ messagesJuges: 1, sautes: 0, silences: 1 });
+	});
+
+	it('indice hors des cas ou message sans candidates : null', () => {
+		expect(repondreMessage(CAS, 5, { jugements: {}, resteNonUtile: true })).toBeNull();
+		expect(repondreMessage(CAS, -1, { jugements: {}, resteNonUtile: true })).toBeNull();
+		expect(repondreMessage([aJuger('étiqueté', [], { candidates: undefined })], 0, { jugements: {}, resteNonUtile: true })).toBeNull();
+		expect(repondreMessage([aJuger('vide', [])], 0, { jugements: {}, resteNonUtile: true })).toBeNull();
+	});
+
+	it('paires validées : aussi celles d’un message jugé en partie (le rejeu les prend), jamais d’un message sauté', () => {
+		const cas: CasContexte[] = [{ ...CAS[0]!, jugements: { 'a.md': 'pertinente' as const, 'b.md': 'indecise' as const } }, { ...CAS[1]!, saute: true, jugements: { 'd.md': 'pertinente' as const } }];
+		expect(progression(cas)).toMatchObject({ messagesJuges: 0, pairesValidees: 1 });
+	});
+
 	it('sans date donnée : la date de validation est l’heure courante (ISO)', () => {
 		const fait = repondreMessage(CAS, 1, { jugements: {}, resteNonUtile: true })!;
 		expect(Number.isNaN(Date.parse(fait.cas[1]!.valideLe!))).toBe(false);
@@ -173,9 +206,18 @@ describe('propositions du juge', () => {
 	});
 
 	it('à relire : messages non validés ayant des propositions, les plus incertains d’abord', () => {
-		expect(messagesARelire(CAS)).toEqual([3, 1, 2, 4]);
-		expect(messagesARelire(accepterSures(CAS, 0.9).cas)).toEqual([3, 1, 4]);
+		// très incertain 0,3 ; incomplet (0,99 + 0) / 2 ; incertain 0,725 ; sûr 0,925
+		expect(messagesARelire(CAS)).toEqual([3, 4, 1, 2]);
+		expect(messagesARelire(accepterSures(CAS, 0.9).cas)).toEqual([3, 4, 1]);
 		expect(progression(CAS)).toMatchObject({ aRelire: 4, pairesValidees: 1 });
+	});
+
+	it('à relire : une candidate sans proposition compte confiance 0 ; une proposition sur un chemin inconnu ne compte pas', () => {
+		// incomplet : (0,99 + 0) / 2 = 0,495, relu avant un message complet à 0,6 de moyenne
+		const complet = aJuger('complet', ['k.md', 'l.md'], { prejugements: { 'k.md': propose('pertinente', 0.6), 'l.md': propose('non_pertinente', 0.6) } });
+		const etranger = aJuger('étranger', ['m.md'], { prejugements: { 'z.md': propose('pertinente', 0.1) } });
+		expect(messagesARelire([complet, incomplet, etranger])).toEqual([1, 0]);
+		expect(accepterSures([etranger], 0).acceptes).toBe(0);
 	});
 
 	it('prochain message : d’abord ceux à relire, puis les autres dans l’ordre du fichier ; null quand tout est fait', () => {
@@ -186,7 +228,7 @@ describe('propositions du juge', () => {
 			vus.push(i);
 			cas = repondreMessage(cas, i, { jugements: {}, resteNonUtile: true })!.cas;
 		}
-		expect(vus).toEqual([3, 1, 2, 4, 0]);
+		expect(vus).toEqual([3, 4, 1, 2, 0]);
 		expect(prochainMessage([aJuger('étiqueté', [], { candidates: undefined })])).toBeNull();
 	});
 });
