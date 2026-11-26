@@ -1,7 +1,8 @@
 /**
  * Fiche de l'agent choisi dans la Nouvelle session : nom, étiquette (par défaut, intégré, personnalisé), description, puis
  * en clair son fournisseur, son moteur et sa version, son modèle, où il se lance, son équipement (skills, plugins, hooks)
- * et l'état de son moteur. Annoncée aux lecteurs d'écran quand l'agent change.
+ * et l'état de son moteur. Une seule région vivante, invisible, annonce aux lecteurs d'écran l'agent et l'état de son moteur
+ * quand l'un ou l'autre change (pas toute la fiche).
  */
 import { FOURNISSEURS_MOTEURS } from '@mnemo/commun';
 import type { MoteurVue, ProfilVue } from '@mnemo/contrat';
@@ -9,7 +10,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { couleurFournisseur } from '../../../moteurs/fournisseurs.ts';
 import { nomDuMoteur } from '../../../moteurs/noms.ts';
 import { HOOKS_PROFIL } from '../../../profils/hooks.ts';
-import { etiquetteDuProfil, LIEUX_DE_LANCEMENT, modeleDuProfil, montrePlugins, motPlugins, motSkills, texteHooks, type EtatMoteurAgent as Etat } from '../../../sessions/agents.ts';
+import { annonceDeLAgent, etiquetteDuProfil, LIEUX_DE_LANCEMENT, modeleDuProfil, montrePlugins, motPlugins, motSkills, texteHooks, type EtatMoteurAgent as Etat } from '../../../sessions/agents.ts';
 import { EtatMoteurAgent } from './EtatMoteurAgent.tsx';
 import s from './FicheAgent.module.css';
 
@@ -22,9 +23,14 @@ export function FicheAgent(p: Props): ReactNode {
 	const { skills, plugins, hooks } = a.equipement;
 	const lance = LIEUX_DE_LANCEMENT[a.lancement];
 	return (
-		<div className={s.fiche} aria-live="polite">
+		<div className={s.fiche}>
+			<p className={s.annonce} aria-live="polite">
+				{annonceDeLAgent(a.nom, nomMoteur, p.etat)}
+			</p>
 			<div className={s.titre}>
-				<h3 className={s.nom}>{a.nom}</h3>
+				<h3 className={s.nom} title={a.nom}>
+					{a.nom}
+				</h3>
 				<span className={s.etiquette}>{etiquetteDuProfil(a)}</span>
 			</div>
 			<p className={s.desc}>{a.description}</p>

@@ -105,7 +105,7 @@ describe('profilsDisponibles', () => {
 		]);
 	});
 
-	it('équipement : skills reçues (du profil, puis celles de la mémoire qu\'il retient), plugins allumés avec Claude Code seulement, événements de hook', async () => {
+	it('équipement : skills reçues (du profil, puis celles de la mémoire qu\'il retient) sans lire leur texte, plugins installés allumés avec Claude Code seulement, événements de hook', async () => {
 		const dep = fauxPorts();
 		const skill = (nom: string) => `---\nname: ${nom}\ndescription: ${nom}.\n---\n\nCorps.\n`;
 		dep.fichiers.set('skills/devis/SKILL.md', skill('devis'));
@@ -116,9 +116,19 @@ describe('profilsDisponibles', () => {
 		dep.fichiers.set('profils/redaction/skills/relecture/SKILL.md', skill('relecture'));
 		dep.fichiers.set('profils/redaction/skills/signature/SKILL.md', skill('signature'));
 		dep.fichiers.set('profils/calculs/calculs.md', '---\ntype: profil\nmoteur: codex\nplugins: [superpowers@marketplace]\n---\n# Calculs\n\nCalcule.\n');
+		// un seul des deux plugins du profil est installé : seul lui s'allume
+		dep.pluginsClaude.plugins = [{ id: 'superpowers@marketplace', nom: 'superpowers', version: '1.0.0', portee: 'utilisateur', skills: [], hooks: false }];
+		const lus: string[] = [];
+		const lire = dep.coffre.lire.bind(dep.coffre);
+		dep.coffre.lire = async (chemin) => {
+			lus.push(chemin);
+			return lire(chemin);
+		};
 		const { profils } = await profilsDisponibles(dep);
+		// compter les skills ne lit aucun SKILL.md
+		expect(lus.filter((c) => c.endsWith('SKILL.md'))).toEqual([]);
 		const de = (nom: string) => profils.find((p) => p.nom === nom)!.equipement;
-		expect(de('redaction')).toEqual({ skills: 3, plugins: 2, hooks: ['debut', 'message', 'fin'] });
+		expect(de('redaction')).toEqual({ skills: 3, plugins: 1, hooks: ['debut', 'message', 'fin'] });
 		// toutes les skills de la mémoire ; des plugins avec Codex ne s'allument pas
 		expect(de('calculs')).toEqual({ skills: 3, plugins: 0, hooks: ['debut', 'message', 'outil', 'apres_outil', 'arret', 'fin'] });
 		expect(de(PROFIL_TRAVAIL).skills).toBe(3);

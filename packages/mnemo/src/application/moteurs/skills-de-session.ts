@@ -41,7 +41,19 @@ export async function skillsDeSession(dep: Dependances, session: Pick<Session, '
 export async function skillsRetenues(dep: Dependances, projet: string | undefined, profil: Pick<Profil, 'nom' | 'skillsMemoire'>): Promise<SkillDeSession[]> {
 	const duProfil = await skillsDuDossier(dep, dossierSkillsDuProfil(profil.nom), () => true);
 	const noms = new Set(duProfil.map((s) => s.nom));
-	const retenue = (nom: string) => profil.skillsMemoire === 'tous' || profil.skillsMemoire.includes(nom);
-	const deLaMemoire = await skillsDuDossier(dep, DOSSIERS_FIXES.skills, (nom, texte) => !noms.has(nom) && retenue(nom) && (projet === undefined || skillPourProjet(texte, projet)));
+	const deLaMemoire = await skillsDuDossier(dep, DOSSIERS_FIXES.skills, (nom, texte) => !noms.has(nom) && retenueParLeProfil(profil, nom) && (projet === undefined || skillPourProjet(texte, projet)));
 	return [...duProfil, ...deLaMemoire];
+}
+
+/** Une skill de `_mnemo/skills/` que le profil retient par `skillsMemoire` (`tous`, ou son nom). */
+export const retenueParLeProfil = (profil: Pick<Profil, 'skillsMemoire'>, nom: string): boolean => profil.skillsMemoire === 'tous' || profil.skillsMemoire.includes(nom);
+
+/**
+ * Noms des skills d'un dossier, sans lire leur texte : chaque sous-dossier dont le `SKILL.md` est une fiche listée (la même
+ * règle que `skillsDuDossier`). Pour compter les skills d'un profil (`skillsRetenues` sans projet) sans lire chaque `SKILL.md`.
+ */
+export async function nomsDesSkills(dep: Dependances, dossier: string): Promise<string[]> {
+	const noms: string[] = [];
+	for (const sous of (await dep.coffre.lister(dossier)).dossiers) if ((await dep.coffre.lister(sous)).fiches.includes(`${sous}/SKILL.md`)) noms.push(sous.slice(sous.lastIndexOf('/') + 1));
+	return noms;
 }

@@ -80,10 +80,11 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 		}
 	}, []);
 
-	// les agents arrivés : le focus sur celui choisi, pour que ← → et Entrée agissent tout de suite
+	// les agents arrivés : le focus sur celui choisi, pour que ← → et Entrée agissent tout de suite (pas si l'on écrit déjà)
 	const charges = agents.length > 0;
 	useEffect(() => {
-		if (charges) dialogue.current?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.focus();
+		if (!charges || document.activeElement?.closest(CHAMP)) return;
+		dialogue.current?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.focus();
 	}, [charges]);
 
 	const fermer = () => {
@@ -129,7 +130,7 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 		if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
 			e.preventDefault();
 			choisir(indice + (e.key === 'ArrowRight' ? 1 : -1));
-		} else if (e.key === 'Enter' && (cible.closest('button, a') === null || cible.getAttribute('role') === 'option')) {
+		} else if (e.key === 'Enter' && !e.repeat && (cible.closest('button, a') === null || cible.getAttribute('role') === 'option')) {
 			e.preventDefault();
 			formulaire.current?.requestSubmit();
 		}
@@ -167,8 +168,12 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 						<div className={s.scene}>
 							{charges ? (
 								<SceneAgents agents={agents} choisi={indice} eteints={eteints} surChoisir={choisir} />
+							) : profils.donnees === undefined && profils.erreur === null ? (
+								<div className={s.squelette} role="status">
+									<span className={s.horsVue}>Lecture des profils…</span>
+								</div>
 							) : (
-								<p className={s.attente}>{profils.erreur === null ? 'Lecture des profils…' : 'Aucun agent à proposer.'}</p>
+								<p className={s.attente}>Aucun agent à proposer : aucun profil ne se lance par ce dialogue.</p>
 							)}
 							<div className={s.colonneFiche}>
 								{agent !== undefined && etat !== null && <FicheAgent profil={agent} moteur={moteurDe(agent)} etat={etat} verification={verification} idRaison={idRaison} surVoirReglages={voirReglages} />}
@@ -183,12 +188,16 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 							</p>
 						)}
 						<div className={s.pied}>
-							{agent !== undefined && <span className={s.resume}>{resumeDeLaSession(agent, dossier, p.nomRacine)}</span>}
+							{agent !== undefined && (
+								<span className={s.resume} title={resumeDeLaSession(agent, dossier, p.nomRacine)}>
+									{resumeDeLaSession(agent, dossier, p.nomRacine)}
+								</span>
+							)}
 							<div className={s.boutons}>
 								<Bouton className={s.bouton} onClick={fermer}>
 									Annuler
 								</Bouton>
-								<Bouton genre="primaire" type="submit" className={`${s.bouton} ${s.lancer}`} disabled={envoi} indisponible={bloque !== null && { raison: idRaison }} title={bloque?.raison}>
+								<Bouton genre="primaire" type="submit" className={`${s.bouton} ${s.lancer}`} disabled={envoi} indisponible={bloque !== null && { raison: idRaison }} title={bloque?.raison ?? `Lancer ${agent?.nom ?? profil}`}>
 									{`Lancer ${agent?.nom ?? profil}`}
 								</Bouton>
 							</div>

@@ -22,6 +22,7 @@ vi.mock('../../src/terminal/Terminal.tsx', () => ({
 afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
 });
 
 const MAINTENANT = Date.now();
@@ -437,8 +438,11 @@ describe('vue Sessions', () => {
 		expect(within(dialogue).getByText(`${PROFIL_ARCHIVISTE} : lancé par son propre chemin, dans la mémoire.`)).toBeTruthy();
 		expect(within(dialogue).getByText(/A b : nom refusé/)).toBeTruthy();
 		expect(within(dialogue).getByText('Profil notes : lanceur « propre » sans chemin de lancement connu')).toBeTruthy();
-		const fiche = dialogue.querySelector<HTMLElement>('[aria-live="polite"]')!;
-		expect(within(fiche).getByRole('heading', { name: PROFIL_TRAVAIL })).toBeTruthy();
+		const fiche = within(dialogue).getByRole('heading', { name: PROFIL_TRAVAIL }).closest<HTMLElement>('div[class*="fiche"]')!;
+		// une seule région vivante : l'agent et l'état de son moteur, pas toute la fiche
+		const annonce = dialogue.querySelector<HTMLElement>('[aria-live="polite"]')!;
+		expect(dialogue.querySelectorAll('[aria-live]')).toHaveLength(1);
+		expect(annonce.textContent).toMatch(new RegExp(`^${PROFIL_TRAVAIL} : `));
 		expect(within(fiche).getByText('par défaut')).toBeTruthy();
 		expect(within(fiche).getByText('La mémoire Mnemo est ta mémoire de référence.')).toBeTruthy();
 		expect(within(fiche).getByText('Anthropic')).toBeTruthy();
@@ -449,6 +453,7 @@ describe('vue Sessions', () => {
 		expect(within(dialogue).getByText(`${PROFIL_TRAVAIL} · Anthropic modèle par défaut · dans erp-saas`)).toBeTruthy();
 
 		await act(async () => within(agents).getByRole('option', { name: 'notes' }).click());
+		expect(annonce.textContent).toMatch(/^notes : /);
 		expect(within(fiche).getByText('personnalisé')).toBeTruthy();
 		expect(within(fiche).getByText('Range mes notes.')).toBeTruthy();
 		expect(within(equipement).getAllByRole('listitem').map((x) => x.textContent)).toEqual(['1 skill', '0 plugin', 'hooks : Début, Fin']);
@@ -489,6 +494,29 @@ describe('vue Sessions', () => {
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions', { profil: PROFIL_TRAVAIL, dossier: 'erp-saas' });
 	});
 
+	it('Nouvelle session : Entrée sur « Changer » ou « Annuler » ne lance pas ; ← → dans l’arbre déplié ne changent pas d’agent ; un dossier choisi rend le focus à « Changer »', async () => {
+		const faux = await monter({ '/api/sessions': (_: unknown, corps: unknown) => (corps === undefined ? { sessions: SESSIONS } : { session: SESSIONS[0] }) });
+		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
+		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
+		const agents = within(dialogue).getByRole('listbox', { name: 'Agents' });
+		await waitFor(() => expect(within(agents).getAllByRole('option')).toHaveLength(3));
+		const choisi = () => within(agents).getByRole('option', { selected: true }).getAttribute('aria-label');
+		const changer = within(dialogue).getByRole('button', { name: 'Changer' });
+		await act(async () => fireEvent.keyDown(changer, { key: 'Enter' }));
+		await act(async () => fireEvent.keyDown(within(dialogue).getByRole('button', { name: 'Annuler' }), { key: 'Enter' }));
+		// Entrée maintenue sur un agent : une seule demande, pas une par répétition
+		await act(async () => fireEvent.keyDown(within(agents).getByRole('option', { name: PROFIL_TRAVAIL }), { key: 'Enter', repeat: true }));
+		expect(faux.api.envoyer).not.toHaveBeenCalledWith('/api/sessions', expect.anything());
+		await act(async () => changer.click());
+		const api = await within(dialogue).findByRole('button', { name: /^api/ });
+		await act(async () => fireEvent.keyDown(api, { key: 'ArrowRight' }));
+		await act(async () => fireEvent.keyDown(api, { key: 'ArrowLeft' }));
+		expect(choisi()).toBe(PROFIL_TRAVAIL);
+		await act(async () => api.click());
+		expect(document.activeElement).toBe(changer);
+		expect(changer.getAttribute('aria-expanded')).toBe('false');
+	});
+
 	it('Nouvelle session : un profil dont le moteur ne lance pas ici (Codex introuvable) garde Lancer indisponible avec la raison ; rien n’est envoyé, ni par Entrée', async () => {
 		const profils = { ...PROFILS, profils: PROFILS.profils.map((x) => (x.nom === 'redaction' ? { ...x, moteur: 'codex', modele: '' } : { ...x, moteur: 'claude-code', modele: '' })) };
 		const moteurs = {
@@ -505,16 +533,17 @@ describe('vue Sessions', () => {
 		// Claude Code introuvable : la ligne à coller reste possible, Lancer aussi
 		await waitFor(() => expect(within(dialogue).getByText(/Claude Code introuvable ici/)).toBeTruthy());
 		expect(within(dialogue).getByRole('button', { name: /^Lancer / }).getAttribute('aria-disabled')).toBeNull();
-		await act(async () => within(agents).getByRole('option', { name: 'redaction' }).click());
-		// l'agent reste choisissable, éteint dans la rangée
-		expect(within(agents).getByRole('option', { name: 'redaction' }).getAttribute('aria-selected')).toBe('true');
-		expect(within(agents).getByRole('option', { name: 'redaction' }).hasAttribute('data-eteint')).toBe(true);
+		// l'agent bloqué reste choisissable, éteint dans la rangée, et son nom le dit
+		const redaction = within(agents).getByRole('option', { name: 'redaction, lancement impossible' });
+		await act(async () => redaction.click());
+		expect(redaction.getAttribute('aria-selected')).toBe('true');
+		expect(redaction.hasAttribute('data-eteint')).toBe(true);
 		const lancer = within(dialogue).getByRole('button', { name: 'Lancer redaction' });
 		expect(lancer.getAttribute('aria-disabled')).toBe('true');
 		const raison = document.getElementById(lancer.getAttribute('aria-describedby')!);
 		expect(raison?.textContent).toBe('Lancement impossible ici : Codex introuvable sur ce poste (codex).');
 		await act(async () => lancer.click());
-		await act(async () => fireEvent.keyDown(within(agents).getByRole('option', { name: 'redaction' }), { key: 'Enter' }));
+		await act(async () => fireEvent.keyDown(redaction, { key: 'Enter' }));
 		expect(faux.api.envoyer).not.toHaveBeenCalledWith('/api/sessions', expect.anything());
 	});
 
@@ -538,8 +567,8 @@ describe('vue Sessions', () => {
 		});
 		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
 		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
-		await cliquerQuandAffiche(within(dialogue).findByRole('option', { name: 'redaction' }));
-		const fiche = dialogue.querySelector<HTMLElement>('[aria-live="polite"]')!;
+		await cliquerQuandAffiche(within(dialogue).findByRole('option', { name: /^redaction/ }));
+		const fiche = within(dialogue).getByRole('heading', { name: 'redaction' }).closest<HTMLElement>('div[class*="fiche"]')!;
 		expect(within(fiche).getByText('Mistral')).toBeTruthy();
 		expect(within(fiche).getByText('mistral-medium-3.5')).toBeTruthy();
 		// les plugins ne valent qu'avec Claude Code
@@ -577,7 +606,6 @@ describe('vue Sessions', () => {
 		const reglages = await screen.findByRole('region', { name: 'Réglages' });
 		expect(within(reglages).getByRole('tab', { name: 'Système' }).getAttribute('aria-selected')).toBe('true');
 		expect(await within(reglages).findByRole('heading', { name: 'Moteurs' })).toBeTruthy();
-		vi.unstubAllGlobals();
 	});
 
 	it('Nouvelle session : un profil lancé dans la mémoire fige le dossier (ni chemin ni « Changer ») et envoie la racine', async () => {

@@ -3,14 +3,16 @@ import { DOSSIERS_FIXES, MOTEUR_PAR_DEFAUT } from '@mnemo/commun';
 import { estNomDeProfil, lanceurPropreSansChemin, moteurOuModeleInvalides, MOTIF_LANCEUR_PROPRE, MOTIF_NOM_DE_PROFIL, PROFILS_PAR_DEFAUT } from '../domaine/profil.ts';
 import type { Profil } from '../domaine/profil.ts';
 import type { EvenementHook } from '../domaine/session.ts';
-import { skillsRetenues } from './moteurs/skills-de-session.ts';
-import type { Dependances } from './ports.ts';
-import { chargerProfil, ficheDeProfil, profilParDefaut } from './profil.ts';
+import { enabledPluginsDe } from './moteurs/claude-code/plugin.ts';
+import { nomsDesSkills, retenueParLeProfil } from './moteurs/skills-de-session.ts';
+import type { Dependances, PluginInstalle } from './ports.ts';
+import { chargerProfil, dossierSkillsDuProfil, ficheDeProfil, profilParDefaut } from './profil.ts';
 
 /**
  * Équipement d'un profil, compté comme le montre l'aperçu de Réglages › Profils : `skills`, celles que ses sessions reçoivent
- * (`skillsRetenues` : celles du profil, puis celles de la mémoire qu'il retient, sans le filtre par projet) ; `plugins`, les
- * plugins Claude Code qu'il allume (seulement avec ce moteur) ; `hooks`, ses événements de hook de Mnemo.
+ * (comme `skillsRetenues` sans projet : celles du profil, puis celles de la mémoire qu'il retient, celle du profil gagnant à
+ * nom égal) ; `plugins`, les plugins Claude Code installés qu'il allume (`enabledPluginsDe`, seulement avec ce moteur) ;
+ * `hooks`, ses événements de hook de Mnemo.
  */
 export type EquipementProfil = { skills: number; plugins: number; hooks: EvenementHook[] };
 
@@ -31,13 +33,15 @@ export type ProfilDisponible = {
 	equipement: EquipementProfil;
 };
 
-/** Équipement du profil, sans rien écrire (les skills par défaut pas encore déposées ne comptent pas). */
-export async function equipementDuProfil(dep: Dependances, profil: Profil): Promise<EquipementProfil> {
-	return {
-		skills: (await skillsRetenues(dep, undefined, profil)).length,
-		plugins: profil.moteur === MOTEUR_PAR_DEFAUT ? profil.plugins.length : 0,
-		hooks: [...profil.hooks],
-	};
+/**
+ * Équipement du profil, sans rien écrire ni lire de `SKILL.md` (les skills par défaut pas encore déposées ne comptent pas) ;
+ * `skillsMemoire` : noms des skills de `_mnemo/skills/`, `installes` : plugins Claude Code, lus une fois pour tous les profils.
+ */
+export async function equipementDuProfil(dep: Dependances, profil: Profil, skillsMemoire: readonly string[], installes: readonly PluginInstalle[]): Promise<EquipementProfil> {
+	const duProfil = await nomsDesSkills(dep, dossierSkillsDuProfil(profil.nom));
+	const deLaMemoire = skillsMemoire.filter((nom) => !duProfil.includes(nom) && retenueParLeProfil(profil, nom));
+	const allumes = profil.moteur === MOTEUR_PAR_DEFAUT ? Object.values(enabledPluginsDe(profil, installes)).filter(Boolean).length : 0;
+	return { skills: duProfil.length + deLaMemoire.length, plugins: allumes, hooks: [...profil.hooks] };
 }
 
 /**
@@ -51,6 +55,9 @@ export async function profilsDisponibles(
 	const dossiers = (await dep.coffre.lister(DOSSIERS_FIXES.profils)).dossiers.map((d) => d.slice(d.lastIndexOf('/') + 1));
 	const noms = [...new Set([...Object.keys(PROFILS_PAR_DEFAUT), ...dossiers.filter(estNomDeProfil)])].sort();
 	const profils: ProfilDisponible[] = [];
+	const skillsMemoire = await nomsDesSkills(dep, DOSSIERS_FIXES.skills);
+	// plugins illisibles : aucun compté, la liste des profils reste lisible
+	const { plugins: installes } = await dep.pluginsClaude.installes().catch(() => ({ plugins: [] as PluginInstalle[] }));
 	const avertissements: { nom: string; motif: string }[] = [];
 	for (const nom of noms) {
 		const profil = await chargerProfil(dep, nom);
@@ -63,7 +70,7 @@ export async function profilsDisponibles(
 			personnalise: profil.consignePersonnalisee,
 			moteur: profil.moteur,
 			modele: profil.modele,
-			equipement: await equipementDuProfil(dep, profil),
+			equipement: await equipementDuProfil(dep, profil, skillsMemoire, installes),
 		});
 		const fiche = await ficheDeProfil(dep, nom).catch(() => null);
 		if (lanceurPropreSansChemin(fiche, profilParDefaut(nom))) avertissements.push({ nom, motif: MOTIF_LANCEUR_PROPRE });

@@ -7,7 +7,7 @@
  */
 import type { IdMoteur } from '@mnemo/commun';
 import { useCallback, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { ongletRetenu, retenirOnglet, type OngletReglages } from '../../reglages/onglet-retenu.ts';
+import { ONGLETS_REGLAGES, ongletRetenu, retenirOnglet, type OngletReglages } from '../../reglages/onglet-retenu.ts';
 import { Bouton } from '../commun/Bouton.tsx';
 import { AppClaude } from './claude-desktop/AppClaude.tsx';
 import { Profils } from './profils/Profils.tsx';
@@ -15,11 +15,8 @@ import { ReglagesSysteme } from './ReglagesSysteme.tsx';
 import s from './Reglages.module.css';
 
 type Onglet = OngletReglages;
-const ONGLETS: { cle: Onglet; titre: string }[] = [
-	{ cle: 'profils', titre: 'Profils' },
-	{ cle: 'systeme', titre: 'Système' },
-	{ cle: 'app-claude', titre: 'App Claude' },
-];
+const TITRES_ONGLETS: Readonly<Record<Onglet, string>> = { profils: 'Profils', systeme: 'Système', 'app-claude': 'App Claude' };
+const ONGLETS = ONGLETS_REGLAGES.map((cle) => ({ cle, titre: TITRES_ONGLETS[cle] }));
 
 export function Reglages(): ReactNode {
 	const [onglet, setOnglet] = useState<Onglet>(ongletRetenu);

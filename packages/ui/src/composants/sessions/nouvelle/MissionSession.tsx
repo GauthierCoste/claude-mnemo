@@ -17,6 +17,11 @@ export function MissionSession(p: Props): ReactNode {
 	const [pliage, setPliage] = useState(PLIAGE_INITIAL);
 	// la racine, puis chaque dossier du chemin
 	const segments = [p.nomRacine, ...(p.dossier === '' ? [] : p.dossier.split('/'))];
+	// l'arbre replié (un dossier choisi, ou « Replier ») : le focus revient à « Changer », qui reste à sa place
+	const replier = () => {
+		setOuvert(false);
+		document.getElementById(`${id}-changer`)?.focus();
+	};
 	return (
 		<div className={s.mission}>
 			<div className={s.champ} role="group" aria-labelledby={`${id}-dossier`}>
@@ -38,7 +43,7 @@ export function MissionSession(p: Props): ReactNode {
 									</Fragment>
 								))}
 							</span>
-							<Bouton petit className={s.cible} aria-expanded={ouvert} aria-controls={`${id}-arbre`} onClick={() => setOuvert(!ouvert)}>
+							<Bouton petit id={`${id}-changer`} className={s.cible} aria-expanded={ouvert} aria-controls={`${id}-arbre`} onClick={() => (ouvert ? replier() : setOuvert(true))}>
 								{ouvert ? 'Replier' : 'Changer'}
 							</Bouton>
 						</div>
@@ -50,7 +55,7 @@ export function MissionSession(p: Props): ReactNode {
 									choisi={p.dossier}
 									surChoisir={(chemin) => {
 										p.surDossier(chemin);
-										setOuvert(false);
+										replier();
 									}}
 									pliage={pliage}
 									surPliage={setPliage}

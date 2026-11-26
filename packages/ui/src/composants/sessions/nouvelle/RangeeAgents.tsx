@@ -1,7 +1,7 @@
 /**
  * Rangée des agents de la Nouvelle session : une vignette par agent, la liste de choix (`listbox` horizontale) que suivent
  * le clavier et les lecteurs d'écran. ← → (Début, Fin) changent d'agent et suivent le focus ; Entrée lance (le dialogue).
- * Un agent dont le moteur bloque le lancement porte une marque, dite dans son infobulle.
+ * Un agent dont le moteur bloque le lancement porte une marque, dite dans son nom accessible et son infobulle.
  */
 import type { ProfilVue } from '@mnemo/contrat';
 import { useRef, type KeyboardEvent, type ReactNode } from 'react';
@@ -40,7 +40,7 @@ export function RangeeAgents(p: { agents: readonly ProfilVue[]; choisi: number; 
 						type="button"
 						role="option"
 						aria-selected={j === p.choisi}
-						aria-label={a.nom}
+						aria-label={eteint ? `${a.nom}, lancement impossible` : a.nom}
 						tabIndex={j === p.choisi ? 0 : -1}
 						title={infobulle}
 						className={s.vignette}

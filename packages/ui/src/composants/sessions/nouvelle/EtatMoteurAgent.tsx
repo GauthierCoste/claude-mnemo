@@ -1,8 +1,9 @@
 /**
  * État du moteur d'un agent, en bas de sa fiche : « Prêt », ou ce qui bloque son lancement avec le geste qui le débloque
  * (« Lier à Mnemo », comme Réglages › Système › Moteurs) et « Voir dans Réglages » ; un point à régler qui n'empêche pas de
- * lancer ; la vérification du poste en cours, discrète (le choix reste libre). `idRaison` : l'élément qui dit pourquoi
- * « Lancer » est indisponible.
+ * lancer ; la vérification du poste en cours, discrète (le choix reste libre). Le retour d'une liaison (déclaration laissée,
+ * échec) reste dit quel que soit l'état qui suit. `idRaison` : l'élément qui dit pourquoi « Lancer » est indisponible.
+ * L'annonce aux lecteurs d'écran est faite par la fiche : aucune région vivante ici, hors du retour de liaison.
  */
 import type { IdMoteur } from '@mnemo/commun';
 import { useEffect, type ReactNode } from 'react';
@@ -27,28 +28,30 @@ export function EtatMoteurAgent(p: Props): ReactNode {
 	);
 	// une vérification relancée alors que l'état est déjà connu : dite à côté, sans masquer l'état
 	const enVerification = p.verification && e.genre !== 'verification' && <span className={`${s.verif} ${r.reflet}`}>vérification…</span>;
+	const retourLiaison = retour !== null && (
+		<ul className={s.retour} role={retour.alerte ? 'alert' : 'status'}>
+			{retour.messages.map((m) => (
+				<li key={m}>{m}</li>
+			))}
+		</ul>
+	);
 
 	if (e.genre === 'verification') {
 		return (
-			<p className={s.etat} data-genre="verification" role="status">
+			<p className={s.etat} data-genre="verification">
 				<span className={r.reflet}>{`Vérification de ${p.moteur} sur ce poste…`}</span>
 			</p>
 		);
 	}
-	if (e.genre === 'pret') {
+	if (e.genre === 'pret' || e.genre === 'manuel') {
 		return (
-			<p className={s.etat} data-genre="pret">
-				{`✓ Prêt : ${p.moteur} trouvé et lié à Mnemo.`}
-				{enVerification}
-			</p>
-		);
-	}
-	if (e.genre === 'manuel') {
-		return (
-			<p className={s.etat} data-genre="attention">
-				{`${p.moteur} introuvable ici : la session sera suivie, et tu la lanceras toi-même dans un terminal.`}
-				{enVerification}
-			</p>
+			<div className={s.etat} data-genre={e.genre === 'pret' ? 'pret' : 'attention'}>
+				<p className={s.ligne}>
+					{e.genre === 'pret' ? `✓ Prêt : ${p.moteur} trouvé et lié à Mnemo.` : `${p.moteur} introuvable ici : la session sera suivie, et tu la lanceras toi-même dans un terminal.`}
+					{enVerification}
+				</p>
+				{retourLiaison}
+			</div>
 		);
 	}
 	if (e.genre === 'illisible' || e.genre === 'attention') {
@@ -60,6 +63,7 @@ export function EtatMoteurAgent(p: Props): ReactNode {
 					{enVerification}
 				</p>
 				<span className={s.actions}>{voir}</span>
+				{retourLiaison}
 			</div>
 		);
 	}
@@ -84,13 +88,7 @@ export function EtatMoteurAgent(p: Props): ReactNode {
 				{voir}
 				{enVerification}
 			</span>
-			{retour !== null && (
-				<ul className={s.retour} role={retour.alerte ? 'alert' : 'status'}>
-					{retour.messages.map((m) => (
-						<li key={m}>{m}</li>
-					))}
-				</ul>
-			)}
+			{retourLiaison}
 		</div>
 	);
 }

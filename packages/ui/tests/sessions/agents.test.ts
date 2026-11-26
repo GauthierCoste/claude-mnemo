@@ -28,6 +28,8 @@ describe('agents de la Nouvelle session', () => {
 		expect(etatDuMoteur(undefined, true, null)).toEqual({ genre: 'verification' });
 		expect(etatDuMoteur(undefined, false, 'refus')).toEqual({ genre: 'illisible', motif: 'refus' });
 		expect(etatDuMoteur(moteur({}), true, null)).toEqual({ genre: 'verification' });
+		// vérification du poste en échec : jamais « lié »
+		expect(etatDuMoteur(moteur({}), false, 'délai dépassé')).toEqual({ genre: 'illisible', motif: 'délai dépassé' });
 		expect(etatDuMoteur(moteur({ poste: [{ cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée' }] }), false, null)).toEqual({ genre: 'pret' });
 		const aLier = moteur({
 			poste: [

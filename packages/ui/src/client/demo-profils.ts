@@ -88,11 +88,11 @@ export function creerProfilsDemo() {
 	const consigne = (e: Etat) => e.editable.consigne ?? e.consigneParDefaut;
 	const empreinte = (nom: string, e: Etat) => (e.ecrit ? `${nom}-${e.version}` : null);
 	const skillsDuProfil = (nom: string): SkillVue[] => (nom === 'redaction' ? [{ nom: 'signature', description: 'Signer un courrier.' }] : []);
-	/** Comme le service : les skills du profil puis celles de la mémoire qu'il retient (le profil gagne à nom égal), les plugins avec Claude Code seulement. */
+	/** Comme le service : les skills du profil puis celles de la mémoire qu'il retient (le profil gagne à nom égal), les plugins installés qu'il allume, avec Claude Code seulement. */
 	const equipement = (nom: string, e: Etat): EquipementProfilVue => {
 		const duProfil = skillsDuProfil(nom).map((x) => x.nom);
 		const retenues = SKILLS_MEMOIRE.filter((x) => !duProfil.includes(x.nom) && (e.editable.skillsMemoire === 'tous' || e.editable.skillsMemoire.includes(x.nom)));
-		return { skills: duProfil.length + retenues.length, plugins: e.editable.moteur === 'claude-code' ? e.editable.plugins.length : 0, hooks: [...e.editable.hooks] };
+		return { skills: duProfil.length + retenues.length, plugins: e.editable.moteur === 'claude-code' ? PLUGINS.filter((x) => e.editable.plugins.includes(x.id)).length : 0, hooks: [...e.editable.hooks] };
 	};
 	const verifierNom = (nom: string) => {
 		if (!/^[a-z0-9][a-z0-9-]{0,39}$/u.test(nom)) throw new ErreurApi('Profil refusé : nom refusé : minuscules, chiffres et tirets, 40 caractères au plus, sans tiret au début', 400);

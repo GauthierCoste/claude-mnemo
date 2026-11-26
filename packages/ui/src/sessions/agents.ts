@@ -50,7 +50,7 @@ export const motPlugins = (n: number): string => pluriel(n, 'plugin');
 /**
  * État du moteur d'un agent, sur sa fiche :
  * - `verification` : la vue du moteur n'est pas encore là (vérification du poste en cours) ;
- * - `illisible` : la lecture a échoué ;
+ * - `illisible` : la lecture des moteurs, ou la vérification du poste, a échoué ;
  * - `pret` ; `manuel` : introuvable, ses sessions se lancent par une ligne à coller ;
  * - `bloque` : le lancement est impossible (`raison`, dite à côté de « Lancer ») ; `lignes` : les points en cause ; `lier` :
  *   « Lier à Mnemo » le débloque ;
@@ -69,8 +69,8 @@ export function etatDuMoteur(m: MoteurVue | undefined, verification: boolean, er
 	if (m === undefined) return erreur !== null && !verification ? { genre: 'illisible', motif: erreur } : { genre: 'verification' };
 	const enDefaut = (m.poste ?? []).filter((x) => x.ok === false).map((x) => `${x.libelle} : ${x.etat}`);
 	if (m.indisponible !== null) return m.manuel ? { genre: 'manuel' } : { genre: 'bloque', raison: `Lancement impossible ici : ${m.indisponible}`, lignes: enDefaut, lier: false };
-	// points du poste pas encore vérifiés : rien à dire tant que la vérification court
-	if (m.poste === undefined && verification) return { genre: 'verification' };
+	// points du poste pas encore vérifiés : rien à dire tant que la vérification court ; elle a échoué : jamais « lié »
+	if (m.poste === undefined) return verification ? { genre: 'verification' } : { genre: 'illisible', motif: erreur ?? 'poste non vérifié' };
 	const statut = statutDuMoteur(m);
 	if (statut.cle === 'pret') return { genre: 'pret' };
 	const action = actionDuMoteur(m);
@@ -86,4 +86,21 @@ export function resumeDeLaSession(p: Pick<ProfilVue, 'nom' | 'moteur' | 'modele'
 	const modele = p.modele === '' ? 'modèle par défaut' : p.modele;
 	const lieu = p.lancement === 'memoire' ? LIEUX_DE_LANCEMENT.memoire : `dans ${dossier === '' ? nomRacine : dossier.slice(dossier.lastIndexOf('/') + 1)}`;
 	return `${p.nom} · ${FOURNISSEURS_MOTEURS[p.moteur]} ${modele} · ${lieu}`;
+}
+
+/** Ce que la fiche annonce aux lecteurs d'écran quand l'agent ou l'état de son moteur change : l'agent, puis l'état en bref. */
+export function annonceDeLAgent(nom: string, moteur: string, e: EtatMoteurAgent): string {
+	const etat =
+		e.genre === 'verification'
+			? `vérification de ${moteur}`
+			: e.genre === 'pret'
+				? 'prêt'
+				: e.genre === 'manuel'
+					? `${moteur} introuvable, lancement par une ligne à coller`
+					: e.genre === 'bloque'
+						? e.raison
+						: e.genre === 'attention'
+							? e.titre
+							: `état de ${moteur} illisible`;
+	return `${nom} : ${etat}`;
 }

@@ -59,6 +59,39 @@
 	min-width: 0;
 }
 
+.squelette {
+	position: relative;
+	height: 300px;
+	border: 1px solid var(--bd);
+	border-radius: var(--r-4);
+	background: linear-gradient(100deg, var(--s2) 40%, var(--s3) 50%, var(--s2) 60%) 0 0 / 300% 100%;
+	animation: squelette 1.6s linear infinite;
+}
+
+@keyframes squelette {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: 0 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.squelette {
+		animation: none;
+	}
+}
+
+.horsVue {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
 .attente {
 	margin: 0;
 	padding: 18px;
@@ -96,12 +129,21 @@
 	margin-left: auto;
 	display: flex;
 	gap: 8px;
-	flex-shrink: 0;
+	min-width: 0;
 }
 
 .bouton {
+	flex: none;
 	min-height: 32px;
 	white-space: nowrap;
+}
+
+/* « Lancer <agent> » rétrécit avant de déborder : le nom long se coupe, entier dans l'infobulle */
+.lancer {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 /* « Lancer <agent> » à la couleur de l'agent, tant qu'il peut partir */

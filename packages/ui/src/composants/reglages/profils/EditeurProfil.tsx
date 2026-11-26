@@ -22,7 +22,6 @@ import { ChoixAvatar } from './ChoixAvatar.tsx';
 import { ChoixMoteur } from './ChoixMoteur.tsx';
 import s from './Profils.module.css';
 
-const HOOKS = HOOKS_PROFIL;
 
 /** Rôle du profil, dit sous son nom. */
 function roleDe(nom: string): string {
@@ -256,12 +255,12 @@ export function EditeurProfil(p: {
 
 			<Section titre="Hooks de Mnemo" explication="Au moins un.">
 				<div className={s.liste2}>
-					{HOOKS.map((h) => (
+					{HOOKS_PROFIL.map((h) => (
 						<label key={h.cle} className={s.case}>
 							<input
 								type="checkbox"
 								checked={brouillon.hooks.includes(h.cle)}
-								onChange={(e) => changer({ hooks: basculer(brouillon.hooks, h.cle, e.target.checked, HOOKS.map((x) => x.cle)) })}
+								onChange={(e) => changer({ hooks: basculer(brouillon.hooks, h.cle, e.target.checked, HOOKS_PROFIL.map((x) => x.cle)) })}
 							/>
 							<span>
 								{h.libelle} <span className={s.discret}>— {h.detail}</span>
