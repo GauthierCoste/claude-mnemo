@@ -1,5 +1,31 @@
-/* Recherche ciblée d'une fiche, sous la jonction du panneau Contexte : un champ compact d'une ligne (loupe, croix), puis
-   l'état de la recherche ; les résultats sont des lignes du classement. */
+/* Recherche ciblée d'une fiche, dans le panneau Contexte : la loupe du titre de la section, qui ouvre, sous la jonction,
+   un champ compact d'une ligne (loupe, croix), puis l'état de la recherche ; les résultats sont des lignes du classement. */
+.boutonLoupe {
+	flex: none;
+	display: inline-grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: var(--r-1);
+	background: none;
+	color: var(--dim);
+	cursor: pointer;
+}
+
+.boutonLoupe:hover,
+.boutonLoupe[aria-expanded='true'] {
+	color: var(--tx);
+}
+
+/* allumée tant qu'une recherche a du texte : un cadre et un fond, pas seulement la couleur */
+.boutonLoupe[data-allumee='true'] {
+	color: var(--ac);
+	border-color: color-mix(in srgb, var(--ac) 55%, transparent);
+	background: color-mix(in srgb, var(--ac) 14%, transparent);
+}
+
 .recherche {
 	margin: 4px 0 4px;
 	padding: 0 4px;
@@ -73,6 +99,11 @@
 	font: 500 10px var(--mono);
 	color: var(--dim);
 	overflow-wrap: anywhere;
+}
+
+/* la zone d'état reste montée (lecteurs d'écran) ; vide, elle ne prend pas de place */
+.etat:empty {
+	margin: 0;
 }
 
 .erreur {

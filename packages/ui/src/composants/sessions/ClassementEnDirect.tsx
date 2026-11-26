@@ -6,9 +6,11 @@
  *   (vert pointillé) quand l'injection automatique est active, gris « coupé » si elle l'est ; dessous, l'injection
  *   automatique coupée par le suivi, avec son motif et « Réactiver ». L'état du classement qui sort de l'ordinaire (« affinage… », « ordre seul » et sa raison) est dit dans le bouton des
  *   modèles de la session, à droite du titre. Le message classé n'est pas rappelé ;
- * - juste sous la jonction (sans fiche injectée : en tête du pas vu), le champ « Chercher une fiche… » (`RechercheFiche`,
- *   session modifiable seulement) : dès deux caractères, les fiches trouvées remplacent le classement et « Plus tôt », sans %,
- *   avec ➤ (une fiche déjà injectée : ◆, sans ➤) ; Échap ou la croix rendent le classement ;
+ * - la recherche ciblée (`RechercheFiche`, session modifiable seulement) : la loupe à droite du titre, ou `/` dans le panneau,
+ *   ouvre le champ « Chercher une fiche… » juste sous la jonction (sans fiche injectée : en tête du pas vu). Dès deux
+ *   caractères, les fiches trouvées remplacent le classement et « Plus tôt » (les ◆ restent au-dessus), sans %, avec ➤ (une
+ *   fiche déjà injectée : ◆, sans ➤ ; une fiche écartée le dit, sans ✗) ; ↑/↓ les parcourent, Échap revient au champ. Champ
+ *   vide ou fermé : le classement ; Échap vide le champ, puis le referme (focus rendu à la loupe) ;
  * - le classement du dernier message porteur : la note en % (calibrée) ; en ordre seul, « ≈ 42 % » en gris (note non
  *   calibrée) ou ◇ sans aucune note ; le titre et, dessous, la raison et « piste » (envoyée en piste dans la session) ;
  * - « Plus tôt dans la session » : les pistes plus anciennes et les fiches lues (◈) absentes du classement, plus récentes
@@ -24,7 +26,7 @@
  */
 import { libelleRaison, niveauEffectif, type NiveauModeles } from '@mnemo/commun';
 import type { ClassementVue, CoupureInjectionVue, EntreeServieVue, InjectionVue, LueVue, RaisonCarteVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
 import { useAServir, useEcartes, useEcarteesToujours, useModeles, useReactiverInjection, useReglages } from '../../client/hooks.ts';
 import { dernierClassement, derniereEntree, estCalibre, estEcarte, modesDInjection, pourcentage, seuilInjection, sousLeSeuil, type ModeInjection } from '../../sessions/classement.ts';
@@ -36,7 +38,8 @@ import { avisModeles } from '../modeles/avis-modeles.ts';
 import { ModelesSession } from '../modeles/ModelesSession.tsx';
 import { cx } from '../commun/classes.ts';
 import { useToast } from '../Toast.tsx';
-import { RechercheFiche, rechercheActive, type FicheTrouvee } from './RechercheFiche.tsx';
+import { origineDeLaTouche } from '../../raccourcis.ts';
+import { BoutonLoupe, RechercheFiche, rechercheActive, type FicheTrouvee } from './RechercheFiche.tsx';
 import s from './ClassementEnDirect.module.css';
 
 /** Durée d'affichage des ▲/▼ et du fondu d'une nouvelle venue. */
@@ -227,10 +230,14 @@ export function ClassementEnDirect(p: {
 	const [demarrage, setDemarrage] = useState<{ pour: string } | null>(null);
 	const [jamaisIci, setJamaisIci] = useState<string[]>([]);
 	const [, rafraichir] = useState(0);
-	// la recherche ciblée : propre à la session affichée
-	const [recherche, setRecherche] = useState({ session: p.session, texte: '' });
-	const texteCherche = recherche.session === p.session ? recherche.texte : '';
-	const enRecherche = p.modifiable && rechercheActive(texteCherche);
+	// la recherche ciblée (le composant est recréé à chaque session : `key` de PanneauContexte)
+	const [rechercheOuverte, setRechercheOuverte] = useState(false);
+	const [texteCherche, setTexteCherche] = useState('');
+	const enRecherche = p.modifiable && rechercheOuverte && rechercheActive(texteCherche);
+	const loupe = useRef<HTMLButtonElement>(null);
+	/** Après l'écart d'une fiche trouvée : le résultat qui prend le focus ('' : le champ). */
+	const focusTrouvee = useRef<string | null>(null);
+	const [ecartsTrouvees, setEcartsTrouvees] = useState(0);
 	const suggestion = (p.suggestions ?? []).find((x) => !suggestionsGardees.has(`${p.session}|${x.chemin}`) && !jamais.has(x.chemin)) ?? null;
 
 	const titreSection = useRef<HTMLSpanElement>(null);
@@ -340,6 +347,59 @@ export function ClassementEnDirect(p: {
 		if (await agir(() => toujours.ecarter(c, p.session))) setJamaisIci((j) => (j.includes(c) ? j : [...j, c]));
 		else focusApres.current = null;
 	};
+	/** Écarter une fiche trouvée : elle reste parmi les résultats, marquée ; le focus passe au résultat voisin (ou au champ). */
+	const ecarterTrouvee = async (c: string, pourToujours: boolean) => {
+		const resultats = [...(liste.current?.querySelectorAll<HTMLLIElement>('li[data-trouvee]') ?? [])];
+		const i = resultats.findIndex((li) => li.dataset['id'] === c);
+		const voisin = resultats[i + 1] ?? resultats[i - 1];
+		const ok = pourToujours ? await agir(() => toujours.ecarter(c, p.session)) : await agir(() => ecarter(c));
+		if (!ok) return;
+		if (pourToujours) setJamaisIci((j) => (j.includes(c) ? j : [...j, c]));
+		focusTrouvee.current = voisin?.dataset['id'] ?? '';
+		setEcartsTrouvees((n) => n + 1);
+	};
+	useEffect(() => {
+		const cible = focusTrouvee.current;
+		if (cible === null) return;
+		focusTrouvee.current = null;
+		const ol = liste.current;
+		const li = [...(ol?.querySelectorAll<HTMLLIElement>('li[data-trouvee]') ?? [])].find((x) => x.dataset['id'] === cible);
+		(li?.querySelector<HTMLButtonElement>('button') ?? ol?.querySelector<HTMLInputElement>('input[type="search"]'))?.focus();
+	}, [ecartsTrouvees]);
+	const ouvrirRecherche = () => {
+		if (rechercheOuverte) {
+			// déjà ouverte : le champ reprend le focus
+			liste.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+			return;
+		}
+		setRechercheOuverte(true);
+	};
+	const fermerRecherche = () => {
+		setTexteCherche('');
+		setRechercheOuverte(false);
+		loupe.current?.focus();
+	};
+	/** `/` dans le panneau (hors champ, terminal et modificateurs) ouvre la recherche ; ↑/↓ parcourent les résultats, Échap revient au champ. */
+	const clavier = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+		if (!p.modifiable) return;
+		if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && origineDeLaTouche(e.target) === 'page') {
+			e.preventDefault();
+			ouvrirRecherche();
+			return;
+		}
+		const li = e.target instanceof Element ? e.target.closest<HTMLLIElement>('li[data-trouvee]') : null;
+		if (li === null || !['ArrowDown', 'ArrowUp', 'Escape'].includes(e.key)) return;
+		// un menu d'écart ouvert garde ses touches
+		if (e.target instanceof Element && e.target.closest('[role="menu"]')) return;
+		const champ = liste.current?.querySelector<HTMLInputElement>('input[type="search"]');
+		const resultats = [...(liste.current?.querySelectorAll<HTMLLIElement>('li[data-trouvee]') ?? [])];
+		const i = resultats.indexOf(li);
+		const cible = e.key === 'Escape' ? null : e.key === 'ArrowDown' ? resultats[i + 1] : resultats[i - 1];
+		e.preventDefault();
+		e.stopPropagation();
+		if (cible) cible.querySelector<HTMLButtonElement>('button')?.focus();
+		else if (e.key !== 'ArrowDown') champ?.focus();
+	};
 	const demarrer = () => void agir(modeles.demarrer).then((ok) => ok && setDemarrage({ pour: cle }));
 	const refFiche = (id: string) => (el: HTMLLIElement | null) => {
 		if (el) elements.current.set(id, el);
@@ -357,7 +417,7 @@ export function ClassementEnDirect(p: {
 	};
 
 	/** ➤ (sauf une fiche déjà injectée) et ✗, le menu d'écart : pour cette session, ou pour toujours. */
-	const gestes = (o: { id: string; titre: string; ecartableIci: boolean; motifIci: string; resume: string; injecter: boolean }): ReactNode => {
+	const gestes = (o: { id: string; titre: string; ecartableIci: boolean; motifIci: string; resume: string; injecter: boolean; trouvee?: boolean }): ReactNode => {
 		if (!p.modifiable) return null;
 		const c = chemin(o.id);
 		const attend = aServir.chemins.includes(c);
@@ -396,7 +456,7 @@ export function ClassementEnDirect(p: {
 								desactive={!o.ecartableIci}
 								surChoix={() => {
 									fermer();
-									void ecarterIci(o.id);
+									void (o.trouvee ? ecarterTrouvee(o.id, false) : ecarterIci(o.id));
 								}}
 							/>
 							<ItemMenu
@@ -404,7 +464,7 @@ export function ClassementEnDirect(p: {
 								detail="Dans aucune session, ni par Mnemo ni en piste. Se rétablit depuis la fiche, page Mémoire."
 								surChoix={() => {
 									fermer();
-									void ecarterToujours(o.id);
+									void (o.trouvee ? ecarterTrouvee(o.id, true) : ecarterToujours(o.id));
 								}}
 							/>
 						</>
@@ -531,13 +591,34 @@ export function ClassementEnDirect(p: {
 		);
 	};
 
-	/** Une fiche trouvée par la recherche : sans % ; déjà injectée, ◆ et pas de ➤. */
+	/** ➤ seul : une fiche trouvée déjà écartée s'injecte encore à la main, sans ✗ (elle l'est déjà). */
+	const gestesSansEcart = (c: string, t: string): ReactNode => {
+		const attend = aServir.chemins.includes(c);
+		return (
+			<span className={s.gestes} data-force={attend ? 'true' : undefined}>
+				<button
+					type="button"
+					className={`${s.croix} ${s.servir}`}
+					aria-pressed={attend}
+					aria-label={`Injecter ${t} dans la session`}
+					title={attend ? 'Sera injectée au prochain message de la session ; cliquer pour annuler' : 'Injecter dans la session : la fiche entière, au prochain message'}
+					onClick={() => void agir(() => (attend ? aServir.annuler(c) : aServir.servir(c)))}
+				>
+					➤
+				</button>
+			</span>
+		);
+	};
+
+	/** Une fiche trouvée par la recherche : sans % ; déjà injectée, ◆ et pas de ➤ ; écartée, dit, sans ✗. */
 	const ligneTrouvee = (f: FicheTrouvee): ReactNode => {
 		const c = f.chemin;
 		const injectee = injectees.has(c);
 		const attend = aServir.chemins.includes(c);
 		const t = titres.get(c) ?? f.titre;
-		const quoi = injectee ? 'déjà injectée dans la session' : attend ? null : 'trouvée par la recherche';
+		const jamaisSuggeree = jamais.has(c);
+		const ecarteeIci = !jamaisSuggeree && estEcarte(c, idsEcartes);
+		const quoi = injectee ? 'déjà injectée dans la session' : attend ? null : jamaisSuggeree ? 'plus jamais suggérée' : ecarteeIci ? 'écartée de cette session' : 'trouvée par la recherche';
 		return (
 			<li key={`trouvee:${c}`} className={s.ligne} data-id={c} data-trouvee="true" data-servie={injectee ? 'true' : 'false'} style={{ '--c': p.couleur(c) } as CSSProperties}>
 				<span className={`${s.note} ${s.injectee}`} role={injectee ? 'img' : undefined} aria-label={injectee ? 'Injectée dans la session' : undefined} title={injectee ? 'Déjà injectée dans la session' : undefined}>
@@ -551,14 +632,17 @@ export function ClassementEnDirect(p: {
 					<span className={s.sous}>{quoi === null ? <span className={s.attend}>injectée au prochain message</span> : quoi}</span>
 				</span>
 				{!injectee &&
-					gestes({
+					(jamaisSuggeree || ecarteeIci
+						? gestesSansEcart(c, t)
+						: gestes({
 						id: c,
 						titre: t,
 						ecartableIci: classees.some((l) => chemin(l.id) === c),
 						motifIci: "Indisponible : trouvée par la recherche, Mnemo ne l'a pas proposée à ce message.",
 						resume: 'trouvée par la recherche',
 						injecter: true,
-					})}
+						trouvee: true,
+					}))}
 			</li>
 		);
 	};
@@ -586,13 +670,14 @@ export function ClassementEnDirect(p: {
 	const libelleNiveau = (n: CoupureInjectionVue['niveau']) => (n === 'complets' ? 'modèles complets' : 'sens seul');
 
 	return (
-		<div className={s.classement}>
+		<div className={s.classement} onKeyDown={clavier}>
 			<div className={s.enteteClassement}>
 				<span className={s.lbl} id={`classement-${p.session}`} ref={titreSection} tabIndex={-1}>
 					Injecté dans la session
 				</span>
 				{p.modifiable ? (
-					<span className={s.aDroite}>
+					<span className={cx(s.aDroite, s.outils)}>
+						<BoutonLoupe ouverte={rechercheOuverte} texte={texteCherche} bouton={loupe} surClic={() => (rechercheOuverte ? fermerRecherche() : ouvrirRecherche())} />
 						<ModelesSession session={p.session} niveau={niveauPropre} classement={etatClassement} />
 					</span>
 				) : (
@@ -603,7 +688,7 @@ export function ClassementEnDirect(p: {
 					)
 				)}
 			</div>
-			{ordreServies.length + enLice.length === 0 && !jonctionVisible && !p.modifiable ? (
+			{ordreServies.length + enLice.length === 0 && !jonctionVisible && !(p.modifiable && rechercheOuverte) ? (
 				<p className={s.mu}>Aucune fiche pour l’instant.</p>
 			) : (
 				<ol className={s.liste} aria-label="Injecté dans la session" ref={liste}>
@@ -637,14 +722,9 @@ export function ClassementEnDirect(p: {
 							)}
 						</li>
 					)}
-					{p.modifiable && <RechercheFiche texte={texteCherche} surTexte={(texte) => setRecherche({ session: p.session, texte })} rendreTrouvee={ligneTrouvee} />}
+					{p.modifiable && rechercheOuverte && <RechercheFiche texte={texteCherche} surTexte={setTexteCherche} surFermer={fermerRecherche} rendreTrouvee={ligneTrouvee} />}
 					{!enRecherche && (
 						<>
-							{ordreServies.length + enLice.length === 0 && !jonctionVisible && (
-								<li key="vide" className={s.mu} role="presentation">
-									Aucune fiche pour l’instant.
-								</li>
-							)}
 							{lignesClassees}
 							{classees.length > 0 && plusTot.length > 0 && (
 								<li key="plus-tot" className={s.intertitre} role="presentation">

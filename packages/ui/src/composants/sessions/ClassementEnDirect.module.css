@@ -1,6 +1,7 @@
 /* « Injecté dans la session » (panneau Contexte), le classement vivant : ◆ injectées (et comment), un seul séparateur (filet,
    ou seuil d'injection quand elle est active), puis le classement du message (%, ≈ % gris ou ◇ en ordre seul, raison et
-   « piste » dessous) — ou, pendant une recherche (`RechercheFiche`, sous la jonction), les fiches trouvées —, « Plus tôt dans la session » ; au survol, ➤ et ✗ (menu d'écart). Puis la suggestion des 3 sessions,
+   « piste » dessous) — ou, pendant une recherche (loupe du titre, `RechercheFiche` sous la jonction), les fiches trouvées —,
+   « Plus tôt dans la session » ; au survol, ➤ et ✗ (menu d'écart). Puis la suggestion des 3 sessions,
    « Sous le seuil (N) », « Écartées (N) ». */
 .classement {
 	margin-top: 18px;
@@ -30,15 +31,17 @@
 	min-width: 0;
 }
 
+/* la loupe de la recherche, puis le bouton des modèles */
+.outils {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
 .mu {
 	color: var(--mu);
 }
 
-/* session vivante sans fiche : le mot sous le champ de recherche */
-.liste > .mu {
-	padding: 4px 4px 0;
-	font-size: 12.5px;
-}
 
 .liste {
 	position: relative;

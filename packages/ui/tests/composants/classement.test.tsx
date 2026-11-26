@@ -231,7 +231,7 @@ describe('ClassementEnDirect : classement vivant', () => {
 		monter({ entrees: [entree(A(14, 34), [v('b.md', 'Bêta', 1, 0.95), v('c.md', 'Gamma', 2, 0.92), v('d.md', 'Delta', 3, 0.5)], { ids: [POSITION] })] });
 		await act(async () => {});
 		const items = [...liste().children].map((li) => li.getAttribute('data-id') ?? li.textContent);
-		expect(items).toEqual([POSITION, 'seuil d’injection 90\u00a0%', 'Chercher une fiche à injecter', 'b.md', 'c.md', 'd.md']);
+		expect(items).toEqual([POSITION, 'seuil d’injection 90\u00a0%', 'b.md', 'c.md', 'd.md']);
 		expect(separateurs().map((x) => x.getAttribute('data-genre'))).toEqual(['seuil']);
 		expect(within(lignes()[1]!).getByRole('button', { name: 'Bêta' }).getAttribute('title')).toMatch(/Au-dessus du seuil sans être injectée/u);
 	});
@@ -250,15 +250,13 @@ describe('ClassementEnDirect : classement vivant', () => {
 	it('séparateur : sans fiche injectée, aucun (rien à séparer), injection active ou ordre seul ; jamais deux traits', async () => {
 		monter({ entrees: [entree(A(14, 34), [v('d.md', 'Delta', 1, 0.5), v('e.md', 'Epsilon', 2, 0.3)])] });
 		await act(async () => {});
-		// rien entre le champ de recherche, en tête, et la première fiche
-		expect(liste().children[1]!.getAttribute('data-id')).toBe('d.md');
+		expect(liste().firstElementChild!.getAttribute('data-id')).toBe('d.md');
 		expect(separateurs()).toHaveLength(0);
 		expect(screen.queryByText(/seuil d’injection/u)).toBeNull();
 		cleanup();
 		monter({ entrees: [entree(A(14, 34), [v('d.md', 'Delta', 1, null, { pNonCalibree: 0.5 })], { calibree: false })] });
 		await act(async () => {});
-		// rien entre le champ de recherche, en tête, et la première fiche
-		expect(liste().children[1]!.getAttribute('data-id')).toBe('d.md');
+		expect(liste().firstElementChild!.getAttribute('data-id')).toBe('d.md');
 		expect(separateurs()).toHaveLength(0);
 		cleanup();
 		// ordre seul avec une fiche injectée : le filet gris, sans texte
@@ -579,104 +577,180 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(screen.queryByRole('button', { name: 'Réactiver' })).toBeNull();
 	});
 
-	it('aucun classement : un mot sous le champ de recherche, aucune ligne', async () => {
+	it('aucun classement : un mot, pas de liste', async () => {
 		monter({ entrees: [] });
 		await act(async () => {});
-		expect(within(liste()).queryAllByRole('listitem')).toEqual([]);
-		expect(screen.getByRole('searchbox', { name: 'Chercher une fiche à injecter' })).toBeTruthy();
-		expect(screen.getByText('Aucune fiche pour l’instant.')).toBeTruthy();
-	});
-
-	it('aucun classement, session terminée : un mot, pas de liste', async () => {
-		monter({ entrees: [], modifiable: false });
-		await act(async () => {});
 		expect(screen.queryByRole('list', { name: 'Injecté dans la session' })).toBeNull();
-		expect(screen.queryByRole('searchbox')).toBeNull();
 		expect(screen.getByText('Aucune fiche pour l’instant.')).toBeTruthy();
 	});
 });
 
 describe('ClassementEnDirect : recherche ciblée de fiche', () => {
+	const loupe = () => screen.getByRole('button', { name: 'Chercher une fiche' });
 	const champ = () => screen.getByRole('searchbox', { name: 'Chercher une fiche à injecter' });
 	const taper = (texte: string) => act(async () => fireEvent.change(champ(), { target: { value: texte } }));
+	const touche = (cible: Element, key: string) => act(async () => fireEvent.keyDown(cible, { key }));
+	const resultats = () => within(liste()).getAllByRole('listitem').filter((l) => l.dataset['trouvee'] === 'true');
+	const ouvrir = async () => {
+		await act(async () => loupe().click());
+	};
+	const CLASSEMENT = [POSITION, 'g.md', 'b.md', 'd.md', 'e.md'];
+	/** Gamma ni injectée ni classée : les deux résultats de « zeta » ont ➤. */
+	const SANS_GAMMA = entree(A(14, 34), [v('b.md', 'Bêta', 1, 0.5)], { ids: [POSITION] });
 
-	it('le champ est juste sous la jonction ; sans fiche injectée, en tête du pas vu', async () => {
+	it('fermée par défaut : une loupe à droite du titre ; au clic, le champ s’ouvre juste sous la jonction, focus dedans', async () => {
 		monter();
 		await act(async () => {});
+		expect(screen.queryByRole('searchbox')).toBeNull();
+		expect(loupe().getAttribute('aria-expanded')).toBe('false');
+		await ouvrir();
+		expect(loupe().getAttribute('aria-expanded')).toBe('true');
+		expect(document.activeElement).toBe(champ());
 		const enfants = [...liste().children];
 		const jonction = enfants.findIndex((e) => e.querySelector('[data-genre]') !== null);
-		expect(jonction).toBeGreaterThanOrEqual(0);
 		expect(enfants[jonction + 1]?.contains(champ())).toBe(true);
 		expect(enfants[jonction + 2]?.getAttribute('data-id')).toBe('b.md');
-		cleanup();
+		// la zone d'état est montée, vide, avant toute recherche
+		expect(within(liste()).getByRole('status').textContent).toBe('');
+	});
 
+	it('sans fiche injectée, le champ s’ouvre en tête du pas vu ; « / » dans le panneau l’ouvre aussi', async () => {
 		monter({ entrees: [entree(A(14, 34), [v('b.md', 'Bêta', 1, 0.5)])] });
 		await act(async () => {});
+		await touche(within(liste()).getByRole('button', { name: 'Bêta' }), '/');
 		expect(separateurs()).toEqual([]);
 		expect(liste().firstElementChild?.contains(champ())).toBe(true);
+		expect(document.activeElement).toBe(champ());
 		expect(titres()).toEqual(['b.md']);
 	});
 
-	it('taper remplace le classement par les fiches trouvées (une ligne par fiche, sans %) ; une fiche déjà injectée : ◆, sans ➤', async () => {
+	it('taper remplace la liste du bas (les ◆ restent) par les fiches trouvées, sans % ; une fiche déjà injectée : ◆, sans ➤ ; clé de remplacement `fiche`', async () => {
 		const { faux } = monter();
 		await act(async () => {});
+		await ouvrir();
 		await taper('zeta');
 		await screen.findByText('Zêta');
+		await act(async () => new Promise((r) => setTimeout(r, 400)));
 		expect(titres()).toEqual([POSITION, 'g.md', 'z.md', 'g.md']);
-		const appel = faux.api.lire.mock.calls.find(([chemin]) => chemin === '/api/recherche');
-		expect(appel?.[1]).toMatchObject({ q: 'zeta', genre: 'fiche' });
-		const [zeta, gamma] = within(liste()).getAllByRole('listitem').filter((l) => l.dataset['trouvee'] === 'true') as [HTMLElement, HTMLElement];
+		const appels = faux.api.lire.mock.calls.filter(([chemin]) => chemin === '/api/recherche');
+		expect(appels.map(([, params]) => params)).toEqual([expect.objectContaining({ q: 'zeta', genre: 'fiche', rapide: '1' }), expect.objectContaining({ q: 'zeta', genre: 'fiche' })]);
+		expect(appels.map(([, , options]) => (options as { remplacement?: string } | undefined)?.remplacement)).toEqual([undefined, 'fiche']);
+		const [zeta, gamma] = resultats() as [HTMLElement, HTMLElement];
 		expect(note(zeta)).toBe('');
 		expect(within(zeta).getByRole('button', { name: 'Injecter Zêta dans la session' })).toBeTruthy();
 		expect(note(gamma)).toBe('◆');
 		expect(gamma.textContent).toContain('déjà injectée');
 		expect(within(gamma).queryByRole('button', { name: /^Injecter/u })).toBeNull();
 		expect(within(liste()).getByRole('status').textContent).toBe('2 fiches');
+		expect(loupe().dataset['allumee']).toBe('true');
+	});
+
+	it('pendant la recherche d’un texte changé, les résultats précédents restent estompés (`data-perimees`) ; jamais après une erreur', async () => {
+		monter();
+		await act(async () => {});
+		await ouvrir();
+		await taper('zeta');
+		await screen.findByText('Zêta');
+		await taper('zetas');
+		const li = champ().closest('li')!;
+		expect(li.dataset['perimees']).toBe('true');
+		expect(resultats()).toHaveLength(2);
+		expect(await screen.findByText('Aucune fiche pour « zetas »')).toBeTruthy();
+		expect(li.dataset['perimees']).toBeUndefined();
+		// après une erreur, plus rien de périmé : un nouveau texte ne fait pas revenir les résultats d'avant
+		await taper('zeta');
+		await screen.findByText('Zêta');
+		await taper('panne');
+		expect(await screen.findByText(/Recherche impossible : Service injoignable/u)).toBeTruthy();
+		await taper('pannes');
+		expect(resultats()).toEqual([]);
+		expect(champ().closest('li')!.dataset['perimees']).toBeUndefined();
 	});
 
 	it('➤ sur un résultat injecte la fiche ; un clic sur le titre l’ouvre', async () => {
-		const { faux, ouvrir } = monter();
+		const { faux, ouvrir: ouvrirFiche } = monter();
 		await act(async () => {});
+		await ouvrir();
 		await taper('zeta');
 		await screen.findByText('Zêta');
 		await act(async () => screen.getByRole('button', { name: 'Injecter Zêta dans la session' }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions/s1/a-servir', { chemin: 'z.md' });
 		expect(await screen.findByText('injectée au prochain message')).toBeTruthy();
 		await act(async () => screen.getByText('Zêta').click());
-		expect(ouvrir).toHaveBeenCalledWith('z.md');
+		expect(ouvrirFiche).toHaveBeenCalledWith('z.md');
 	});
 
-	it('Échap vide le champ et rend le classement ; la croix aussi', async () => {
-		monter();
+	it('↓ va au premier résultat, ↑/↓ les parcourent, ↑ depuis le premier revient au champ ; Échap sur un résultat aussi', async () => {
+		monter({ entrees: [SANS_GAMMA] });
 		await act(async () => {});
+		await ouvrir();
 		await taper('zeta');
 		await screen.findByText('Zêta');
-		await act(async () => fireEvent.keyDown(champ(), { key: 'Escape' }));
+		await touche(champ(), 'ArrowDown');
+		expect(document.activeElement?.textContent).toBe('Zêta');
+		await touche(document.activeElement!, 'ArrowDown');
+		expect(document.activeElement?.textContent).toBe('Gamma');
+		await touche(document.activeElement!, 'ArrowUp');
+		expect(document.activeElement?.textContent).toBe('Zêta');
+		await touche(document.activeElement!, 'ArrowUp');
+		expect(document.activeElement).toBe(champ());
+		await touche(champ(), 'ArrowDown');
+		await touche(document.activeElement!, 'Escape');
+		expect(document.activeElement).toBe(champ());
+		expect((champ() as HTMLInputElement).value).toBe('zeta');
+	});
+
+	it('Échap en deux temps : vide le champ (le classement revient), puis le referme et rend le focus à la loupe ; la croix vide aussi', async () => {
+		monter();
+		await act(async () => {});
+		await ouvrir();
+		await taper('zeta');
+		await screen.findByText('Zêta');
+		await touche(champ(), 'Escape');
 		expect((champ() as HTMLInputElement).value).toBe('');
-		expect(titres()).toEqual([POSITION, 'g.md', 'b.md', 'd.md', 'e.md']);
+		expect(titres()).toEqual(CLASSEMENT);
+		expect(loupe().dataset['allumee']).toBeUndefined();
+		await touche(champ(), 'Escape');
+		expect(screen.queryByRole('searchbox')).toBeNull();
+		expect(document.activeElement).toBe(loupe());
+		expect(loupe().getAttribute('aria-expanded')).toBe('false');
+		await ouvrir();
 		await taper('zeta');
 		await screen.findByText('Zêta');
 		await act(async () => screen.getByRole('button', { name: 'Effacer la recherche' }).click());
-		expect(titres()).toEqual([POSITION, 'g.md', 'b.md', 'd.md', 'e.md']);
+		expect(titres()).toEqual(CLASSEMENT);
 		expect(document.activeElement).toBe(champ());
 	});
 
-	it('↓ va au premier résultat', async () => {
-		monter();
+	it('✗ sur un résultat : la fiche reste, marquée, sans ✗ ; le focus passe au résultat voisin', async () => {
+		const { faux } = monter({ entrees: [SANS_GAMMA] });
 		await act(async () => {});
+		await ouvrir();
 		await taper('zeta');
 		await screen.findByText('Zêta');
-		await act(async () => fireEvent.keyDown(champ(), { key: 'ArrowDown' }));
-		expect(document.activeElement?.textContent).toBe('Zêta');
+		const [zeta] = resultats() as [HTMLElement];
+		await act(async () => within(zeta).getByRole('button', { name: 'Écarter Zêta' }).click());
+		await act(async () => screen.getByRole('menuitem', { name: /Ne plus jamais suggérer/u }).click());
+		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/ecartees-toujours', expect.objectContaining({ chemin: 'z.md' }));
+		const [apres] = resultats() as [HTMLElement];
+		expect(apres.textContent).toContain('plus jamais suggérée');
+		expect(within(apres).queryByRole('button', { name: 'Écarter Zêta' })).toBeNull();
+		expect(within(apres).getByRole('button', { name: 'Injecter Zêta dans la session' })).toBeTruthy();
+		expect(document.activeElement?.textContent).toBe('Gamma');
 	});
 
-	it('aucun résultat, puis une erreur : dit à la place du classement', async () => {
+	it('aucun résultat : dit à la place de la liste du bas', async () => {
 		monter();
 		await act(async () => {});
+		await ouvrir();
 		await taper('rien');
 		expect(await screen.findByText('Aucune fiche pour « rien »')).toBeTruthy();
 		expect(titres()).toEqual([POSITION, 'g.md']);
-		await taper('panne');
-		expect(await screen.findByText(/Recherche impossible : Service injoignable/u)).toBeTruthy();
+	});
+
+	it('session terminée : pas de loupe', async () => {
+		monter({ modifiable: false });
+		await act(async () => {});
+		expect(screen.queryByRole('button', { name: 'Chercher une fiche' })).toBeNull();
 	});
 });
