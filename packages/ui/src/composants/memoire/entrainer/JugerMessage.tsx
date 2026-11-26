@@ -7,7 +7,8 @@
  * écran : le message rétabli se rouvre), « Retour » (Échap). Après la dernière réponse : « Tout est jugé » et le retour à la
  * page, qui propose alors d'apprendre. Un refus du service (409, réseau) est dit à côté de son geste.
  *
- * Clavier, seulement quand la vue Mémoire est affichée et hors d'un champ de saisie ou d'un terminal : ↑/↓ change de fiche
+ * Clavier, seulement quand la vue Mémoire est affichée, le focus sur l'écran ou nulle part (pas dans la palette, une modale,
+ * le tiroir de l'archiviste) et hors d'un champ de saisie ou d'un terminal : ↑/↓ change de fiche
  * (le focus va sur son choix), o / n / i la juge et passe à la suivante, Entrée valide (sauf sur un bouton, un lien ou un
  * résumé, qui gardent leur Entrée), Échap revient à la page (sauf si la palette ou le tiroir de l'archiviste l'ont prise).
  */
@@ -72,6 +73,7 @@ export function JugerMessage(p: { surFermer(): void }): ReactNode {
 	const poignee = useRef<Poignee | null>(null);
 	const fermer = useRef(p.surFermer);
 	fermer.current = p.surFermer;
+	const ecran = useRef<HTMLElement>(null);
 	const visible = nav.vue === 'memoire';
 	const { paletteOuverte, tiroirOuvert } = nav;
 	useEffect(() => {
@@ -79,6 +81,9 @@ export function JugerMessage(p: { surFermer(): void }): ReactNode {
 		const surTouche = (e: KeyboardEvent) => {
 			if (e.defaultPrevented || e.isComposing || e.altKey || e.metaKey || e.ctrlKey) return;
 			if (origineDeLaTouche(e.target) !== 'page') return;
+			// le focus ailleurs que sur l'écran (palette, modale, tiroir, onglets…) : la touche n'est pas pour lui
+			const cible = e.target;
+			if (cible instanceof Node && cible !== document.body && cible !== document.documentElement && cible !== document && !ecran.current?.contains(cible)) return;
 			if (e.key === 'Escape') {
 				// la palette ou le tiroir de l'archiviste prennent Échap d'abord (raccourcis de l'application)
 				if (paletteOuverte || tiroirOuvert) return;
@@ -94,7 +99,7 @@ export function JugerMessage(p: { surFermer(): void }): ReactNode {
 
 	const titre = !fin ? 'Juger' : faits > 0 ? 'Tout est jugé' : 'Rien à juger';
 	return (
-		<section className={s.juger} aria-labelledby={`${id}-titre`}>
+		<section ref={ecran} className={s.juger} aria-labelledby={`${id}-titre`}>
 			<div className={s.tete}>
 				<h3 id={`${id}-titre`} className={s.titre}>
 					{titre}
@@ -173,13 +178,22 @@ function MessageAJuger(p: { m: VueMessageAJuger; inerte: boolean; geste: Geste; 
 	// la première fiche prend le focus quand le message est prêt, une fois (la clé du composant change avec le message) : on
 	// juge au clavier sans viser
 	const focusDonne = useRef(false);
+	// démonté (fin) : ses touches ne valent plus, Entrée ne renverrait pas un message déjà répondu ; le message suivant, monté
+	// avant ce nettoyage, garde la sienne
+	const mienne = useRef<Poignee | null>(null);
+	useEffect(() => {
+		const poignee = p.poignee;
+		return () => {
+			if (poignee.current === mienne.current) poignee.current = null;
+		};
+	}, [p.poignee]);
 	useEffect(() => {
 		if (p.inerte || focusDonne.current) return;
 		focusDonne.current = true;
 		allerA(0);
 	});
 
-	p.poignee.current = (e) => {
+	mienne.current = p.poignee.current = (e) => {
 		if (p.inerte) return;
 		const n = m.candidates.length;
 		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {

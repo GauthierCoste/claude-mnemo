@@ -4,9 +4,10 @@
  * « Relire (n) » ouvre l'écran de jugement ; « Accepter les sûres » s'il y a des propositions à relire, annulable ;
  * « Pré-juger avec Claude », son coût dit avant : un appel par message). 3. Apprendre. Un geste indisponible est grisé avec sa
  * raison sous lui (pendant une tâche : le bandeau de la tâche). Un refus du service s'affiche dans la carte de son geste.
+ * `focusAuRetour` (retour de l'écran de jugement) : le focus va au bouton principal de l'étape utile.
  */
 import type { VueEntrainement } from '@mnemo/contrat';
-import { useId, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { useActionsEntrainement } from '../../../client/hooks.ts';
 import { accorder, etapeUtile, MESSAGES_CONSEILLES, NOMBRE_A_PREPARER, PREPARER_MAX, type Etape } from '../../../memoire/entrainement.ts';
 import { Bouton } from '../../commun/Bouton.tsx';
@@ -16,7 +17,7 @@ import s from './Entrainer.module.css';
 import { useGeste, type Geste } from './useGeste.ts';
 
 /** `idTache` : l'élément qui nomme la tâche en cours (raison des gestes indisponibles), null sans tâche. */
-export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | null; surJuger(): void }): ReactNode {
+export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | null; focusAuRetour?: boolean; surJuger(): void }): ReactNode {
 	const v = p.vue;
 	const b = v.banc;
 	const actions = useActionsEntrainement();
@@ -25,12 +26,19 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 	const utile = etapeUtile(v);
 	const [nombre, setNombre] = useState(String(NOMBRE_A_PREPARER));
 	const [acceptes, setAcceptes] = useState<number | null>(null);
+	const liste = useRef<HTMLOListElement>(null);
+	// au retour de l'écran de jugement, le focus ne se perd pas : il va au geste qui suit (une fois, au montage)
+	const focusAuRetour = useRef(p.focusAuRetour === true);
+	useEffect(() => {
+		if (focusAuRetour.current) liste.current?.querySelector<HTMLElement>('[data-principal]')?.focus();
+	}, []);
 
 	const n = Number(nombre);
 	const nombreValide = Number.isInteger(n) && n >= 1 && n <= PREPARER_MAX;
 	// pendant une tâche, les gestes qui en lancent une attendent ; leur raison est le bandeau de la tâche
 	const occupe = p.idTache !== null ? { raison: p.idTache } : false;
 	const genre = (etape: Etape) => (utile === etape ? 'primaire' : 'normal');
+	const principal = (etape: Etape) => (utile === etape ? { 'data-principal': true } : {});
 	const libelle = (nom: string, texte: string) => (geste.enCours === nom ? <span className={r.reflet}>{texte}</span> : texte);
 
 	const preparer = (e: FormEvent) => {
@@ -56,7 +64,7 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 	const raisonApprendre = b.paires === 0 ? 'Aucun jugement validé : juge des messages d’abord.' : null;
 
 	return (
-		<ol className={s.etapes} aria-label="Étapes de l’entraînement">
+		<ol ref={liste} className={s.etapes} aria-label="Étapes de l’entraînement">
 			<li className={s.etape} data-utile={utile === 1 || undefined} aria-current={utile === 1 ? 'step' : undefined}>
 				<TitreEtape numero={1} titre="Préparer des messages" />
 				<p className={s.aide}>Tirés de tes dernières sessions, avec les fiches que Mnemo aurait proposées.</p>
@@ -78,7 +86,7 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 						/>
 						<span>messages</span>
 					</label>
-					<Bouton type="submit" genre={genre(1)} className={s.cible} indisponible={occupe} title={occupe ? 'Une tâche est en cours' : undefined}>
+					<Bouton type="submit" genre={genre(1)} {...principal(1)} className={s.cible} indisponible={occupe} title={occupe ? 'Une tâche est en cours' : undefined}>
 						{libelle('preparer', 'Préparer')}
 					</Bouton>
 				</form>
@@ -97,7 +105,7 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 					{b.aRelire > 0 && <span className={s.discret}>{`, dont ${b.aRelire} pré-jugés par Claude, à relire`}</span>}
 				</p>
 				<div className={s.gestes}>
-					<Bouton genre={genre(2)} className={s.cible} indisponible={raisonJuger !== null && { raison: `${id}-juger` }} onClick={p.surJuger}>
+					<Bouton genre={genre(2)} {...principal(2)} className={s.cible} indisponible={raisonJuger !== null && { raison: `${id}-juger` }} onClick={p.surJuger}>
 						{b.aRelire > 0 ? `Relire (${b.aRelire})` : 'Juger'}
 					</Bouton>
 					{b.aRelire > 0 && (
@@ -150,6 +158,7 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 				<div className={s.gestes}>
 					<Bouton
 						genre={genre(3)}
+						{...principal(3)}
 						className={s.cible}
 						indisponible={raisonApprendre !== null ? { raison: `${id}-apprendre` } : occupe}
 						title={occupe && raisonApprendre === null ? 'Une tâche est en cours' : undefined}

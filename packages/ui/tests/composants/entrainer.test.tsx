@@ -275,6 +275,29 @@ describe('Mémoire › Entraîner', () => {
 		expect(await screen.findByRole('heading', { name: 'Rien à juger' })).toBeTruthy();
 		act(() => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
 		expect(await screen.findByRole('heading', { name: 'Note de confiance' })).toBeTruthy();
+		// le focus revient au geste principal de l'étape utile
+		await waitFor(() => expect(document.activeElement).toBe(within(screen.getByRole('list', { name: 'Étapes de l’entraînement' })).getByRole('button', { name: 'Juger' })));
+	});
+
+	it('retour de l’écran de jugement quand tout est jugé : le focus sur « Apprendre la note »', async () => {
+		// un message à juger ; une fois répondu, tout est jugé : l'étape utile devient « Apprendre »
+		let etat = vue({ banc: { messages: 2, valides: 1, aJuger: 1, paires: 3 } });
+		const message = { indice: 1, message: 'Message fictif', precedent: null, candidates: [{ chemin: 'a.md', titre: 'a', ligne: '', synthese: '', proposition: null, jugement: null }], valide: false, silence: false, saute: false, aRelire: false, restants: 1 };
+		monter(etat, {
+			[ROUTES.entrainement]: () => etat,
+			[ROUTES.entrainementMessage]: (_params: unknown, corps: unknown) => {
+				if (corps === undefined) return { message };
+				etat = vue({ banc: { messages: 2, valides: 2, aJuger: 0, paires: 4 } });
+				return { suivant: null };
+			},
+		});
+		const juger = within(await etape(/Juger/)).getByRole('button', { name: 'Juger' });
+		await act(async () => juger.click());
+		const valider = await screen.findByRole('button', { name: 'Valider' });
+		await act(async () => valider.click());
+		const revenir = await screen.findByRole('button', { name: 'Revenir à l’entraînement' });
+		await act(async () => revenir.click());
+		await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Apprendre la note' })));
 	});
 });
 

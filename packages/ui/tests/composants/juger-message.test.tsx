@@ -178,6 +178,41 @@ describe('écran de jugement', () => {
 		champ.remove();
 	});
 
+	it('clavier : rien n’est pris quand le focus est hors de l’écran (palette, modale, tiroir) ; Échap non plus', async () => {
+		const { surFermer } = monter();
+		await screen.findByText('Message fictif 0');
+		const palette = document.createElement('div');
+		palette.setAttribute('role', 'dialog');
+		const bouton = document.createElement('button');
+		palette.append(bouton);
+		document.body.append(palette);
+		touche('o', bouton);
+		touche('Enter', palette);
+		touche('Escape', palette);
+		expect(coche('a')).toBeNull();
+		expect(surFermer).not.toHaveBeenCalled();
+		palette.remove();
+		// sans focus (sur la page) : pris
+		touche('o', document.body);
+		expect(coche('a')).toBe('pertinente');
+	});
+
+	it('double Entrée : un seul envoi ; à la fin, Entrée ne renvoie pas le message déjà répondu', async () => {
+		const { faux } = monter({ repondre: () => null });
+		await screen.findByText('Message fictif 0');
+		await waitFor(() => expect(fiches()[0]!.contains(document.activeElement)).toBe(true));
+		const radio = document.activeElement!;
+		await act(async () => {
+			radio.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+			radio.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+		});
+		expect(await screen.findByRole('heading', { name: 'Tout est jugé' })).toBeTruthy();
+		touche('Enter', document.body);
+		touche('o', document.body);
+		await act(async () => {});
+		expect(envois(faux)).toHaveLength(1);
+	});
+
 	it('« Rien d’utile ici » : indisponible si une fiche est marquée Utile ; refusé par le service (409), dit à côté de l’action', async () => {
 		const { faux } = monter({
 			repondre: (d) => {

@@ -2,7 +2,8 @@
  * Mémoire › Entraîner : entraîner sa note de confiance (spec « entraîner la note »). De haut en bas : l'état de la note
  * (`EnteteNote`), la tâche en cours (`TacheEntrainement`), l'erreur de la dernière tâche, les trois étapes
  * (`EtapesEntrainement`), le dernier apprentissage (`ResultatApprentissage`) et l'historique ; les deux derniers seulement
- * s'il y en a. « Juger » ouvre l'écran de jugement à la place, dans la page.
+ * s'il y en a. « Juger » ouvre l'écran de jugement à la place, dans la page ; au retour, le focus va au bouton principal de
+ * l'étape utile (« Apprendre la note » quand c'est elle).
  */
 import { useId, useState, type ReactNode } from 'react';
 import { useEntrainement } from '../../../client/hooks.ts';
@@ -19,6 +20,8 @@ export function Entrainer(): ReactNode {
 	const ressource = useEntrainement();
 	const v = ressource.donnees;
 	const [jugement, setJugement] = useState(false);
+	// revenu de l'écran de jugement : le focus va au geste principal de l'étape utile (sinon il tomberait sur la page)
+	const [revenu, setRevenu] = useState(false);
 	const idTache = useId();
 
 	if (v === undefined) {
@@ -43,7 +46,12 @@ export function Entrainer(): ReactNode {
 		<div className={s.page}>
 			<div className={s.colonne}>
 				{jugement ? (
-					<JugerMessage surFermer={() => setJugement(false)} />
+					<JugerMessage
+						surFermer={() => {
+							setJugement(false);
+							setRevenu(true);
+						}}
+					/>
 				) : (
 					<>
 						<EnteteNote vue={v} />
@@ -53,7 +61,7 @@ export function Entrainer(): ReactNode {
 								<span className={s.titreErreur}>La dernière tâche a échoué.</span> {v.derniereErreur}
 							</p>
 						)}
-						<EtapesEntrainement vue={v} idTache={v.tache !== null ? idTache : null} surJuger={() => setJugement(true)} />
+						<EtapesEntrainement vue={v} idTache={v.tache !== null ? idTache : null} focusAuRetour={revenu} surJuger={() => setJugement(true)} />
 						{v.resultat !== null && <ResultatApprentissage resultat={v.resultat} />}
 						{v.historique.length > 0 && <HistoriqueEntrainement lignes={v.historique} />}
 					</>
