@@ -1,7 +1,7 @@
 import { mkdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { apprendreAuBanc, ggufInstalles, verifierCheminDuModule } from '../../src/adaptateurs/cli/banc-apprendre.ts';
+import { apprendreAuBanc, ggufInstalles, rapportEnTexte, verifierCheminDuModule } from '../../src/adaptateurs/cli/banc-apprendre.ts';
 import type { CasContexte } from '../../src/application/banc-contexte.ts';
 import { jsonDeCoefficients, moduleDeCoefficients } from '../../src/domaine/modele-de-note.ts';
 import { GGUF_DE_TEST } from '../aides/banc-synthetique.ts';
@@ -45,6 +45,10 @@ describe('mnemo banc contexte --apprendre', () => {
 		const json = await readFile(join(racine, '.mnemo', 'apprentissage-note.json'), 'utf8');
 		expect(JSON.parse(json).messages).toBe(12);
 		expect(await readFile(join(racine, '.mnemo', 'apprentissage-note.txt'), 'utf8')).toBe(`${texte}\n`);
+		// paires implicites des gestes : dites seulement s'il y en a
+		expect(texte).not.toContain('paires implicites');
+		const avecImplicites = { ...rapport, niveaux: rapport.niveaux.map((n) => ({ ...n, implicites: { utilisees: 7, ecartees: 2 } })) };
+		expect(rapportEnTexte(avecImplicites, []).match(/paires implicites des gestes : 7 apprises, 2 laissées/gu)).toHaveLength(2);
 		for (const contenu of [ecrit, coefficients, json, texte]) {
 			expect(contenu).not.toContain('Atelier');
 			expect(contenu).not.toContain('Devis');

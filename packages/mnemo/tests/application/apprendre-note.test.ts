@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { apprendreModele, apprendreNote, choisirConfiguration, jeuDApprentissage, LAMBDAS, noterMessage, validationEmboitee } from '../../src/application/apprendre-note.ts';
+import type { Implicite } from '../../src/application/apprendre-note.ts';
 import type { CandidateAJuger, CasContexte, Jugement } from '../../src/application/banc-contexte.ts';
 import type { Signaux } from '../../src/application/banc-signaux.ts';
 import { banc, GGUF_DE_TEST, SCENARIOS } from '../aides/banc-synthetique.ts';
@@ -208,5 +209,54 @@ describe('apprendreNote', { timeout: 60_000 }, () => {
 		const rapport = apprendreNote(jeuDApprentissage(cas, null, INSTALLES), { date: DATE, graines: [1] });
 		expect(rapport.coefficients.complets).toMatchObject({ accepte: false, refus: ['aucune paire jugée pour ce niveau'], poids: {} });
 		expect(rapport.coefficients.sens.paires).toBeGreaterThan(0);
+	});
+});
+
+describe('paires implicites des gestes', { timeout: 60_000 }, () => {
+	/** Paires implicites d'une session : signal de session fort et utile, ou nul et pas utile. */
+	const implicites = (session: string, nombre: number, avecLogit = false): Implicite[] =>
+		Array.from({ length: nombre }, (_, i) => ({
+			session,
+			signaux: { cosinusRelatif: (i % 5) / 20, cosinusZ: 0, bm25Relatif: 0, signalSession: i % 2, ...(avecLogit ? { logit: i % 3 } : {}) },
+			y: i % 2 === 1,
+			poids: 1 + (i % 3),
+		}));
+	const sansSignalDeSession = () =>
+		banc(SCENARIOS.favorable, 5, 50, 12).map((c) => ({ ...c, candidates: c.candidates!.map((x) => ({ ...x, signaux: { seule: { ...x.signaux.seule!, signalSession: 0 } } })) }));
+
+	it('n’entrent que dans les plis d’apprentissage : jamais dans le modèle qui note leur propre session', () => {
+		const jeu = jeuDApprentissage(sansSignalDeSession(), null, INSTALLES);
+		const notes = (session: string, paires: readonly Implicite[]) =>
+			validationEmboitee(jeu, 'sens', 1, LAMBDAS, paires)
+				.notes.filter((n) => (session === 's000' ? n.session === 's000' : n.session !== 's000'))
+				.flatMap((n) => n.candidates.map((c) => c.p));
+		const de000 = implicites('s000', 60);
+		// les notes de s000 ignorent ses paires implicites ; celles des autres sessions les ont apprises
+		expect(notes('s000', de000)).toEqual(notes('s000', []));
+		expect(notes('autres', de000)).not.toEqual(notes('autres', []));
+		// une session absente du banc est toujours du côté de l'apprentissage
+		expect(notes('s000', implicites('hors-banc', 60))).not.toEqual(notes('s000', []));
+	});
+
+	it('modèle final appris avec elles ; rapport : utilisées et écartées par niveau (sans logit : Sens seul seulement)', () => {
+		const jeu = jeuDApprentissage(sansSignalDeSession(), null, INSTALLES);
+		const paires = [...implicites('hors-banc', 40), ...implicites('hors-banc-2', 10, true)];
+		const sans = apprendreNote(jeu, { date: DATE, graines: [1] });
+		const avec = apprendreNote(jeu, { date: DATE, graines: [1], implicites: paires });
+		expect(avec.coefficients.sens.poids.signalSession ?? 0).toBeGreaterThan(sans.coefficients.sens.poids.signalSession ?? 0);
+		expect(avec.niveaux.find((n) => n.niveau === 'sens')!.implicites).toEqual({ utilisees: 50, ecartees: 0 });
+		expect(avec.niveaux.find((n) => n.niveau === 'complets')!.implicites).toEqual({ utilisees: 10, ecartees: 40 });
+		expect(sans.niveaux.every((n) => n.implicites.utilisees === 0 && n.implicites.ecartees === 0)).toBe(true);
+		// les paires du banc et ses mesures restent celles du banc
+		expect(avec.coefficients.sens.paires).toBe(sans.coefficients.sens.paires);
+		expect(avec.paires).toEqual(sans.paires);
+	});
+
+	it('une paire sans la variable d’une configuration (z-score absent) est laissée', () => {
+		const jeu = jeuDApprentissage(banc(SCENARIOS.favorable, 3, 30, 8), null, INSTALLES);
+		const conf = { requete: 'jointe' as const, methode: 'zscore' as const, avecApriori: false, lambda: 0.001 };
+		const sansZ = implicites('hors-banc', 30).map(({ signaux: { cosinusZ: _z, ...s }, ...p }) => ({ ...p, signaux: s }));
+		expect(apprendreModele(jeu.messages, 'sens', conf, sansZ).r).toEqual(apprendreModele(jeu.messages, 'sens', conf).r);
+		expect(apprendreModele(jeu.messages, 'sens', conf, implicites('hors-banc', 30)).r).not.toEqual(apprendreModele(jeu.messages, 'sens', conf).r);
 	});
 });
