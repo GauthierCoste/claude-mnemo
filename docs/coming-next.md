@@ -63,6 +63,14 @@
   stays in « ordre seul » and nothing is injected automatically. Judge real messages (`mnemo banc contexte --extraire`,
   then `--juger`) until `--apprendre` accepts a model for each level, then check on real sessions that the thresholds
   (90 % to inject, 10 % for leads) and the watch of automatic injection hold; adjust them with the report if they do not.
+- **A confidence score that learns from use (later).** Today the weights of the score change only when `mnemo banc
+  contexte --apprendre` is run by hand, and the prior of the gestures enters the model only if it is non-zero on enough
+  pairs (30, from 5 sessions): the gestures of every day do not move the score. Relearn in the background (each night, or
+  every N sessions) on the bench judgements plus the gestures taken as implicit judgements (➤ or a note read by the agent:
+  relevant; ✗: not relevant; a note left at the top of the ranking: weakly not relevant), behind the same acceptance gate
+  (a refused model leaves the current one in place). To design from the start: exposure bias (only what was shown gets a
+  gesture: keep the notes drawn outside the pile, weight each gesture by the chance that its note was shown) and the
+  rarity of gestures (the bench judgements stay the base, the gestures adjust it).
 - **Mistral Vibe with a real account.** Measured so far against a local fake model, without an account. To measure
   with a real Mistral account: the real list of models and the default model, the real context window, the screens
   after sign-in, and the points still marked "not measured": `process.start`, `question_asked` and `turn_failed`, the
