@@ -4,9 +4,9 @@
  * finie, on relit `service.json` et on vérifie que le service répond.
  */
 import { execFile } from 'node:child_process';
-import { avecVariable } from '@mnemo/commun';
 import type { Configuration } from '../domaine/configuration.ts';
 import { santeService } from './api-service.ts';
+import { environnementAvecPath } from './environnement.ts';
 import { lireServiceJson, type ServiceLocal } from './service-local.ts';
 
 /** `mnemo ouvrir` attend le service 30 s ; la commande elle-même est abandonnée au-delà. */
@@ -17,12 +17,12 @@ const LIGNES_ERREUR = 5;
 export type ResultatDemarrage = { ok: true; service: ServiceLocal } | { ok: false; raison: string };
 
 /**
- * Environnement de la commande : celui de l'app (`base`), le `PATH` de la configuration (celui du terminal : `git`,
- * `claude` ; sous Windows sous la clé déjà présente, `Path`), `MNEMO_SANS_NAVIGATEUR=1` (la fenêtre est celle de l'app),
- * `MNEMO_PORT` si la configuration en fixe un.
+ * Environnement de la commande : celui de l'app (`base`), le `PATH` de la configuration sous macOS (celui du terminal :
+ * `git`, `claude`) ou le `Path` du processus de l'app sous Windows (`environnementAvecPath`), `MNEMO_SANS_NAVIGATEUR=1`
+ * (la fenêtre est celle de l'app), `MNEMO_PORT` si la configuration en fixe un.
  */
 export function environnementOuvrir(configuration: Configuration, base: NodeJS.ProcessEnv, plateforme: NodeJS.Platform = process.platform): NodeJS.ProcessEnv {
-	const env: NodeJS.ProcessEnv = { ...avecVariable(base, 'PATH', configuration.path, plateforme), MNEMO_SANS_NAVIGATEUR: '1' };
+	const env: NodeJS.ProcessEnv = { ...environnementAvecPath(base, configuration.path, plateforme), MNEMO_SANS_NAVIGATEUR: '1' };
 	if (configuration.port !== undefined) env['MNEMO_PORT'] = String(configuration.port);
 	return env;
 }

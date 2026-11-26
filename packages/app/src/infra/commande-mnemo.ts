@@ -1,12 +1,12 @@
 /**
  * Les commandes de `mnemo` lancées par l'app (`<node> <main> <args>`), sans shell : pour refaire ou retirer ce que Mnemo a
  * installé (`mnemo commande`, `mnemo declarer`). L'environnement est celui de l'app avec le `PATH` de la configuration (celui
- * du terminal : `claude`, `git`).
+ * du terminal : `claude`, `git`) ; sous Windows, le `Path` du processus de l'app (`environnementAvecPath`).
  */
 import { execFile } from 'node:child_process';
-import { avecVariable } from '@mnemo/commun';
 import type { SortieDeclarer } from '@mnemo/contrat';
 import type { Lancement } from '../domaine/configuration.ts';
+import { environnementAvecPath } from './environnement.ts';
 
 /** `claude mcp get` vérifie aussi que le serveur répond : quelques secondes. */
 export const DELAI_COMMANDE_MS = 60_000;
@@ -20,7 +20,7 @@ const premiereLigne = (texte: string): string => texte.trim().split('\n').find((
 
 export function lancerMnemo(lancement: Lancement, args: readonly string[], path: string, base: NodeJS.ProcessEnv = process.env): Promise<ResultatCommande> {
 	return new Promise((resoudre) => {
-		execFile(lancement.node, [lancement.main, ...args], { env: avecVariable(base, 'PATH', path, process.platform), timeout: DELAI_COMMANDE_MS, windowsHide: true }, (erreur, sortie, erreurs) => {
+		execFile(lancement.node, [lancement.main, ...args], { env: environnementAvecPath(base, path), timeout: DELAI_COMMANDE_MS, windowsHide: true }, (erreur, sortie, erreurs) => {
 			if (erreur) resoudre({ ok: false, raison: premiereLigne(`${erreurs}`) || premiereLigne(`${sortie}`) || erreur.message, sortie: `${sortie}` });
 			else resoudre({ ok: true, sortie: `${sortie}` });
 		}).stdin?.end();

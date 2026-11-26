@@ -67,10 +67,15 @@ describe('configuration', () => {
 
 	it('environnement de `ouvrir` : PATH de la configuration, sans navigateur, MNEMO_PORT seulement s’il est fixé', () => {
 		const base = { HOME: '/h', PATH: '/autre', MNEMO_PORT: '7' };
-		expect(environnementOuvrir({ racine: '/r', node: '/n', main: '/m', path: '/bin' }, base)).toEqual({ HOME: '/h', PATH: '/bin', MNEMO_PORT: '7', MNEMO_SANS_NAVIGATEUR: '1' });
-		expect(environnementOuvrir({ racine: '/r', node: '/n', main: '/m', path: '/bin', port: 4321 }, base)).toMatchObject({ MNEMO_PORT: '4321' });
-		// Windows : la clé `Path` du système est remplacée, jamais doublée d'une clé `PATH`
-		expect(environnementOuvrir({ racine: 'C:\\r', node: 'C:\\n', main: 'C:\\m', path: 'C:\\Git\\cmd' }, { Path: 'C:\\Windows', USERPROFILE: 'C:\\h' }, 'win32')).toEqual({ Path: 'C:\\Git\\cmd', USERPROFILE: 'C:\\h', MNEMO_SANS_NAVIGATEUR: '1' });
+		expect(environnementOuvrir({ racine: '/r', node: '/n', main: '/m', path: '/bin' }, base, 'darwin')).toEqual({ HOME: '/h', PATH: '/bin', MNEMO_PORT: '7', MNEMO_SANS_NAVIGATEUR: '1' });
+		expect(environnementOuvrir({ racine: '/r', node: '/n', main: '/m', path: '/bin', port: 4321 }, base, 'darwin')).toMatchObject({ MNEMO_PORT: '4321' });
+		// Windows : le `Path` vivant du processus de l'app, pas celui (figé) de la configuration ; sans lui, celui de la
+		// configuration, sous une seule clé
+		const configurationWindows = { racine: 'C:\\r', node: 'C:\\n', main: 'C:\\m', path: 'C:\\Ancien' };
+		expect(environnementOuvrir(configurationWindows, { Path: 'C:\\Windows;C:\\Git\\cmd', USERPROFILE: 'C:\\h' }, 'win32')).toEqual({ Path: 'C:\\Windows;C:\\Git\\cmd', USERPROFILE: 'C:\\h', MNEMO_SANS_NAVIGATEUR: '1' });
+		expect(environnementOuvrir(configurationWindows, { Path: '', USERPROFILE: 'C:\\h' }, 'win32')).toEqual({ Path: 'C:\\Ancien', USERPROFILE: 'C:\\h', MNEMO_SANS_NAVIGATEUR: '1' });
+		// macOS : toujours celui de la configuration
+		expect(environnementOuvrir({ racine: '/r', node: '/n', main: '/m', path: '/bin' }, { PATH: '/usr/bin' }, 'darwin')).toEqual({ PATH: '/bin', MNEMO_SANS_NAVIGATEUR: '1' });
 	});
 });
 

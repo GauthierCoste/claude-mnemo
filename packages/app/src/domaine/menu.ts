@@ -5,8 +5,10 @@
  * publiée s'il y en a une (un clic ouvre sa page), « Chercher les nouvelles versions », « Désinstaller Mnemo… » ;
  * « Quitter Mnemo ».
  *
- * Sous Windows : pas de « Reprendre le PATH du terminal » (pas de shell de connexion à lire : l'app reçoit déjà le `Path`
- * du compte) ; le détail d'une session (seconde ligne, ignorée par Windows) va dans son libellé.
+ * Sous Windows : pas de « Reprendre le PATH du terminal » (pas de shell de connexion à lire : l'app reçoit le `Path` du
+ * compte, et le service comme les commandes de `mnemo` sont lancés avec celui du processus de l'app, pas celui de la
+ * configuration : voir `infra/environnement.ts`) ; le détail d'une session (seconde ligne, ignorée par Windows) va dans son
+ * libellé.
  */
 import type { SessionVue } from '@mnemo/contrat';
 import type { PlateformeApp } from './plateforme.ts';
