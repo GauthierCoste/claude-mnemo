@@ -2,6 +2,8 @@ node_modules/
 .superpowers/
 .DS_Store
 packages/ui/dist/
+packages/app/dist/
+packages/app/.cache/
 # plans et spécifications de travail : temporaires, jamais commités
 docs/superpowers/
 # documents de conception et notes de travail : locaux, jamais publiés

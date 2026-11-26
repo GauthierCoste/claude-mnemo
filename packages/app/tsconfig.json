@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src", "tests", "outils", "vite.config.ts", "vite.assistant.config.ts", "vite.preload.config.ts", "vitest.config.ts", "../../outils-tests"],
+  "exclude": ["src/assistant/page.ts"]
+}

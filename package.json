@@ -9,7 +9,9 @@
     "test": "pnpm -r --workspace-concurrency=1 --no-bail test && vitest run --config outils/vitest.config.ts",
     "verifier": "pnpm -r verifier && tsc --noEmit -p outils",
     "verifier-publication": "node outils/verifier-publication.ts",
-    "construire": "pnpm --filter @mnemo/ui construire"
+    "construire": "pnpm --filter @mnemo/ui construire",
+    "construire-app": "pnpm --filter @mnemo/ui construire && pnpm --filter @mnemo/app construire && node packages/app/outils/construire-app.ts",
+    "installer-dev": "node packages/app/outils/installer-dev.ts"
   },
   "devDependencies": {
     "@types/node": "^24.19.0",

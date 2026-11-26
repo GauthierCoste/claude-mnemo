@@ -31,4 +31,10 @@ jobs:
       - run: |
           node -e "const d = require('node:path').join(process.env.RUNNER_TEMP, 'mnemo-modeles-vides'); require('node:fs').mkdirSync(d, { recursive: true }); require('node:fs').appendFileSync(process.env.GITHUB_ENV, 'MNEMO_MODELES=' + d + String.fromCharCode(10))"
       - run: pnpm verifier
+      # L'app de bureau (packages/app) est pour macOS seulement : ses tests ne tournent que là.
       - run: pnpm test
+        if: matrix.os == 'macos-latest'
+      - run: pnpm -r --workspace-concurrency=1 --no-bail --filter "!@mnemo/app" test
+        if: matrix.os != 'macos-latest'
+      - run: pnpm exec vitest run --config outils/vitest.config.ts
+        if: matrix.os != 'macos-latest'
