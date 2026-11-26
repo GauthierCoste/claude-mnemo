@@ -6,7 +6,7 @@
  *   du menu Démarrer ;
  * - `desinstaller` : l'app fermée, le service du dossier d'essai arrêté (`mnemo arreter` : le Node de l'app tient sinon
  *   ses fichiers), `Uninstall Mnemo.exe /S`, puis le dossier de l'app et le raccourci partis (le désinstalleur de NSIS se
- *   relance depuis un dossier temporaire : sa fin n'est pas celle du retrait, attendu ici).
+ *   relance depuis un dossier temporaire : sa fin n'est pas celle du retrait, attendu ici, raccourci compris).
  *
  * Usage : node packages/app/outils/ci/installation.ts installer|desinstaller
  */
@@ -63,8 +63,10 @@ await executer(async () => {
 		etape(`${c.desinstalleur} /S`);
 		const s = await lancer(c.desinstalleur, ['/S'], { delaiMs: 300_000 });
 		if (s.code !== 0) echouer(`le désinstalleur est sorti avec le code ${s.code}.`);
+		// le désinstalleur relancé retire le dossier de l'app (RMDir /r) puis seulement les raccourcis (uninstaller.nsh
+		// d'electron-builder) : attendre les deux
 		const limite = Date.now() + ATTENTE_RETRAIT_MS;
-		while (existsSync(c.installe) && Date.now() < limite) await pause(1000);
+		while ((existsSync(c.installe) || existsSync(c.raccourci)) && Date.now() < limite) await pause(1000);
 		if (existsSync(c.installe)) echouer(`dossier encore là ${ATTENTE_RETRAIT_MS / 1000} s après la désinstallation : ${c.installe} (${readdirSync(c.installe).join(', ')})`);
 		if (existsSync(c.raccourci)) echouer(`raccourci du menu Démarrer encore là : ${c.raccourci}`);
 		etape(`désinstallée : ${c.installe} et le raccourci retirés`);

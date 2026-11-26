@@ -58,6 +58,9 @@ p.onExit(({ exitCode }) => {
 	setTimeout(() => {
 		if (!lu.includes('mnemo-pty-ok')) { console.error('marqueur absent de la sortie du terminal : ' + JSON.stringify(lu)); process.exit(3); }
 		console.log('terminal ' + (windows ? 'ConPTY' : 'pty') + ' : marqueur lu, code ' + exitCode);
+		// sous Windows, node-pty garde après la fin du processus de quoi faire vivre la boucle d'événements (tubes de ConPTY) :
+		// sortie explicite, comme le service, qui sort par process.exit
+		process.exit(0);
 	}, 500);
 });
 `;
