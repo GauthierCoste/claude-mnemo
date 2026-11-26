@@ -299,8 +299,9 @@ async function extraire(racine: string, fichier: string, o: Options): Promise<vo
 const instantDApprentissage = (): string => new Date().toISOString();
 
 /**
- * `--apprendre` : la note de confiance apprise sur les jugements (empreintes vérifiées sur l'index lu tel qu'il est), le module
- * de coefficients et le rapport écrits. `--depart` : seulement le module, rien dans `.mnemo/`, pas même le verrou (le banc est
+ * `--apprendre` : la note de confiance apprise sur les jugements (empreintes vérifiées sur l'index lu tel qu'il est), enregistrée
+ * comme depuis le service (modèle d'avant gardé, rapport, ligne d'historique), le module de coefficients écrit s'il est demandé.
+ * `--depart` : seulement le module, rien dans `.mnemo/`, pas même le verrou (le banc est
  * lu une fois, et ses écritures se font par renommage : la lecture voit un fichier entier).
  */
 async function apprendre(racine: string, fichier: string, o: Options): Promise<void> {

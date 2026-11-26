@@ -105,10 +105,13 @@ export function fichiersDeLaNote(racine: string) {
 			await ecrireEntier(avant, (await lireOuNull(courant)) ?? AUCUN);
 			await ecrireEntier(courant, jsonDeCoefficients(coefficients));
 		},
-		/** Le rapport (JSON, avec `remplace`) et son texte, qui dit si le modèle a été écrit ou si l'actuel est gardé. */
-		async ecrireRapport(rapport: RapportDApprentissage, remplace: boolean): Promise<void> {
+		/**
+		 * Le rapport (JSON, avec `remplace`) et son texte, qui dit si le modèle a été écrit ou si l'actuel est gardé ; `aussi` : les
+		 * autres fichiers écrits avec le modèle (le module de `--apprendre --module`).
+		 */
+		async ecrireRapport(rapport: RapportDApprentissage, remplace: boolean, aussi: readonly string[] = []): Promise<void> {
 			await ecrireEntier(fichierRapport(racine, 'json'), `${JSON.stringify({ ...rapport, remplace }, null, 2)}\n`);
-			await ecrireEntier(fichierRapport(racine, 'txt'), `${rapportEnTexte(rapport, remplace ? [courant] : [])}\n`);
+			await ecrireEntier(fichierRapport(racine, 'txt'), `${rapportEnTexte(rapport, remplace ? [courant, ...aussi] : [])}\n`);
 		},
 		/** Un modèle d'avant à rendre : le marqueur « aucun » n'en est un que s'il y a un modèle à retirer. */
 		async avant(): Promise<boolean> {

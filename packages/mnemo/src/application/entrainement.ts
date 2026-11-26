@@ -9,8 +9,9 @@
  *   annulations) passent par une seule file : chacune relit le fichier juste avant d'écrire. Hors tâche, chaque écriture prend
  *   le verrou le temps de l'écrire. Juger reste permis pendant une tâche. Le verrou d'une tâche est pris dans cette file : une
  *   écriture en cours ne fait jamais refuser la tâche qui démarre.
- * - Apprendre : le modèle d'avant est gardé (`revenir` l'échange) ; une ligne d'historique par essai. Les écritures des fichiers
- *   de la note (nouveau modèle, retour au modèle d'avant) passent l'une après l'autre.
+ * - Apprendre : le modèle d'avant est gardé (`revenir` l'échange) ; une ligne d'historique par essai (`enregistrerApprentissage`,
+ *   partagé avec `mnemo banc contexte --apprendre`). Les écritures des fichiers de la note (nouveau modèle, retour au modèle
+ *   d'avant) passent l'une après l'autre.
  */
 import type { BilanExtraction, MessageAExtraire } from './banc-extraire.ts';
 import { fusionnerCas, messagesAExtraire } from './banc-extraire.ts';
@@ -184,6 +185,37 @@ export function nouveauxDepuis(cas: readonly CasContexte[], depuis: string | nul
 	}).length;
 }
 
+/** Ce qu'il faut pour enregistrer un apprentissage : les fichiers de la note et l'historique. */
+export type PortsEnregistrement = { note: Pick<FichiersDeNote, 'modeles' | 'installes' | 'echelle' | 'ecrire' | 'ecrireRapport'>; historique: HistoriqueDesApprentissages };
+
+/** Ajoute une ligne en tête de l'historique (les `HISTORIQUE_MAX` plus récentes gardées). */
+export const ajouterAlHistorique = async (historique: HistoriqueDesApprentissages, ligne: LigneHistorique): Promise<void> =>
+	historique.ecrire([ligne, ...(await historique.lire())].slice(0, HISTORIQUE_MAX));
+
+/**
+ * Enregistre un apprentissage, pour le service comme pour `mnemo banc contexte --apprendre` : un niveau sans paire jugée garde
+ * le modèle actuel (`garderLesNiveauxSansPaire`) ; `remplacer(nouveau, actuel)` dit si le nouveau modèle remplace l'actuel (vrai
+ * par défaut : geste de l'utilisateur, même refusé ; « Revenir au modèle d'avant » rend l'ancien) ; écrit le modèle (l'actuel
+ * gardé comme modèle d'avant), le rapport et une ligne d'historique. Rend les coefficients retenus et s'ils ont été écrits.
+ */
+export async function enregistrerApprentissage(
+	p: PortsEnregistrement,
+	rapport: RapportDApprentissage,
+	o: { date: string; origine: OrigineApprentissage; remplacer?: ((nouveau: RapportDApprentissage, actuel: ModelesDeNote) => boolean) | undefined },
+): Promise<{ coefficients: CoefficientsNote; remplace: boolean }> {
+	const actuel = await p.note.modeles();
+	// un niveau sans paire jugée garde le modèle actuel (il ne retombe jamais sur la règle provisoire faute de données)
+	const coefficients = garderLesNiveauxSansPaire(rapport.coefficients, actuel);
+	const remplace = o.remplacer?.({ ...rapport, coefficients }, actuel) ?? true;
+	if (remplace) await p.note.ecrire(coefficients);
+	await p.note.ecrireRapport(rapport, remplace);
+	const installes = p.note.installes();
+	const echelle = p.note.echelle();
+	const verdicts = Object.fromEntries(NIVEAUX_DE_NOTE.map((n) => [n, etatDuModele(coefficients[n], n, installes, echelle)])) as Record<NiveauDeNote, EtatDuModele>;
+	await ajouterAlHistorique(p.historique, { date: o.date, origine: o.origine, verdicts, remplace });
+	return { coefficients, remplace };
+}
+
 export type Entrainement = {
 	etat(): Promise<EtatEntrainement>;
 	/** Lance la tâche ; rend sa fin (jamais rejetée : un échec va dans `derniereErreur`). */
@@ -319,8 +351,6 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 		return lancer(liberer, (signal) => travail(contexte, signal));
 	};
 
-	const ajouterAlHistorique = async (ligne: LigneHistorique): Promise<void> => p.historique.ecrire([ligne, ...(await p.historique.lire())].slice(0, HISTORIQUE_MAX));
-
 	const noteDuNiveau = (niveau: NiveauDeNote, m: ModelesDeNote): NoteDuNiveau => {
 		const { modele, etat } = m[niveau];
 		return { niveau, etat, origine: origineDu(modele, etat), date: modele.apprisLe, verdict: verdictEnClair(etat), criteres: criteresEnClair(modele, etat), refus: [...modele.refus] };
@@ -424,20 +454,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 				const jeu = jeuDApprentissage(cas, await p.note.empreintes(), { empreintes: 'exclure', installes: p.note.installes() });
 				const rapport = await p.apprenti.apprendre(jeu, { date, echelle: p.note.echelle(), ...(implicites === undefined ? {} : { implicites }) }, signal);
 				if (signal.aborted) return;
-				await enFileNote(async () => {
-					const actuel = await p.note.modeles();
-					// un niveau sans paire jugée garde le modèle actuel (il ne retombe jamais sur la règle provisoire faute de données)
-					const coefficients = garderLesNiveauxSansPaire(rapport.coefficients, actuel);
-					// geste de l'utilisateur (manuel) : le nouveau modèle remplace toujours, même refusé ; « Revenir au modèle d'avant »
-					// rend l'ancien, et la ligne d'historique comme le résultat disent qu'il a été remplacé
-					const remplace = o.remplacer?.({ ...rapport, coefficients }, actuel) ?? true;
-					if (remplace) await p.note.ecrire(coefficients);
-					await p.note.ecrireRapport(rapport, remplace);
-					const installes = p.note.installes();
-					const echelle = p.note.echelle();
-					const verdicts = Object.fromEntries(NIVEAUX_DE_NOTE.map((n) => [n, etatDuModele(coefficients[n], n, installes, echelle)])) as Record<NiveauDeNote, EtatDuModele>;
-					await ajouterAlHistorique({ date, origine: o.origine, verdicts, remplace });
-				});
+				await enFileNote(() => enregistrerApprentissage(p, rapport, { date, origine: o.origine, remplacer: o.remplacer }));
 			};
 			/** L'échec d'un essai automatique dans l'historique (les modèles gardés) ; une panne ici ne masque pas l'erreur. */
 			const noterEchec = async (date: string, erreur: string): Promise<void> => {
@@ -445,7 +462,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 					await enFileNote(async () => {
 						const actuel = await p.note.modeles();
 						const verdicts = Object.fromEntries(NIVEAUX_DE_NOTE.map((n) => [n, actuel[n].etat])) as Record<NiveauDeNote, EtatDuModele>;
-						await ajouterAlHistorique({ date, origine: o.origine, verdicts, remplace: false, erreur: couper(erreur, ERREUR_MAX) });
+						await ajouterAlHistorique(p.historique, { date, origine: o.origine, verdicts, remplace: false, erreur: couper(erreur, ERREUR_MAX) });
 					});
 				} catch {
 					// historique illisible ou non écrit : l'erreur reste dans `derniereErreur`

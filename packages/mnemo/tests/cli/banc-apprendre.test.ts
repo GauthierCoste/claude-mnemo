@@ -59,6 +59,33 @@ describe('mnemo banc contexte --apprendre', () => {
 		}
 	});
 
+	it('enregistre comme le service : modèle d’avant gardé, ligne d’historique manuelle ; un niveau sans paire jugée garde son modèle actuel', async () => {
+		const racine = await dossierTemporaire();
+		await mkdir(join(racine, '.mnemo'));
+		const lot = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'].flatMap((s) => [cas(s, 1), cas(s, 2)]);
+		const options = { empreinteDe: null, empreintes: 'exclure' as const, installes: GGUF_DE_TEST, graines: [1] };
+		const premier = await apprendreAuBanc(racine, lot, { ...options, date: '2026-11-25T10:00:00.000Z' });
+		const fichier = join(racine, '.mnemo', 'coefficients-note.json');
+		const ecrit = await readFile(fichier, 'utf8');
+		// aucun fichier avant : le module livré valait
+		expect(JSON.parse(await readFile(join(racine, '.mnemo', 'coefficients-note.avant.json'), 'utf8'))).toEqual({ aucun: true });
+		expect(premier.rapport.coefficients.complets.apprisLe).not.toBeNull();
+		// sans logit du reranker : aucune paire au niveau Complets, qui garde le modèle appris juste avant
+		const sansLogit = lot.map((c) => ({ ...c, candidates: c.candidates!.map((x) => ({ ...x, signaux: { seule: { ...x.signaux.seule!, logit: null } } })) })) as CasContexte[];
+		const second = await apprendreAuBanc(racine, sansLogit, { ...options, date: '2026-11-26T10:00:00.000Z' });
+		expect(Object.keys(second.rapport.coefficients.complets.poids)).toEqual([]);
+		const relus = lireCoefficients(JSON.parse(await readFile(fichier, 'utf8')))!;
+		expect(relus.complets).toEqual(lireCoefficients(JSON.parse(ecrit))!.complets);
+		expect(relus.sens.apprisLe).toBe('2026-11-26T10:00:00.000Z');
+		expect(await readFile(join(racine, '.mnemo', 'coefficients-note.avant.json'), 'utf8')).toBe(ecrit);
+		const historique = JSON.parse(await readFile(join(racine, '.mnemo', 'entrainements.json'), 'utf8'));
+		expect(historique.map((l: { date: string; origine: string; remplace: boolean }) => [l.date, l.origine, l.remplace])).toEqual([
+			['2026-11-26T10:00:00.000Z', 'manuel', true],
+			['2026-11-25T10:00:00.000Z', 'manuel', true],
+		]);
+		expect(JSON.parse(await readFile(join(racine, '.mnemo', 'apprentissage-note.json'), 'utf8')).remplace).toBe(true);
+	});
+
 	it('--depart : écrit seulement le module, en modèles de départ ; rien dans .mnemo ; refusé sans module', async () => {
 		const racine = await dossierTemporaire();
 		await mkdir(join(racine, '.mnemo'));

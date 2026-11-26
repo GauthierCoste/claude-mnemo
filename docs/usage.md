@@ -1032,9 +1032,12 @@ Benchmarks measure Mnemo on fictitious corpora shipped with it (`packages/mnemo/
      injections in at least 10 real sessions, a pessimistic precision of 90 % or more (80 % or more at its lower Wilson
      bound and at the 2.5th percentile of a bootstrap by session), a calibration slope between 0.8 and 1.25, at least 20
      judged messages that need nothing (from 5 sessions) with an injection on at most 5 % of them, and at most 0.5
-     injection per message. It writes the coefficients to `.mnemo/coefficients-note.json`, which the service reads again
-     at once, and its report to `.mnemo/apprentissage-note.txt` (and `.json`): the reason of each refusal, and what each
-     threshold would give. Neither file holds any text of a note or a message. `--module <path>` also writes the
+     injection per message. It records the result as « Apprendre la note » does: the coefficients in
+     `.mnemo/coefficients-note.json`, which the service reads again at once (a level with no judged pair keeps its
+     current model; the current model is kept in `.mnemo/coefficients-note.avant.json`, for « Revenir au modèle
+     d’avant »), its report in `.mnemo/apprentissage-note.txt` (and `.json`): the reason of each refusal, and what each
+     threshold would give, and a line « Manuel » in the history of the Entraîner page. None of these files holds any text
+     of a note or a message. `--module <path>` also writes the
      coefficients as the TypeScript module of defaults shipped with Mnemo (for development); with `--depart`, it writes
      only that module, as starting models (shown « De départ », never accepted), and nothing in `.mnemo`.
 
