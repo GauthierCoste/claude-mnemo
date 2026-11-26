@@ -74,6 +74,25 @@ describe('banc-contexte.json', () => {
 		expect(lireCasContexte(JSON.stringify([ancien]))).toEqual([ancien]);
 	});
 
+	it('relit les propositions du juge et la date de validation ; absentes : rien d’ajouté', () => {
+		const avec: CasContexte = {
+			...JUGE,
+			prejugements: { 'pratiques/cuisson-grisailles.md': { jugement: 'pertinente', confiance: 0.92, raison: 'répond à la question' } },
+			valideLe: '2026-11-26T10:00:00.000Z',
+		};
+		expect(lireCasContexte(JSON.stringify([avec]))).toEqual([avec]);
+		expect(lireCasContexte(JSON.stringify([JUGE]))[0]).not.toHaveProperty('prejugements');
+		expect(lireCasContexte(JSON.stringify([JUGE]))[0]).not.toHaveProperty('valideLe');
+	});
+
+	it('proposition du juge mal formée : erreur lisible', () => {
+		const chemin = 'pratiques/cuisson-grisailles.md';
+		for (const p of [{ jugement: 'peut-être', confiance: 0.5, raison: '' }, { jugement: 'pertinente', confiance: 1.5, raison: '' }, { jugement: 'pertinente', confiance: 0.5 }]) {
+			expect(() => lireCasContexte(JSON.stringify([{ ...JUGE, prejugements: { [chemin]: p } }]))).toThrow('proposition du juge');
+		}
+		expect(() => lireCasContexte(JSON.stringify([{ ...JUGE, prejugements: [] }]))).toThrow('prejugements');
+	});
+
 	it('jugement inconnu : erreur lisible', () => {
 		expect(() => lireCasContexte(JSON.stringify([{ ...JUGE, jugements: { 'a.md': 'peut-être' } }]))).toThrow('jugement inconnu');
 	});

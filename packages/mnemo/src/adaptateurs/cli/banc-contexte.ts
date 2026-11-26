@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { JUGEMENTS, rejouerCas } from '../../application/banc-contexte.ts';
-import type { CandidateAJuger, CasContexte, EchecContexte, Jugement, MesureContexte, VarianteRequete } from '../../application/banc-contexte.ts';
+import type { CandidateAJuger, CasContexte, EchecContexte, Jugement, MesureContexte, Prejugement, VarianteRequete } from '../../application/banc-contexte.ts';
 import { extraireJugements, fusionnerCas, messagesAExtraire, messagesDesCas, messagesDuJournal } from '../../application/banc-extraire.ts';
 import type { MessageAExtraire } from '../../application/banc-extraire.ts';
 import { progression } from '../../application/banc-juger.ts';
@@ -107,6 +107,19 @@ function lireJugements(v: unknown, i: number): Record<string, Jugement> {
 	return jugements;
 }
 
+function lirePrejugements(v: unknown, i: number): Record<string, Prejugement> {
+	if (!estObjet(v)) throw new ErreurCli(`banc-contexte.json, cas ${i + 1} : « prejugements » doit être un objet (chemin → proposition du juge).`);
+	const prejugements: Record<string, Prejugement> = {};
+	for (const [chemin, p] of Object.entries(v)) {
+		const confiance = estObjet(p) ? p['confiance'] : undefined;
+		if (!estObjet(p) || !JUGEMENTS.includes(p['jugement'] as Jugement) || typeof confiance !== 'number' || !(confiance >= 0 && confiance <= 1) || typeof p['raison'] !== 'string') {
+			throw new ErreurCli(`banc-contexte.json, cas ${i + 1} : proposition du juge mal formée pour ${chemin} (jugement, confiance de 0 à 1, raison).`);
+		}
+		prejugements[chemin] = { jugement: p['jugement'] as Jugement, confiance, raison: p['raison'] };
+	}
+	return prejugements;
+}
+
 /** Cas d'un fichier `banc-contexte.json` (liste de cas) ; erreur lisible sur un cas mal formé. */
 export function lireCasContexte(texte: string): CasContexte[] {
 	let brut: unknown;
@@ -136,6 +149,8 @@ export function lireCasContexte(texte: string): CasContexte[] {
 			...(c['candidates'] === undefined ? {} : { candidates: lireCandidates(c['candidates'], i) }),
 			...(c['jugements'] === undefined ? {} : { jugements: lireJugements(c['jugements'], i) }),
 			...(c['saute'] === true ? { saute: true } : {}),
+			...(c['prejugements'] === undefined ? {} : { prejugements: lirePrejugements(c['prejugements'], i) }),
+			...(typeof c['valideLe'] === 'string' ? { valideLe: c['valideLe'] } : {}),
 			...(typeof c['horodatageMs'] === 'number' ? { horodatageMs: c['horodatageMs'] } : {}),
 			...(typeof c['extraitLe'] === 'string' ? { extraitLe: c['extraitLe'] } : {}),
 			...(estObjet(c['modeles']) ? { modeles: { sens: c['modeles']['sens'] === true, reranker: c['modeles']['reranker'] === true } } : {}),

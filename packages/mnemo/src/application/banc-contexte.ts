@@ -45,6 +45,13 @@ export type CasContexte = {
 	jugements?: Record<string, Jugement>;
 	/** Vrai : le message a été sauté au jugement ; il ne compte nulle part. */
 	saute?: boolean;
+	/**
+	 * Propositions du juge Claude, chemin → proposition : elles ne comptent qu'une fois validées (message validé, ou « Accepter
+	 * les sûres »), converties en `jugements`.
+	 */
+	prejugements?: Record<string, Prejugement>;
+	/** Date (ISO) à laquelle l'utilisateur a validé le message entier : il est jugé, ses fiches sans jugement ne font pas de paire. */
+	valideLe?: string;
 	/** Horodatage du message au journal (identité stable avec la session et le rang) et date de l'extraction (ISO). */
 	horodatageMs?: number;
 	extraitLe?: string;
@@ -60,6 +67,8 @@ export type CasContexte = {
 };
 export type Jugement = 'pertinente' | 'non_pertinente' | 'indecise';
 export const JUGEMENTS: readonly Jugement[] = ['pertinente', 'non_pertinente', 'indecise'];
+/** Proposition du juge Claude pour une candidate : son jugement, sa confiance (0..1) et sa raison. */
+export type Prejugement = { jugement: Jugement; confiance: number; raison: string };
 /** `seule` : le message ; `jointe` : le message joint au message porteur d'avant (spec § 3.2). */
 export type VarianteRequete = 'seule' | 'jointe';
 /**
