@@ -199,8 +199,9 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 	/** Annulations : les messages tels qu'ils étaient avant chaque réponse (ou « Accepter les sûres »). */
 	const annulations: { indice: number; cas: Cas }[][] = [];
 
-	const aRelire = (c: Cas) => !c.valide && !c.saute && c.propositions !== null;
-	const aJuger = (c: Cas) => !c.valide && !c.saute;
+	// comme le service : un message répondu (validé ou « Rien d'utile ici ») ou passé n'est plus à juger
+	const aJuger = (c: Cas) => !c.valide && !c.silence && !c.saute;
+	const aRelire = (c: Cas) => aJuger(c) && c.propositions !== null;
 	const paires = (c: Cas) => (c.valide ? Object.values(c.jugements).filter((j) => j !== 'indecise').length : 0);
 
 	function vue(): VueEntrainement {
@@ -307,16 +308,25 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 		return vue();
 	}
 
-	/** Le prochain à juger : ceux à relire d'abord. */
+	const indiceValide = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+	const confianceMoyenne = (c: Cas) => {
+		const p = Object.values(c.propositions ?? {});
+		return p.length === 0 ? 1 : p.reduce((n, x) => n + x.confiance, 0) / p.length;
+	};
+	/** Le prochain à juger, comme le service : ceux à relire d'abord, les plus incertains en tête, puis les autres dans l'ordre. */
 	const prochain = (): number | null => {
-		const i = banc.findIndex(aRelire);
-		if (i >= 0) return i;
+		const aRelireTries = banc
+			.flatMap((c, indice) => (aRelire(c) ? [{ indice, confiance: confianceMoyenne(c) }] : []))
+			.sort((a, b) => a.confiance - b.confiance || a.indice - b.indice);
+		if (aRelireTries.length > 0) return aRelireTries[0]!.indice;
 		const j = banc.findIndex(aJuger);
 		return j >= 0 ? j : null;
 	};
 
 	function message(params: Record<string, string>): ReponseMessageAJuger {
-		const i = params['indice'] !== undefined ? Number(params['indice']) : prochain();
+		const brut = params['indice'];
+		const i = brut !== undefined && brut !== '' ? Number(brut) : prochain();
+		if (i !== null && !indiceValide(i)) throw new ErreurApi('Paramètre « indice » : un entier positif ou nul.', 400);
 		if (i === null) return { message: null };
 		const c = banc[i];
 		if (c === undefined) throw new ErreurApi(`Message ${i} inconnu.`, 404);
@@ -337,19 +347,28 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 		};
 	}
 
+	/**
+	 * Comme le service (`repondreMessage`) : les jugements d'un chemin qui n'est pas candidate sont ignorés ; « Rien d'utile
+	 * ici » est refusé (409) si une fiche est jugée utile, déjà ou dans la réponse, et garde les fiches « Je ne sais pas » ;
+	 * toute réponse qui ne passe pas valide le message (le reste « pas utile » si demandé) et le sort des passés.
+	 */
 	function repondre(corps: Record<string, unknown>): ReponseReponseMessage {
-		const i = Number(corps['indice']);
+		const i = corps['indice'];
+		if (!indiceValide(i)) throw new ErreurApi('Champ « indice » : un entier positif ou nul.', 400);
+		if (corps['silence'] === true && corps['passer'] === true) throw new ErreurApi('« silence » et « passer » ne vont pas ensemble.', 400);
 		const c = banc[i];
 		if (c === undefined) throw new ErreurApi(`Message ${i} inconnu.`, 404);
-		const jugements = (corps['jugements'] ?? {}) as Record<string, JugementVue>;
-		if (corps['silence'] === true && Object.values(jugements).includes('pertinente')) throw new ErreurApi("« Rien d'utile ici » est refusé : une fiche de ce message est jugée utile.", 409);
+		const chemins = c.candidates.map((x) => x.chemin);
+		const donnes = Object.entries((corps['jugements'] ?? {}) as Record<string, JugementVue>).filter(([chemin]) => chemins.includes(chemin));
+		const fusion: Record<string, JugementVue> = { ...c.jugements, ...Object.fromEntries(donnes) };
+		if (corps['silence'] === true && Object.values(fusion).includes('pertinente')) throw new ErreurApi("« Rien d'utile ici » est refusé : une fiche de ce message est jugée utile.", 409);
 		annulations.push([{ indice: i, cas: structuredClone(c) }]);
 		if (corps['passer'] === true) c.saute = true;
-		else if (corps['silence'] === true) Object.assign(c, { silence: true, valide: true, jugements: Object.fromEntries(c.candidates.map((x) => [x.chemin, 'non_pertinente'])) });
 		else {
-			const reste = corps['resteNonUtile'] === true ? Object.fromEntries(c.candidates.map((x) => [x.chemin, 'non_pertinente' as const])) : {};
-			c.jugements = { ...reste, ...c.jugements, ...jugements };
-			c.valide = c.candidates.every((x) => c.jugements[x.chemin] !== undefined);
+			const reste = corps['silence'] === true || corps['resteNonUtile'] === true ? Object.fromEntries(chemins.map((x) => [x, 'non_pertinente' as const])) : {};
+			const silence = corps['silence'] === true;
+			c.jugements = silence ? Object.fromEntries(chemins.map((x) => [x, fusion[x] === 'indecise' ? 'indecise' : 'non_pertinente'])) : { ...reste, ...fusion };
+			Object.assign(c, { silence, valide: true, saute: false });
 		}
 		changer();
 		return { suivant: prochain() };
@@ -369,7 +388,8 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 			const p = c.propositions;
 			if (!aRelire(c) || p === null || !c.candidates.every((x) => (p[x.chemin]?.confiance ?? 0) >= SEUIL_SUR)) return;
 			avantGeste.push({ indice, cas: structuredClone(c) });
-			c.jugements = Object.fromEntries(c.candidates.map((x) => [x.chemin, p[x.chemin]!.jugement]));
+			// un jugement déjà donné à la main est gardé
+			c.jugements = { ...Object.fromEntries(c.candidates.map((x) => [x.chemin, p[x.chemin]!.jugement])), ...c.jugements };
 			c.valide = true;
 		});
 		if (avantGeste.length > 0) {

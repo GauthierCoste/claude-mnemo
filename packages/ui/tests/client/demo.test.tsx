@@ -288,6 +288,38 @@ describe('mode démo', () => {
 		await expect(api.envoyer(ROUTES.entrainementPrejuger)).rejects.toMatchObject({ statut: 409 });
 	});
 
+	it('entraînement : les réponses à un message comme le service (relire les plus incertains d’abord, valider, rien d’utile ici, passer, annuler)', async () => {
+		const { api } = creerClientDemo();
+		const lire = async (indice?: number) => (await api.lire<ReponseMessageAJuger>(ROUTES.entrainementMessage, indice === undefined ? undefined : { indice: String(indice) })).message!;
+		const banc = async () => (await api.lire<VueEntrainement>(ROUTES.entrainement)).banc;
+		const repondre = (corps: Record<string, unknown>) => api.envoyer<ReponseReponseMessage>(ROUTES.entrainementMessage, corps);
+		// à relire d'abord, le moins sûr en tête (confiance moyenne 0,84 avant 0,94)
+		const premier = await lire();
+		expect(premier).toMatchObject({ indice: 3, aRelire: true, restants: 4 });
+		// une réponse partielle sans « le reste » valide quand même le message
+		const [a] = premier.candidates;
+		expect(await repondre({ indice: 3, jugements: { [a!.chemin]: 'indecise', 'ailleurs.md': 'pertinente' }, resteNonUtile: false })).toEqual({ suivant: 2 });
+		expect(await lire(3)).toMatchObject({ valide: true, candidates: expect.arrayContaining([expect.objectContaining({ chemin: a!.chemin, jugement: 'indecise' })]) });
+		expect((await lire(3)).candidates.filter((c) => c.jugement !== null)).toHaveLength(1);
+		expect(await banc()).toMatchObject({ valides: 3, aJuger: 3 });
+		// « Rien d'utile ici » : les « Je ne sais pas » gardés, le reste pas utile ; refusé si une fiche est déjà jugée utile
+		const autre = await lire(4);
+		expect(await repondre({ indice: 4, jugements: { [autre.candidates[0]!.chemin]: 'indecise' }, resteNonUtile: true, silence: true })).toEqual({ suivant: 2 });
+		expect((await lire(4)).candidates.map((c) => c.jugement).sort()).toEqual(['indecise', 'non_pertinente']);
+		await expect(repondre({ indice: 0, jugements: {}, resteNonUtile: true, silence: true })).rejects.toMatchObject({ statut: 409 });
+		// passer : mis de côté ; le message passé reste lisible par son indice
+		expect(await repondre({ indice: 2, jugements: {}, resteNonUtile: false, passer: true })).toEqual({ suivant: 5 });
+		expect(await lire(2)).toMatchObject({ saute: true });
+		expect(await banc()).toMatchObject({ sautes: 1, aJuger: 1 });
+		// annuler : la dernière réponse d'abord, son message rétabli
+		expect(await api.envoyer<ReponseAnnulation>(ROUTES.entrainementAnnuler)).toEqual({ indice: 2 });
+		expect(await lire(2)).toMatchObject({ saute: false, aRelire: true });
+		// corps invalides : 400, comme le service
+		await expect(repondre({ indice: -1, jugements: {}, resteNonUtile: true })).rejects.toMatchObject({ statut: 400 });
+		await expect(repondre({ indice: 5, jugements: {}, resteNonUtile: true, silence: true, passer: true })).rejects.toMatchObject({ statut: 400 });
+		await expect(repondre({ indice: 99, jugements: {}, resteNonUtile: true })).rejects.toMatchObject({ statut: 404 });
+	});
+
 	it('entraînement : messages et fiches fictifs, des fiches de la démo', async () => {
 		const { api } = creerClientDemo();
 		const { fiches } = await api.lire<DonneesGraphe>(ROUTES.graphe);
