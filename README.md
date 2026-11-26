@@ -34,8 +34,8 @@ it.
   and Mistral Vibe get the memory through MCP, the context and reminders through their hooks, the checked instructions,
   and sessions started, resumed and wrapped up from the interface. Codex also shows its ChatGPT quotas next to the
   Claude ones in the title bar; Mistral Vibe does not report readable quotas. Claude Code plugins, the archivist and the
-  import of Claude Code's own memory stay with Claude Code. **Settings › Système › Moteurs** shows one card per engine
-  with its provider (Anthropic, OpenAI, Mistral) and how far it is linked to Mnemo; « Lier à Mnemo » links it in one
+  import of Claude Code's own memory stay with Claude Code. **Settings › Réglages › Branchements** shows one line per engine
+  with its provider's logo (Anthropic, OpenAI, Mistral) and whether it is linked to Mnemo; « Lier à Mnemo » links it in one
   click (or `mnemo declarer --moteur <engine> --lier` in a terminal), and an engine installed while Mnemo runs is
   picked up by « Relire », without a restart. New session lets you pick the agent like a character, with its provider,
   engine, model and equipment, and does not start an engine that is not linked. See

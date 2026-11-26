@@ -119,14 +119,13 @@ interface (gear at the bottom of the rail, ⌥,): project markers (◆ in the fo
 minimum similarity of search, model shutdown after inactivity, note types whose proposed information needs a
 confirmation, service port, launcher browser and the main colour of the interface (green by default). The table of settings and defaults is in [installation.md](installation.md#settings).
 The main colour is applied as soon as it is picked; below the picker, a warning appears when it is hard to read on the dark background (contrast under 3:1). The logo and the session state colours keep their own colours.
-The **App Claude** tab connects the memory to the Claude app (Claude Desktop) and manages its other MCP servers: see
-[Connecting the Claude app](#connecting-the-claude-app).
+**Réglages › Branchements** links the engines to Mnemo, connects the memory to the Claude app (Claude Desktop) and
+manages its other MCP servers: see [Engines](#engines) and [Connecting the Claude app](#connecting-the-claude-app).
 
 ### Engines
 
-**Settings › Système › Moteurs** (engines) shows one card per engine the service knows (Claude Code, Codex, Mistral
-Vibe), each with its provider (Anthropic, OpenAI, Mistral), shown as a letter in the provider's colour (no brand logo),
-and a one-word status:
+**Settings › Réglages › Branchements** shows one line per engine the service knows (Claude Code, Codex, Mistral
+Vibe), each with its provider's logo and name (Anthropic, OpenAI, Mistral) and a one-word status:
 
 - « Prêt » (ready): linked and usable;
 - « À lier » (to link): the MCP declaration or the hooks are missing or out of date, « Lier à Mnemo » fixes it;
@@ -138,29 +137,27 @@ and a one-word status:
 - « Introuvable » (not found): the command the service started with has disappeared since;
 - « Pas installé » (not installed): no command found on this computer.
 
-Each card draws the **link circuit** of the engine on this computer: Installé (command found) → Version →
-Mémoire (MCP declaration) → Suivi (Mnemo hooks) → Approbation (for an engine that asks for it, Codex). Steps already
-done are lit in the provider's colour; the first broken one pulses, and a single action box below says what is wrong
-and what to do:
+A ready engine shows « ● prêt ». Otherwise, the line says below what is missing and what it means, and offers the
+gesture that fixes it:
 
 - **« Lier à Mnemo »** (link to Mnemo) when the MCP declaration or the hooks are missing or out of date. It calls
   `POST /api/moteurs/:id/lier` (no body), which does for this engine only what `mnemo declarer --moteur <id> --lier`
-  does, then reads the machine again; the steps light up and a toast says « <engine> lié à Mnemo. ». A failure is shown
-  in the box. The same command is offered below, to copy, for a terminal. The route answers 404 for an engine the
-  service does not know, 409 when the engine's command cannot be found, when `MNEMO_SANS_MCP=1` is set in the service's
-  environment, or while a link of the same engine is already running; its answer carries the steps of the link and
-  every engine read again (like `GET /api/moteurs?poste=1`), types `ReponseLiaisonMoteur` and `LiaisonMoteurVue` in
+  does, then reads the machine again; the line turns « prêt » and a toast says « <engine> lié à Mnemo. ». A failure is
+  shown below the line. The same command is offered below, to copy, for a terminal. The route answers 404 for an engine
+  the service does not know, 409 when the engine's command cannot be found, when `MNEMO_SANS_MCP=1` is set in the
+  service's environment, or while a link of the same engine is already running; its answer carries the steps of the link
+  and every engine read again (like `GET /api/moteurs?poste=1`), types `ReponseLiaisonMoteur` and `LiaisonMoteurVue` in
   `@mnemo/contrat`.
 - **« Copier »** copies the command to type in the engine (`/hooks` in Codex) when the hooks wait for an approval.
 
-Each card also lists its **team** (the profiles that run on this engine, with « Nouveau profil » to create one on it)
-and its **models** (the list the engine gives).
+An engine that waits for one of these gestures puts an amber dot on the Réglages tab and on Branchements; an engine not
+installed does not.
 
 **« Relire »** (read again, with the time of the last check) checks the machine again. An engine installed or moved
 after the service started is picked up there: the service adopts the command it finds now, new sessions start it, and
 its version is read again; running sessions keep their process. No restart of the service is needed. A command that has
-disappeared is not adopted: the card says it can no longer be found. The light reading of the engines (Settings ›
-Profiles, `GET /api/moteurs` without `poste=1`) looks for nothing new.
+disappeared is not adopted: the line says it can no longer be found. The light reading of the engines (Settings ›
+Agents, `GET /api/moteurs` without `poste=1`) looks for nothing new.
 
 ## Documents
 
@@ -438,7 +435,7 @@ description, its provider, engine and version, its model (the one the profile se
 engine's default), where it starts, and its equipment (skills, plugins, hooks). Below, the state of its engine:
 « Prêt » (ready), or what blocks it. An engine that is not linked to Mnemo blocks the launch (« Lancer » unavailable,
 with the reason), since without its MCP server and hooks Mnemo cannot follow the session; « Lier à Mnemo » links it on
-the spot, « Voir dans Réglages » opens Settings › Système. Hooks still to approve in the engine, or a state that cannot
+the spot, « Voir dans Réglages » opens Settings › Réglages › Branchements. Hooks still to approve in the engine, or a state that cannot
 be read, are only flagged. The folder is folded behind « Changer » (fixed for a profile that starts in the memory), the
 objective is optional, and the footer sums up the choice and starts it with « Lancer <agent> » (Enter). Profiles started
 outside a dialog, warnings and ignored profiles are listed under the sheet. Motion is turned off under « reduce
@@ -511,7 +508,7 @@ profile.
 - **Context gauge and quotas.** They are read from the session's transcript (`~/.codex/sessions/`, or under
   `$CODEX_HOME`) after a hook: how full the context window is, and the ChatGPT quotas of the title bar.
 - **Not found.** Without `codex`, or with a version older than 0.171, a Codex session is not started (there is no command
-  line to paste, unlike Claude Code); the launch says why, and so does the engine's line in Settings › Profiles.
+  line to paste, unlike Claude Code); the launch says why, and so does the engine's line in Settings › Agents.
 
 ### Mistral Vibe sessions
 
@@ -839,7 +836,7 @@ A profile is a note of the memory, `_mnemo/profils/<name>/<name>.md`: see [forma
 
 ### Managing profiles
 
-**Settings › Profiles** lists the profiles in two groups: **Memory**, the archivist, always there, which files and keeps the memory (started from the Archivist drawer); and **Work profiles**, the sessions on your projects, started from New session, `travail` first (the default one, always there). Each line shows the avatar, the name and the first line of the instruction; the chosen profile is edited on the right:
+**Settings › Agents** lists the profiles in two groups: **Memory**, the archivist, always there, which files and keeps the memory (started from the Archivist drawer); and **Work profiles**, the sessions on your projects, started from New session, `travail` first (the default one, always there). Each line shows the avatar, the name and the first line of the instruction; the chosen profile is edited on the right:
 
 - **Avatar**: a small creature (12 shapes) and a colour, chosen separately; shown in New session and in the session lists.
 - **Engine**: Claude Code, Codex or Mistral Vibe, the coding agent that runs the sessions of the profile, shown with its
@@ -942,7 +939,7 @@ To undo: `claude mcp remove mnemo --scope user`. `MNEMO_SANS_MCP=1` is the same 
 
 ## Connecting Codex
 
-`mnemo init --codex`, `mnemo declarer --moteur codex --lier` or « Lier à Mnemo » in Settings › Système › Moteurs
+`mnemo init --codex`, `mnemo declarer --moteur codex --lier` or « Lier à Mnemo » in Settings › Réglages › Branchements
 declares the same server to Codex at user level, so every Codex session reaches the memory, and installs the Mnemo hooks
 for the sessions started by Mnemo. If `codex` cannot be found, `init --codex` prints the command to run yourself;
 `--lier` and the button refuse, and link nothing:
@@ -955,8 +952,8 @@ case of your own settings are in [installation.md](installation.md#codex).
 
 ## Connecting the Claude app
 
-The Claude app (Claude Desktop) has its own list of MCP servers, in `claude_desktop_config.json`. **Settings › App Claude**
-(the third tab of the settings) edits it from the interface; the path of the file is shown at the top of the tab:
+The Claude app (Claude Desktop) has its own list of MCP servers, in `claude_desktop_config.json`. The **App Claude**
+group of Settings › Réglages › Branchements edits it from the interface; the path of the file is shown below the group:
 
 | Platform | File |
 | --- | --- |
@@ -964,17 +961,17 @@ The Claude app (Claude Desktop) has its own list of MCP servers, in `claude_desk
 | Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
 | Linux | `$XDG_CONFIG_HOME/Claude/claude_desktop_config.json` (by default `~/.config/Claude/`) |
 
-When the Claude app is not installed (its folder does not exist), the tab only says so. When the file cannot be read
-(invalid JSON, `mcpServers` not an object, no permission), the tab shows the error and the path and changes nothing: Mnemo
-never rewrites a file it cannot read. Fix it by hand, then open the tab again.
+When the Claude app is not installed (its folder does not exist), the group only says so. When the file cannot be read
+(invalid JSON, `mcpServers` not an object, no permission), the group shows the error and the path and changes nothing: Mnemo
+never rewrites a file it cannot read. Fix it by hand, then open the settings again.
 
-- **Mémoire Mnemo** connects the memory of this folder: « Brancher la mémoire » adds a `mnemo` entry that runs
-  `mnemo mcp` with the Node and the copy of Mnemo of this installation, and the folder in `MNEMO_RACINE`; « Débrancher »
-  removes it. When the entry no longer matches this installation (another Node, Mnemo moved, another folder), the tab
-  says so and « Mettre à jour » rewrites it. The name `mnemo` is reserved: the other servers can never take it, in any
+- **Mémoire Mnemo** connects the memory of this folder: its switch adds a `mnemo` entry that runs `mnemo mcp` with the
+  Node and the copy of Mnemo of this installation, and the folder in `MNEMO_RACINE`, or removes it. When the entry no
+  longer matches this installation (another Node, Mnemo moved, another folder), the line says so: « Mettre à jour »
+  rewrites it, « Débrancher » removes it. The name `mnemo` is reserved: the other servers can never take it, in any
   case.
-- **Autres serveurs MCP** lists the other servers of the file, in its order: name, command and arguments, and the names of
-  their environment variables. « Ajouter un serveur… » and « Modifier » open a form (name, command, arguments one per line,
+- The other servers of the file follow, one line each, in its order: name, command and arguments, and the names of
+  their environment variables. « + Ajouter un serveur » and « Modifier » open a form (name, command, arguments one per line,
   variables as `NOM=valeur` one per line); « Retirer… » asks for a confirmation in the page. Only servers run by a command
   (stdio: `command`, with optional `args` and `env`) can be changed; a server described otherwise (a remote `url`, other
   fields) is marked « lecture seule » and can only be removed. A remote address is shown without credentials, query or
@@ -987,9 +984,9 @@ quote a value either, not even from an invalid file.
 
 Every other key of the file, and every server you do not touch, is kept as it is. Each change rereads the file and
 rewrites it in one go (a temporary file next to it, then renamed, readable by you only). Leaving the tab or the settings
-with a server form not saved asks first, as the other tabs do.
+with a server form not saved asks first, as the other settings do.
 
-**Restart the Claude app** after a change: it reads its MCP servers only at startup (the tab reminds you after each
+**Restart the Claude app** after a change: it reads its MCP servers only at startup (the group reminds you after each
 change).
 
 What the Claude app receives is the memory's MCP tools (`chercher`, `lire`, `contexte`, `proposer`, …) and the

@@ -89,8 +89,8 @@ After an update (`git pull`, then `pnpm installer`), restart what was already ru
 from the Mnemo folder), then open Mnemo again, and restart the sessions opened before the update.
 Until then, they run the old code, and only one set of models should run for the machine. If you use Codex, run
 `mnemo verifier-poste`: when the update changed the Mnemo hooks, approve them again in Codex (`/hooks`). For Mistral
-Vibe, `mnemo verifier-poste` says when the hooks are out of date, and « Lier à Mnemo » in **Settings › Système ›
-Moteurs** (or `mnemo declarer --moteur mistral-vibe --lier`) rewrites them; Vibe does not ask for an approval.
+Vibe, `mnemo verifier-poste` says when the hooks are out of date, and « Lier à Mnemo » in **Settings › Réglages ›
+Branchements** (or `mnemo declarer --moteur mistral-vibe --lier`) rewrites them; Vibe does not ask for an approval.
 
 ## The questions of `mnemo init`
 
@@ -122,8 +122,8 @@ declares a Mnemo MCP server pointing to another copy of Mnemo, `init` leaves it 
 it (`claude mcp remove mnemo --scope user`, then `claude mcp add …`); `mnemo declarer --lier` does both at once.
 `--codex` also declares the MCP server to Codex and installs the Mnemo hooks there (see [Codex](#codex)); without it,
 Codex is never touched. `--mistral` does the same for Mistral Vibe (see [Mistral
-Vibe](#mistral-vibe)). To link one engine later, `init` is not needed: « Lier à Mnemo » in **Settings › Système ›
-Moteurs**, or `mnemo declarer --moteur <claude-code|codex|mistral-vibe> --lier` from any folder, links it without any
+Vibe](#mistral-vibe)). To link one engine later, `init` is not needed: « Lier à Mnemo » in **Settings › Réglages ›
+Branchements**, or `mnemo declarer --moteur <claude-code|codex|mistral-vibe> --lier` from any folder, links it without any
 question and touches nothing else. `mnemo init --help` (or `-h`) prints the options of `init`. Explicit options (`--mcp`, `--sans-modeles`…) decide a step without asking, and `--json` gives one JSON line per event,
 for a program that drives the installation; `mnemo verifier-poste` checks git, Claude Code and the optional engines first (see
 [usage.md](usage.md#command-line)).
@@ -149,10 +149,10 @@ mnemo jeton
 Codex is optional. Mnemo needs **Codex 0.171 or later** (`codex --version`), signed in with your ChatGPT subscription; it
 never uses an API key (`CODEX_API_KEY` is removed from the environment of the sessions). Mnemo looks for `codex` in
 `MNEMO_CODEX`, then in the `PATH`, then, on macOS, in the copy that comes with the ChatGPT app.
-Installed after the Mnemo service started? Click « Relire » in **Settings › Système › Moteurs**: the service picks up
+Installed after the Mnemo service started? Click « Relire » in **Settings › Réglages › Branchements**: the service picks up
 the command it finds now, without a restart.
 
-1. **Link it to Mnemo.** In **Settings › Système › Moteurs**, click « Lier à Mnemo » on the Codex card, or, from any
+1. **Link it to Mnemo.** In **Settings › Réglages › Branchements**, click « Lier à Mnemo » on the Codex line, or, from any
    folder:
 
    ```sh
@@ -170,7 +170,7 @@ the command it finds now, without a restart.
    session. Answer it yourself: Mnemo shows the terminal but never answers for you. Until the first message of the
    session has reached the Mnemo hooks, the session can only be abandoned: no pause, wrap-up or resume.
 4. **Check.** `mnemo verifier-poste` prints a Codex line: where it was found, its version, the MCP declaration, the hooks
-   and whether they are approved. The interface shows the same in **Settings › Système › Moteurs**, with « Lier à
+   and whether they are approved. The interface shows the same in **Settings › Réglages › Branchements**, with « Lier à
    Mnemo », the command to run, or the action to take in Codex, when something is missing.
 
 A Mnemo declaration made for another Node.js or another copy of Mnemo is not rewritten by `init`: « Lier à Mnemo » or
@@ -196,13 +196,13 @@ Mistral Vibe (Mistral's terminal coding agent) is optional. Mnemo needs **Mistra
    ```
 
    This puts `vibe` in `~/.local/bin`. The Vibe desktop app does not provide this command: Mnemo needs the command
-   line tool. If the Mnemo service was already running, click « Relire » in **Settings › Système › Moteurs**: the
+   line tool. If the Mnemo service was already running, click « Relire » in **Settings › Réglages › Branchements**: the
    service picks up the new command, no restart needed.
 
 2. **Sign in yourself.** Run `vibe` once in a terminal: its setup asks how to sign in (browser or API key). Mnemo never
    signs in for you, never reads your key and never changes how Vibe signs in: a session started by Mnemo uses the same
    sign-in as your own `vibe`.
-3. **Link it to Mnemo.** In **Settings › Système › Moteurs**, click « Lier à Mnemo » on the Mistral Vibe card, or, from
+3. **Link it to Mnemo.** In **Settings › Réglages › Branchements**, click « Lier à Mnemo » on the Mistral Vibe line, or, from
    any folder:
 
    ```sh
@@ -217,7 +217,7 @@ Mistral Vibe (Mistral's terminal coding agent) is optional. Mnemo needs **Mistra
    button and `--lier` link nothing and say so; `init --mistral` installs the hooks anyway and prints the declaration as
    a command to paste later.
 4. **Check.** `mnemo verifier-poste` prints a Mistral Vibe line (where it was found, its version, the MCP declaration,
-   the hooks), and **Settings › Système › Moteurs** shows the same, with « Lier à Mnemo » when something is missing.
+   the hooks), and **Settings › Réglages › Branchements** shows the same, with « Lier à Mnemo » when something is missing.
 
 What Mnemo writes, and nothing else: the `mnemo` block of `config.toml` and the `mnemo-…` blocks of `hooks.toml`. For each
 session, an agent profile with the instruction of the profile (`mnemo-<session>.toml`) goes into the session folder of
@@ -237,7 +237,7 @@ Mnemo tools (`mnemo_*`) and its agent profile (`mnemo-<session>`) if they are li
 
 ## Claude app (Claude Desktop)
 
-To use the memory from the Claude app too, open the settings, **App Claude** tab, click « Brancher la mémoire », then
+To use the memory from the Claude app too, open the settings, **Réglages › Branchements**, turn on « Mémoire Mnemo » under App Claude, then
 restart the Claude app. It gets the memory's MCP tools, not the hooks of a Claude Code session: see
 [usage.md](usage.md#connecting-the-claude-app).
 
@@ -250,13 +250,22 @@ this way. Nothing is registered to run at login.
 ## Settings
 
 Open the interface and click the gear at the bottom of the left rail (shortcut: ⌥, on macOS, Alt+, elsewhere; the key
-next to M on a US keyboard), then the **Système** tab (the **Profils** tab manages session profiles, see
-[usage.md](usage.md#managing-profiles); the **App Claude** tab, the MCP servers of the Claude app, see
-[usage.md](usage.md#connecting-the-claude-app)). The groups are listed on the left, by how often you will use them: injected
-context, memory, archivist, search, projects, models, service, interface; the last one, **Moteurs** (engines), shows
-the state of each engine (Claude Code, Codex, Mistral Vibe) on this computer and links it to Mnemo with « Lier à Mnemo »
-(see [usage.md](usage.md#engines)). Each setting shows a one-line explanation, its default, and "Rétablir le défaut" (reset to
-default); changes are saved only when you click "Enregistrer" (save; leaving the page with unsaved changes asks first).
+next to M on a US keyboard). The settings have three tabs: **Agents** (session profiles, see
+[usage.md](usage.md#managing-profiles)), **Réglages** and **Documentation** (to come). **Réglages** has three sections,
+listed on the left:
+
+- **Branchements** (connections): the engines (Claude Code, Codex, Mistral Vibe) on this computer, linked to Mnemo with
+  « Lier à Mnemo » (see [usage.md](usage.md#engines)), and the MCP servers of the Claude app (see
+  [usage.md](usage.md#connecting-the-claude-app)). An amber dot on the tab and on the section says that an engine waits
+  for something from you.
+- **Mémoire** (memory): **Rappel** (recall: what Mnemo injects into your sessions and in what order; the rarer settings
+  are folded under « Réglages fins ») and **Confiance** (trust: reliability of sources, weight of a fact, what the
+  archivist writes alone, project markers).
+- **Système** (system): the service (its state, launcher browser, port), the local models, the main colour.
+
+Each slider says in one sentence what its value does; a setting that differs from its default shows the default and
+« Rétablir » (reset); the full explanation is in its tooltip. Changes of Mémoire and Système are saved together, only
+when you click "Enregistrer" (save; leaving the page with unsaved changes asks first).
 They are stored in `.mnemo/reglages.json` (only the values that differ from the defaults). A missing or invalid value
 falls back to its default with a warning, never a crash.
 
@@ -301,7 +310,7 @@ version) are kept, and so are invalid entries you did not touch (they stay liste
 
 ## Uninstall cleanly
 
-1. If the memory is connected to the Claude app, click « Débrancher » in **Settings › App Claude**, then restart the
+1. If the memory is connected to the Claude app, click « Débrancher » in **Settings › Réglages › Branchements**, then restart the
    Claude app.
 2. Stop what runs: `mnemo arreter` (service), from the Mnemo folder, and `mnemo modeles arreter` (model servers of the
    machine).
