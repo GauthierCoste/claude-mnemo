@@ -16,10 +16,9 @@ import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmS
 import { delimiter, join, sep } from 'node:path';
 import { trouverRacine } from '../../mnemo/src/adaptateurs/cli/racine.ts';
 import { IDENTIFIANT_LANCEUR } from '../../mnemo/src/infra/lanceur-macos.ts';
+import { IDENTIFIANT_APP } from '../src/domaine/identite-app.ts';
 import { cheminConfiguration, ecrireConfiguration } from '../src/infra/configuration-fichier.ts';
 
-/** Identifiant du paquet de l'app (`construire-app.ts`). */
-export const IDENTIFIANT_APP = 'local.mnemo.app';
 const NOM = 'Mnemo.app';
 
 const RACINE = join(import.meta.dirname, '..', '..', '..');

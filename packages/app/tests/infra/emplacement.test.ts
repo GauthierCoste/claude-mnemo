@@ -5,8 +5,16 @@ import { emplacementProvisoire, lancementDuPaquet, paquetDeLApp, pathParDefaut }
 describe('emplacement du Node et du main.ts', () => {
 	it('app empaquetée : ceux du dossier de ressources', () => {
 		const ressources = join('/Applications', 'Mnemo.app', 'Contents', 'Resources');
-		expect(lancementDuPaquet(true, ressources)).toEqual({
+		expect(lancementDuPaquet(true, ressources, 'darwin')).toEqual({
 			node: join(ressources, 'node', 'bin', 'node'),
+			main: join(ressources, 'mnemo', 'src', 'adaptateurs', 'cli', 'main.ts'),
+		});
+	});
+
+	it('app empaquetée sous Windows : node.exe à la racine de node/', () => {
+		const ressources = join('C:', 'Programmes', 'Mnemo', 'resources');
+		expect(lancementDuPaquet(true, ressources, 'win32')).toEqual({
+			node: join(ressources, 'node', 'node.exe'),
 			main: join(ressources, 'mnemo', 'src', 'adaptateurs', 'cli', 'main.ts'),
 		});
 	});
@@ -16,15 +24,19 @@ describe('emplacement du Node et du main.ts', () => {
 	});
 
 	it('dossier .app de l’app empaquetée', () => {
-		expect(paquetDeLApp(join('/Applications', 'Mnemo.app', 'Contents', 'Resources'))).toBe(join('/Applications', 'Mnemo.app'));
+		expect(paquetDeLApp(join('/Applications', 'Mnemo.app', 'Contents', 'Resources'), 'darwin')).toBe(join('/Applications', 'Mnemo.app'));
+	});
+
+	it('hors de macOS, pas de dossier .app : aucun', () => {
+		expect(paquetDeLApp(join('/Applications', 'Mnemo.app', 'Contents', 'Resources'), 'win32')).toBeNull();
 	});
 
 	it('jamais un chemin calculé faux : autre disposition, image disque ou translocation : aucun', () => {
-		expect(paquetDeLApp(join('/opt', 'Mnemo', 'resources'))).toBeNull();
-		expect(paquetDeLApp(join('/Applications', 'Contents', 'Resources'))).toBeNull();
-		expect(paquetDeLApp('/Applications/Mnemo/Contents/Resources')).toBeNull();
-		expect(paquetDeLApp('/Volumes/Mnemo 1.5.0/Mnemo.app/Contents/Resources')).toBeNull();
-		expect(paquetDeLApp('/private/var/folders/ab/T/AppTranslocation/1234/d/Mnemo.app/Contents/Resources')).toBeNull();
+		expect(paquetDeLApp(join('/opt', 'Mnemo', 'resources'), 'darwin')).toBeNull();
+		expect(paquetDeLApp(join('/Applications', 'Contents', 'Resources'), 'darwin')).toBeNull();
+		expect(paquetDeLApp('/Applications/Mnemo/Contents/Resources', 'darwin')).toBeNull();
+		expect(paquetDeLApp('/Volumes/Mnemo 1.5.0/Mnemo.app/Contents/Resources', 'darwin')).toBeNull();
+		expect(paquetDeLApp('/private/var/folders/ab/T/AppTranslocation/1234/d/Mnemo.app/Contents/Resources', 'darwin')).toBeNull();
 		expect(emplacementProvisoire('/Volumes/Mnemo 1.5.0/Mnemo.app/Contents/Resources')).toBe(true);
 		expect(emplacementProvisoire('/Applications/Mnemo.app/Contents/Resources')).toBe(false);
 	});
