@@ -400,7 +400,10 @@ to process).
 - **Sessions**: the grid of sessions, the Dossier panel (tree of all the folders of the root, two levels unfolded at
   start, with session status dots, git status and "+ session" on each folder) and the Contexte panel ("Injecté dans
   la session": one list for the selected session, see "Injected context"). The side panels are resized by dragging their
-  border (double-click: default width).
+  border (double-click: default width). In the session bar, left of the Dossier and Contexte switches, one small avatar
+  per agent (profile) with a live session, the archivist included: its most urgent state (waiting for an answer: amber
+  dot with a ring; working: pulsing dot; idle: hollow dot) and its number of sessions; a click goes to that session (the
+  archivist: its drawer). The row hides when the bar gets narrow.
 - **Mémoire › Archiviste**: one page to enrich the memory and decide, in three columns: to decide (facts to confirm,
   level raises and modifications proposed by a session) and to process (imported sources); the archivist terminal in the
   centre; on the right, the drop zone, the recent documents and "Appris aujourd'hui" (learned today: the commits of the

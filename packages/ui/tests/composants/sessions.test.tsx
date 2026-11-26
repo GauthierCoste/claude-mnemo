@@ -358,6 +358,23 @@ describe('vue Sessions', () => {
 		expect(screen.getByText('consignes / Tests.md')).toBeTruthy();
 	});
 
+	it('barre des états : un avatar par agent en cours (l’archiviste compris), juste à gauche des bascules ; clic → sa session la plus urgente, ou le tiroir de l’archiviste', async () => {
+		await monter();
+		const rangee = await screen.findByRole('list', { name: 'Agents en cours' });
+		const [travail, archiviste] = within(rangee).getAllByRole('button') as [HTMLElement, HTMLElement];
+		expect(travail.getAttribute('aria-label')).toBe('travail : 4 sessions, 1 travaille, 1 attend une réponse, 2 au repos');
+		expect(archiviste.getAttribute('aria-label')).toBe('archiviste : 1 session, 1 travaille');
+		expect(rangee.nextElementSibling).toBe(screen.getByRole('switch', { name: 'Dossier' }).closest('label') ?? screen.getByRole('switch', { name: 'Dossier' }));
+		await act(async () => within(ligneDossier('api')).getByRole('button', { name: /^api/ }).click());
+		expect(screen.getByLabelText('terminal s3').getAttribute('data-actif')).toBe('true');
+		await act(async () => travail.click());
+		expect(screen.getByLabelText('terminal s1').getAttribute('data-actif')).toBe('true');
+		const tiroir = document.querySelector<HTMLElement>('aside[data-ouvert][aria-label="Archiviste"]')!;
+		expect(tiroir.getAttribute('data-ouvert')).toBe('false');
+		await act(async () => archiviste.click());
+		expect(tiroir.getAttribute('data-ouvert')).toBe('true');
+	});
+
 	it('panneau Dossier : puce git, clic sur un dossier → sa première session choisie', async () => {
 		await monter();
 		const dossier = screen.getByRole('complementary', { name: 'Dossier' });
