@@ -246,7 +246,7 @@ function vueTermine(): Enfant[] {
 		el('h1', {}, 'Mnemo est prêt'),
 		el('p', { class: 'intro' }, 'La mémoire est dans ', el('code', {}, etat.dossier?.racine ?? ''), '.'),
 		i !== null ? vueEtapes(i) : null,
-		echecs.length > 0 ? el('p', { class: 'avertissement' }, `${echecs.map((e) => LIBELLES_ETAPES[e.etape]).join(', ')} : échec. Tu pourras le refaire plus tard (mnemo init, dans ce dossier).`) : null,
+		echecs.length > 0 ? el('p', { class: 'avertissement' }, `${echecs.map((e) => LIBELLES_ETAPES[e.etape]).join(', ')} : échec.${textes.relance === null ? '' : ` ${textes.relance}`}`) : null,
 		erreur(erreurFin),
 		el('div', { class: 'actions' }, bouton(ouverture ? 'Ouverture…' : 'Ouvrir Mnemo', () => void terminer(), { primaire: true, desactive: ouverture, cle: 'ouvrir' })),
 	];

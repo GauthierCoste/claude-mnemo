@@ -123,12 +123,16 @@ describe('sous Windows', () => {
 		expect(w.aideGit).toEqual({ commande: null, libelleLien: 'Installer Git pour Windows', lien: 'https://git-scm.com/downloads/win' });
 		expect(w.cases.find((c) => c.cle === 'ouvrirALaSession')?.detail).toBe('Mnemo reste dans la zone de notification.');
 		expect(w.cases.find((c) => c.cle === 'modeles')?.detail).toMatch(/^Recherche par le sens, sur cet ordinateur ; /u);
-		expect(JSON.stringify(w)).not.toMatch(/Mac|barre des menus|xcode/u);
+		expect(w.cases.find((c) => c.cle === 'modeles')?.detail).toBe('Recherche par le sens, sur cet ordinateur ; environ 1,3 Go à télécharger. Sans eux, la recherche se fait par les mots.');
+		expect(w.relance).toBeNull();
+		expect(JSON.stringify(w)).not.toMatch(/Mac|barre des menus|xcode|mnemo /u);
 		const m = textesAssistant('darwin');
 		expect(m.intro).toBe('Mnemo donne une mémoire à tes sessions Claude Code. Il lui faut git et Claude Code sur ce Mac.');
 		expect(m.aideGit).toEqual({ commande: 'xcode-select --install', libelleLien: 'installer git', lien: 'https://git-scm.com/downloads/mac' });
 		expect(m.cases.find((c) => c.cle === 'ouvrirALaSession')?.detail).toBe('Mnemo reste dans la barre des menus.');
 		expect(m.cases.find((c) => c.cle === 'commande')?.detail).toBe('Pour le terminal : ~/.local/bin/mnemo.');
+		expect(m.cases.find((c) => c.cle === 'modeles')?.detail).toMatch(/ ; plus tard : mnemo modeles installer\.$/u);
+		expect(m.relance).toBe('Tu pourras le refaire plus tard (mnemo init, dans ce dossier).');
 	});
 });
 

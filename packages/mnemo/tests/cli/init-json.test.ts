@@ -154,13 +154,15 @@ describe('mnemo init --json', () => {
 		expect(a.installerCommande).not.toHaveBeenCalled();
 	});
 
-	it('sous Windows : la commande est sautée, même demandée, sans conseil de développeur', async () => {
+	it('sous Windows : la commande est sautée, même demandée, sans conseil de développeur ; les modèles sautés sans renvoi à une commande', async () => {
 		const racine = await dossierTemporaire();
 		const a = actions();
 		const sortie = capture();
 		await commandeInit([racine, '--json', '--sans-mcp', '--commande', '--sans-lanceur'], { sortie: sortie.flux, plateforme: 'win32', actions: a });
 		const commande = lignesJson(sortie.texte()).filter((l) => (l as { etape?: string }).etape === 'commande');
 		expect(commande).toEqual([{ etape: 'commande', etat: 'saute', message: 'Commande « mnemo » : pas sous Windows.' }]);
+		const modeles = lignesJson(sortie.texte()).filter((l) => (l as { etape?: string }).etape === 'modeles');
+		expect(modeles).toEqual([{ etape: 'modeles', etat: 'saute', message: 'Modèles locaux : non installés (la recherche se fait par les mots).' }]);
 		expect(a.installerCommande).not.toHaveBeenCalled();
 	});
 

@@ -292,7 +292,8 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 				return infos.length > 0 ? infos.join(' ; ') : 'Modèles locaux installés.';
 			});
 		} else {
-			const message = 'Modèles locaux : non installés (la recherche se fait par les mots) ; plus tard : mnemo modeles installer.';
+			// sous Windows, pas de commande « mnemo » à relancer plus tard : pas de renvoi vers elle
+			const message = plateforme === 'win32' ? 'Modèles locaux : non installés (la recherche se fait par les mots).' : 'Modèles locaux : non installés (la recherche se fait par les mots) ; plus tard : mnemo modeles installer.';
 			if (!existante) ecrire(message);
 			j.evenement('modeles', 'saute', message);
 		}
