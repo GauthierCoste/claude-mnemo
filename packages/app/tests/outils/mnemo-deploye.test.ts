@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ErreurConstruction } from '../../outils/erreur.ts';
-import { commandePnpm, dependancesSansChemin, elaguerNodePty, precompilesNodePty, verifierSansLien } from '../../outils/mnemo-deploye.ts';
+import { commandePnpm, dependancesSansChemin, dossiersDeTest, elaguerNodePty, precompilesNodePty, verifierSansLien } from '../../outils/mnemo-deploye.ts';
 
 let dossier: string;
 beforeEach(() => {
@@ -77,6 +77,26 @@ describe('arbre emporté', () => {
 		verifierSansLien(dossier);
 		symlinkSync(join('b', 'f'), join(dossier, 'a', 'lien'));
 		expect(() => verifierSansLien(dossier)).toThrow(/Lien refusé/u);
+	});
+});
+
+describe('dossiers de tests des dépendances', () => {
+	it('à la racine d’un paquet (portée comprise) et non nommés par ses entrées : retirables ; ailleurs ou nommés : gardés', () => {
+		const modules = join(dossier, 'node_modules');
+		const paquet = (chemin: string, json: object, dossiers: string[]): void => {
+			mkdirSync(join(modules, chemin), { recursive: true });
+			writeFileSync(join(modules, chemin, 'package.json'), JSON.stringify(json));
+			for (const d of dossiers) mkdirSync(join(modules, chemin, d), { recursive: true });
+		};
+		paquet('domino', { main: './lib/index.js' }, ['test', 'lib/test']);
+		paquet('@portee/p', { exports: { '.': './dist/index.js' } }, ['tests', '__tests__']);
+		paquet('utilise', { main: './test/index.js' }, ['test']);
+		paquet('a/node_modules/imbrique', { main: 'index.js' }, ['test']);
+		mkdirSync(join(modules, 'sans-paquet', 'test'), { recursive: true });
+		writeFileSync(join(modules, 'domino', 'tests'), 'un fichier, pas un dossier');
+		expect(dossiersDeTest(modules).sort()).toEqual(
+			[join(modules, '@portee', 'p', '__tests__'), join(modules, '@portee', 'p', 'tests'), join(modules, 'a', 'node_modules', 'imbrique', 'test'), join(modules, 'domino', 'test')].sort(),
+		);
 	});
 });
 

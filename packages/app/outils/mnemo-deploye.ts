@@ -2,7 +2,8 @@
  * Le code de Mnemo (paquets voisins de ce dépôt) emporté par l'app, dans un dossier de ressources :
  *
  * - `mnemo/` : `packages/mnemo` et ses dépendances de production (`pnpm deploy --prod`, `node_modules` à plat :
- *   `node-linker=hoisted`), dont `node-pty` (précompilé N-API pour la cible, seul gardé) ;
+ *   `node-linker=hoisted`), dont `node-pty` (précompilé N-API pour la cible, seul gardé), sans les dossiers de tests des
+ *   dépendances (`dossiersDeTest`) ;
  * - `mnemo/node_modules/@mnemo/{commun,contrat}` : ces deux paquets traduits en JavaScript (`paquet-js.ts` : Node refuse le
  *   TypeScript situé sous `node_modules`) ;
  * - `ui/dist` : l'interface construite, là où `adaptateurs/http/statique.ts` la cherche (`../../../../ui/dist` depuis le
@@ -13,7 +14,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { Cible } from './cible.ts';
 import { ErreurConstruction } from './erreur.ts';
 import { ecrirePaquetJs } from './paquet-js.ts';
@@ -95,6 +96,32 @@ function retirerBin(modules: string): void {
 	}
 }
 
+/** Noms des dossiers de tests d'un paquet. */
+const DOSSIERS_DE_TEST = new Set(['test', 'tests', '__tests__']);
+
+/**
+ * Dossiers de tests à la racine des paquets de `modules` (`node_modules/<paquet>/test`, `node_modules/@portee/<paquet>/tests`…),
+ * que ni le point d'entrée, ni les exports, ni les commandes du paquet ne nomment : inutiles à l'exécution, ils allongent les
+ * chemins (limite de 260 caractères de certains outils Windows) et alourdissent l'app.
+ */
+export function dossiersDeTest(modules: string): string[] {
+	const trouves: string[] = [];
+	for (const entree of readdirSync(modules, { recursive: true }) as string[]) {
+		const nom = basename(entree);
+		if (!DOSSIERS_DE_TEST.has(nom)) continue;
+		const chemin = join(modules, entree);
+		const paquet = dirname(chemin);
+		const parent = dirname(paquet);
+		const racine = basename(parent) === 'node_modules' || (basename(parent).startsWith('@') && basename(dirname(parent)) === 'node_modules');
+		if (!racine || !lstatSync(chemin).isDirectory() || !existsSync(join(paquet, 'package.json'))) continue;
+		const json = lireJson(join(paquet, 'package.json'));
+		const references = JSON.stringify(['main', 'module', 'exports', 'imports', 'browser', 'bin'].map((cle) => json[cle] ?? null));
+		if (new RegExp(`(^|[^\\w-])${nom}([^\\w-]|$)`, 'u').test(references)) continue;
+		trouves.push(chemin);
+	}
+	return trouves;
+}
+
 /** Aucun lien symbolique sous `dossier` (ni jonction) : l'installeur Windows ne les garde pas, le paquet se suffit. */
 export function verifierSansLien(dossier: string): void {
 	for (const entree of readdirSync(dossier, { recursive: true }) as string[]) {
@@ -130,6 +157,7 @@ export function deployerMnemo(espace: string, paquets: string, ressources: strin
 	writeFileSync(join(mnemo, 'package.json'), `${JSON.stringify(paquetMnemo, null, 2)}\n`);
 
 	elaguerNodePty(join(modules, 'node-pty'), cible);
+	for (const dossier of dossiersDeTest(modules)) rmSync(dossier, { recursive: true, force: true });
 	cpSync(ui, join(ressources, 'ui', 'dist'), { recursive: true });
 	verifierSansLien(ressources);
 }
