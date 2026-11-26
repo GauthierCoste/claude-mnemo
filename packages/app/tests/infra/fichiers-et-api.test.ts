@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { demanderArret, requeteLocale, santeService, suiteDeLaDemande } from '../../src/infra/api-service.ts';
 import { cheminConfiguration, lireConfiguration } from '../../src/infra/configuration-fichier.ts';
 import { environnementOuvrir } from '../../src/infra/demarrage.ts';
-import { dossierApp } from '../../src/infra/dossiers.ts';
+import { dossierApp, environnementDuDossier } from '../../src/infra/dossiers.ts';
 import { cheminsInstallation } from '../../src/infra/installation-fichiers.ts';
 import { cheminServiceJson, lireServiceJson, processusVivant } from '../../src/infra/service-local.ts';
 
@@ -32,6 +32,16 @@ describe('dossiers selon la plateforme', () => {
 		expect(dossierApp('/maison/exemple', 'darwin', {})).toBe('/maison/exemple/Library/Application Support/Mnemo');
 		expect(dossierApp('D:\\Profils\\exemple', 'win32', { APPDATA: 'D:\\essai\\Roaming' })).toBe('D:\\essai\\Roaming\\Mnemo');
 		expect(dossierApp('D:\\Profils\\exemple', 'win32', {})).toBe('D:\\Profils\\exemple\\AppData\\Roaming\\Mnemo');
+	});
+
+	it('Windows : un dossier personnel de travail ne touche jamais au vrai %APPDATA%', () => {
+		const vrai = { APPDATA: 'C:\\Vrai\\Roaming', Path: 'C:\\Windows' };
+		expect(environnementDuDossier('D:\\essai', 'win32', vrai, 'C:\\Vrai')).toEqual({ APPDATA: 'D:\\essai\\AppData\\Roaming', Path: 'C:\\Windows' });
+		expect(environnementDuDossier('C:\\Vrai', 'win32', vrai, 'C:\\Vrai')).toBe(vrai);
+		expect(environnementDuDossier('/essai', 'darwin', vrai, '/vrai')).toBe(vrai);
+		// sans `env` donné : jamais le vrai `%APPDATA%` pour un dossier personnel autre que celui du système
+		expect(dossierApp('D:\\essai', 'win32')).toBe('D:\\essai\\AppData\\Roaming\\Mnemo');
+		expect(cheminsInstallation('D:\\essai', 'win32').appClaude).toBe('D:\\essai\\AppData\\Roaming\\Claude\\claude_desktop_config.json');
 	});
 
 	it('configuration de l’app Claude : même règle que le service', () => {

@@ -12,15 +12,17 @@ import { pathToFileURL } from 'node:url';
 import { fichierConfigClaudeDesktop } from '@mnemo/commun';
 import type { Lancement } from '../domaine/configuration.ts';
 import { plateformeApp } from '../domaine/plateforme.ts';
+import { environnementDuDossier } from './dossiers.ts';
 import { type Attendu, entreeMnemo, type EtatElement, etatCommande, etatEntreeMcp, type EtatInstallation, texteSansEntreeMnemo } from '../domaine/installation.ts';
 
 export type CheminsInstallation = { commande: string; claudeCode: string; appClaude: string };
 
-export function cheminsInstallation(home: string, plateforme: NodeJS.Platform = process.platform, env: NodeJS.ProcessEnv = process.env): CheminsInstallation {
+/** `env` : par défaut `environnementDuDossier` (un dossier personnel de travail ne lit jamais le vrai `%APPDATA%`). */
+export function cheminsInstallation(home: string, plateforme: NodeJS.Platform = process.platform, env: NodeJS.ProcessEnv = environnementDuDossier(home, plateforme)): CheminsInstallation {
 	return {
 		commande: join(home, '.local', 'bin', 'mnemo'),
 		claudeCode: join(home, '.claude.json'),
-		appClaude: fichierConfigClaudeDesktop(plateforme, home, env),
+		appClaude: fichierConfigClaudeDesktop(plateformeApp(plateforme), home, env),
 	};
 }
 
