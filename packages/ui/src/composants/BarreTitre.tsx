@@ -1,5 +1,5 @@
 import type { ReactNode, RefObject } from 'react';
-import { toucheCommande } from '../raccourcis.ts';
+import { raccourciAlt, toucheCommande } from '../raccourcis.ts';
 import { Quotas } from './Quotas.tsx';
 import { BoutonModeles } from './modeles/BoutonModeles.tsx';
 import s from './BarreTitre.module.css';
@@ -43,7 +43,7 @@ export function BarreTitre(p: {
 				>
 					<span className={s.pouls} data-attend={p.archivisteAttend ? 'true' : undefined} aria-hidden="true" />
 					Archiviste
-					<kbd>⌥A</kbd>
+					<kbd>{raccourciAlt('A')}</kbd>
 				</button>
 			</div>
 		</header>

@@ -12,6 +12,7 @@ import type { GroupeSessions } from '../../sessions/groupes.ts';
 import { CLASSE_GLISSEMENT } from '../../terminal/useTerminal.ts';
 import { cx } from '../commun/classes.ts';
 import { useGestesSeparateur } from '../commun/gestes-separateur.ts';
+import { raccourciAlt } from '../../raccourcis.ts';
 import { AvatarSession } from './AvatarSession.tsx';
 import { CarteSession } from './CarteSession.tsx';
 import s from './GrilleSessions.module.css';
@@ -83,7 +84,7 @@ export function GrilleSessions(p: Props): ReactNode {
 					aria-keyshortcuts={rang <= 9 ? `Alt+${rang}` : undefined}
 				>
 					<AvatarSession session={x} taille="rail" />
-					{rang <= 9 && <kbd>⌥{rang}</kbd>}
+					{rang <= 9 && <kbd>{raccourciAlt(String(rang))}</kbd>}
 					<span className={s.vertical}>{x.objectif ?? 'Sans objectif'}</span>
 				</button>
 				<CarteSession
@@ -156,10 +157,10 @@ export function GrilleSessions(p: Props): ReactNode {
 				})}
 			</div>
 			<div className={s.aide} data-aide="">
-				<span>{nombre > 1 ? `⌥1 à ⌥${Math.min(nombre, 9)} ouvre une session en grand` : '⌥1 ouvre la session en grand'}</span>
+				<span>{nombre > 1 ? `${raccourciAlt('1')} à ${raccourciAlt(String(Math.min(nombre, 9)))} ouvre une session en grand` : `${raccourciAlt('1')} ouvre la session en grand`}</span>
 				<span>Échap revient à la grille</span>
 				<span>double-clic sur un titre pour agrandir</span>
-				<span>⌥A parle à l'archiviste</span>
+				<span>{raccourciAlt('A')} parle à l'archiviste</span>
 			</div>
 		</div>
 	);

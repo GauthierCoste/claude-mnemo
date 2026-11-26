@@ -10,12 +10,13 @@ afterEach(() => {
 
 describe('BoutonsArbre', () => {
 	it.each([
-		['MacIntel', '⌘', 'Meta'],
-		['Win32', 'Ctrl+', 'Control'],
-		['Linux x86_64', 'Ctrl+', 'Control'],
-	])('raccourcis annoncés selon la plateforme (%s)', (platform, affiche, touche) => {
+		['MacIntel', '⌘', 'Meta', '⌥L'],
+		['Win32', 'Ctrl+', 'Control', 'Alt+L'],
+		['Linux x86_64', 'Ctrl+', 'Control', 'Alt+L'],
+	])('raccourcis annoncés selon la plateforme (%s)', (platform, affiche, touche, localiser) => {
 		vi.stubGlobal('navigator', { platform });
-		render(<BoutonsArbre surReplier={() => {}} surDeplier={() => {}} />);
+		render(<BoutonsArbre surReplier={() => {}} surDeplier={() => {}} localiser={{ possible: true, surLocaliser: () => {} }} />);
+		expect(screen.getByRole('button', { name: 'Localiser la fiche ouverte' }).title).toBe(`Localiser la fiche ouverte (${localiser})`);
 		const replier = screen.getByRole('button', { name: 'Tout replier' });
 		const deplier = screen.getByRole('button', { name: 'Tout déplier' });
 		expect(replier.title).toBe(`Tout replier (${affiche}-)`);

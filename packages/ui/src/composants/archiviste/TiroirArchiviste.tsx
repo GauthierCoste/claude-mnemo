@@ -19,6 +19,7 @@ import { Bouton } from '../commun/Bouton.tsx';
 import { Puce } from '../commun/Puce.tsx';
 import { garder, lireGarde } from '../commun/taille-gardee.ts';
 import { Tiroir } from '../commun/Tiroir.tsx';
+import { raccourciAlt } from '../../raccourcis.ts';
 import { activiteArchiviste, ActiviteArchiviste, libelleActivite } from './ActiviteArchiviste.tsx';
 import { archivisteVivant, CentreArchiviste, terminalDansLaPage } from './CentreArchiviste.tsx';
 import s from './TiroirArchiviste.module.css';
@@ -120,7 +121,7 @@ export function TiroirArchiviste(): ReactNode {
 				{aFaire.total} à faire
 			</Bouton>
 			{(archiviste?.terminal || grand) && (
-				<Bouton genre="icone" onClick={() => nav.agrandirArchiviste()} aria-keyshortcuts="Alt+Shift+A" title={grand ? 'Rendre au tiroir (⌥⇧A, Échap)' : 'Terminal en grand (⌥⇧A)'}>
+				<Bouton genre="icone" onClick={() => nav.agrandirArchiviste()} aria-keyshortcuts="Alt+Shift+A" title={grand ? `Rendre au tiroir (${raccourciAlt('A', { maj: true })}, Échap)` : `Terminal en grand (${raccourciAlt('A', { maj: true })})`}>
 					{grand ? 'Réduire' : 'Agrandir'}
 				</Bouton>
 			)}

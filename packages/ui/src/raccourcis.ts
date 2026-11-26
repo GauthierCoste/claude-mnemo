@@ -19,6 +19,15 @@ export function toucheCommande(mac: boolean = plateformeMac()): { libelle: strin
 	return mac ? { libelle: '⌘', aria: 'Meta' } : { libelle: 'Ctrl+', aria: 'Control' };
 }
 
+/**
+ * Libellé affiché d'un raccourci avec Alt (les raccourcis ⌥ de l'en-tête) : `⌥A`, `⌥⇧A` sous macOS ; ailleurs `Alt+A`,
+ * `Alt+Maj+A`. `aria-keyshortcuts` dit déjà `Alt+…` partout.
+ */
+export function raccourciAlt(touche: string, o: { maj?: boolean; mac?: boolean } = {}): string {
+	const mac = o.mac ?? plateformeMac();
+	return mac ? `⌥${o.maj === true ? '⇧' : ''}${touche}` : `Alt+${o.maj === true ? 'Maj+' : ''}${touche}`;
+}
+
 export type Action =
 	| { genre: 'session'; rang: number }
 	| { genre: 'grille' }

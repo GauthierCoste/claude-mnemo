@@ -22,6 +22,7 @@ import { enSaisie, enValeur, modifications, type Saisie } from '../../reglages/b
 import { CARTES_REGLAGES, champsNonDisposes, sectionDuChamp } from '../../reglages/disposition.ts';
 import { oublierSectionDemandee, sectionDemandeeALire, type SectionReglages } from '../../reglages/onglet-retenu.ts';
 import { Bouton } from '../commun/Bouton.tsx';
+import { raccourciAlt } from '../../raccourcis.ts';
 import { CarteReglages, type Saisies } from './CarteReglages.tsx';
 import { AppClaude } from './claude-desktop/AppClaude.tsx';
 import { EtatService } from './EtatService.tsx';
@@ -155,7 +156,7 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 					))}
 				</ul>
 				<p className={d.discret}>
-					Dans <code>.mnemo/reglages.json</code> ; les règles de la mémoire (confiance, seuil de rappel) dans <code>SCHEMA.md</code>, versionné (un commit). Raccourci : <kbd>⌥,</kbd>
+					Dans <code>.mnemo/reglages.json</code> ; les règles de la mémoire (confiance, seuil de rappel) dans <code>SCHEMA.md</code>, versionné (un commit). Raccourci : <kbd>{raccourciAlt(',')}</kbd>
 				</p>
 			</nav>
 			<div className={c.contenu}>

@@ -4,7 +4,7 @@
  * par l'arbre (`pliageArbre`) et annoncés selon la plateforme.
  */
 import type { ReactNode } from 'react';
-import { toucheCommande } from '../../raccourcis.ts';
+import { raccourciAlt, toucheCommande } from '../../raccourcis.ts';
 import s from './BoutonsArbre.module.css';
 
 const trait = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
@@ -37,7 +37,7 @@ export function BoutonsArbre(p: { surReplier(): void; surDeplier(): void; locali
 				<button
 					type="button"
 					className={s.bouton}
-					title="Localiser la fiche ouverte (⌥L)"
+					title={`Localiser la fiche ouverte (${raccourciAlt('L')})`}
 					aria-label="Localiser la fiche ouverte"
 					aria-keyshortcuts="Alt+L"
 					disabled={!p.localiser.possible}

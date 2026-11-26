@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from 'vitest';
-import { actionDuRaccourci, origineDeLaTouche, pliageArbre, plateformeMac, toucheCommande } from '../src/raccourcis.ts';
+import { actionDuRaccourci, origineDeLaTouche, pliageArbre, plateformeMac, raccourciAlt, toucheCommande } from '../src/raccourcis.ts';
 
 const touche = (code: string, o: Partial<{ key: string; altKey: boolean; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }> = {}) => ({
 	code,
@@ -90,6 +90,14 @@ describe('actionDuRaccourci', () => {
 	it('toucheCommande : ⌘ (Meta) sous macOS, Ctrl+ (Control) ailleurs ; un seul libellé pour la palette et les arbres', () => {
 		expect(toucheCommande(true)).toEqual({ libelle: '⌘', aria: 'Meta' });
 		expect(toucheCommande(false)).toEqual({ libelle: 'Ctrl+', aria: 'Control' });
+	});
+
+	it('raccourciAlt : ⌥A, ⌥⇧A sous macOS ; Alt+A, Alt+Maj+A ailleurs', () => {
+		expect(raccourciAlt('A', { mac: true })).toBe('⌥A');
+		expect(raccourciAlt('A', { mac: true, maj: true })).toBe('⌥⇧A');
+		expect(raccourciAlt('A', { mac: false })).toBe('Alt+A');
+		expect(raccourciAlt('A', { mac: false, maj: true })).toBe('Alt+Maj+A');
+		expect(raccourciAlt(',', { mac: false })).toBe('Alt+,');
 	});
 
 	it('plateformeMac : userAgentData d’abord, puis navigator.platform', () => {

@@ -10,6 +10,7 @@ import { moteurEtModele, moteurParticulier } from '../../moteurs/noms.ts';
 import { Terminal } from '../../terminal/Terminal.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
 import { cx } from '../commun/classes.ts';
+import { raccourciAlt } from '../../raccourcis.ts';
 import s from './CarteSession.module.css';
 import { FermerSession } from './FermerSession.tsx';
 import { JaugeContexte } from './JaugeContexte.tsx';
@@ -36,7 +37,7 @@ export function CarteSession(p: PropsCarte): ReactNode {
 		<div className={cx(s.carte, p.choisie && s.foc)} data-session={session.id} onMouseDown={choisir}>
 			<div className={s.barre} onDoubleClick={() => p.surZoom(session.id)}>
 				<AvatarSession session={session} taille="barre" />
-				{p.rang <= 9 && <kbd>⌥{p.rang}</kbd>}
+				{p.rang <= 9 && <kbd>{raccourciAlt(String(p.rang))}</kbd>}
 				<span className={s.objectif}>{session.objectif ?? 'Sans objectif'}</span>
 				{moteurParticulier(session) !== null && (
 					<span className={s.moteur} title={`Moteur : ${moteurEtModele(session)}`}>

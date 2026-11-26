@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ErreurApi } from '../../src/client/api.ts';
 import { Application } from '../../src/composants/Application.tsx';
+import { raccourciAlt } from '../../src/raccourcis.ts';
 import { dossiersFaux } from '../aides/dossiers-faux.ts';
 import { cliquerQuandAffiche, creerFauxClient, demandeTout } from '../aides/faux-client.tsx';
 import { stockage } from '../aides/stockage.ts';
@@ -123,8 +124,9 @@ describe('vue Sessions', () => {
 		expect(lignes).toEqual(['erp-saas', 'api', 'agent']);
 		expect(carte('arch')).toBeNull();
 		expect(screen.getByText('4 sessions | 1 attend une réponse | 1 travaille')).toBeTruthy();
-		expect(within(carte('s1')).getByText('⌥1')).toBeTruthy();
-		expect(within(carte('s3')).getByText('⌥3')).toBeTruthy();
+		// ⌥1 sous macOS, Alt+1 ailleurs (navigator de l'environnement de test)
+		expect(within(carte('s1')).getByText(raccourciAlt('1'))).toBeTruthy();
+		expect(within(carte('s3')).getByText(raccourciAlt('3'))).toBeTruthy();
 	});
 
 	it('un message `session` passe une carte de « Travaille » à « Attend une réponse », la pastille suit', async () => {
