@@ -251,14 +251,15 @@ this way. Nothing is registered to run at login.
 
 Open the interface and click the gear at the bottom of the left rail (shortcut: ⌥, on macOS, Alt+, elsewhere; the key
 next to M on a US keyboard). The settings have three tabs: **Agents** (session profiles, see
-[usage.md](usage.md#managing-profiles)), **Réglages** and **Documentation** (to come). **Réglages** has three sections,
+[usage.md](usage.md#managing-profiles)), **Réglages** and **Documentation** (how Mnemo works, in six chapters, see
+[usage.md](usage.md#settings)). **Réglages** has three sections,
 listed on the left:
 
 - **Branchements** (connections): the engines (Claude Code, Codex, Mistral Vibe) on this computer, linked to Mnemo with
   « Lier à Mnemo » (see [usage.md](usage.md#engines)), and the MCP servers of the Claude app (see
   [usage.md](usage.md#connecting-the-claude-app)). An amber dot on the tab and on the section says that an engine waits
   for something from you.
-- **Mémoire** (memory): **Rappel** (recall: what Mnemo injects into your sessions and in what order; the rarer settings
+- **Mémoire** (memory): **Rappel** (recall: what Mnemo injects into your sessions, and the order of search results; the rarer settings
   are folded under « Réglages fins ») and **Confiance** (trust: reliability of sources, weight of a fact, what the
   archivist writes alone, project markers).
 - **Système** (system): the service (its state, launcher browser, port), the local models, the main colour.

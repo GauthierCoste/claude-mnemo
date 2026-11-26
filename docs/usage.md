@@ -114,13 +114,31 @@ command only, for example `mnemo init --help` or `mnemo declarer --help`, with e
 
 ## Settings
 
-The settings of a folder are in `.mnemo/reglages.json` (local state, never versioned) and can be changed in the
-interface (gear at the bottom of the rail, ⌥,): project markers (◆ in the folder tree), the injected context (thresholds of automatic injection and of leads, notes injected and leads per message),
-minimum similarity of search, model shutdown after inactivity, note types whose proposed information needs a
-confirmation, service port, launcher browser and the main colour of the interface (green by default). The table of settings and defaults is in [installation.md](installation.md#settings).
-The main colour is applied as soon as it is picked; below the picker, a warning appears when it is hard to read on the dark background (contrast under 3:1). The logo and the session state colours keep their own colours.
-**Réglages › Branchements** links the engines to Mnemo, connects the memory to the Claude app (Claude Desktop) and
-manages its other MCP servers: see [Engines](#engines) and [Connecting the Claude app](#connecting-the-claude-app).
+The settings view (gear at the bottom of the rail, ⌥,) has three tabs, each with its side panel on the left; the last tab
+opened is remembered in this browser:
+
+- **Agents**: the session profiles, one line each in the panel, edited on the right in a character creator: see
+  [Managing profiles](#managing-profiles).
+- **Réglages** (settings), in three sections: **Branchements** (connections: the engines and their link to Mnemo, then
+  the Claude app: see [Engines](#engines) and [Connecting the Claude app](#connecting-the-claude-app)), **Mémoire**
+  (memory: two cards side by side, *Rappel* for what is injected and the weights of search, *Confiance* for source
+  reliability, fact weights, the repetitions before a rule is proposed as permanent, the note types the archivist writes
+  without asking, and the project markers) and **Système** (system: service state, port and launcher browser, local
+  model shutdown after inactivity, main colour). Main sliders show their value on the right and a sentence saying what
+  it does; « Défaut : x · Rétablir » appears only when the value differs from the default; finer settings are folded
+  under « Réglages fins · N ». Mémoire and Système share one Cancel / Save footer; leaving the tab or the view with
+  unsaved changes asks first. An engine waiting for a gesture puts an amber dot on the Réglages tab and on Branchements.
+- **Documentation**: how Mnemo works, in six chapters (the principle, a session and its six powers, agents, recall,
+  confidence, the archivist), checked against the code. The chapter opened is remembered too.
+
+The settings of a folder are in `.mnemo/reglages.json` (local state, never versioned); the rules of the memory
+(reliabilities, fact weights, recall threshold, repetitions) are in `SCHEMA.md`, versioned (one commit per save). They
+cover project markers (◆ in the folder tree), the injected context (thresholds of automatic injection and of leads,
+notes injected and leads per message), minimum similarity of search, model shutdown after inactivity, note types whose
+proposed information needs a confirmation, service port, launcher browser and the main colour of the interface (green by
+default). The table of settings and defaults is in [installation.md](installation.md#settings).
+The main colour is picked among preset swatches (the original green and the agent colours) or with « Autre couleur », and applied as soon as it is picked; a warning appears when a colour is
+hard to read on the dark background (contrast under 3:1). The logo and the session state colours keep their own colours.
 
 ### Engines
 
@@ -727,9 +745,9 @@ A profile decides what a session receives. Two are shipped:
   `_mnemo/profils/archiviste/skills/`. Its instruction lets it organise the folder tree freely, reuse or create note
   types, declare the scope of a place (`portee`) and move a note or a whole folder with `deplacer`.
 
-A default skill already placed in a memory is never rewritten, even when a newer Mnemo changes it (a memory created
-earlier keeps its old `menage` skill; delete its folder and the current one is placed at the next launch), whereas the
-default instruction of a profile, unless you replaced it, follows Mnemo updates.
+A default skill (the archivist's, placed in `_mnemo/profils/archiviste/skills/`) is placed at the profile's first launch
+if missing, and rewritten at a later launch only while it is still a past default version: once you or an agent changed
+it, it is never touched again. The default instruction of a profile, unless you replaced it, follows Mnemo updates.
 
 The archivist cleans the memory with the `entretenir` MCP tool (also a `menage` skill, and the memory's own « Ménage de la
 mémoire » note if there is one). Each action is one commit under the lock (`mnemo: supprime <path>`, `mnemo: fusionne
@@ -836,39 +854,59 @@ A profile is a note of the memory, `_mnemo/profils/<name>/<name>.md`: see [forma
 
 ### Managing profiles
 
-**Settings › Agents** lists the profiles in two groups: **Memory**, the archivist, always there, which files and keeps the memory (started from the Archivist drawer); and **Work profiles**, the sessions on your projects, started from New session, `travail` first (the default one, always there). Each line shows the avatar, the name and the first line of the instruction; the chosen profile is edited on the right:
+**Settings › Agents** lists the profiles (agents) in the panel, in two groups: **Mémoire**, the archivist, always there,
+which files and keeps the memory (started from the Archivist drawer); and **Travail**, the sessions on your projects,
+started from New session, `travail` first (the default one, always there). Each line shows the avatar, the name, and
+engine · model; « + Nouvel agent » asks for a name. The chosen agent opens on the right in a character creator, all in
+a draft saved with one gesture:
 
-- **Avatar**: a small creature (12 shapes) and a colour, chosen separately; shown in New session and in the session lists.
-- **Engine**: Claude Code, Codex or Mistral Vibe, the coding agent that runs the sessions of the profile, shown with its
-  provider (Anthropic, OpenAI, Mistral). Each line says whether the engine is ready on this computer; one that cannot be
-  found is greyed out with the reason. The archivist stays on Claude Code. A profile on another engine shows a badge in
-  the list.
-- **Model**: a model of the engine, chosen among the proposed ones (Claude Code: `opus`, `sonnet`, `haiku`; Codex: the
-  list given by `codex debug models`) or typed freely. **Empty: the engine's default model.** It is passed as `--model`
-  (Claude Code) or `-m` (Codex). Changing the engine empties the model and the plugins; going back to the saved engine
-  restores them.
-- **Instruction**: Mnemo's default instruction (which follows Mnemo updates) or your own text. « Restore the default
-  instruction » goes back to the default.
-- **Start**: in the chosen project folder, or in the memory (`_mnemo/`, the root added with `--add-dir`). The
-  archivist's cannot be changed.
-- **Mnemo hooks**: at least one of the six events.
-- **Memory skills**: all those of `_mnemo/skills/` (future ones included), or only the ticked ones. The skills of the
-  profile itself (`profils/<name>/skills/`) are always active and win over a memory skill of the same name.
-- **Claude Code plugins** (Claude Code only): the installed plugins (read from `~/.claude/plugins/installed_plugins.json`, or
-  `CLAUDE_CONFIG_DIR`). The ticked ones are switched on in the session, every other installed plugin is switched off,
-  even one switched on in your Claude Code settings (`enabledPlugins` of the session settings). A profile with no plugin
-  ticked gets none.
+- **The stage** (left, stays in view): the avatar large on its podium (a slow breathing motion, off under « reduce
+  motion »), the name, the class summary (provider logo, engine · model, provider), stats as bars (skills, plugins with
+  Claude Code, powers, each against what can be equipped), the switch **« Démarre dans la mémoire »** (start in the
+  memory: `_mnemo/`, the root added with `--add-dir`; otherwise in the folder chosen at launch; the archivist always
+  starts in the memory) and the Cancel / Save footer.
+- **Apparence** (appearance): a small creature (12 shapes) and a colour, chosen separately; shown in New session and in
+  the session lists.
+- **Classe** (class): one card per engine (Claude Code, Codex, Mistral Vibe) with its provider's logo and its state on
+  this computer; an engine not yet linked to Mnemo, or not installed, is locked 🔒 with the reason (Settings › Réglages ›
+  Branchements links it). The archivist stays on Claude Code. Then the model, as chips, « par défaut » (the engine's
+  default) first, then the models the engine offers (Claude Code: `opus`, `sonnet`, `haiku`; Codex: the list given by
+  `codex debug models`); another name can be typed. It is passed as `--model` (Claude Code) or `-m` (Codex). Changing the
+  engine empties the model and the plugins; going back to the saved engine restores them.
+- **Équipement** (equipment), as an inventory: the agent's own skills (`profils/<name>/skills/`, always active, winning
+  over a memory skill of the same name), the memory skills (`_mnemo/skills/`, equipped one by one, or all of them,
+  future ones included), then the **Claude Code plugins** (greyed out with another engine): the installed plugins (read
+  from `~/.claude/plugins/installed_plugins.json`, or `CLAUDE_CONFIG_DIR`). The ticked ones are switched on in the
+  session, every other installed plugin is switched off, even one switched on in your Claude Code settings
+  (`enabledPlugins` of the session settings). A profile with no plugin ticked gets none.
+- **Pouvoirs** (powers): the six Mnemo hooks, each a switch with what it does: Éveil (start), Souffle (each message),
+  Bouclier (before an action), Carnet (after an action), Veille (stop), Récit (end). At least one stays on.
+- **Mission**: the instruction, Mnemo's default one (which follows Mnemo updates) or your own text; « Revenir à la
+  consigne par défaut » goes back to the default.
+- **Gérer l'agent** (manage, folded at the bottom): its note in the memory, **what a session receives** (read-only, as
+  saved: the profile instruction, the Mnemo MCP server instructions, the hooks, the memory skills and why one is left
+  out, the Claude Code plugins, what comes from the engine outside Mnemo such as personal skills or `CLAUDE.md`, and the
+  system instructions; for Codex or Mistral Vibe, the instruction is shown with the list of skills it carries, and no
+  plugins), « Dupliquer » (copies its effective values and its own skills under another name) and « Supprimer » (removes
+  `profils/<name>/` after a confirmation; not possible for `travail` and `archiviste`, the reason is shown; the sessions
+  of a deleted profile resume with the defaults of `travail`).
 
-« New profile » starts from the default values of `travail`; « Duplicate » copies a profile (its effective values and its
-own skills); « Delete » removes `profils/<name>/` (not possible for `travail` and `archiviste`; the sessions of a deleted
-profile resume with the defaults of `travail`). Each save is one commit. If the note changed elsewhere since it was
-opened, the save is refused until you reload it.
+Each save is one commit. If the note changed elsewhere since it was opened, the save is refused until you reload it.
+Switching agent, tab or view with unsaved changes asks first.
 
-Below the editor, **What a session receives** previews, read-only and as saved: the profile instruction, the Mnemo MCP
-server instructions, the hooks, the memory skills (and why one is left out), the Claude Code plugins, what comes from
-Claude Code outside Mnemo (personal skills, `CLAUDE.md`), and the system instructions (wrap-up, import sent to the
-archivist). For a Codex profile, the instruction is shown with the list of skills it carries, and what comes from
-outside Mnemo is Codex's own (`AGENTS.md`, `.agents/skills`); there are no plugins.
+**Editing skills.** On hover (always shown on touch screens), the pencil ✎ of a memory skill or of one of the agent's
+own skills opens its editor; plugin skills have none. « + Nouvelle skill » at the end of the inventory creates one, in the
+memory (shared by every agent, equipped on the open agent in its draft) or for this agent only. The editor has the icon
+(an emoji, stored in the frontmatter under `metadata.icone`), the name (lowercase letters, digits and hyphens, 40
+characters at most, unique: the name the agent sees), « Quand l'utiliser » (when to use it: the description that makes
+the agent load it, required), the Markdown content, and the agents that carry it. Each gesture writes at once, one
+commit under the lock: create (`mnemo: cree <path>`), save (`modifie`; a rename is `renomme <old> → <new>` and updates the
+profiles that list the skill, in the same commit), delete (the second click confirms and says how many agents lose it;
+the profiles that list it are updated in the same commit). A skill changed elsewhere since it was opened is refused with
+« Recharger ». A **skill provided by Mnemo** (the archivist's default skills) can be edited (a warning says it then
+leaves the automatic updates) and brought back with « Revenir à la version d'origine », but neither renamed nor deleted:
+the next launch of its profile would place it again; the greyed action says so. A skill still in a past default version
+is shown as up to date (the next launch replaces it anyway).
 
 A session takes the engine and model of its profile when it starts and keeps them, resume included: changing the profile
 later only affects new sessions.
