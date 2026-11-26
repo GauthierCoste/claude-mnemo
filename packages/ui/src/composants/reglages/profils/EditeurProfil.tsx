@@ -14,6 +14,7 @@ import { ErreurApi } from '../../../client/api.ts';
 import { useClient } from '../../../client/contexte.tsx';
 import { avecId } from '../../../client/hooks.ts';
 import { useNavigation } from '../../../navigation.tsx';
+import { HOOKS_PROFIL } from '../../../profils/hooks.ts';
 import { AvatarProfil, JETONS_COULEUR } from '../../commun/AvatarProfil.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
 import { ApercuProfil } from './ApercuProfil.tsx';
@@ -21,14 +22,7 @@ import { ChoixAvatar } from './ChoixAvatar.tsx';
 import { ChoixMoteur } from './ChoixMoteur.tsx';
 import s from './Profils.module.css';
 
-const HOOKS: { cle: EvenementHookVue; libelle: string; detail: string }[] = [
-	{ cle: 'debut', libelle: 'Début', detail: 'note la session au démarrage' },
-	{ cle: 'message', libelle: 'Message', detail: 'injecte les consignes et la fiche de position, propose des pistes à chaque message' },
-	{ cle: 'outil', libelle: 'Outil', detail: 'refuse une action contraire à une consigne vérifiée' },
-	{ cle: 'apres_outil', libelle: 'Après outil', detail: 'note les fiches lues ou écrites (rien n’est injecté)' },
-	{ cle: 'arret', libelle: 'Arrêt', detail: 'tient l’état de la session (attend, à relire)' },
-	{ cle: 'fin', libelle: 'Fin', detail: 'termine la session ; épisode minimal sans bilan' },
-];
+const HOOKS = HOOKS_PROFIL;
 
 /** Rôle du profil, dit sous son nom. */
 function roleDe(nom: string): string {

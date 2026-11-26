@@ -16,6 +16,7 @@ import { ErreurApi } from '../../client/api.ts';
 import { useClient } from '../../client/contexte.tsx';
 import { useReglages } from '../../client/hooks.ts';
 import { enSaisie, enValeur, egales, modifications, valeurLisible, type Saisie } from '../../reglages/brouillon.ts';
+import { oublierSectionSysteme, sectionSystemeALire } from '../../reglages/onglet-retenu.ts';
 import { useNavigation } from '../../navigation.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
 import { EtatMoteurs } from './moteurs/EtatMoteurs.tsx';
@@ -86,7 +87,9 @@ function Formulaire(p: { vue: ReglagesVue; enregistree: boolean; surEnregistree(
 	const [envoi, setEnvoi] = useState(false);
 	const [erreur, setErreur] = useState<string | null>(null);
 	// « moteurs » : l'état des moteurs, pas un groupe de réglages
-	const [choisi, setChoisi] = useState<GroupeReglageVue | 'moteurs' | null>(null);
+	// « Voir dans Réglages » d'une autre vue : la section Moteurs ouverte d'emblée
+	const [choisi, setChoisi] = useState<GroupeReglageVue | 'moteurs' | null>(sectionSystemeALire);
+	useEffect(() => oublierSectionSysteme(), []);
 	const aEnvoyer = modifications(p.vue.champs, saisies);
 	const modifie = Object.keys(aEnvoyer).length > 0;
 	const libelles = (cles: string[]) => cles.map((c) => p.vue.champs.find((x) => x.cle === c)?.libelle ?? c).join(', ');

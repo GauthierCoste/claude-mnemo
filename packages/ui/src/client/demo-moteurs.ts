@@ -12,10 +12,11 @@ const CLAUDE_CODE: MoteurVue = {
 	nom: 'Claude Code',
 	indisponible: null,
 	manuel: false,
-	version: null,
+	version: '2.1.120',
 	modeles: ['opus', 'sonnet', 'haiku'],
 	poste: [
 		{ cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée', detail: '~/.local/bin/claude' },
+		{ cle: 'version', libelle: 'Version', ok: true, etat: '2.1.120' },
 		{ cle: 'mcp', libelle: 'Serveur MCP mnemo', ok: true, etat: 'déclaré' },
 	],
 };

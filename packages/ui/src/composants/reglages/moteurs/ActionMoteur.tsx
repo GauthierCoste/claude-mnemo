@@ -7,52 +7,25 @@
  * commande à lancer soi-même reste en repli discret. Sinon « Copier » la commande (dans un terminal, ou à taper dans le moteur).
  */
 import type { IdMoteur } from '@mnemo/commun';
-import type { EtapeLiaisonVue, LiaisonMoteurVue } from '@mnemo/contrat';
-import { useEffect, useState, type ReactNode } from 'react';
-import { ErreurApi } from '../../../client/api.ts';
-import { useLierMoteur } from '../../../client/hooks.ts';
+import { useEffect, type ReactNode } from 'react';
 import type { ActionMoteur as Action } from '../../../moteurs/circuit.ts';
 import { Bouton } from '../../commun/Bouton.tsx';
 import { copierTexte } from '../../commun/copier.ts';
 import r from '../../commun/Reflet.module.css';
+import { useLiaisonMoteur } from '../../commun/useLiaisonMoteur.ts';
 import { useToast } from '../../Toast.tsx';
 import s from './Moteurs.module.css';
-
-/** Ce que la dernière liaison a laissé à dire : les étapes laissées ou en échec, ou le refus du service. */
-type Retour = { alerte: boolean; messages: string[] };
-
-function retourDe(l: LiaisonMoteurVue): Retour | null {
-	const etapes = [l.mcp, l.hooks].filter((e): e is EtapeLiaisonVue => e !== undefined && (e.resultat === 'laisse' || e.resultat === 'echec'));
-	if (l.lie && etapes.length === 0) return null;
-	return { alerte: !l.ok, messages: etapes.length > 0 ? etapes.map((e) => e.message) : ['Liaison incomplète.'] };
-}
 
 /** `lecture` : une vérification du poste en cours (« Relire ») : « Lier à Mnemo » attend qu'elle soit finie. */
 export function ActionMoteur(p: { id: IdMoteur; moteur: string; action: Action; lecture: boolean }): ReactNode {
 	const a = p.action;
 	const toast = useToast();
-	const lier = useLierMoteur();
-	const [enCours, setEnCours] = useState(false);
-	const [retour, setRetour] = useState<Retour | null>(null);
+	const { enCours, retour, lier, effacer } = useLiaisonMoteur(p.id, p.moteur);
 	const copier = (texte: string) => copierTexte(texte, toast, 'Commande copiée.');
 	// une nouvelle vérification du poste : le retour de la dernière liaison n'est plus à jour
 	useEffect(() => {
-		if (p.lecture) setRetour(null);
-	}, [p.lecture]);
-
-	const surLier = async () => {
-		setEnCours(true);
-		setRetour(null);
-		try {
-			const l = await lier(p.id);
-			if (l.lie) toast(`${p.moteur} lié à Mnemo.`);
-			setRetour(retourDe(l));
-		} catch (e) {
-			setRetour({ alerte: true, messages: [e instanceof ErreurApi ? e.message : `Liaison de ${p.moteur} impossible.`] });
-		} finally {
-			setEnCours(false);
-		}
-	};
+		if (p.lecture) effacer();
+	}, [p.lecture, effacer]);
 
 	const commande = a.commande;
 	const ouDans = commande?.dans === 'moteur' ? `À taper dans ${p.moteur} :` : a.geste === 'lier' ? 'Ou dans un terminal :' : 'Dans un terminal :';
@@ -63,7 +36,7 @@ export function ActionMoteur(p: { id: IdMoteur; moteur: string; action: Action; 
 				{a.motif !== null && ` ${a.motif}`}
 			</p>
 			{a.geste === 'lier' && (
-				<Bouton petit className={`${s.geste} ${s.cible}`} disabled={enCours || p.lecture} onClick={() => void surLier()}>
+				<Bouton petit className={`${s.geste} ${s.cible}`} disabled={enCours || p.lecture} onClick={() => void lier()}>
 					{enCours ? <span className={r.reflet}>Liaison…</span> : 'Lier à Mnemo'}
 				</Bouton>
 			)}

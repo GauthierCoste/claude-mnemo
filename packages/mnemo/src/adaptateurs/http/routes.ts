@@ -36,7 +36,7 @@ import type { Dependances, DossiersRacine, MemoireClaude, Modeles, Pilotage, Pro
 import { ErreurFichier } from '../../application/ports.ts';
 import { dossierAccepte, ErreurDossier, niveauDossiers } from '../../application/dossiers.ts';
 import type { GenreErreurDossier } from '../../application/dossiers.ts';
-import { profilsDisponibles } from '../../application/profil.ts';
+import { profilsDisponibles } from '../../application/profils-disponibles.ts';
 import { ecrireBrut, proposer } from '../../application/proposer.ts';
 import { referencerDepot } from '../../application/referencer-depot.ts';
 import { validerArguments, validerDemande, validerParametresRecherche, validerRequete } from '../../application/validation.ts';

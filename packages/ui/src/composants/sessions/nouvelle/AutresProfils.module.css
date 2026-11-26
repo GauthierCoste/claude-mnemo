@@ -1,0 +1,15 @@
+/* Profils non proposés : en petit, sous la fiche. */
+.autres {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: 11.5px;
+	color: var(--dim);
+}
+
+.autres > li[data-erreur] {
+	color: var(--red);
+}

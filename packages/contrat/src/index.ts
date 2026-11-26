@@ -61,9 +61,26 @@ export type SuggestionEcarteeToujoursVue = { chemin: string; sessions: number; j
  * Un profil de session qui peut être lancé : `description`, première ligne de sa consigne ; `lancement` : `projet` (dans le
  * dossier choisi) ou `memoire` (dans `_mnemo/`, quel que soit le dossier) ; `lanceur` : `dialogue` (choix de Nouvelle
  * session) ou `propre` (son propre chemin, montré à part) ; `moteur` et `modele` (« » : celui par défaut du moteur) de ses
- * sessions.
+ * sessions ; `equipement`.
  */
-export type ProfilVue = { nom: string; description: string; lancement: 'projet' | 'memoire'; lanceur: LanceurDeProfil; avatar: Avatar; personnalise: boolean; moteur: IdMoteur; modele: string };
+export type ProfilVue = {
+	nom: string;
+	description: string;
+	lancement: 'projet' | 'memoire';
+	lanceur: LanceurDeProfil;
+	avatar: Avatar;
+	personnalise: boolean;
+	moteur: IdMoteur;
+	modele: string;
+	equipement: EquipementProfilVue;
+};
+
+/**
+ * Équipement d'un profil, compté comme l'aperçu de Réglages › Profils : `skills`, celles que ses sessions reçoivent (du
+ * profil, puis de la mémoire qu'il retient, sans filtre par projet) ; `plugins`, les plugins Claude Code qu'il allume (0 avec
+ * un autre moteur) ; `hooks`, ses événements de hook de Mnemo.
+ */
+export type EquipementProfilVue = { skills: number; plugins: number; hooks: EvenementHookVue[] };
 
 /**
  * Ce qui se règle d'un profil dans Réglages › Profils ; `consigne` : `null` = la consigne par défaut du code ; `moteur` : l'agent

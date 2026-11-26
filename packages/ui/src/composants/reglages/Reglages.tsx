@@ -7,36 +7,19 @@
  */
 import type { IdMoteur } from '@mnemo/commun';
 import { useCallback, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { ongletRetenu, retenirOnglet, type OngletReglages } from '../../reglages/onglet-retenu.ts';
 import { Bouton } from '../commun/Bouton.tsx';
 import { AppClaude } from './claude-desktop/AppClaude.tsx';
 import { Profils } from './profils/Profils.tsx';
 import { ReglagesSysteme } from './ReglagesSysteme.tsx';
 import s from './Reglages.module.css';
 
-type Onglet = 'profils' | 'systeme' | 'app-claude';
+type Onglet = OngletReglages;
 const ONGLETS: { cle: Onglet; titre: string }[] = [
 	{ cle: 'profils', titre: 'Profils' },
 	{ cle: 'systeme', titre: 'Système' },
 	{ cle: 'app-claude', titre: 'App Claude' },
 ];
-const CLE_ONGLET = 'mnemo.reglages.onglet';
-
-function ongletRetenu(): Onglet {
-	try {
-		const v = localStorage.getItem(CLE_ONGLET);
-		return ONGLETS.find((o) => o.cle === v)?.cle ?? 'profils';
-	} catch {
-		return 'profils';
-	}
-}
-
-function retenirOnglet(o: Onglet): void {
-	try {
-		localStorage.setItem(CLE_ONGLET, o);
-	} catch {
-		// stockage indisponible : l'onglet n'est pas retenu
-	}
-}
 
 export function Reglages(): ReactNode {
 	const [onglet, setOnglet] = useState<Onglet>(ongletRetenu);

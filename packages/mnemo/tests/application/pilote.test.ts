@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { enregistrerProfil } from '../../src/application/gerer-profils.ts';
 import { creerPilote, ErreurMoteurIndisponible, ErreurRepriseImpossible, ErreurSessionNonCommencee, ligneManuelle } from '../../src/application/pilote.ts';
 import type { Pilote } from '../../src/application/pilote.ts';
-import { profilsDisponibles } from '../../src/application/profil.ts';
+import { profilsDisponibles } from '../../src/application/profils-disponibles.ts';
 import type { CommandeMoteur, EtatSessions, FichierPlugin, Moteur, Pilotage } from '../../src/application/ports.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';

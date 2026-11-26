@@ -1,0 +1,181 @@
+/* Fiche de l'agent choisi et état de son moteur. */
+.fiche {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+}
+
+.titre {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+
+.nom {
+	margin: 0;
+	font-size: 17px;
+	font-weight: 600;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.etiquette {
+	font-size: 11px;
+	padding: 1px 7px;
+	border-radius: 99px;
+	border: 1px solid var(--bd2);
+	color: var(--mu);
+	white-space: nowrap;
+}
+
+.desc {
+	margin: 0;
+	color: var(--mu);
+}
+
+.attributs {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: 6px 14px;
+	margin: 0;
+	padding: 12px 14px;
+	background: var(--s2);
+	border: 1px solid var(--bd);
+	border-radius: var(--r-3);
+}
+
+.attributs dt {
+	color: var(--dim);
+	font-size: 12px;
+	padding-top: 1px;
+}
+
+.attributs dd {
+	margin: 0;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fournisseur {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.fournisseur > i {
+	width: 8px;
+	height: 8px;
+	border-radius: 2px;
+	background: var(--c);
+	display: inline-block;
+}
+
+.mono {
+	font-family: var(--mono);
+	font-size: 12.5px;
+}
+
+.sec {
+	color: var(--mu);
+}
+
+.equipement {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.equipement > li {
+	font-size: 12px;
+	padding: 2px 8px;
+	border-radius: var(--r-1);
+	background: var(--s3);
+	color: var(--mu);
+}
+
+.equipement b {
+	color: var(--tx);
+	font-weight: 600;
+}
+
+/* --- État du moteur : une ligne (paragraphe), ou un encadré avec ses gestes --- */
+.etat {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+	padding: 9px 12px;
+	border-radius: var(--r-3);
+	font-size: 12.5px;
+}
+
+p.etat {
+	display: block;
+}
+
+.etat[data-genre='pret'] {
+	background: color-mix(in srgb, var(--vert) 9%, transparent);
+	color: var(--vert);
+}
+
+.etat[data-genre='verification'] {
+	background: var(--s2);
+	color: var(--mu);
+}
+
+.etat[data-genre='bloque'],
+.etat[data-genre='attention'] {
+	background: color-mix(in srgb, var(--amber) 10%, transparent);
+	color: var(--amber);
+}
+
+.titreEtat {
+	margin: 0;
+	font-weight: 600;
+}
+
+.motif {
+	font-weight: 400;
+	color: var(--tx);
+}
+
+.lignes,
+.retour {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	color: var(--tx);
+}
+
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-top: 2px;
+}
+
+.verif {
+	margin-left: 6px;
+	font-weight: 400;
+}
+
+/* cible d'au moins 24 px */
+.cible {
+	min-height: 26px;
+}
+
+.lier:not([aria-disabled='true']):not(:disabled) {
+	background: var(--profil);
+	border-color: transparent;
+	color: var(--bg);
+}
