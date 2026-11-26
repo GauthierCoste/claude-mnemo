@@ -16,10 +16,12 @@ afterEach(() => {
 });
 
 describe('mode démo', () => {
-	it('nourrit la coquille sans jeton : racine, pastilles, connexion ouverte', async () => {
+	it('alimente la coquille sans jeton : racine, pastilles, connexion ouverte', async () => {
 		const client = creerClientDemo();
 		render(<Application client={client} />);
-		expect(await within(screen.getByRole('banner')).findByText('~/Developer')).toBeTruthy();
+		// le dossier Mnemo est dans la barre d'état, plus dans la barre de titre
+		expect(await screen.findByText('coffre ~/Developer')).toBeTruthy();
+		expect(within(screen.getByRole('banner')).queryByText('~/Developer')).toBeNull();
 		const nav = screen.getByRole('navigation');
 		await screen.findByText('service connecté');
 		expect(within(nav).getByRole('button', { name: /Sessions/ }).textContent).toContain('4');
