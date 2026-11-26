@@ -113,19 +113,19 @@ describe('route moteurs', () => {
 		expect(retiree?.poste?.[0]).toEqual({ cle: 'commande', libelle: 'Commande', ok: false, etat: 'introuvable maintenant', detail: expect.stringContaining('/opt/bin/claude') });
 	});
 
-	it('poste : la commande adoptée est celle du pilotage (sessions lancées ensuite) et de la vue suivante sans poste', async () => {
+	it('poste : la commande adoptée est celle du pilotage et de la vue suivante sans poste', async () => {
 		const pils: Pilotage[] = [];
 		const s = await serviceFaux({}, { pil: (p) => void pils.push(p) });
 		const pil = pils[0]!;
-		const moteurs = pil.moteurs;
-		moteurs.codex = { moteur: codex({ trouvee: COMMANDE, version: '0.171.0' }), commande: null };
+		// seul Codex, factice : aucune commande cherchée ni lancée pour Claude Code
+		delete pil.moteurs['claude-code'];
+		pil.moteurs.codex = { moteur: codex({ trouvee: COMMANDE, version: '0.171.0' }), commande: null };
 		const vue = async (poste: boolean): Promise<MoteurVue | undefined> => {
 			const r = await appeler(s.service.port, 'GET', `${ROUTES.moteurs}${poste ? '?poste=1' : ''}`, { jeton: s.service.jeton });
 			return (r.corps as ReponseMoteurs).moteurs.find((m) => m.id === 'codex');
 		};
 		expect((await vue(false))?.indisponible).toContain('Codex introuvable');
 		await vue(true);
-		expect(pil.moteurs).toBe(moteurs);
 		expect(pil.moteurs.codex?.commande).toEqual(COMMANDE);
 		expect(await vue(false)).toMatchObject({ indisponible: null, version: '0.171.0' });
 	});

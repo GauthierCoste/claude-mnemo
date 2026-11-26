@@ -175,7 +175,7 @@ describe('Réglages › Système › Moteurs', () => {
 		expect(within(vibe).queryByText('Approbation des hooks')).toBeNull();
 	});
 
-	it('« Relire » : désactivé, section occupée et « Vérification… » pendant chaque lecture ; redémarrage proposé en deux commandes', async () => {
+	it('« Relire » : désactivé, section occupée et « Vérification… » pendant chaque lecture ; le point relu affiché', async () => {
 		const client = creerClientDemo();
 		const lire = client.api.lire.bind(client.api);
 		let liberer: () => void = () => {};
