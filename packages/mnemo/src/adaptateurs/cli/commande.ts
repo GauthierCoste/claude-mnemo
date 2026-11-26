@@ -20,7 +20,7 @@ export async function commandeCommande(args: string[], o: OptionsCommande = {}):
 	if (inconnues.length > 0) throw new ErreurCli(`Option inconnue : « ${inconnues[0]} ».\n${USAGE}`, 2);
 	const plateforme = o.plateforme ?? process.platform;
 	const ecrire = o.ecrire ?? ((ligne: string) => console.log(ligne));
-	if (plateforme === 'win32') throw new ErreurCli('Sur Windows, installez la commande depuis packages/mnemo : pnpm link --global.');
+	if (plateforme === 'win32') throw new ErreurCli('Sur Windows, installer la commande depuis packages/mnemo : pnpm link --global.');
 	const dossier = dossierDeCommande(o.maison ?? homedir());
 
 	if (args.includes('--retirer')) {
@@ -34,9 +34,9 @@ export async function commandeCommande(args: string[], o: OptionsCommande = {}):
 	if ('refus' in r) throw new ErreurCli(r.refus);
 	ecrire(`${r.remplace ? 'Commande mise à jour' : 'Commande installée'} : ${r.fichier} (Node ${process.versions.node}).`);
 	if (!dansLePath(dossier, o.path ?? process.env.PATH)) {
-		ecrire(`${dossier} n'est pas dans votre PATH : ajoutez à ~/.zshrc (ou ~/.bashrc) la ligne`);
+		ecrire(`${dossier} n'est pas dans le PATH : ajouter à ~/.zshrc (ou ~/.bashrc) la ligne`);
 		ecrire(`  export PATH="${dossier}:$PATH"`);
-		ecrire('puis ouvrez un nouveau terminal.');
+		ecrire('puis ouvrir un nouveau terminal.');
 	}
 	ecrire('La retirer : mnemo commande --retirer.');
 }

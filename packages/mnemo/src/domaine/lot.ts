@@ -62,8 +62,8 @@ const faitDe = (faits: readonly LigneDeFait[], ancre: string): Fait | undefined 
  * information retirée est refusée (elle ne se réécrit pas).
  */
 export function motifDesLignes(genre: GenreLot, lignes: readonly LigneDeLot[], faits: readonly LigneDeFait[]): string | null {
-	if (lignes.length === 0) return 'Le lot est vide : donne au moins une ligne.';
-	if (lignes.length > LIGNES_MAX_LOT) return `Le lot a ${lignes.length} lignes, ${LIGNES_MAX_LOT} au plus : découpe-le.`;
+	if (lignes.length === 0) return 'Le lot est vide : au moins une ligne attendue.';
+	if (lignes.length > LIGNES_MAX_LOT) return `Le lot a ${lignes.length} lignes, ${LIGNES_MAX_LOT} au plus : le découper.`;
 	const illisibles = new Set<string>();
 	for (const l of faits) if ('brute' in l) for (const b of l.brute) {
 		const a = ancreDeLigneBrute(b);
@@ -78,7 +78,7 @@ export function motifDesLignes(genre: GenreLot, lignes: readonly LigneDeLot[], f
 		for (const ancre of ancresDeLigne(ligne)) {
 			if (vues.has(ancre)) return `${n} : l'information ^${ancre} est déjà nommée dans le lot.`;
 			vues.add(ancre);
-			if (illisibles.has(ancre)) return `${n} : l'information ^${ancre} est une ligne illisible : corrige-la d'abord.`;
+			if (illisibles.has(ancre)) return `${n} : l'information ^${ancre} est une ligne illisible : la corriger d'abord.`;
 			const fait = faitDe(faits, ancre);
 			if (fait === undefined) return `${n} : l'information ^${ancre} n'existe pas dans la fiche.`;
 			if (genre !== 'supprimer' && fait.barre) return `${n} : l'information ^${ancre} est barrée.`;
@@ -89,7 +89,7 @@ export function motifDesLignes(genre: GenreLot, lignes: readonly LigneDeLot[], f
 			if (gardee.contredit !== undefined && ligne.absorber.includes(gardee.contredit)) return `${n} : ^${ligne.garder} contredit ^${gardee.contredit} : ce ne sont pas des doublons.`;
 			for (const ancre of ligne.absorber) {
 				const absorbee = faitDe(faits, ancre)!;
-				if (gardee.aConfirmer && !absorbee.aConfirmer) return `${n} : ^${ancre} est confirmée et ^${ligne.garder} à confirmer : garde plutôt la confirmée (une fusion ne confirme rien).`;
+				if (gardee.aConfirmer && !absorbee.aConfirmer) return `${n} : ^${ancre} est confirmée et ^${ligne.garder} à confirmer : garder plutôt la confirmée (une fusion ne confirme rien).`;
 				if (absorbee.aConfirmer && absorbee.contredit !== undefined) return `${n} : ^${ancre} est une contradiction à confirmer (de ^${absorbee.contredit}) : à trancher par l'utilisateur avant toute fusion.`;
 			}
 		}
@@ -99,7 +99,7 @@ export function motifDesLignes(genre: GenreLot, lignes: readonly LigneDeLot[], f
 		for (const l of faits) {
 			if (!('brute' in l)) continue;
 			const renvoi = l.brute.flatMap(renvoisDeLigneBrute).find((a) => partent.has(a) && !l.brute.some((b) => ancreDeLigneBrute(b) === a));
-			if (renvoi !== undefined) return `Une ligne illisible de la fiche renvoie à l'information ^${renvoi}, qui disparaîtrait : corrige-la d'abord.`;
+			if (renvoi !== undefined) return `Une ligne illisible de la fiche renvoie à l'information ^${renvoi}, qui disparaîtrait : la corriger d'abord.`;
 		}
 	}
 	return null;
@@ -210,7 +210,7 @@ export function appliquerLot(fiche: Fiche, genre: GenreLot, lignes: readonly Lig
 			if (!('fait' in l)) continue;
 			const f = l.fait;
 			if (f.contredit !== undefined && retirees.has(f.contredit)) {
-				if (f.aConfirmer && !f.barre) return { motif: `L'information ^${f.ancre ?? '?'}, à confirmer, contredit ^${f.contredit} : tranche d'abord cette contradiction (ou supprime les deux).` };
+				if (f.aConfirmer && !f.barre) return { motif: `L'information ^${f.ancre ?? '?'}, à confirmer, contredit ^${f.contredit} : trancher d'abord cette contradiction (ou supprimer les deux).` };
 				delete f.contredit;
 				touches.add(f);
 			}

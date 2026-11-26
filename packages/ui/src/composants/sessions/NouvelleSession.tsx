@@ -205,7 +205,7 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 					</>
 				) : (
 					<div className={s.manuel}>
-						<p className={s.mu}>Les terminaux ne sont pas disponibles dans Mnemo : la session est suivie, lance-la toi-même dans un terminal.</p>
+						<p className={s.mu}>Les terminaux ne sont pas disponibles dans Mnemo : la session est suivie, à lancer à la main dans un terminal.</p>
 						<code className={s.commande}>{manuel}</code>
 						<div className={s.boutonsManuel}>
 							<Bouton className={s.bouton} onClick={copier}>

@@ -69,8 +69,8 @@ const chemin = (id: string) => id.split('#')[0]!;
 /** Pourquoi le classement est en ordre seul (info-bulle du repère « ordre seul »). */
 export function raisonOrdreSeul(coupes: boolean): string {
 	return coupes
-		? "Ordre seul : modèles coupés pour cette session, ni sens ni reranker. L'ordre suit les mots, puis l'historique de tes gestes ; sans %, ni injection par Mnemo."
-		: "Ordre seul : aucune note apprise et validée sur tes jugements pour les modèles installés (pas encore apprise, refusée, ou modèles changés depuis). L'ordre suit le sens et les mots ; sans %, ni injection par Mnemo.";
+		? "Ordre seul : modèles coupés pour cette session, ni sens ni reranker. L'ordre suit les mots, puis l'historique des gestes ; sans %, ni injection par Mnemo."
+		: "Ordre seul : aucune note apprise et validée sur les jugements pour les modèles installés (pas encore apprise, refusée, ou modèles changés depuis). L'ordre suit le sens et les mots ; sans %, ni injection par Mnemo.";
 }
 
 /** Libellé à droite d'une fiche injectée et son info-bulle. */
@@ -456,7 +456,7 @@ export function ClassementEnDirect(p: {
 				: "\nAu-dessus du seuil sans être injectée (affinée après le message, plafond par message, ou déjà vue) : ➤ pour l'injecter.";
 		const bulle = `${raison ?? 'Classée pour ce message'}${k.piste ? ' – envoyée en piste dans la session (titre et résumé)' : ''}${l.lueMs === undefined ? '' : `, lue aussi à ${heure(l.lueMs)}`}${pourquoiPasInjectee}\n${c}`;
 		const noteBulle =
-			note !== null ? `${note} : chance que la fiche soit utile à ce message (note apprise sur tes jugements)` : k.nonCalibree !== undefined ? BULLES_NON_CALIBREES[k.nonCalibree.origine] : `Rang ${k.rang} : ordre seul, sans note calibrée`;
+			note !== null ? `${note} : chance que la fiche soit utile à ce message (note apprise sur les jugements)` : k.nonCalibree !== undefined ? BULLES_NON_CALIBREES[k.nonCalibree.origine] : `Rang ${k.rang} : ordre seul, sans note calibrée`;
 		const resume = `${note ?? grise ?? `rang ${k.rang}`}${raison === null ? '' : ` – ${raison}`}${k.piste ? ' – piste' : ''}`;
 		return (
 			<li key={l.id} ref={refFiche(l.id)} className={s.ligne} data-id={l.id} data-servie="false" data-nouvelle={marques.nouvelles.has(l.id) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>

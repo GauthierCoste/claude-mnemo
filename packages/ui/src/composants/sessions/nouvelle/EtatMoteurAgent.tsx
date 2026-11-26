@@ -47,7 +47,7 @@ export function EtatMoteurAgent(p: Props): ReactNode {
 		return (
 			<div className={s.etat} data-genre={e.genre === 'pret' ? 'pret' : 'attention'}>
 				<p className={s.ligne}>
-					{e.genre === 'pret' ? `✓ Prêt : ${p.moteur} trouvé et lié à Mnemo.` : `${p.moteur} introuvable ici : la session sera suivie, et tu la lanceras toi-même dans un terminal.`}
+					{e.genre === 'pret' ? `✓ Prêt : ${p.moteur} trouvé et lié à Mnemo.` : `${p.moteur} introuvable ici : la session sera suivie, et à lancer à la main dans un terminal.`}
 					{enVerification}
 				</p>
 				{retourLiaison}

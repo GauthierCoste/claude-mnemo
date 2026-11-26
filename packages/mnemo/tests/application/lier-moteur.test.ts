@@ -42,7 +42,7 @@ function moteur(o: Reglages): { moteur: MoteurDuPoste; appels: string[] } {
 		moteur: {
 			id: 'codex',
 			commandeParDefaut: 'codex',
-			installation: { recherche: 'codex absent', desactivation: 'enabled = false', retraitManuel: '`codex mcp remove mnemo`', approbation: { commande: '/hooks', consigne: 'approuvez-les une fois dans Codex (/hooks).' } },
+			installation: { recherche: 'codex absent', desactivation: 'enabled = false', retraitManuel: '`codex mcp remove mnemo`', approbation: { commande: '/hooks', consigne: 'les approuver une fois dans Codex (/hooks).' } },
 			trouver: () => APPEL.commande,
 			declarationMcp,
 			...(o.hooks === null ? {} : { hooksDuPoste }),

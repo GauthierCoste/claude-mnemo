@@ -122,18 +122,18 @@ describe('vue Sessions', () => {
 		const lignes = [...document.querySelectorAll('[data-ligne]')].map((l) => l.getAttribute('data-ligne'));
 		expect(lignes).toEqual(['erp-saas', 'api', 'agent']);
 		expect(carte('arch')).toBeNull();
-		expect(screen.getByText('4 sessions | 1 attend ta réponse | 1 travaille')).toBeTruthy();
+		expect(screen.getByText('4 sessions | 1 attend une réponse | 1 travaille')).toBeTruthy();
 		expect(within(carte('s1')).getByText('⌥1')).toBeTruthy();
 		expect(within(carte('s3')).getByText('⌥3')).toBeTruthy();
 	});
 
-	it('un message `session` passe une carte de « Travaille » à « Attend ta réponse », la pastille suit', async () => {
+	it('un message `session` passe une carte de « Travaille » à « Attend une réponse », la pastille suit', async () => {
 		const faux = await monter();
 		const nav = screen.getByRole('navigation');
 		expect(within(carte('s2')).getByRole('img', { name: 'Travaille' })).toBeTruthy();
 		expect(within(nav).getByRole('button', { name: /Sessions/ }).textContent).toContain('1');
 		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[1]!, etat: 'attend' } }));
-		expect(within(carte('s2')).getByRole('img', { name: 'Attend ta réponse' })).toBeTruthy();
+		expect(within(carte('s2')).getByRole('img', { name: 'Attend une réponse' })).toBeTruthy();
 		expect(within(nav).getByRole('button', { name: /Sessions/ }).textContent).toContain('2');
 	});
 
@@ -253,7 +253,7 @@ describe('vue Sessions', () => {
 	it('« Mettre en pause » → POST pause de la session choisie', async () => {
 		const faux = await monter();
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
-		expect(within(contexte).getByText('Attend ta réponse')).toBeTruthy();
+		expect(within(contexte).getByText('Attend une réponse')).toBeTruthy();
 		await act(async () => within(contexte).getByRole('button', { name: 'Mettre en pause' }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions/s1/pause', undefined);
 	});

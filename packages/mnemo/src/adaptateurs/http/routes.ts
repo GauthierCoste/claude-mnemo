@@ -754,7 +754,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const s = d.session === undefined ? null : await session(d.session);
 				const reactives = await reactiverInjection(pil.etat, modelesActifs(dep), { session: s?.id ?? '', horodatageMs: Date.now(), ...(d.niveau === undefined ? {} : { niveau: d.niveau }) }).catch((e: unknown) => {
 					// état de coupure inconnu : aucun geste, l'utilisateur réessaie
-					if (e instanceof SuiviIllisible) throw new ErreurHttp(503, 'Suivi des injections illisible : réessayez.');
+					if (e instanceof SuiviIllisible) throw new ErreurHttp(503, 'Suivi des injections illisible : réessayer.');
 					throw e;
 				});
 				if (reactives.length > 0) {

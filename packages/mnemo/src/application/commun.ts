@@ -128,7 +128,7 @@ export async function lireFicheExistante(dep: Dependances, chemin: string): Prom
 export async function cheminExistant(dep: Dependances, chemin: string): Promise<string | null> {
 	const cle = cleDeCasse(chemin);
 	const existant = (await dep.coffre.toutesLesFiches()).find((e) => e !== chemin && cleDeCasse(e) === cle);
-	return existant === undefined ? null : `La fiche ${chemin} existe déjà sous le nom ${existant} : utilise ce chemin.`;
+	return existant === undefined ? null : `La fiche ${chemin} existe déjà sous le nom ${existant} : utiliser ce chemin.`;
 }
 
 /** Refuse (texte) si une fiche existante a le même chemin à la casse près. */
@@ -149,7 +149,7 @@ export async function dossiersManquants(dep: Dependances, chemin: string): Promi
 		if (cheminDossier === chemin || existantes.includes(cheminDossier)) continue;
 		const cle = cleDeCasse(cheminDossier);
 		const voisin = existantes.find((e) => cleDeCasse(e) === cle);
-		if (voisin !== undefined) return `La fiche de dossier ${voisin} existe déjà, à la casse près de ${cheminDossier} : utilise ce chemin.`;
+		if (voisin !== undefined) return `La fiche de dossier ${voisin} existe déjà, à la casse près de ${cheminDossier} : utiliser ce chemin.`;
 		fiches.push(ficheVide(dep, cheminDossier, 'dossier', dossier.slice(dossier.lastIndexOf('/') + 1)));
 	}
 	return fiches;

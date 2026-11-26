@@ -493,7 +493,7 @@ describe('Mémoire › Fichiers', () => {
 		const arbre = await screen.findByRole('navigation', { name: 'Fiches' });
 		await within(arbre).findByRole('button', { name: 'P000' });
 		expect(within(arbre).getAllByRole('button')).toHaveLength(400);
-		expect(within(arbre).getByText('201 lignes de plus : filtre, ou replie des dossiers.')).toBeTruthy();
+		expect(within(arbre).getByText('201 lignes de plus : filtrer, ou replier des dossiers.')).toBeTruthy();
 		fireEvent.change(screen.getByPlaceholderText('Filtrer les fichiers'), { target: { value: 'P59' } });
 		expect(within(arbre).getAllByRole('button').map((b) => b.textContent)).toEqual(['personnes', ...Array.from({ length: 10 }, (_, i) => `P59${i}`)]);
 	});

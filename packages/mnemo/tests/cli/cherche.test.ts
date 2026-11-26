@@ -181,7 +181,7 @@ describe('mnemo cherche : passages d\'un document du dossier (câblage réel)', 
 		// la recherche n'extrait aucun document : elle sert l'index tel quel, et renvoie à mnemo index
 		const avant = await mnemo(d, 'cherche', 'tamanoir');
 		expect(avant.out).not.toContain('Le tamanoir mange des termites.');
-		expect(avant.out).toContain('2 documents changés pas encore réindexés (recherche sur leur ancien texte) : lance « mnemo index ».');
+		expect(avant.out).toContain('2 documents changés pas encore réindexés (recherche sur leur ancien texte) : lancer « mnemo index ».');
 		expect((await mnemo(d, 'index')).code).toBe(0);
 		const r = await mnemo(d, 'cherche', 'tamanoir');
 		expect(r.out).not.toContain('pas encore réindexé');

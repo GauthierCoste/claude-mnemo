@@ -69,8 +69,8 @@ export async function deplacerInformations(dep: Dependances, demande: DemandeDep
 	if (id === null) return refuse(motifCheminInvalide(demande.id));
 	const dans = cheminDeFiche(demande.dans);
 	if (dans === null) return refuse(motifCheminInvalide(demande.dans));
-	if (id === dans) return refuse('Les informations sont déjà dans cette fiche : donne une autre fiche dans `dans`.');
-	if (demande.ancres.length === 0) return refuse('Aucune information à déplacer : donne au moins une ancre dans `ancres`.');
+	if (id === dans) return refuse('Les informations sont déjà dans cette fiche : une autre fiche attendue dans `dans`.');
+	if (demande.ancres.length === 0) return refuse('Aucune information à déplacer : au moins une ancre attendue dans `ancres`.');
 	const demandees: string[] = [];
 	for (const brut of demande.ancres) {
 		const vise = ancreDeFait(brut, id);
@@ -99,7 +99,7 @@ export async function deplacerInformations(dep: Dependances, demande: DemandeDep
 		cibleLue = lue;
 	} else {
 		const titre = demande.titreSiNouvelle?.trim();
-		if (titre === undefined || titre === '') return refuse(`La fiche ${dans} n'existe pas : donne \`titreSiNouvelle\` pour la créer, ou une fiche existante.`);
+		if (titre === undefined || titre === '') return refuse(`La fiche ${dans} n'existe pas : donner \`titreSiNouvelle\` pour la créer, ou une fiche existante.`);
 		const motifTitre = motifTitreInvalide(titre);
 		if (motifTitre !== null) return refuse(motifTitre);
 		// une fiche de dossier n'a de sens qu'à la place d'un dossier (`d/d.md`)
@@ -123,18 +123,18 @@ export async function deplacerInformations(dep: Dependances, demande: DemandeDep
 		}
 	}
 	for (const ancre of demandees) {
-		if (illisibles.has(ancre)) return refuse(`L'information ^${ancre} de ${id} est une ligne illisible : corrige-la avant de la déplacer.`);
+		if (illisibles.has(ancre)) return refuse(`L'information ^${ancre} de ${id} est une ligne illisible : la corriger avant de la déplacer.`);
 		if (!lisibles.has(ancre)) return refuse(`L'information ^${ancre} n'existe pas dans ${id}.`);
 	}
 	const { lignes: partantes, ancres: partent } = informationsQuiPartent(origineLue.faits, demandees);
 	for (const ancre of partent) {
-		if (illisibles.has(ancre)) return refuse(`L'information ^${ancre} de ${id}, liée par un renvoi à une information déplacée, est une ligne illisible : corrige-la d'abord.`);
+		if (illisibles.has(ancre)) return refuse(`L'information ^${ancre} de ${id}, liée par un renvoi à une information déplacée, est une ligne illisible : la corriger d'abord.`);
 	}
 	// une ligne illisible qui reste ne peut pas suivre ses renvois : elle viserait une information partie
 	for (const ligne of origineLue.faits) {
 		if (!('brute' in ligne)) continue;
 		const renvoi = ligne.brute.flatMap(renvoisDeLigneBrute).find((a) => partent.has(a));
-		if (renvoi !== undefined) return refuse(`Une ligne illisible de ${id} renvoie à l'information ^${renvoi}, qui partirait : corrige-la d'abord.`);
+		if (renvoi !== undefined) return refuse(`Une ligne illisible de ${id} renvoie à l'information ^${renvoi}, qui partirait : la corriger d'abord.`);
 	}
 
 	const table = renumerotation(origineLue.faits.filter((_, i) => partantes.has(i)), cibleLue);
@@ -148,7 +148,7 @@ export async function deplacerInformations(dep: Dependances, demande: DemandeDep
 	const jour = aujourdhui(dep);
 	const origine = lireFiche(id, reecrire(texteOrigine));
 	// réécrire un lien ne change pas le découpage des lignes : les indices restent ceux de la lecture
-	if (origine.faits.length !== origineLue.faits.length) return refuse(`La fiche ${id} se relit autrement une fois ses liens réécrits : corrige-la à la main.`);
+	if (origine.faits.length !== origineLue.faits.length) return refuse(`La fiche ${id} se relit autrement une fois ses liens réécrits : la corriger à la main.`);
 	const versees = origine.faits.filter((_, i) => partantes.has(i)).map((l) => ligneRenumerotee(l, table));
 	origine.faits = origine.faits.filter((_, i) => !partantes.has(i));
 	// les numéros des parties ne resservent pas à l'origine (une information sans ancre en reçoit une au-dessus)

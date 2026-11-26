@@ -52,7 +52,7 @@ describe('proposer_lot (archiviste) : enregistré, jamais appliqué', () => {
 		expect(await motif(lot('confirmer', [{ ancre: 'f-0001' }], 'consignes/regle.md'))).toContain('consigne');
 		expect(await motif({ ...lot('supprimer', [{ ancre: 'f-0001' }]), motif: '  ' })).toContain('motif est vide');
 		// une information à confirmer qui contredit une supprimée : la contradiction est à trancher d'abord
-		expect(await motif(lot('supprimer', [{ ancre: 'f-0007' }]))).toContain('tranche d\'abord');
+		expect(await motif(lot('supprimer', [{ ancre: 'f-0007' }]))).toContain('trancher d\'abord');
 		expect(await dep.lots.enAttente()).toEqual([]);
 		await proposerLot(dep, lot('supprimer', [{ ancre: 'f-0005' }]));
 		expect(await motif(lot('confirmer', [{ ancre: 'f-0005' }]))).toContain('vise déjà ^f-0005');
@@ -305,7 +305,7 @@ describe('revue : lots périmés, plafonds, contradictions, avertissements', () 
 		const id = await proposerLot(dep, lot('supprimer', [{ ancre: 'f-0007' }, { ancre: 'f-0006' }]));
 		const r = await validerLot(dep, id, [0]);
 		expect(r).toMatchObject({ statut: 'refuse' });
-		expect('motif' in r ? r.motif : '').toContain('tranche d\'abord');
+		expect('motif' in r ? r.motif : '').toContain('trancher d\'abord');
 		expect(dep.commits).toEqual([]);
 		expect(await dep.lots.enAttente()).toHaveLength(1);
 		expect((await validerLot(dep, id, [0, 1])).statut).toBe('valide');
@@ -339,7 +339,7 @@ describe('revue : lots périmés, plafonds, contradictions, avertissements', () 
 		expect(r).toMatchObject({ statut: 'refuse' });
 		expect('motif' in r ? r.motif : '').toContain('ne confirme que l\'une des deux');
 		const f = await entretenir(dep, lot('fusionner', [{ garder: 'f-0005', absorber: ['f-0001'] }]));
-		expect('motif' in f ? f.motif : '').toContain('garde plutôt la confirmée');
+		expect('motif' in f ? f.motif : '').toContain('garder plutôt la confirmée');
 		expect(await dep.lots.enAttente()).toEqual([]);
 	});
 

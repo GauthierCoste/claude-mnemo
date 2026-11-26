@@ -61,16 +61,16 @@ describe('Application', () => {
 		render(<Application client={faux.client} />);
 		const bouton = screen.getByRole('button', { name: /Archiviste/ });
 		await act(async () => faux.connexion.emettre({ type: 'sessions', sessions: [session('d', 'travaille', 'archiviste')] }));
-		expect(bouton.textContent).not.toContain('attend ta réponse');
+		expect(bouton.textContent).not.toContain('attend une réponse');
 		// repos après `arret` : état `attend`, aucun dialogue
 		await act(async () => faux.connexion.emettre({ type: 'session', session: session('d', 'attend', 'archiviste') }));
-		expect(bouton.textContent).not.toContain('attend ta réponse');
+		expect(bouton.textContent).not.toContain('attend une réponse');
 		await act(async () => fireEvent.click(bouton));
 		const tiroir = screen.getByRole('complementary', { name: 'Archiviste' });
-		expect(within(tiroir).queryByText('attend ta réponse')).toBeNull();
+		expect(within(tiroir).queryByText('attend une réponse')).toBeNull();
 		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...session('d', 'attend', 'archiviste'), dialogueOuvert: true } }));
-		expect(bouton.textContent).toContain('attend ta réponse');
-		expect(within(tiroir).getByText('attend ta réponse')).toBeTruthy();
+		expect(bouton.textContent).toContain('attend une réponse');
+		expect(within(tiroir).getByText('attend une réponse')).toBeTruthy();
 		expect(within(screen.getByRole('navigation')).getByRole('button', { name: /Sessions/ }).textContent).not.toMatch(/\d/);
 	});
 

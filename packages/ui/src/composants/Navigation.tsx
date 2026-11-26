@@ -28,7 +28,7 @@ const ICONES: Record<Vue, ReactNode> = {
 
 /** `bas` : poussée en bas du rail (Réglages, sous les vues). */
 const VUES: { cle: Vue; libelle: string; infoPastille: string; raccourci?: string; bas?: boolean }[] = [
-	{ cle: 'sessions', libelle: 'Sessions', infoPastille: 'sessions attendent ta réponse', raccourci: 'Alt+0' },
+	{ cle: 'sessions', libelle: 'Sessions', infoPastille: 'sessions attendent une réponse', raccourci: 'Alt+0' },
 	{ cle: 'memoire', libelle: 'Mémoire', infoPastille: 'éléments à faire (Mémoire › Archiviste)' },
 	{ cle: 'reglages', libelle: 'Réglages', infoPastille: '', raccourci: 'Alt+Comma', bas: true },
 ];

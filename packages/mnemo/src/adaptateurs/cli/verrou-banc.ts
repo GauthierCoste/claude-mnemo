@@ -40,7 +40,7 @@ export function prendreVerrouBanc(fichier: string, operation: string): () => voi
 			}
 			if (typeof tenant.pid === 'number' && tenant.pid !== process.pid && vivant(tenant.pid)) {
 				throw new ErreurCli(
-					`Le fichier des jugements est ouvert par « mnemo banc contexte ${String(tenant.operation ?? '')} » (processus ${tenant.pid}, depuis ${String(tenant.depuis ?? '?')}) : terminez-le (q) avant de lancer ${operation}.`,
+					`Le fichier des jugements est ouvert par « mnemo banc contexte ${String(tenant.operation ?? '')} » (processus ${tenant.pid}, depuis ${String(tenant.depuis ?? '?')}) : le terminer (q) avant de lancer ${operation}.`,
 				);
 			}
 			try {

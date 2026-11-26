@@ -2,7 +2,7 @@
 import type { EtatSessionVue } from '@mnemo/contrat';
 
 export const LIBELLES_ETATS: Record<EtatSessionVue, string> = {
-	attend: 'Attend ta réponse',
+	attend: 'Attend une réponse',
 	travaille: 'Travaille',
 	a_relire: 'Terminée, à relire',
 	en_pause: 'En pause',

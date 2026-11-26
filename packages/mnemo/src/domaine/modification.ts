@@ -145,7 +145,7 @@ export function validerCibles(brut: {
 		cibles.alias = alias;
 	}
 	return Object.keys(cibles).length === 0
-		? `Rien à modifier : donne « synthese », « sections », « type », « titre », « alias », « traitee », « ${CLE_DOSSIER_PROJET} », « ${CLE_PORTEE} » ou « ${CLE_PERIME_LE} ».`
+		? `Rien à modifier : donner « synthese », « sections », « type », « titre », « alias », « traitee », « ${CLE_DOSSIER_PROJET} », « ${CLE_PORTEE} » ou « ${CLE_PERIME_LE} ».`
 		: cibles;
 }
 

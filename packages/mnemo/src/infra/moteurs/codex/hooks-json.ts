@@ -16,7 +16,7 @@ async function lireFichier(chemin: string): Promise<{ reel: string; texte: strin
 	const lu = await lireConfiguration(chemin);
 	if ('echec' in lu) return lu;
 	const json = lireHooksJson(lu.texte);
-	if ('echec' in json) return { echec: `${chemin} : ${json.echec} ; corrigez-le, Mnemo ne le réécrit pas.` };
+	if ('echec' in json) return { echec: `${chemin} : ${json.echec} ; le corriger, Mnemo ne le réécrit pas.` };
 	return { ...lu, racine: json.racine };
 }
 

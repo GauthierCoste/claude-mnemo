@@ -16,7 +16,7 @@ const VERBES = { confirmer: 'confirme', rejeter: 'rejette', supprimer: 'supprime
  */
 export async function proposerDecision(dep: Dependances, demande: DemandeDecision, parUtilisateur: boolean): Promise<Resultat> {
 	if (!parUtilisateur) {
-		return refuse(`${demande.genre[0]!.toUpperCase()}${demande.genre.slice(1)} une information est réservé à l'utilisateur, dans l'interface de Mnemo : signale-lui l'information ^${demande.ancre.replace(/^.*\^/u, '')} de ${demande.fiche}.`);
+		return refuse(`${demande.genre[0]!.toUpperCase()}${demande.genre.slice(1)} une information est réservé à l'utilisateur, dans l'interface de Mnemo : lui signaler l'information ^${demande.ancre.replace(/^.*\^/u, '')} de ${demande.fiche}.`);
 	}
 	const chemin = cheminDeFiche(demande.fiche);
 	if (chemin === null) return refuse(motifCheminInvalide(demande.fiche));

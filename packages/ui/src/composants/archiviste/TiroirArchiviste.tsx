@@ -3,7 +3,7 @@
  * par ⌥A ou le bouton « Archiviste » de la barre de titre ; fermé par ⌥A ou Échap hors terminal, ou « Fermer » (dans le
  * terminal, ⌥A et Échap vont à `claude`).
  * En-tête : état, « N à faire » (→ Mémoire › Archiviste, qui a tout le reste : à faire, suggestions, dépôt, ce qu'il a fait
- * pour tes sessions), « Agrandir », « Fermer ». Contenu : l'activité minimale (changements de la mémoire du jour), repliée
+ * pour les sessions), « Agrandir », « Fermer ». Contenu : l'activité minimale (changements de la mémoire du jour), repliée
  * par défaut, puis le terminal de la session de profil `archiviste` (ou « Lancer l'archiviste »), qui prend toute la
  * hauteur restante. Glisser des fichiers sur le tiroir fait paraître un calque de dépôt, le temps du glisser et de l'envoi.
  * « Agrandir » (⌥⇧A hors terminal) met le même terminal en grand sur toute la zone sous la barre de titre ; « Réduire »,
@@ -37,7 +37,7 @@ function puceEtat(a: SessionVue | null): ReactNode {
 	if (a === null) return <Puce>arrêté</Puce>;
 	if (a.etat === 'travaille') return <Puce ton="succes">au travail</Puce>;
 	if (a.etat === 'en_pause') return <Puce>en pause</Puce>;
-	if (a.etat === 'attend') return a.dialogueOuvert ? <Puce ton="avertissement">attend ta réponse</Puce> : <Puce ton="succes">à l'écoute</Puce>;
+	if (a.etat === 'attend') return a.dialogueOuvert ? <Puce ton="avertissement">attend une réponse</Puce> : <Puce ton="succes">à l'écoute</Puce>;
 	return <Puce>arrêté</Puce>;
 }
 

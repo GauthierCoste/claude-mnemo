@@ -48,7 +48,7 @@ export function CarteNoeud(p: {
 		return (
 			<aside className={s.carte} aria-label="Fiche choisie" onWheel={(e) => e.stopPropagation()}>
 				<span className={s.lbl}>Fiche</span>
-				<p className={s.mu}>Clique un point pour voir la fiche.</p>
+				<p className={s.mu}>Un clic sur un point montre la fiche.</p>
 			</aside>
 		);
 	}

@@ -99,7 +99,7 @@ async function remettreA(ctx: ContexteArchiviste, session: Session, consigne: st
 	return { archiviste: enCours ? 'confie' : 'repris' };
 }
 
-const refusTermine = (): RefusArchiviste => ({ refus: 'L’archiviste s’est terminé pendant la demande : réessaie.', arret: false });
+const refusTermine = (): RefusArchiviste => ({ refus: 'L’archiviste s’est terminé pendant la demande : réessayer.', arret: false });
 
 /** Lancé avec la consigne pour objectif ; un archiviste apparu entre-temps (`existant`) la reçoit à sa place. */
 async function lancerAvec(ctx: ContexteArchiviste, consigne: string, motif: string): Promise<Remise | RefusArchiviste> {

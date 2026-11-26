@@ -49,8 +49,8 @@ export function ApprisAujourdhui(): ReactNode {
 			{fil.donnees && commits.length === 0 && <p className={s.vide}>Aucun changement de la mémoire ce jour-là.</p>}
 			<CommitsDuJour commits={commits} choisi={commit?.hash ?? null} sessions={sessions} choisir={setChoisi} />
 			{commit && <DetailCommit commit={commit} sessions={sessions} />}
-			<h3 className={s.lbl}>Ce qu'il a fait pour tes sessions</h3>
-			<ActiviteArchiviste activite={activite} libelle="Ce qu'il a fait pour tes sessions" />
+			<h3 className={s.lbl}>Ce qu'il a fait pour les sessions</h3>
+			<ActiviteArchiviste activite={activite} libelle="Ce qu'il a fait pour les sessions" />
 		</section>
 	);
 }

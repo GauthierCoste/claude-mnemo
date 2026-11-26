@@ -43,7 +43,7 @@ const ARCHIVISTE: Record<ReponseTraiter['archiviste'], string> = {
 	confie: 'Confié à l’archiviste',
 	repris: 'Archiviste repris : la consigne suit',
 	lance: 'Archiviste lancé avec la consigne',
-	manuel: 'Terminaux indisponibles : lance l’archiviste toi-même',
+	manuel: 'Terminaux indisponibles : archiviste à lancer à la main',
 };
 
 /** `total` : fiches à traiter, listées ou non ; « Tout voir » (`surToutVoir`) demande la liste entière ; `dossiers` : les dossiers non rattachés. */

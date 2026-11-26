@@ -610,7 +610,7 @@ function creerConnexionDemo(monde: Monde): FausseConnexion {
 		monde.servis.set(entree.session, [entree, ...(monde.servis.get(entree.session) ?? []).filter((e) => e.horodatageMs !== entree.horodatageMs)]);
 		diffuser({ type: 'servi', entree });
 	}
-	// Peu après l'ouverture, l'archiviste sert une session (message `servi`, tiroir « Ce qu'il a fait pour tes sessions »).
+	// Peu après l'ouverture, l'archiviste sert une session (message `servi`, tiroir « Ce qu'il a fait pour les sessions »).
 	const servie = SESSIONS_DEMO.find((s) => s.objectif === 'Faire passer les tests du dépôt SFTP');
 	if (servie)
 		setTimeout(() => {
@@ -1109,7 +1109,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			if (i < 0) throw introuvable('Session');
 			const avant = monde.sessions[i]!;
 			// comme le service : une session que son moteur ne peut pas reprendre n'a ni pause, ni reprise, ni bilan
-			if (action !== 'abandon' && avant.sansReprise !== undefined) throw new ErreurApi(`${action === 'bilan' ? 'Bilan' : action === 'pause' ? 'Pause' : 'Reprise'} impossible : ${avant.sansReprise} ; abandonne-la à la place.`, 409);
+			if (action !== 'abandon' && avant.sansReprise !== undefined) throw new ErreurApi(`${action === 'bilan' ? 'Bilan' : action === 'pause' ? 'Pause' : 'Reprise'} impossible : ${avant.sansReprise} ; l’abandonner à la place.`, 409);
 			const s = {
 				...avecEtat(avant, etat),
 				bilanDemandeMs: action === 'bilan' ? Date.now() : avant.bilanDemandeMs,

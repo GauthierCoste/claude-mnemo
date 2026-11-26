@@ -11,9 +11,9 @@ import { trouverRacine } from './racine.ts';
 const USAGE = 'Usage : mnemo cherche <texte…> [--dossier <chemin>] [--tout] [--limite N] [--contexte]';
 const LONGUEUR_TEXTE = 100;
 
-/** « 2 documents changés pas encore réindexés (recherche sur leur ancien texte) : lance « mnemo index ». » */
+/** « 2 documents changés pas encore réindexés (recherche sur leur ancien texte) : lancer « mnemo index ». » */
 export const documentsDifferes = (n: number): string =>
-	`${n} document${n > 1 ? 's' : ''} changé${n > 1 ? 's' : ''} pas encore réindexé${n > 1 ? 's' : ''} (recherche sur ${n > 1 ? 'leur' : 'son'} ancien texte) : lance « mnemo index ».`;
+	`${n} document${n > 1 ? 's' : ''} changé${n > 1 ? 's' : ''} pas encore réindexé${n > 1 ? 's' : ''} (recherche sur ${n > 1 ? 'leur' : 'son'} ancien texte) : lancer « mnemo index ».`;
 
 /** `--contexte` : base, référence et étendue injectée, puis le texte entier (passage élargi à sa section ou ses voisins), en retrait. */
 function enEntier(t: Trouve): string {

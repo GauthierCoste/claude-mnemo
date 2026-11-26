@@ -247,7 +247,7 @@ export async function dupliquerProfil(dep: Dependances, source: string, nouveau:
  * ensuite avec les valeurs par défaut de `travail`.
  */
 export async function supprimerProfil(dep: Dependances, nom: string): Promise<ResultatProfil> {
-	if (PROFILS_DU_PAQUET.includes(nom)) return { ok: false, motifs: { nom: `le profil « ${nom} » ne se supprime pas : rétablis ses valeurs par défaut` } };
+	if (PROFILS_DU_PAQUET.includes(nom)) return { ok: false, motifs: { nom: `le profil « ${nom} » ne se supprime pas : rétablir ses valeurs par défaut` } };
 	if (!estNomDeProfil(nom) || !(await existe(dep, nom))) return { ok: false, motifs: { nom: `profil inconnu : « ${nom} »` } };
 	const dossier = dossierDuProfil(nom);
 	const resultat = await sousVerrou(dep, async (): Promise<ResultatProfil> => {

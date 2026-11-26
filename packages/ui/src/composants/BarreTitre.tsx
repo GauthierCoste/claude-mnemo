@@ -34,7 +34,7 @@ export function BarreTitre(p: {
 				<button type="button" className={s.archiviste} onClick={p.surArchiviste} aria-keyshortcuts="Alt+A" aria-expanded={p.tiroirOuvert}>
 					<span className={s.pouls} aria-hidden="true" />
 					Archiviste
-					{p.archivisteAttend && <span className={s.attend}>attend ta réponse</span>}
+					{p.archivisteAttend && <span className={s.attend}>attend une réponse</span>}
 					<kbd>⌥A</kbd>
 				</button>
 			</div>

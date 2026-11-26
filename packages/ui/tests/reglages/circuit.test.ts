@@ -38,9 +38,9 @@ describe('liaison d’un moteur à Mnemo', () => {
 	});
 
 	it('version trop ancienne : « À mettre à jour », le motif du service, sans geste', () => {
-		const m = moteur([commande, { cle: 'version', libelle: 'Version', ok: false, etat: '0.1.0', detail: 'Version 0.2 au moins : mets Codex à jour.' }]);
+		const m = moteur([commande, { cle: 'version', libelle: 'Version', ok: false, etat: '0.1.0', detail: 'Version 0.2 au moins : mettre Codex à jour.' }]);
 		expect(statutDuMoteur(m).libelle).toBe('À mettre à jour');
-		expect(actionDuMoteur(m)).toEqual({ etape: 'version', titre: 'Version : 0.1.0.', motif: 'Version 0.2 au moins : mets Codex à jour.', geste: null, commande: null });
+		expect(actionDuMoteur(m)).toEqual({ etape: 'version', titre: 'Version : 0.1.0.', motif: 'Version 0.2 au moins : mettre Codex à jour.', geste: null, commande: null });
 	});
 
 	it('approbation inconnue : avec remède, « À vérifier » et la commande à copier ; sans remède, ne bloque pas', () => {

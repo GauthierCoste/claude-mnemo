@@ -23,7 +23,7 @@ async function service(): Promise<ServiceLocal> {
 	const racine = trouverRacine(process.cwd());
 	if (racine === null) throw new ErreurCli(AUCUNE_MEMOIRE);
 	const s = await serviceVivant(racine);
-	if (s === null) throw new ErreurCli('Aucun service Mnemo ne tourne pour ce dossier : lancez « mnemo » d’abord.');
+	if (s === null) throw new ErreurCli('Aucun service Mnemo ne tourne pour ce dossier : lancer « mnemo » d’abord.');
 	return s;
 }
 
@@ -47,7 +47,7 @@ async function trouverSession(s: ServiceLocal, debut: string | undefined): Promi
 	const { sessions } = await appeler<{ sessions: SessionVue[] }>(s, `${ROUTES.sessions}?archivees=1`);
 	const trouvees = sessions.filter((x) => x.id.startsWith(debut.toLowerCase()));
 	if (trouvees.length === 0) throw new ErreurCli(`Aucune session « ${debut} ».`);
-	if (trouvees.length > 1) throw new ErreurCli(`« ${debut} » désigne plusieurs sessions : donnez plus de caractères.`);
+	if (trouvees.length > 1) throw new ErreurCli(`« ${debut} » désigne plusieurs sessions : plus de caractères attendus.`);
 	return trouvees[0]!;
 }
 
@@ -97,7 +97,7 @@ async function lancer(args: string[]): Promise<void> {
 		...(objectif === undefined ? {} : { objectif }),
 	});
 	console.log(ligne(r.session));
-	if (r.manuel !== undefined) console.log(`Pas de terminal dans Mnemo : lancez cette commande dans votre terminal :\n${r.manuel}`);
+	if (r.manuel !== undefined) console.log(`Pas de terminal dans Mnemo : lancer cette commande dans un terminal :\n${r.manuel}`);
 }
 
 async function terminer(args: string[]): Promise<void> {

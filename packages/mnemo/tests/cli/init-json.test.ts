@@ -201,7 +201,7 @@ describe('mnemo init --json', () => {
 		const sortie = capture();
 		await expect(commandeInit([racine, '--json', '--mcp'], { sortie: sortie.flux, plateforme: 'linux', actions: a })).rejects.toMatchObject({ code: 1 });
 		const lignes = lignesJson(sortie.texte());
-		expect(lignes).toContainEqual({ etape: 'mcp', etat: 'echec', message: 'Claude Code introuvable : lancez vous-même : claude mcp add --scope user mnemo -- node main.ts mcp' });
+		expect(lignes).toContainEqual({ etape: 'mcp', etat: 'echec', message: 'Claude Code introuvable : à lancer à la main : claude mcp add --scope user mnemo -- node main.ts mcp' });
 		expect(lignes.at(-1)).toEqual({ fin: true, racine, ok: false });
 	});
 
@@ -259,7 +259,7 @@ describe('mnemo init : échec en mode texte', () => {
 		await expect(commandeInit([racine, '--sans-mcp', '--commande', '--lanceur'], { sortie: sortie.flux, interactif: false, plateforme: 'darwin', actions: a })).rejects.toThrow(/en échec : commande/u);
 		expect(sortie.texte()).toContain('Commande « mnemo » : échec — droits insuffisants');
 		expect(a.creerLanceur).toHaveBeenCalledWith(racine);
-		expect(sortie.texte()).toContain('Pour démarrer : ouvrez l’application Mnemo');
+		expect(sortie.texte()).toContain('Pour démarrer : ouvrir l’application Mnemo');
 	});
 });
 
@@ -303,7 +303,7 @@ describe('mnemo init --codex', () => {
 		avecMcpFactice();
 		const racine = await dossierTemporaire();
 		const sortie = capture();
-		const a = avecCodex('declare', { echec: '/h/.codex/hooks.json : JSON illisible (x) ; corrigez-le, Mnemo ne le réécrit pas.' });
+		const a = avecCodex('declare', { echec: '/h/.codex/hooks.json : JSON illisible (x) ; le corriger, Mnemo ne le réécrit pas.' });
 		await expect(commandeInit([racine, '--json', '--sans-mcp', '--codex'], { sortie: sortie.flux, plateforme: 'linux', actions: a })).rejects.toMatchObject({ code: 1 });
 		const lignes = lignesJson(sortie.texte());
 		expect(lignes).toContainEqual({ etape: 'codex', etat: 'fait', message: 'Serveur MCP déclaré pour toutes les sessions Codex.' });

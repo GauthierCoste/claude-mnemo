@@ -89,7 +89,7 @@ async function pointsDuPoste(duService: MoteurDuService, p: PosteDesMoteurs): Pr
 	else if (lu === 'deja') points.push({ ...mcp, ok: true, etat: 'déclaré' });
 	else if (lu === 'absent') points.push({ ...mcp, ok: false, etat: 'non déclaré', detail: `Les sessions de ${NOMS_MOTEURS[moteur.id]} lancées hors de Mnemo ne lisent pas la mémoire.`, remede: terminal(commandes.declarer) });
 	else if (lu === 'perime') points.push({ ...mcp, ok: false, etat: 'périmé', detail: 'Déclaré pour un autre Node ou une autre installation de Mnemo.', remede: terminal(commandes.remplacer) });
-	else if (lu === 'desactive') points.push({ ...mcp, ok: false, etat: 'désactivé', detail: `Désactivé dans ${NOMS_MOTEURS[moteur.id]} (${commandes.desactivation}) : Mnemo ne le réactive pas ; réactive-le dans sa configuration.` });
+	else if (lu === 'desactive') points.push({ ...mcp, ok: false, etat: 'désactivé', detail: `Désactivé dans ${NOMS_MOTEURS[moteur.id]} (${commandes.desactivation}) : Mnemo ne le réactive pas ; le réactiver dans sa configuration.` });
 	else points.push({ ...mcp, ok: false, etat: 'autre serveur', detail: 'Une déclaration « mnemo » existe mais ne lance pas Mnemo : laissée telle quelle.' });
 
 	if (moteur.hooksDuPoste === undefined) return points;
@@ -136,7 +136,7 @@ async function vueMoteur(entree: MoteurDuService, p: PosteDesMoteurs, poste: boo
 				? { cle: 'version', libelle: 'Version', ok: null, etat: 'illisible', detail: `${moteur.commandeParDefaut} --version ne répond pas : rien n'est empêché.` }
 				: tropAncien === null
 					? { cle: 'version', libelle: 'Version', ok: true, etat: version }
-					: { cle: 'version', libelle: 'Version', ok: false, etat: version, detail: `${tropAncien} : mets ${NOMS_MOTEURS[moteur.id]} à jour.` },
+					: { cle: 'version', libelle: 'Version', ok: false, etat: version, detail: `${tropAncien} : mettre ${NOMS_MOTEURS[moteur.id]} à jour.` },
 		);
 	}
 	if (commande !== null) points.push(...(await pointsDuPoste(duService, p)));

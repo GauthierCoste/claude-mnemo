@@ -228,7 +228,7 @@ export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editio
 		alertes.push(
 			<div key="disparue" role="alert" className={s.avis}>
 				<span>
-					Cette fiche n'existe plus à cet endroit ({fiche.erreur}).{edition ? ' Ton texte reste dans la zone ; copie-le avant de quitter.' : ''}
+					Cette fiche n'existe plus à cet endroit ({fiche.erreur}).{edition ? ' Le texte reste dans la zone ; le copier avant de quitter.' : ''}
 				</span>
 			</div>,
 		);
@@ -241,7 +241,7 @@ export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editio
 	if (avis?.genre === 'conflit')
 		alertes.push(
 			<div key="conflit" role="alert" className={s.avis}>
-				<span>La fiche a changé depuis l'ouverture. Ton texte reste dans la zone : recharge pour repartir de la version du disque.</span>
+				<span>La fiche a changé depuis l'ouverture. Le texte reste dans la zone : Recharger repart de la version du disque.</span>
 				<Bouton petit onClick={recharger}>
 					Recharger
 				</Bouton>
@@ -265,7 +265,7 @@ export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editio
 	if (changeeSurLeDisque)
 		alertes.push(
 			<div key="disque" role="alert" className={s.avis}>
-				<span>La fiche a changé sur le disque pendant ton édition.</span>
+				<span>La fiche a changé sur le disque pendant l’édition.</span>
 				<Bouton petit onClick={recharger}>
 					Recharger
 				</Bouton>

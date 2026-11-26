@@ -9,13 +9,13 @@ import { Bascule } from '../commun/Bascule.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
 import s from './BarreEtats.module.css';
 
-/** « 8 sessions | 2 attendent ta réponse | 2 travaillent », au singulier quand il le faut. */
+/** « 8 sessions | 2 attendent une réponse | 2 travaillent », au singulier quand il le faut. */
 export function decompte(sessions: readonly SessionVue[]): string {
 	const attendent = sessions.filter((x) => x.etat === 'attend').length;
 	const travaillent = sessions.filter((x) => x.etat === 'travaille').length;
 	return [
 		`${sessions.length} session${sessions.length > 1 ? 's' : ''}`,
-		`${attendent} ${attendent > 1 ? 'attendent' : 'attend'} ta réponse`,
+		`${attendent} ${attendent > 1 ? 'attendent' : 'attend'} une réponse`,
 		`${travaillent} ${travaillent > 1 ? 'travaillent' : 'travaille'}`,
 	].join(' | ');
 }

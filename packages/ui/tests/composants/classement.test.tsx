@@ -462,7 +462,7 @@ describe('ClassementEnDirect : classement vivant', () => {
 			coupures: [coupure],
 			entrees: [entree(1, [v('b.md', 'Bêta', 1, null)], { calibree: false })],
 			reactiver: () => {
-				throw new ErreurApi('Suivi des injections illisible : réessayez.', 503);
+				throw new ErreurApi('Suivi des injections illisible : réessayer.', 503);
 			},
 		});
 		await act(async () => {});
@@ -470,7 +470,7 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(etat.textContent).not.toContain('Les % restent');
 		expect(etat.textContent).toContain('➤ pour injecter à la main.');
 		await act(async () => within(etat).getByRole('button', { name: 'Réactiver' }).click());
-		expect(await screen.findByText('Suivi des injections illisible : réessayez.')).toBeTruthy();
+		expect(await screen.findByText('Suivi des injections illisible : réessayer.')).toBeTruthy();
 	});
 
 	it('« piste » seulement pour une piste de ce message : une fiche proposée en carte plus tôt dans la session ne la porte pas', async () => {

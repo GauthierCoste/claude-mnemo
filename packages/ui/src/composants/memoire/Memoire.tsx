@@ -141,7 +141,7 @@ function CorpsMemoire(p: { visible: boolean; editionInitiale: boolean }): ReactN
 						<FicheOuverte key={memoire.fiche} chemin={memoire.fiche} fiches={graphe.donnees?.fiches} editionInitiale={memoire.fiche === ficheEditee} poigneeLiens={poigneeLiens} />
 					) : (
 						<>
-							<p className={s.vide}>Choisis une fiche dans l'arbre.</p>
+							<p className={s.vide}>Choisir une fiche dans l'arbre.</p>
 							{poigneeLiens}
 							<aside className={s.liensVides} aria-label="Liens de la fiche" />
 						</>
