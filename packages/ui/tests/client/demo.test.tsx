@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { avertissementNonCherchable, consigneATraiter, estIdMoteur, IDS_MOTEURS, NOMS_MOTEURS } from '@mnemo/commun';
-import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EtatModelesVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseEcarteesToujours, type ReponseServis, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseMoteurs, type ReponseProfils, type ReponseQuotas, type ReponseValidationLot, type SessionTermineeVue, type SessionVue } from '@mnemo/contrat';
+import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EtatModelesVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseEcarteesToujours, type ReponseServis, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseMoteurs, type ProfilDetailVue, type ReponseEcritureSkill, type ReponseProfils, type SkillDetailVue, type ReponseQuotas, type ReponseValidationLot, type SessionTermineeVue, type SessionVue } from '@mnemo/contrat';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ErreurApi } from '../../src/client/api.ts';
@@ -148,6 +148,40 @@ describe('mode démo', () => {
 		expect(fil.commits.length).toBeGreaterThan(0);
 		expect(fil.aConfirmer.length).toBeGreaterThan(0);
 		expect(fil.montees.length).toBe(2);
+	});
+
+	it('skills de la mémoire : détail avec icône et agents, créer, renommer (profils suivis), revenir à l’origine, supprimer', async () => {
+		const { api } = creerClientDemo();
+		const chemin = (route: string, nom: string) => route.replace(':id', encodeURIComponent(nom));
+		const detailProfil = await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'redaction'));
+		expect(detailProfil.skillsMemoireDisponibles.every((x) => x.icone !== undefined)).toBe(true);
+		const relecture = await api.lire<SkillDetailVue>(chemin(ROUTES.skill, 'relecture'));
+		expect(relecture).toMatchObject({ nom: 'relecture', origine: 'memoire', modifiee: false });
+		expect(relecture.agents).toContain('redaction');
+		// une skill fournie par Mnemo, pour voir l’avertissement et « Revenir à la version d’origine »
+		const fournie = (await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'travail'))).skillsMemoireDisponibles.map((x) => x.nom);
+		const mnemo = await Promise.all(fournie.map((nom) => api.lire<SkillDetailVue>(chemin(ROUTES.skill, nom))));
+		const origine = mnemo.find((x) => x.origine === 'mnemo')!;
+		await api.remplacer<ReponseEcritureSkill>(chemin(ROUTES.skill, origine.nom), { ...origine, contenu: 'Changé.', empreinte: origine.empreinte });
+		expect((await api.lire<SkillDetailVue>(chemin(ROUTES.skill, origine.nom))).modifiee).toBe(true);
+		await api.envoyer<ReponseEcritureSkill>(chemin(ROUTES.skillOrigine, origine.nom));
+		expect((await api.lire<SkillDetailVue>(chemin(ROUTES.skill, origine.nom))).modifiee).toBe(false);
+		await expect(api.envoyer(chemin(ROUTES.skillOrigine, 'relecture'))).rejects.toMatchObject({ statut: 400 });
+
+		const cree = await api.envoyer<ReponseEcritureSkill>(ROUTES.skills, { nom: 'courrier', description: 'Écrire un courrier.', icone: '✉️', contenu: '# Courrier' });
+		expect(cree.nom).toBe('courrier');
+		await expect(api.envoyer(ROUTES.skills, { nom: 'courrier', description: 'x', icone: null, contenu: '' })).rejects.toMatchObject({ statut: 400 });
+		await expect(api.envoyer(ROUTES.skills, { nom: 'autre', description: ' ', icone: null, contenu: '' })).rejects.toMatchObject({ statut: 400 });
+
+		const renommee = await api.remplacer<ReponseEcritureSkill>(chemin(ROUTES.skill, 'relecture'), { ...relecture, nom: 'relecture-finale', empreinte: relecture.empreinte });
+		expect(renommee.nom).toBe('relecture-finale');
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'redaction'))).editable.skillsMemoire).toEqual(['relecture-finale']);
+		await expect(api.lire(chemin(ROUTES.skill, 'relecture'))).rejects.toMatchObject({ statut: 404 });
+		await expect(api.remplacer(chemin(ROUTES.skill, 'relecture-finale'), { ...relecture, empreinte: relecture.empreinte })).rejects.toMatchObject({ statut: 409 });
+
+		await api.supprimer<ReponseEcritureSkill>(chemin(ROUTES.skill, 'relecture-finale'));
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'redaction'))).editable.skillsMemoire).toEqual([]);
+		await expect(api.supprimer(chemin(ROUTES.skill, 'relecture-finale'))).rejects.toMatchObject({ statut: 404 });
 	});
 
 	it('moteurs : les trois du catalogue dans /api/moteurs, chaque profil et chaque session sur un moteur connu, avec un modèle proposé ; sans quotas pour Vibe', async () => {
