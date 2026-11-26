@@ -37,7 +37,16 @@ async function editer(nom: string | null): Promise<HTMLElement> {
 	if (nom !== null) await within(modale).findByDisplayValue(nom);
 	return modale;
 }
-const champ = (modale: HTMLElement, nom: string) => within(modale).getByRole('textbox', { name: new RegExp(`^${nom}`, 'u') }) as HTMLInputElement;
+const champ = (modale: HTMLElement, nom: string) => within(modale).getByRole('textbox', { name: nom }) as HTMLInputElement;
+/** Le texte relié à `el` par son `aria-describedby`. */
+const description = (el: HTMLElement) =>
+	(el.getAttribute('aria-describedby') ?? '')
+		.split(' ')
+		.map((id) => document.getElementById(id)?.textContent)
+		.join(' | ');
+const couleur = (nom: string) => within(screen.getByRole('radiogroup', { name: 'Couleur de l’avatar' })).getByRole('radio', { name: nom });
+/** Échap sur la modale (l'événement `cancel` du navigateur). */
+const echap = (modale: HTMLElement) => fireEvent(modale, new Event('cancel', { cancelable: true }));
 const saisir = (modale: HTMLElement, nom: string, valeur: string) => fireEvent.change(champ(modale, nom), { target: { value: valeur } });
 const lireSkill = (client: Client, nom: string, profil?: string) => client.api.lire<SkillDetailVue>(ROUTES.skill.replace(':id', nom), profil === undefined ? undefined : { profil });
 const lireProfil = (client: Client, nom: string) => client.api.lire<ProfilDetailVue>(ROUTES.profil.replace(':id', nom));
@@ -67,6 +76,26 @@ describe('Éditeur de skill : modifier, renommer', () => {
 		expect((await lireProfil(client, 'redaction')).editable.skillsMemoire).toEqual(['relecture-courrier']);
 		expect(within(pied()).queryByRole('alert')).toBeNull();
 		expect(within(pied()).queryByText('Modifié, non enregistré')).toBeNull();
+		// le focus revient sur la case de la skill renommée
+		await waitFor(() => expect(document.activeElement).toBe(caseInventaire('relecture-courrier')));
+	});
+
+	it('renommer depuis un agent déjà modifié : pas de faux conflit, ses modifications restent, l’équipement suit', async () => {
+		const client = await ouvrir('redaction');
+		await act(async () => couleur('Rouge').click());
+		const modale = await editer('relecture');
+		saisir(modale, 'Nom', 'relecture-courrier');
+		await act(async () => within(modale).getByRole('button', { name: 'Enregistrer' }).click());
+		await waitFor(() => expect(caseInventaire('relecture-courrier')?.getAttribute('aria-checked')).toBe('true'));
+		// l'agent relu, Enregistrer redevient disponible ; ni alerte, ni modification perdue
+		const enregistrer = within(pied()).getByRole('button', { name: 'Enregistrer' });
+		await waitFor(() => expect(enregistrer.getAttribute('aria-disabled')).toBeNull());
+		expect(within(pied()).queryByRole('alert')).toBeNull();
+		expect(couleur('Rouge').getAttribute('aria-checked')).toBe('true');
+		expect(within(pied()).getByText('Modifié, non enregistré')).toBeTruthy();
+		await act(async () => enregistrer.click());
+		await within(pied()).findByText('Enregistré.');
+		expect((await lireProfil(client, 'redaction')).editable).toMatchObject({ skillsMemoire: ['relecture-courrier'], avatar: { couleur: 'rouge' } });
 	});
 
 	it('refus du service (nom refusé) : le motif est dit, la modale reste ouverte', async () => {
@@ -91,7 +120,9 @@ describe('Éditeur de skill : modifier, renommer', () => {
 		await act(async () => within(modale).getByRole('button', { name: 'Enregistrer' }).click());
 		const alerte = within(modale).getByRole('alert');
 		expect(alerte.textContent).toMatch(/^Cette skill a été modifiée ailleurs depuis son ouverture/u);
-		expect((within(modale).getByRole('button', { name: 'Enregistrer' }) as HTMLButtonElement).disabled).toBe(true);
+		const bouton = within(modale).getByRole('button', { name: 'Enregistrer' });
+		expect(bouton.getAttribute('aria-disabled')).toBe('true');
+		expect(description(bouton)).toBe('À recharger : la skill a changé ailleurs.');
 		await act(async () => within(alerte).getByRole('button', { name: 'Recharger' }).click());
 		await waitFor(() => expect(within(modale).queryByRole('alert')).toBeNull());
 		expect(champ(modale, 'Contenu').value).toMatch(/^# Devis/u);
@@ -104,12 +135,18 @@ describe('Éditeur de skill : créer', () => {
 		const modale = await editer(null);
 		expect((within(modale).getByRole('radio', { name: /^Dans la mémoire/u }) as HTMLInputElement).checked).toBe(true);
 		expect(within(modale).getByText(/équipée sur « redaction » : enregistre l’agent pour garder cet équipement/u)).toBeTruthy();
-		// nom et « Quand l'utiliser » obligatoires
-		expect((within(modale).getByRole('button', { name: 'Créer' }) as HTMLButtonElement).disabled).toBe(true);
+		// nom et « Quand l'utiliser » obligatoires : Créer grisé, avec la raison
+		const creer = within(modale).getByRole('button', { name: 'Créer' });
+		expect(creer.getAttribute('aria-disabled')).toBe('true');
+		expect(description(creer)).toBe('Le nom et « Quand l’utiliser » sont obligatoires.');
+		// chaque champ porte son nom exact, son aide en description
+		expect(description(champ(modale, 'Nom'))).toBe('minuscules, chiffres et tirets ; c’est le nom que voit l’agent');
+		expect(description(champ(modale, 'Quand l’utiliser'))).toBe('l’agent charge la skill quand sa tâche correspond à cette phrase');
 		saisir(modale, 'Nom', 'compte-rendu');
 		saisir(modale, 'Quand l’utiliser', 'Rédiger le compte rendu d’une réunion.');
 		saisir(modale, 'Contenu', 'Décisions, actions, points ouverts.');
-		await act(async () => within(modale).getByRole('button', { name: 'Créer' }).click());
+		expect(creer.getAttribute('aria-disabled')).toBeNull();
+		await act(async () => creer.click());
 		await waitFor(() => expect(caseInventaire('compte-rendu')?.getAttribute('aria-checked')).toBe('true'));
 		expect(await lireSkill(client, 'compte-rendu')).toMatchObject({ profil: null, icone: '✨', description: 'Rédiger le compte rendu d’une réunion.' });
 		expect(within(pied()).getByText('Modifié, non enregistré')).toBeTruthy();
@@ -144,6 +181,8 @@ describe('Éditeur de skill : supprimer, revenir à l’origine, skill fournie',
 		await act(async () => supprimer().click());
 		await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 		await waitFor(() => expect(caseInventaire('devis')).toBeNull());
+		// la skill n'existe plus : le focus va sur l'inventaire
+		expect(document.activeElement?.getAttribute('aria-label')).toBe('Inventaire');
 		await expect(lireSkill(client, 'devis')).rejects.toMatchObject({ statut: 404 });
 	});
 
@@ -169,14 +208,50 @@ describe('Éditeur de skill : supprimer, revenir à l’origine, skill fournie',
 		expect(await lireSkill(client, 'menage', 'archiviste')).toMatchObject({ modifiee: false });
 	});
 
-	it('Annuler ferme sans rien écrire', async () => {
+	it('Annuler ou Échap : sans saisie, ferme ; avec une saisie, demande d’abord de l’abandonner ; rien n’est écrit', async () => {
 		const client = await ouvrir();
+		const remplacer = vi.spyOn(client.api, 'remplacer');
 		const envoyer = vi.spyOn(client.api, 'envoyer');
-		const modale = await editer('devis');
-		saisir(modale, 'Contenu', 'brouillon');
+		let modale = await editer('devis');
 		await act(async () => within(modale).getByRole('button', { name: 'Annuler' }).click());
 		expect(screen.queryByRole('dialog')).toBeNull();
+
+		modale = await editer('devis');
+		saisir(modale, 'Contenu', 'brouillon');
+		await act(async () => within(modale).getByRole('button', { name: 'Annuler' }).click());
+		const avis = within(modale).getByRole('alert');
+		expect(avis.textContent).toMatch(/^Abandonner la saisie \?/u);
+		await act(async () => within(avis).getByRole('button', { name: 'Continuer' }).click());
+		expect(champ(modale, 'Contenu').value).toBe('brouillon');
+		await act(async () => echap(modale));
+		await act(async () => within(within(modale).getByRole('alert')).getByRole('button', { name: 'Abandonner' }).click());
+		expect(screen.queryByRole('dialog')).toBeNull();
+
+		// une nouvelle skill entamée : même question
+		modale = await editer(null);
+		saisir(modale, 'Nom', 'essai');
+		await act(async () => echap(modale));
+		expect(within(modale).getByRole('alert').textContent).toMatch(/^Abandonner la saisie \?/u);
+		expect(remplacer).not.toHaveBeenCalled();
 		expect(envoyer).not.toHaveBeenCalled();
 		expect((await lireSkill(client, 'devis')).contenu).toMatch(/^# Devis/u);
+	});
+
+	it('Échap pendant une écriture : ignoré, la modale reste', async () => {
+		const client = await ouvrir();
+		let fin = () => {};
+		const remplacer = client.api.remplacer.bind(client.api);
+		vi.spyOn(client.api, 'remplacer').mockImplementation(async (chemin, corps) => {
+			await new Promise<void>((r) => (fin = r));
+			return remplacer(chemin, corps);
+		});
+		const modale = await editer('devis');
+		saisir(modale, 'Contenu', 'Autre chose.');
+		await act(async () => within(modale).getByRole('button', { name: 'Enregistrer' }).click());
+		await act(async () => echap(modale));
+		expect(screen.getByRole('dialog')).toBeTruthy();
+		expect(within(modale).queryByRole('alert')).toBeNull();
+		await act(async () => fin());
+		await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 	});
 });

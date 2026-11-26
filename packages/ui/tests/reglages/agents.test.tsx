@@ -156,7 +156,8 @@ describe('Réglages › Agents : l’équipement', () => {
 		const signature = caseInventaire('signature');
 		expect(signature.getAttribute('aria-checked')).toBe('true');
 		expect(signature.getAttribute('aria-disabled')).toBe('true');
-		expect(description(signature)).toBe('Les skills de l’agent sont toujours équipées.');
+		// la case annonce sa description et son type, puis pourquoi elle ne se décoche pas
+		expect(description(signature)).toMatch(/ \| skill de l’agent \| Les skills de l’agent sont toujours équipées\.$/u);
 		expect(caseInventaire('superpowers').getAttribute('aria-checked')).toBe('true');
 		// un plugin retenu mais plus installé : à décocher pour le retirer
 		expect(caseInventaire('ancien@marketplace').getAttribute('aria-checked')).toBe('true');
@@ -169,7 +170,7 @@ describe('Réglages › Agents : l’équipement', () => {
 		const plugin = caseInventaire('superpowers');
 		expect(plugin.getAttribute('aria-disabled')).toBe('true');
 		expect(plugin.getAttribute('aria-checked')).toBe('false');
-		expect(description(plugin)).toBe('Les plugins sont propres à Claude Code.');
+		expect(description(plugin)).toMatch(/ \| plugin \| Les plugins sont propres à Claude Code\.$/u);
 		expect(inventaire.queryByRole('checkbox', { name: 'ancien@marketplace' })).toBeNull();
 		// retour à Claude Code : les plugins saisis reviennent
 		await act(async () => classe(/^Claude Code/u).click());
@@ -255,7 +256,55 @@ describe('Réglages › Agents : modifications non enregistrées', () => {
 	});
 });
 
+describe('Réglages › Agents : ce que reçoit une session', () => {
+	it('agent Codex : l’aperçu (version enregistrée) liste les skills dans la consigne', async () => {
+		const { liste } = await ouvrirAgents();
+		await choisir(liste, 'revue-code');
+		const apercu = screen.getByText('Ce que reçoit une session').closest('details')!;
+		await act(async () => {
+			apercu.open = true;
+			fireEvent(apercu, new Event('toggle'));
+		});
+		expect(await within(apercu).findByText('Consigne du profil (personnalisée), avec la liste des skills')).toBeTruthy();
+		expect(within(apercu).getByText('Skills de la mémoire (listées dans la consigne, lues par l’outil lire)')).toBeTruthy();
+	});
+});
+
 describe('Réglages › Agents : créer, dupliquer, supprimer un agent', () => {
+	it('modifications non enregistrées : « + Nouvel agent » demande d’abord de les abandonner ; Rester garde la saisie', async () => {
+		const { liste } = await ouvrirAgents();
+		const rouge = () => within(within(bloc('Apparence')).getByRole('radiogroup', { name: 'Couleur de l’avatar' })).getByRole('radio', { name: 'Rouge' });
+		await act(async () => rouge().click());
+		await act(async () => within(liste).getByRole('button', { name: '+ Nouvel agent' }).click());
+		const avis = screen.getByRole('alert');
+		expect(avis.textContent).toMatch(/Modifications de l’agent « travail » non enregistrées/u);
+		expect(within(liste).queryByLabelText('Nom du nouvel agent')).toBeNull();
+		await act(async () => within(avis).getByRole('button', { name: 'Rester' }).click());
+		expect(rouge().getAttribute('aria-checked')).toBe('true');
+		await act(async () => within(liste).getByRole('button', { name: '+ Nouvel agent' }).click());
+		await act(async () => within(screen.getByRole('alert')).getByRole('button', { name: 'Abandonner' }).click());
+		expect(within(liste).getByLabelText('Nom du nouvel agent')).toBeTruthy();
+		expect(screen.queryByRole('complementary', { name: 'Agent travail' })).toBeNull();
+	});
+
+	it('dupliquer un agent modifié : la copie (version enregistrée) est écrite, l’ouvrir demande d’abord d’abandonner la saisie', async () => {
+		const { client, liste } = await ouvrirAgents();
+		await choisir(liste, 'redaction');
+		const rouge = () => within(within(bloc('Apparence')).getByRole('radiogroup', { name: 'Couleur de l’avatar' })).getByRole('radio', { name: 'Rouge' });
+		await act(async () => rouge().click());
+		const gerer = () => screen.getByText('Gérer l’agent').closest('details')!;
+		await act(async () => within(gerer()).getByRole('button', { name: 'Dupliquer…' }).click());
+		fireEvent.change(within(gerer()).getByLabelText('Nom de la copie'), { target: { value: 'courriers' } });
+		await act(async () => within(gerer()).getByRole('button', { name: 'Dupliquer' }).click());
+		const avis = await screen.findByRole('alert');
+		expect(avis.textContent).toMatch(/Modifications de l’agent « redaction » non enregistrées/u);
+		expect((await detail(client, 'courriers')).editable.avatar.couleur).not.toBe('rouge');
+		await act(async () => within(avis).getByRole('button', { name: 'Rester' }).click());
+		expect(screen.getByRole('complementary', { name: 'Agent redaction' })).toBeTruthy();
+		expect(rouge().getAttribute('aria-checked')).toBe('true');
+	});
+
+
 	it('nouvel agent : pendant la saisie du nom, aucun créateur ; créé, ses réglages vont à lui', async () => {
 		const { client, liste } = await ouvrirAgents();
 		await act(async () => within(liste).getByRole('button', { name: '+ Nouvel agent' }).click());

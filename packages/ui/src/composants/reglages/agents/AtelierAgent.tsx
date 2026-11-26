@@ -4,8 +4,9 @@
  * « Gérer l'agent » (sa fiche, ce que reçoit une session, dupliquer, supprimer). Tout se règle dans un brouillon, enregistré
  * d'un geste et validé par le service. Une modification faite ailleurs entre-temps est signalée (empreinte) : l'enregistrement
  * est alors refusé jusqu'au rechargement. Les skills s'écrivent, elles, tout de suite (éditeur de skill) : une skill créée
- * dans la mémoire est équipée dans le brouillon ; renommée ou supprimée, le brouillon suit (le service a déjà mis à jour la
- * fiche de l'agent, sans que ce soit un conflit).
+ * dans la mémoire est équipée dans le brouillon ; renommée ou supprimée, le brouillon suit, et l'agent est relu tout de
+ * suite (le service a réécrit sa fiche : cette relecture n'est pas un conflit ; Enregistrer attend qu'elle arrive). Après
+ * une écriture de skill, le focus revient sur sa case d'inventaire (ou sur l'inventaire, si elle n'existe plus).
  */
 import { estModele, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { ROUTES } from '@mnemo/contrat';
@@ -57,12 +58,14 @@ export function AtelierAgent(p: {
 	const [erreur, setErreur] = useState<string | null>(null);
 	const [statut, setStatut] = useState<string | null>(null);
 	const [skill, setSkill] = useState<SkillOuverte | null>(null);
-	// une skill de la mémoire renommée ou supprimée d'ici réécrit la fiche de l'agent : la relecture qui suit n'est pas un conflit
-	const absorber = useRef(false);
+	// une skill de la mémoire renommée ou supprimée d'ici a réécrit la fiche de l'agent : la relecture qui suit n'est pas un conflit
+	const [relecture, setRelecture] = useState(false);
+	// la case d'inventaire à focaliser après une écriture de skill (null : l'inventaire)
+	const [focus, setFocus] = useState<{ nom: string | null } | null>(null);
 	const modifie = !egaux(brouillon, base.editable);
 	// un modèle refusé (forme) n'est pas envoyé : Enregistrer reste indisponible, avec la raison
 	const modeleRefuse = !estModele(brouillon.modele);
-	const idModeleRefuse = useId();
+	const idRaison = useId();
 	/** Modèle et plugins saisis pour chaque moteur pendant l'édition : un aller-retour de moteur les rend. */
 	const [saisiesParMoteur, setSaisiesParMoteur] = useState<Partial<Record<IdMoteur, Pick<ProfilEditableVue, 'modele' | 'plugins'>>>>({});
 
@@ -72,8 +75,8 @@ export function AtelierAgent(p: {
 			setBrouillon(structuredClone(d.editable));
 			setChangeAilleurs(false);
 			setSaisiesParMoteur({});
-		} else if (d.empreinte !== base.empreinte && !absorber.current) setChangeAilleurs(true);
-		if (d.empreinte !== base.empreinte) absorber.current = false;
+		} else if (d.empreinte !== base.empreinte && !relecture) setChangeAilleurs(true);
+		setRelecture(false);
 		setBase(d);
 	}
 
@@ -135,6 +138,8 @@ export function AtelierAgent(p: {
 		setBrouillon(structuredClone(base.editable));
 		setSaisiesParMoteur({});
 		setErreur(null);
+		// la base est la dernière lecture de l'agent : plus rien n'entre en conflit avec elle
+		if (base === d) setChangeAilleurs(false);
 	};
 	const recharger = () => {
 		setBrouillon(structuredClone(d.editable));
@@ -144,20 +149,32 @@ export function AtelierAgent(p: {
 		p.recharger();
 	};
 
-	/** Une skill écrite par l'éditeur : l'équipement du brouillon la suit (créée dans la mémoire : équipée ici). */
+	/** Une skill écrite par l'éditeur : l'équipement du brouillon la suit (créée dans la mémoire : équipée ici), le focus aussi. */
 	const surEcritureSkill = (e: EcritureSkill) => {
-		if (e.profil !== null) return;
+		setFocus({ nom: e.genre === 'supprime' ? null : e.nom });
+		if (e.profil !== null || e.genre === 'modifie') return;
 		if (e.genre === 'cree') {
 			if (brouillon.skillsMemoire !== 'tous' && !brouillon.skillsMemoire.includes(e.nom)) changer({ skillsMemoire: [...brouillon.skillsMemoire, e.nom] });
 			return;
 		}
 		const nouveau = e.genre === 'renomme' ? e.nom : null;
 		const enregistre = base.editable.skillsMemoire;
-		if (enregistre !== 'tous' && enregistre.includes(e.ancien)) absorber.current = true;
+		// fiche écrite qui listait la skill : le service l'a réécrite, à relire avant d'enregistrer
+		if (base.empreinte !== null && enregistre !== 'tous' && enregistre.includes(e.ancien)) {
+			setRelecture(true);
+			p.recharger();
+		}
 		setBrouillon((b) => ({ ...b, skillsMemoire: suivreSkill(b.skillsMemoire, e.ancien, nouveau) }));
 	};
 
-	const raisonsBloquantes = changeAilleurs || modeleRefuse;
+	const raisonsBloquantes = changeAilleurs || modeleRefuse || relecture;
+	const texteRaison = modeleRefuse
+		? 'Enregistrement impossible : le nom du modèle est refusé (Classe) ; corrige-le ou reviens au modèle par défaut.'
+		: changeAilleurs
+			? 'Enregistrement impossible : l’agent a été modifié ailleurs, à recharger.'
+			: relecture
+				? 'Relecture de l’agent après l’écriture de la skill…'
+				: null;
 	return (
 		<div className={s.atelier} style={{ '--perso': JETONS_COULEUR[brouillon.avatar.couleur] } as CSSProperties}>
 			<div className={s.colonne}>
@@ -173,7 +190,7 @@ export function AtelierAgent(p: {
 						<div className={s.avis} role="alert">
 							<p>Modifications de l’agent non enregistrées : les enregistrer avant de quitter les Réglages ?</p>
 							<div className={s.actions}>
-								<Bouton genre="primaire" petit disabled={envoi} indisponible={raisonsBloquantes && { raison: idModeleRefuse }} onClick={() => void enregistrerPuisPartir()}>
+								<Bouton genre="primaire" petit disabled={envoi} indisponible={raisonsBloquantes && { raison: idRaison }} onClick={() => void enregistrerPuisPartir()}>
 									Enregistrer
 								</Bouton>
 								<Bouton petit disabled={envoi} onClick={nav.poursuivreSortie}>
@@ -200,14 +217,9 @@ export function AtelierAgent(p: {
 							{erreur}
 						</p>
 					)}
-					{modeleRefuse && (
-						<p id={idModeleRefuse} className={s.erreur}>
-							Enregistrement impossible : le nom du modèle est refusé (Classe) ; corrige-le ou reviens au modèle par défaut.
-						</p>
-					)}
-					{changeAilleurs && !modeleRefuse && (
-						<p id={idModeleRefuse} className={s.horsEcran}>
-							Enregistrement impossible : l’agent a été modifié ailleurs, à recharger.
+					{texteRaison !== null && (
+						<p id={idRaison} className={modeleRefuse ? s.erreur : changeAilleurs ? s.horsEcran : s.etat}>
+							{texteRaison}
 						</p>
 					)}
 					{modifie ? (
@@ -223,7 +235,7 @@ export function AtelierAgent(p: {
 						<Bouton disabled={!modifie || envoi} onClick={annuler}>
 							Annuler
 						</Bouton>
-						<Bouton genre="primaire" disabled={!modifie || envoi} indisponible={modifie && raisonsBloquantes && { raison: idModeleRefuse }} onClick={() => void enregistrer()}>
+						<Bouton genre="primaire" disabled={!modifie || envoi} indisponible={modifie && raisonsBloquantes && { raison: idRaison }} onClick={() => void enregistrer()}>
 							Enregistrer
 						</Bouton>
 					</div>
@@ -253,6 +265,8 @@ export function AtelierAgent(p: {
 					surChange={changer}
 					surEditerSkill={(nom, profil) => setSkill({ nom, profil })}
 					surNouvelleSkill={() => setSkill({ nom: null, profil: null })}
+					focus={focus}
+					surFocusFait={() => setFocus(null)}
 				/>
 				<BlocPouvoirs hooks={brouillon.hooks} surChange={(hooks) => changer({ hooks })} />
 				<BlocMission consigne={brouillon.consigne} consigneParDefaut={d.consigneParDefaut} surChange={(consigne) => changer({ consigne })} />

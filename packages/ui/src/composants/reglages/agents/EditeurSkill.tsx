@@ -16,11 +16,14 @@ import { Bouton } from '../../commun/Bouton.tsx';
 import f from '../champs/Saisie.module.css';
 import s from './EditeurSkill.module.css';
 
-/** Une écriture faite par l'éditeur, pour que l'agent ouvert suive : `ancien`, le nom d'avant (création : le nom créé). */
-export type EcritureSkill = { genre: 'cree' | 'renomme' | 'supprime'; ancien: string; nom: string; profil: string | null };
+/**
+ * Une écriture faite par l'éditeur, pour que l'agent ouvert suive (équipement, focus) : `ancien`, le nom d'avant (création :
+ * le nom créé) ; `nom`, celui d'après.
+ */
+export type EcritureSkill = { genre: 'cree' | 'modifie' | 'renomme' | 'supprime'; ancien: string; nom: string; profil: string | null };
 
 type Saisie = { icone: string; nom: string; description: string; contenu: string };
-const VIDE: Saisie = { icone: '', nom: '', description: '', contenu: '' };
+const VIDE: Saisie = { icone: '✨', nom: '', description: '', contenu: '' };
 const saisieDe = (d: SkillDetailVue): Saisie => ({ icone: d.icone ?? '', nom: d.nom, description: d.description, contenu: d.contenu });
 const corpsDe = (x: Saisie): SkillEditableVue => ({ nom: x.nom.trim(), description: x.description.trim(), icone: x.icone.trim() === '' ? null : x.icone.trim(), contenu: x.contenu });
 /** Portée d'une route de skill : `?profil=<nom>` pour une skill d'un agent, rien pour la mémoire. */
@@ -45,7 +48,8 @@ export function EditeurSkill(p: {
 	const nouvelle = p.nom === null;
 	const [detail, setDetail] = useState<SkillDetailVue | null>(null);
 	const [lecture, setLecture] = useState<string | null>(null);
-	const [saisie, setSaisie] = useState<Saisie>({ ...VIDE, icone: '✨' });
+	const [saisie, setSaisie] = useState<Saisie>(VIDE);
+	const [abandon, setAbandon] = useState(false);
 	const [pourAgent, setPourAgent] = useState(false);
 	const [envoi, setEnvoi] = useState(false);
 	const [erreur, setErreur] = useState<string | null>(null);
@@ -82,13 +86,21 @@ export function EditeurSkill(p: {
 		dialogue.current?.close?.();
 		p.surFermer();
 	};
+	/** Saisie différente de la skill lue (ou, pour une nouvelle, d'une saisie vide) : la fermer demande d'abord confirmation. */
+	const saisieModifiee = JSON.stringify(saisie) !== JSON.stringify(detail === null ? VIDE : saisieDe(detail));
+	const demanderFermeture = () => {
+		if (envoi) return;
+		if (saisieModifiee) setAbandon(true);
+		else fermer();
+	};
 	const changer = (m: Partial<Saisie>) => {
 		setErreur(null);
 		setConfirmer(false);
+		setAbandon(false);
 		setSaisie((x) => ({ ...x, ...m }));
 	};
 
-	/** Un geste d'écriture : `false` s'il a échoué (le motif est dit, un conflit proposé au rechargement). */
+	/** Un geste d'écriture, le temps duquel l'éditeur est occupé ; un échec est dit (motif, ou conflit à recharger). */
 	const ecrire = async (geste: () => Promise<void>): Promise<void> => {
 		setEnvoi(true);
 		setErreur(null);
@@ -111,7 +123,7 @@ export function EditeurSkill(p: {
 				p.surEcriture({ genre: 'cree', ancien: r.nom, nom: r.nom, profil });
 			} else {
 				const r = await api.remplacer<ReponseEcritureSkill>(`${avecId(ROUTES.skill, detail.nom)}${portee(detail.profil)}`, { ...corps, empreinte: detail.empreinte });
-				if (r.nom !== detail.nom) p.surEcriture({ genre: 'renomme', ancien: detail.nom, nom: r.nom, profil: detail.profil });
+				p.surEcriture({ genre: r.nom !== detail.nom ? 'renomme' : 'modifie', ancien: detail.nom, nom: r.nom, profil: detail.profil });
 			}
 			fermer();
 		});
@@ -154,6 +166,8 @@ export function EditeurSkill(p: {
 					: 'Aucun agent ne l’équipe.';
 	const pret = nouvelle || detail !== null;
 	const incomplet = saisie.nom.trim() === '' || saisie.description.trim() === '';
+	// pourquoi Créer / Enregistrer est indisponible (dit sous les actions) ; null : disponible
+	const raison = !pret ? 'Lecture de la skill en cours.' : conflit ? 'À recharger : la skill a changé ailleurs.' : incomplet ? 'Le nom et « Quand l’utiliser » sont obligatoires.' : null;
 
 	return (
 		<dialog
@@ -162,14 +176,14 @@ export function EditeurSkill(p: {
 			aria-labelledby={`${id}-titre`}
 			onCancel={(e) => {
 				e.preventDefault();
-				fermer();
+				demanderFermeture();
 			}}
 		>
 			<form
 				className={s.ed}
 				onSubmit={(e) => {
 					e.preventDefault();
-					if (!incomplet && !conflit) void enregistrer();
+					if (raison === null && !envoi) void enregistrer();
 				}}
 			>
 				<h2 id={`${id}-titre`} className={s.titre}>
@@ -203,30 +217,33 @@ export function EditeurSkill(p: {
 				{nouvelle && (
 					<fieldset className={s.portee}>
 						<legend className={f.libelle}>Où la créer</legend>
-						<label className={s.choix}>
-							<input type="radio" name={`${id}-portee`} checked={!pourAgent} onChange={() => setPourAgent(false)} />
+						<div className={s.choix}>
+							<input id={`${id}-memoire`} type="radio" name={`${id}-portee`} checked={!pourAgent} aria-describedby={`${id}-memoire-aide`} onChange={() => setPourAgent(false)} />
 							<span>
-								Dans la mémoire<small>partagée : chaque agent peut l’équiper</small>
+								<label htmlFor={`${id}-memoire`}>Dans la mémoire</label>
+								<small id={`${id}-memoire-aide`}>partagée : chaque agent peut l’équiper</small>
 							</span>
-						</label>
-						<label className={s.choix}>
-							<input type="radio" name={`${id}-portee`} checked={pourAgent} onChange={() => setPourAgent(true)} />
+						</div>
+						<div className={s.choix}>
+							<input id={`${id}-agent`} type="radio" name={`${id}-portee`} checked={pourAgent} aria-describedby={`${id}-agent-aide`} onChange={() => setPourAgent(true)} />
 							<span>
-								Pour {p.agent} seulement<small>dans son dossier, toujours équipée</small>
+								<label htmlFor={`${id}-agent`}>Pour {p.agent} seulement</label>
+								<small id={`${id}-agent-aide`}>dans son dossier, toujours équipée</small>
 							</span>
-						</label>
+						</div>
 					</fieldset>
 				)}
 				{pret && (
 					<>
 						<div className={s.deuxC}>
-							<label className={s.champ}>
-								Icône
-								<input className={`${f.champTexte} ${s.icone}`} maxLength={16} value={saisie.icone} onChange={(e) => changer({ icone: e.target.value })} />
-							</label>
-							<label className={`${s.champ} ${s.large}`}>
-								Nom
+							<div className={s.champ}>
+								<label htmlFor={`${id}-icone`}>Icône</label>
+								<input id={`${id}-icone`} className={`${f.champTexte} ${s.icone}`} maxLength={16} value={saisie.icone} onChange={(e) => changer({ icone: e.target.value })} />
+							</div>
+							<div className={`${s.champ} ${s.large}`}>
+								<label htmlFor={`${id}-nom`}>Nom</label>
 								<input
+									id={`${id}-nom`}
 									className={f.champTexte}
 									placeholder="ex. compte-rendu-client"
 									spellCheck={false}
@@ -237,28 +254,31 @@ export function EditeurSkill(p: {
 									onChange={(e) => changer({ nom: e.target.value })}
 								/>
 								<small id={`${id}-aide-nom`}>minuscules, chiffres et tirets ; c’est le nom que voit l’agent</small>
-							</label>
+							</div>
 						</div>
-						<label className={s.champ}>
-							Quand l’utiliser
+						<div className={s.champ}>
+							<label htmlFor={`${id}-desc`}>Quand l’utiliser</label>
 							<input
+								id={`${id}-desc`}
 								className={`${f.champTexte} ${s.prose}`}
+								aria-describedby={`${id}-aide-desc`}
 								placeholder="ex. rédiger le compte rendu d’une réunion client"
 								value={saisie.description}
 								onChange={(e) => changer({ description: e.target.value })}
 							/>
-							<small>l’agent charge la skill quand sa tâche correspond à cette phrase</small>
-						</label>
-						<label className={s.champ}>
-							Contenu
+							<small id={`${id}-aide-desc`}>l’agent charge la skill quand sa tâche correspond à cette phrase</small>
+						</div>
+						<div className={s.champ}>
+							<label htmlFor={`${id}-contenu`}>Contenu</label>
 							<textarea
+								id={`${id}-contenu`}
 								className={`${f.texteLong} ${s.contenu}`}
 								rows={10}
 								placeholder="Les étapes, les règles, les exemples que l’agent doit suivre (Markdown)."
 								value={saisie.contenu}
 								onChange={(e) => changer({ contenu: e.target.value })}
 							/>
-						</label>
+						</div>
 						<p className={f.discret}>{qui}</p>
 					</>
 				)}
@@ -277,6 +297,19 @@ export function EditeurSkill(p: {
 						{erreur}
 					</p>
 				)}
+				{abandon && (
+					<div className={f.avis} role="alert">
+						<p>Abandonner la saisie ? Rien n’a été écrit.</p>
+						<div className={f.actions}>
+							<Bouton petit onClick={fermer}>
+								Abandonner
+							</Bouton>
+							<Bouton petit genre="primaire" onClick={() => setAbandon(false)}>
+								Continuer
+							</Bouton>
+						</div>
+					</div>
+				)}
 				{fixe !== null && (
 					<p id={`${id}-fixe`} className={f.discret}>
 						{fixe.charAt(0).toUpperCase() + fixe.slice(1)}.
@@ -289,13 +322,18 @@ export function EditeurSkill(p: {
 						</Bouton>
 					)}
 					<span className={s.espace} />
-					<Bouton disabled={envoi} onClick={fermer}>
+					<Bouton disabled={envoi} onClick={demanderFermeture}>
 						Annuler
 					</Bouton>
-					<Bouton type="submit" genre="primaire" disabled={!pret || envoi || conflit || incomplet}>
+					<Bouton type="submit" genre="primaire" disabled={envoi} indisponible={raison !== null && { raison: `${id}-raison` }}>
 						{nouvelle ? 'Créer' : 'Enregistrer'}
 					</Bouton>
 				</div>
+				{raison !== null && (
+					<p id={`${id}-raison`} className={`${f.discret} ${s.raison}`}>
+						{raison}
+					</p>
+				)}
 			</form>
 		</dialog>
 	);

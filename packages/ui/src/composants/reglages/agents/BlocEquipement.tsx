@@ -2,10 +2,11 @@
  * Équipement d'un agent, en inventaire : ses skills propres (toujours équipées), les skills de la mémoire (à équiper une à
  * une, ou toutes, y compris les futures), puis les plugins Claude Code (grisés avec un autre moteur ; un plugin retenu mais
  * plus installé reste à retirer). Une case = icône, nom, description, type. Le crayon ✎ d'une skill de l'agent ou de la
- * mémoire ouvre son éditeur ; les skills de plugin n'en ont pas. « + Nouvelle skill » en fin d'inventaire.
+ * mémoire ouvre son éditeur ; les skills de plugin n'en ont pas. « + Nouvelle skill » en fin d'inventaire. Après une écriture
+ * de skill, le focus va sur sa case dès qu'elle est relue (sur l'inventaire si elle n'existe plus).
  */
 import type { PluginInstalleVue, ProfilDetailVue, ProfilEditableVue, SkillVue } from '@mnemo/contrat';
-import { useId, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { basculer, basculerSkill, compterEquipement, retient } from '../../../reglages/equipement.ts';
 import { Bascule } from '../../commun/Bascule.tsx';
 import s from './Agents.module.css';
@@ -26,6 +27,7 @@ function Case(p: {
 	surBascule(): void;
 	surEditer?: () => void;
 }): ReactNode {
+	const id = useId();
 	return (
 		<li className={s.caseW}>
 			<button
@@ -35,16 +37,20 @@ function Case(p: {
 				aria-checked={p.equipee}
 				aria-label={p.nom}
 				aria-disabled={p.raison !== undefined || undefined}
-				aria-describedby={p.raison?.id}
-				title={p.raison === undefined ? p.description : `${p.description}\n${p.raison.texte}`}
+				aria-describedby={[`${id}-desc`, `${id}-type`, p.raison?.id].filter((x) => x !== undefined).join(' ')}
+				title={p.description}
 				onClick={() => p.raison === undefined && p.surBascule()}
 			>
 				<span className={s.ic} aria-hidden="true">
 					{p.icone}
 				</span>
 				<span className={s.nomCase}>{p.nom}</span>
-				<span className={s.desc}>{p.description}</span>
-				<span className={s.type}>{p.type}</span>
+				<span id={`${id}-desc`} className={s.desc}>
+					{p.description}
+				</span>
+				<span id={`${id}-type`} className={s.type}>
+					{p.type}
+				</span>
 			</button>
 			{p.surEditer !== undefined && (
 				<button type="button" className={s.crayon} aria-label={`Modifier la skill ${p.nom}`} title={`Modifier la skill ${p.nom}`} onClick={p.surEditer}>
@@ -64,10 +70,24 @@ export function BlocEquipement(p: {
 	surChange(m: Partial<ProfilEditableVue>): void;
 	surEditerSkill(nom: string, profil: string | null): void;
 	surNouvelleSkill(): void;
+	/** Après une écriture de skill : la case à focaliser (`nom` null : l'inventaire). */
+	focus: { nom: string | null } | null;
+	surFocusFait(): void;
 }): ReactNode {
 	const e = p.editable;
 	const d = p.detail;
 	const id = useId();
+	const inventaire = useRef<HTMLUListElement>(null);
+	const { focus, surFocusFait } = p;
+	useEffect(() => {
+		const liste = inventaire.current;
+		if (focus === null || liste === null) return;
+		const cible = focus.nom === null ? liste : [...liste.querySelectorAll<HTMLElement>('[role="checkbox"]')].find((x) => x.getAttribute('aria-label') === focus.nom);
+		// la skill écrite n'est pas encore relue : sa case viendra avec le détail suivant
+		if (cible === undefined) return;
+		cible.focus();
+		surFocusFait();
+	}, [focus, d, surFocusFait]);
 	const { skills, plugins } = compterEquipement(e, d);
 	const n = skills + plugins;
 	const disponibles = d.skillsMemoireDisponibles.map((x) => x.nom);
@@ -85,7 +105,7 @@ export function BlocEquipement(p: {
 					Toutes les skills de la mémoire, y compris les futures
 				</Bascule>
 			</div>
-			<ul className={s.inventaire} aria-label="Inventaire">
+			<ul ref={inventaire} className={s.inventaire} aria-label="Inventaire" tabIndex={-1}>
 				{d.skillsDuProfil.map((x) => (
 					<Case
 						key={`profil:${x.nom}`}

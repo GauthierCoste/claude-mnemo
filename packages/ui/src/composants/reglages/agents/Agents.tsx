@@ -13,6 +13,7 @@ import { avecId, useProfil, useProfils } from '../../../client/hooks.ts';
 import { Bouton } from '../../commun/Bouton.tsx';
 import c from '../Cartes.module.css';
 import d from '../Panneau.module.css';
+import s from './Agents.module.css';
 import { AtelierAgent } from './AtelierAgent.tsx';
 import { ListeAgents } from './ListeAgents.tsx';
 
@@ -99,7 +100,7 @@ export function Agents(p: { surModifie(modifie: boolean): void }): ReactNode {
 				surAnnulerNouveau={() => setCreation(false)}
 				surNouveau={creer}
 			/>
-			<div className={c.contenu}>
+			<div className={`${c.contenu} ${s.defile}`}>
 				{ignores.length > 0 && (
 					<ul className={c.avis} aria-label="Dossiers d’agents ignorés">
 						{ignores.map((x) => (
@@ -138,7 +139,8 @@ export function Agents(p: { surModifie(modifie: boolean): void }): ReactNode {
 						surModifie={surModifie}
 						surDuplique={(nom) => {
 							profils.recharger();
-							ouvrir(nom);
+							// la copie est écrite ; l'ouvrir passe par la garde (brouillon modifié : abandonner ou rester)
+							choisir(nom);
 						}}
 						surSupprime={() => {
 							profils.recharger();

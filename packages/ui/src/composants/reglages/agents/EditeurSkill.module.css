@@ -150,3 +150,8 @@ ul.avis {
 	font-family: var(--sans);
 	font-size: 13px;
 }
+
+/* pourquoi Créer / Enregistrer est indisponible, sous les actions, à droite */
+.raison {
+	text-align: right;
+}
