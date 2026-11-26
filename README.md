@@ -168,8 +168,8 @@ tokens, private keys) are masked before anything is written or indexed. What the
 
 ## Status
 
-Version 1.8.0. Mnemo runs on macOS (Apple silicon and Intel) and is being adapted to Windows, where it has not been
-tried in real use yet; Linux has not been used. The CI runs the type check and the tests at each push on Linux and
+Version 1.9.0. Mnemo runs on macOS (Apple silicon and Intel) and on Windows (x64), where the desktop app is checked by
+the CI but has not been tried in real use yet; Linux has not been used. The CI runs the type check and the tests at each push on Linux and
 Windows with Node.js 24, and on macOS with Node.js 26. The interface runs in the browser, or in its own window with the desktop app (macOS and Windows).
 
 **Next: [coming next](docs/coming-next.md).** Mnemo runs Claude Code, Codex and Mistral Vibe sessions side by
