@@ -6,7 +6,7 @@
  * Chaque retrait est indépendant : un échec n'arrête pas les suivants, et le bilan les dit tous avant que l'app ne quitte.
  * La mémoire (`_mnemo/`) et le dossier local (`.mnemo/`) restent toujours.
  * L'app elle-même : sous macOS, mise à la corbeille ; sous Windows, retirée par son désinstalleur (`Uninstall Mnemo.exe`,
- * à côté de `Mnemo.exe`), lancé une fois Mnemo fermé ; sans désinstalleur, Paramètres › Applications.
+ * à côté de `Mnemo.exe`), ouvert quand Mnemo quitte ; sans désinstalleur, Paramètres › Applications.
  */
 import type { EtatInstallation } from './installation.ts';
 import type { PlateformeApp } from './plateforme.ts';
@@ -57,7 +57,7 @@ function libelle(etape: EtapeDesinstallation, e: EntreeDesinstallation): string 
 		case 'corbeille':
 			return `l’app elle-même (${e.chemins.app}), mise à la corbeille`;
 		case 'desinstalleur':
-			return `l’app elle-même, par son désinstalleur (${e.chemins.app}), qui s’ouvre quand Mnemo a quitté`;
+			return `l’app elle-même, par son désinstalleur (${e.chemins.app}), qui s’ouvre quand Mnemo quitte`;
 	}
 }
 

@@ -123,11 +123,11 @@ describe('désinstallation', () => {
 		expect(ko.detail).toContain('Ta mémoire et /maison/exemple/Mnemo/.mnemo sont restés en place.');
 	});
 
-	it('Windows : l’app retirée par son désinstalleur après la fermeture, jamais la corbeille ; sans désinstalleur, Paramètres › Applications', () => {
+	it('Windows : l’app retirée par son désinstalleur quand Mnemo quitte, jamais la corbeille ; sans désinstalleur, Paramètres › Applications', () => {
 		const windows = { plateforme: 'win32', racine: 'D:\\Profils\\exemple\\Mnemo', chemins: { commande: '~\\.local\\bin\\mnemo', app: 'D:\\Profils\\exemple\\AppData\\Local\\Programs\\Mnemo\\Uninstall Mnemo.exe', dossierApp: 'D:\\Profils\\exemple\\AppData\\Roaming\\Mnemo' } } as const;
 		const plan = planDesinstallation(entree({ ...windows, etat: { commande: 'absent', claudeCode: 'nous', appClaude: 'nous' } }));
 		expect(plan.etapes).toEqual(['ouvertureSession', 'claudeCode', 'appClaude', 'configuration', 'service', 'desinstalleur']);
-		expect(plan.detail).toContain('• l’app elle-même, par son désinstalleur (D:\\Profils\\exemple\\AppData\\Local\\Programs\\Mnemo\\Uninstall Mnemo.exe), qui s’ouvre quand Mnemo a quitté');
+		expect(plan.detail).toContain('• l’app elle-même, par son désinstalleur (D:\\Profils\\exemple\\AppData\\Local\\Programs\\Mnemo\\Uninstall Mnemo.exe), qui s’ouvre quand Mnemo quitte');
 		expect(plan.detail).toContain('ta mémoire (D:\\Profils\\exemple\\Mnemo\\_mnemo) et le dossier local D:\\Profils\\exemple\\Mnemo\\.mnemo');
 		expect(plan.detail).not.toMatch(/corbeille|image disque|macOS/u);
 		const sans = planDesinstallation(entree({ ...windows, empaquetee: false }));

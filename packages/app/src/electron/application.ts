@@ -10,9 +10,8 @@
  *
  * Sous Windows : identifiant de modèle d'application posé avant tout (notifications), icône dans la zone de notification,
  * élément d'ouverture de session lu et retiré avec les mêmes options qu'à l'inscription, et l'app retirée par son
- * désinstalleur, lancé une fois Mnemo fermé.
+ * désinstalleur, ouvert (par le shell de Windows, qui demande l'élévation s'il le faut) juste avant que Mnemo quitte.
  */
-import { spawn } from 'node:child_process';
 import { sep } from 'node:path';
 import { app, Notification, shell } from 'electron';
 import type { Configuration, Lancement } from '../domaine/configuration.ts';
@@ -243,7 +242,7 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 		}
 	}
 
-	/** Windows : le désinstalleur à lancer quand l'app quitte (il ne retire pas une app encore ouverte). */
+	/** Windows : le désinstalleur à ouvrir juste avant que l'app quitte (il ne retire pas une app encore ouverte). */
 	let desinstalleurALancer: string | null = null;
 
 	async function desinstaller(): Promise<void> {
@@ -252,8 +251,9 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 		// la vérification au lancement, si elle tourne encore, finit d'abord : elle ne refait rien après les retraits
 		await verification;
 		const chemins = cheminsInstallation(home);
-		const abreger = (chemin: string): string => (chemin.startsWith(`${home}${sep}`) ? `~${chemin.slice(home.length)}` : chemin);
-		// macOS : le paquet `.app`, mis à la corbeille ; Windows : le désinstalleur, lancé une fois Mnemo fermé
+		// macOS : dossier personnel abrégé en `~` ; Windows : chemins en entier (`~` n'y dit rien)
+		const abreger = (chemin: string): string => (PLATEFORME !== 'win32' && chemin.startsWith(`${home}${sep}`) ? `~${chemin.slice(home.length)}` : chemin);
+		// macOS : le paquet `.app`, mis à la corbeille ; Windows : le désinstalleur, ouvert quand Mnemo quitte
 		const cheminApp = PLATEFORME === 'win32' ? desinstalleurWindows(app.getPath('exe')) : paquetDeLApp(process.resourcesPath);
 		const entree: EntreeDesinstallation = {
 			plateforme: PLATEFORME,
@@ -282,6 +282,7 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 			async service() {
 				const r = await suivi.arreter();
 				if (!r.ok) throw new Error(r.raison);
+				if (r.force === true) return 'arrêté de force : ses sessions n’ont pas été fermées proprement';
 			},
 			async corbeille() {
 				if (cheminApp === null) throw new Error('emplacement de l’app inconnu : laissée en place.');
@@ -299,6 +300,13 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 			},
 		});
 		await direBilan(bilanDesinstallation(resultats, entree));
+		// Windows : le désinstalleur s'ouvre par le shell (`ShellExecute` : l'élévation demandée s'il le faut ; un échec rendu
+		// en texte, jamais une exception), puis l'app quitte aussitôt pour qu'il la trouve fermée
+		if (desinstalleurALancer !== null) {
+			const chemin = desinstalleurALancer;
+			const erreur = await shell.openPath(chemin).catch((e: unknown) => (e instanceof Error ? e.message : String(e)));
+			if (erreur !== '') await direErreur('Le désinstalleur de Mnemo ne s’est pas ouvert.', `${chemin} : ${erreur}\nDésinstalle Mnemo depuis Paramètres › Applications.`).catch(() => {});
+		}
 		app.quit();
 	}
 
@@ -348,7 +356,10 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 			case 'arreterService': {
 				const r = await suivi.arreter();
 				if (!r.ok) await direErreur('Le service ne s’est pas arrêté.', r.raison);
-				else if (r.force === true) journal('Service arrêté de force : la demande d’arrêt ne lui parvenait pas et il ne s’est pas arrêté seul (ses sessions n’ont pas été fermées proprement).');
+				else if (r.force === true) {
+					journal('Service arrêté de force : la demande d’arrêt ne lui parvenait pas et il ne s’est pas arrêté seul (ses sessions n’ont pas été fermées proprement).');
+					await direInformation('Le service a été arrêté de force.', 'Il ne répondait plus à la demande d’arrêt et ne s’est pas arrêté seul : ses sessions n’ont pas été fermées proprement.');
+				}
 				return;
 			}
 			case 'ouvertureSession':
@@ -422,15 +433,6 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 		suivi.fermer();
 	});
 	app.on('will-quit', () => barre.detruire());
-	// Windows, après « Désinstaller Mnemo… » : le désinstalleur s'ouvre, détaché, au moment où l'app se ferme
-	app.on('quit', () => {
-		if (desinstalleurALancer === null) return;
-		try {
-			spawn(desinstalleurALancer, [], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
-		} catch (e) {
-			journal(`Désinstalleur non lancé (${desinstalleurALancer}) : ${e instanceof Error ? e.message : String(e)}`);
-		}
-	});
 
 	afficher(suivi.instantane());
 	void chercherVersion();
