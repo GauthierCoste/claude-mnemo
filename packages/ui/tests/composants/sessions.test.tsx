@@ -10,6 +10,7 @@ import { ErreurApi } from '../../src/client/api.ts';
 import { Application } from '../../src/composants/Application.tsx';
 import { dossiersFaux } from '../aides/dossiers-faux.ts';
 import { cliquerQuandAffiche, creerFauxClient, demandeTout } from '../aides/faux-client.tsx';
+import { stockage } from '../aides/stockage.ts';
 
 // Terminal simulé : un champ qui reçoit le focus comme celui d'xterm.
 vi.mock('../../src/terminal/Terminal.tsx', () => ({
@@ -21,6 +22,7 @@ vi.mock('../../src/terminal/Terminal.tsx', () => ({
 afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
 });
 
 const MAINTENANT = Date.now();
@@ -66,10 +68,10 @@ const SERVIS: EntreeServieVue[] = [
 
 const PROFILS = {
 	profils: [
-		{ nom: PROFIL_ARCHIVISTE, description: 'Tu es l’archiviste de cette mémoire.', lancement: 'memoire', lanceur: 'propre', avatar: { forme: 'chouette', couleur: 'violet' }, personnalise: false },
-		{ nom: 'notes', description: 'Range mes notes.', lancement: 'memoire', lanceur: 'dialogue', avatar: { forme: 'goutte', couleur: 'bleu' }, personnalise: true },
-		{ nom: 'redaction', description: 'Rédige les courriers.', lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'renard', couleur: 'ambre' }, personnalise: true },
-		{ nom: PROFIL_TRAVAIL, description: 'La mémoire Mnemo est ta mémoire de référence.', lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: false },
+		{ nom: PROFIL_ARCHIVISTE, description: 'Tu es l’archiviste de cette mémoire.', lancement: 'memoire', lanceur: 'propre', avatar: { forme: 'chouette', couleur: 'violet' }, personnalise: false, moteur: 'claude-code', modele: '', equipement: { skills: 0, plugins: 0, hooks: ['debut', 'arret', 'fin'] } },
+		{ nom: 'notes', description: 'Range mes notes.', lancement: 'memoire', lanceur: 'dialogue', avatar: { forme: 'goutte', couleur: 'bleu' }, personnalise: true, moteur: 'claude-code', modele: '', equipement: { skills: 1, plugins: 0, hooks: ['debut', 'fin'] } },
+		{ nom: 'redaction', description: 'Rédige les courriers.', lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'renard', couleur: 'ambre' }, personnalise: true, moteur: 'claude-code', modele: '', equipement: { skills: 2, plugins: 1, hooks: ['debut', 'message', 'outil', 'apres_outil', 'arret', 'fin'] } },
+		{ nom: PROFIL_TRAVAIL, description: 'La mémoire Mnemo est ta mémoire de référence.', lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: false, moteur: 'claude-code', modele: '', equipement: { skills: 12, plugins: 2, hooks: ['debut', 'message', 'outil', 'apres_outil', 'arret', 'fin'] } },
 	],
 	ignores: [{ nom: 'A b', motif: 'nom refusé : minuscules, chiffres et tirets' }],
 	avertissements: [{ nom: 'notes', motif: 'lanceur « propre » sans chemin de lancement connu' }],
@@ -403,41 +405,119 @@ describe('vue Sessions', () => {
 		expect(screen.queryByRole('complementary', { name: 'Dossier' })).toBeNull();
 	});
 
-	it('Nouvelle session : POST sessions ; mode dégradé → la commande affichée avec « Copier »', async () => {
+	it('Nouvelle session : POST sessions ; dossier replié, « Changer » déplie l’arbre et un dossier choisi le replie ; mode dégradé → la commande affichée avec « Copier »', async () => {
 		const faux = await monter({
 			'/api/sessions': (_: unknown, corps: unknown) => (corps === undefined ? { sessions: SESSIONS } : { session: SESSIONS[0], manuel: 'claude --session-id 1234 --plugin-dir x' }),
 		});
 		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
 		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
-		const arbre = within(dialogue).getByRole('group', { name: 'Dossier' });
-		await cliquerQuandAffiche(within(arbre).findByRole('button', { name: /^api/ }));
-		expect(within(arbre).getByText('Dossier : api')).toBeTruthy();
+		const dossier = within(dialogue).getByRole('group', { name: 'Dossier' });
+		expect(dossier.textContent).toContain('Developer / erp-saas');
+		expect(within(dossier).queryByRole('button', { name: /^api/ })).toBeNull();
+		await act(async () => within(dossier).getByRole('button', { name: 'Changer' }).click());
+		await cliquerQuandAffiche(within(dossier).findByRole('button', { name: /^api/ }));
+		expect(within(dossier).queryByRole('button', { name: /^agent/ })).toBeNull();
+		expect(dossier.textContent).toContain('Developer / api');
 		fireEvent.change(within(dialogue).getByLabelText('Objectif (facultatif)'), { target: { value: 'Corriger le bug' } });
-		await act(async () => within(dialogue).getByRole('button', { name: 'Lancer' }).click());
+		await act(async () => within(dialogue).getByRole('button', { name: /^Lancer / }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions', { profil: PROFIL_TRAVAIL, dossier: 'api', objectif: 'Corriger le bug' });
 		expect(await within(dialogue).findByText('claude --session-id 1234 --plugin-dir x')).toBeTruthy();
 		expect(within(dialogue).getByRole('button', { name: 'Copier' })).toBeTruthy();
 	});
 
-	it('Nouvelle session : les profils du service, PROFIL_TRAVAIL par défaut, description du profil choisi ; un profil de l’utilisateur est envoyé ; les noms refusés sont dits', async () => {
+	it('Nouvelle session : les agents du service, PROFIL_TRAVAIL d’abord ; sa fiche (étiquette, fournisseur, modèle, équipement) ; les autres profils dits ; clic sur une vignette → l’agent envoyé', async () => {
 		const faux = await monter({ '/api/sessions': (_: unknown, corps: unknown) => (corps === undefined ? { sessions: SESSIONS } : { session: SESSIONS[0] }) });
 		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
 		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
-		const choix = within(dialogue).getByLabelText<HTMLSelectElement>('Profil');
-		await waitFor(() => expect([...choix.options].map((o) => o.value)).toEqual(['notes', 'redaction', PROFIL_TRAVAIL]));
-		// un profil lancé par son propre chemin : montré à part, non sélectionnable, avec l'endroit où il se lance
+		const agents = within(dialogue).getByRole('listbox', { name: 'Agents' });
+		await waitFor(() => expect(within(agents).getAllByRole('option').map((o) => o.getAttribute('aria-label'))).toEqual(['notes', 'redaction', PROFIL_TRAVAIL]));
+		expect(within(agents).getByRole('option', { selected: true }).getAttribute('aria-label')).toBe(PROFIL_TRAVAIL);
+		// le focus sur l'agent choisi : ← → et Entrée agissent tout de suite
+		expect(document.activeElement).toBe(within(agents).getByRole('option', { name: PROFIL_TRAVAIL }));
+		// un profil lancé par son propre chemin : montré à part, non proposé, avec l'endroit où il se lance
 		expect(within(dialogue).getByText(`${PROFIL_ARCHIVISTE} : lancé par son propre chemin, dans la mémoire.`)).toBeTruthy();
-		expect(choix.value).toBe(PROFIL_TRAVAIL);
-		expect(within(dialogue).getByText('La mémoire Mnemo est ta mémoire de référence.')).toBeTruthy();
 		expect(within(dialogue).getByText(/A b : nom refusé/)).toBeTruthy();
 		expect(within(dialogue).getByText('Profil notes : lanceur « propre » sans chemin de lancement connu')).toBeTruthy();
-		fireEvent.change(choix, { target: { value: 'redaction' } });
-		expect(within(dialogue).getByText('Rédige les courriers.')).toBeTruthy();
-		await act(async () => within(dialogue).getByRole('button', { name: 'Lancer' }).click());
+		const fiche = within(dialogue).getByRole('heading', { name: PROFIL_TRAVAIL }).closest<HTMLElement>('div[class*="fiche"]')!;
+		// une seule région vivante : l'agent et l'état de son moteur, pas toute la fiche
+		const annonce = dialogue.querySelector<HTMLElement>('[aria-live="polite"]')!;
+		expect(dialogue.querySelectorAll('[aria-live]')).toHaveLength(1);
+		expect(annonce.textContent).toMatch(new RegExp(`^${PROFIL_TRAVAIL} : `));
+		expect(within(fiche).getByText('par défaut')).toBeTruthy();
+		expect(within(fiche).getByText('La mémoire Mnemo est ta mémoire de référence.')).toBeTruthy();
+		expect(within(fiche).getByText('Anthropic')).toBeTruthy();
+		expect(within(fiche).getByText('par défaut du moteur')).toBeTruthy();
+		expect(within(fiche).getByText('dans le dossier choisi')).toBeTruthy();
+		const equipement = within(fiche).getByRole('list', { name: 'Équipement' });
+		expect(within(equipement).getAllByRole('listitem').map((x) => x.textContent)).toEqual(['12 skills', '2 plugins', 'hooks : tous']);
+		expect(within(dialogue).getByText(`${PROFIL_TRAVAIL} · Anthropic modèle par défaut · dans erp-saas`)).toBeTruthy();
+
+		await act(async () => within(agents).getByRole('option', { name: 'notes' }).click());
+		expect(annonce.textContent).toMatch(/^notes : /);
+		expect(within(fiche).getByText('personnalisé')).toBeTruthy();
+		expect(within(fiche).getByText('Range mes notes.')).toBeTruthy();
+		expect(within(equipement).getAllByRole('listitem').map((x) => x.textContent)).toEqual(['1 skill', '0 plugin', 'hooks : Début, Fin']);
+		await act(async () => within(agents).getByRole('option', { name: 'redaction' }).click());
+		expect(within(agents).getByRole('option', { selected: true }).getAttribute('aria-label')).toBe('redaction');
+		expect(within(fiche).getByText('Rédige les courriers.')).toBeTruthy();
+		await act(async () => within(dialogue).getByRole('button', { name: 'Lancer redaction' }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions', { profil: 'redaction', dossier: 'erp-saas' });
 	});
 
-	it('Nouvelle session : un profil dont le moteur ne lance pas ici (Codex introuvable) garde Lancer indisponible avec la raison ; rien n’est envoyé', async () => {
+	it('Nouvelle session : ← → changent d’agent (en boucle, le focus suit dans la rangée), pas depuis l’objectif ; flèches et clic sur un voisin de la scène ; Entrée lance', async () => {
+		const faux = await monter({ '/api/sessions': (_: unknown, corps: unknown) => (corps === undefined ? { sessions: SESSIONS } : { session: SESSIONS[0] }) });
+		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
+		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
+		const agents = within(dialogue).getByRole('listbox', { name: 'Agents' });
+		await waitFor(() => expect(within(agents).getAllByRole('option')).toHaveLength(3));
+		const choisi = () => within(agents).getByRole('option', { selected: true }).getAttribute('aria-label');
+		await act(async () => fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' }));
+		expect(choisi()).toBe('notes');
+		expect(document.activeElement?.getAttribute('aria-label')).toBe('notes');
+		await act(async () => fireEvent.keyDown(document.activeElement!, { key: 'ArrowLeft' }));
+		expect(choisi()).toBe(PROFIL_TRAVAIL);
+		// hors de la rangée (le dialogue lui-même) : le dialogue change d'agent
+		await act(async () => fireEvent.keyDown(dialogue, { key: 'ArrowLeft' }));
+		expect(choisi()).toBe('redaction');
+		// dans l'objectif, les flèches restent au champ
+		const objectif = within(dialogue).getByLabelText('Objectif (facultatif)');
+		await act(async () => fireEvent.keyDown(objectif, { key: 'ArrowLeft' }));
+		expect(choisi()).toBe('redaction');
+		await act(async () => within(dialogue).getByRole('button', { name: 'Agent suivant' }).click());
+		expect(choisi()).toBe(PROFIL_TRAVAIL);
+		await act(async () => within(dialogue).getByRole('button', { name: 'Agent précédent' }).click());
+		expect(choisi()).toBe('redaction');
+		// la scène : le voisin de droite, réduit, se choisit d'un clic
+		await act(async () => fireEvent.click(dialogue.querySelector('[data-pos="1"]')!));
+		expect(choisi()).toBe(PROFIL_TRAVAIL);
+		await act(async () => fireEvent.keyDown(within(agents).getByRole('option', { name: PROFIL_TRAVAIL }), { key: 'Enter' }));
+		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions', { profil: PROFIL_TRAVAIL, dossier: 'erp-saas' });
+	});
+
+	it('Nouvelle session : Entrée sur « Changer » ou « Annuler » ne lance pas ; ← → dans l’arbre déplié ne changent pas d’agent ; un dossier choisi rend le focus à « Changer »', async () => {
+		const faux = await monter({ '/api/sessions': (_: unknown, corps: unknown) => (corps === undefined ? { sessions: SESSIONS } : { session: SESSIONS[0] }) });
+		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
+		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
+		const agents = within(dialogue).getByRole('listbox', { name: 'Agents' });
+		await waitFor(() => expect(within(agents).getAllByRole('option')).toHaveLength(3));
+		const choisi = () => within(agents).getByRole('option', { selected: true }).getAttribute('aria-label');
+		const changer = within(dialogue).getByRole('button', { name: 'Changer' });
+		await act(async () => fireEvent.keyDown(changer, { key: 'Enter' }));
+		await act(async () => fireEvent.keyDown(within(dialogue).getByRole('button', { name: 'Annuler' }), { key: 'Enter' }));
+		// Entrée maintenue sur un agent : une seule demande, pas une par répétition
+		await act(async () => fireEvent.keyDown(within(agents).getByRole('option', { name: PROFIL_TRAVAIL }), { key: 'Enter', repeat: true }));
+		expect(faux.api.envoyer).not.toHaveBeenCalledWith('/api/sessions', expect.anything());
+		await act(async () => changer.click());
+		const api = await within(dialogue).findByRole('button', { name: /^api/ });
+		await act(async () => fireEvent.keyDown(api, { key: 'ArrowRight' }));
+		await act(async () => fireEvent.keyDown(api, { key: 'ArrowLeft' }));
+		expect(choisi()).toBe(PROFIL_TRAVAIL);
+		await act(async () => api.click());
+		expect(document.activeElement).toBe(changer);
+		expect(changer.getAttribute('aria-expanded')).toBe('false');
+	});
+
+	it('Nouvelle session : un profil dont le moteur ne lance pas ici (Codex introuvable) garde Lancer indisponible avec la raison ; rien n’est envoyé, ni par Entrée', async () => {
 		const profils = { ...PROFILS, profils: PROFILS.profils.map((x) => (x.nom === 'redaction' ? { ...x, moteur: 'codex', modele: '' } : { ...x, moteur: 'claude-code', modele: '' })) };
 		const moteurs = {
 			moteurs: [
@@ -448,32 +528,96 @@ describe('vue Sessions', () => {
 		const faux = await monter({ '/api/profils': profils, '/api/moteurs': moteurs, '/api/sessions': (_: unknown, corps: unknown) => (corps === undefined ? { sessions: SESSIONS } : { session: SESSIONS[0] }) });
 		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
 		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
-		const choix = within(dialogue).getByLabelText<HTMLSelectElement>('Profil');
-		await waitFor(() => expect(choix.options.length).toBe(3));
+		const agents = within(dialogue).getByRole('listbox', { name: 'Agents' });
+		await waitFor(() => expect(within(agents).getAllByRole('option')).toHaveLength(3));
 		// Claude Code introuvable : la ligne à coller reste possible, Lancer aussi
-		await waitFor(() => expect(within(dialogue).getByRole('button', { name: 'Lancer' }).getAttribute('aria-disabled')).toBeNull());
-		fireEvent.change(choix, { target: { value: 'redaction' } });
-		const lancer = await waitFor(() => {
-			const b = within(dialogue).getByRole('button', { name: 'Lancer' });
-			expect(b.getAttribute('aria-disabled')).toBe('true');
-			return b;
-		});
+		await waitFor(() => expect(within(dialogue).getByText(/Claude Code introuvable ici/)).toBeTruthy());
+		expect(within(dialogue).getByRole('button', { name: /^Lancer / }).getAttribute('aria-disabled')).toBeNull();
+		// l'agent bloqué reste choisissable, éteint dans la rangée, et son nom le dit
+		const redaction = within(agents).getByRole('option', { name: 'redaction, lancement impossible' });
+		await act(async () => redaction.click());
+		expect(redaction.getAttribute('aria-selected')).toBe('true');
+		expect(redaction.hasAttribute('data-eteint')).toBe(true);
+		const lancer = within(dialogue).getByRole('button', { name: 'Lancer redaction' });
+		expect(lancer.getAttribute('aria-disabled')).toBe('true');
 		const raison = document.getElementById(lancer.getAttribute('aria-describedby')!);
 		expect(raison?.textContent).toBe('Lancement impossible ici : Codex introuvable sur ce poste (codex).');
 		await act(async () => lancer.click());
+		await act(async () => fireEvent.keyDown(redaction, { key: 'Enter' }));
 		expect(faux.api.envoyer).not.toHaveBeenCalledWith('/api/sessions', expect.anything());
 	});
 
-	it('Nouvelle session : un profil lancé dans la mémoire remplace l’arbre par une phrase et envoie la racine', async () => {
+	it('Nouvelle session : moteur pas lié à Mnemo (Mistral Vibe) → Lancer indisponible avec la raison ; « Lier à Mnemo » appelle la route, l’agent devient prêt et se lance', async () => {
+		const profils = { ...PROFILS, profils: PROFILS.profils.map((x) => (x.nom === 'redaction' ? { ...x, moteur: 'mistral-vibe', modele: 'mistral-medium-3.5' } : { ...x, moteur: 'claude-code', modele: '' })) };
+		const pointsVibe = (lie: boolean) => [
+			{ cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée', detail: '~/.local/bin/vibe' },
+			{ cle: 'version', libelle: 'Version', ok: true, etat: '3.1.5' },
+			lie ? { cle: 'mcp', libelle: 'Serveur MCP mnemo', ok: true, etat: 'déclaré' } : { cle: 'mcp', libelle: 'Serveur MCP mnemo', ok: false, etat: 'non déclaré', remede: { texte: 'mnemo declarer --moteur mistral-vibe --lier', dans: 'terminal' } },
+			lie ? { cle: 'hooks', libelle: 'Hooks de Mnemo', ok: true, etat: 'installés' } : { cle: 'hooks', libelle: 'Hooks de Mnemo', ok: false, etat: 'non installés', remede: { texte: 'mnemo declarer --moteur mistral-vibe --lier', dans: 'terminal' } },
+		];
+		const moteurs = (lie: boolean) => [
+			{ id: 'claude-code', nom: 'Claude Code', indisponible: null, manuel: false, version: '2.1.120', modeles: [], poste: [{ cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée' }] },
+			{ id: 'mistral-vibe', nom: 'Mistral Vibe', indisponible: null, manuel: false, version: '3.1.5', modeles: ['mistral-medium-3.5'], poste: pointsVibe(lie) },
+		];
+		const faux = await monter({
+			'/api/profils': profils,
+			'/api/moteurs': { moteurs: moteurs(false) },
+			'/api/moteurs/mistral-vibe/lier': { moteurs: moteurs(true), liaison: { id: 'mistral-vibe', lie: true, ok: true, mcp: { resultat: 'declare', message: 'Déclaré.' }, hooks: { resultat: 'installe', message: 'Installés.' } } },
+			'/api/sessions': (_: unknown, corps: unknown) => (corps === undefined ? { sessions: SESSIONS } : { session: SESSIONS[0] }),
+		});
+		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
+		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
+		await cliquerQuandAffiche(within(dialogue).findByRole('option', { name: /^redaction/ }));
+		const fiche = within(dialogue).getByRole('heading', { name: 'redaction' }).closest<HTMLElement>('div[class*="fiche"]')!;
+		expect(within(fiche).getByText('Mistral')).toBeTruthy();
+		expect(within(fiche).getByText('mistral-medium-3.5')).toBeTruthy();
+		// les plugins ne valent qu'avec Claude Code
+		expect(within(within(fiche).getByRole('list', { name: 'Équipement' })).queryByText(/plugin/)).toBeNull();
+		const lancer = await waitFor(() => {
+			const b = within(dialogue).getByRole('button', { name: 'Lancer redaction' });
+			expect(b.getAttribute('aria-disabled')).toBe('true');
+			return b;
+		});
+		expect(document.getElementById(lancer.getAttribute('aria-describedby')!)?.textContent).toBe('Lancement impossible : Mistral Vibe n’est pas lié à Mnemo.');
+		expect(within(fiche).getByText('Serveur MCP mnemo : non déclaré')).toBeTruthy();
+		expect(within(fiche).getByText('Hooks de Mnemo : non installés')).toBeTruthy();
+		await act(async () => lancer.click());
+		expect(faux.api.envoyer).not.toHaveBeenCalledWith('/api/sessions', expect.anything());
+
+		await act(async () => within(fiche).getByRole('button', { name: 'Lier à Mnemo' }).click());
+		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/moteurs/mistral-vibe/lier');
+		await waitFor(() => expect(within(fiche).getByText('✓ Prêt : Mistral Vibe trouvé et lié à Mnemo.')).toBeTruthy());
+		expect(await screen.findByText('Mistral Vibe lié à Mnemo.')).toBeTruthy();
+		expect(lancer.getAttribute('aria-disabled')).toBeNull();
+		await act(async () => lancer.click());
+		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions', { profil: 'redaction', dossier: 'erp-saas' });
+	});
+
+	it('Nouvelle session : « Voir dans Réglages » ferme le dialogue et ouvre Réglages › Système, section Moteurs', async () => {
+		const profils = { ...PROFILS, profils: PROFILS.profils.map((x) => ({ ...x, moteur: x.nom === PROFIL_TRAVAIL ? 'codex' : 'claude-code', modele: '' })) };
+		const moteurs = { moteurs: [{ id: 'codex', nom: 'Codex', indisponible: 'Codex introuvable sur ce poste (codex).', manuel: false, version: null, modeles: [] }] };
+		const valeurs = stockage();
+		await monter({ '/api/profils': profils, '/api/moteurs': moteurs, '/api/reglages': { avertissements: [], enAttente: [], champs: [] } });
+		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
+		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
+		await cliquerQuandAffiche(within(dialogue).findByRole('button', { name: 'Voir dans Réglages' }));
+		expect(screen.queryByRole('dialog', { name: 'Nouvelle session' })).toBeNull();
+		expect(valeurs.get('mnemo.reglages.onglet')).toBe('systeme');
+		const reglages = await screen.findByRole('region', { name: 'Réglages' });
+		expect(within(reglages).getByRole('tab', { name: 'Système' }).getAttribute('aria-selected')).toBe('true');
+		expect(await within(reglages).findByRole('heading', { name: 'Moteurs' })).toBeTruthy();
+	});
+
+	it('Nouvelle session : un profil lancé dans la mémoire fige le dossier (ni chemin ni « Changer ») et envoie la racine', async () => {
 		const faux = await monter({ '/api/sessions': (_: unknown, corps: unknown) => (corps === undefined ? { sessions: SESSIONS } : { session: SESSIONS[4] }) });
 		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
 		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
-		const choix = within(dialogue).getByLabelText<HTMLSelectElement>('Profil');
-		await waitFor(() => expect(choix.options.length).toBe(3));
-		fireEvent.change(choix, { target: { value: 'notes' } });
-		expect(within(dialogue).queryByRole('group', { name: 'Dossier' })).toBeNull();
-		expect(within(dialogue).getByText(/se lance dans la mémoire/)).toBeTruthy();
-		await act(async () => within(dialogue).getByRole('button', { name: 'Lancer' }).click());
+		await cliquerQuandAffiche(within(dialogue).findByRole('option', { name: 'notes' }));
+		const dossier = within(dialogue).getByRole('group', { name: 'Dossier' });
+		expect(within(dossier).queryByRole('button', { name: 'Changer' })).toBeNull();
+		expect(within(dossier).getByText('Se lance dans la mémoire, quel que soit le dossier.')).toBeTruthy();
+		expect(within(dialogue).getByText('notes · Anthropic modèle par défaut · dans la mémoire')).toBeTruthy();
+		await act(async () => within(dialogue).getByRole('button', { name: 'Lancer notes' }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions', { profil: 'notes', dossier: '' });
 	});
 
@@ -485,12 +629,13 @@ describe('vue Sessions', () => {
 		await act(async () => faux.connexion.emettre({ type: 'sessions', sessions: [] }));
 		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
 		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
-		const arbre = within(dialogue).getByRole('group', { name: 'Dossier' });
-		expect(within(arbre).getByText('Dossier : Developer')).toBeTruthy();
-		await cliquerQuandAffiche(within(arbre).findByRole('button', { name: 'Déplier Documents/Paula' }));
-		await cliquerQuandAffiche(within(arbre).findByRole('button', { name: /^\.archives/ }));
-		expect(within(arbre).getByText('Dossier : Documents/Paula/.archives')).toBeTruthy();
-		await act(async () => within(dialogue).getByRole('button', { name: 'Lancer' }).click());
+		const dossier = within(dialogue).getByRole('group', { name: 'Dossier' });
+		expect(dossier.textContent).toContain('Developer');
+		await act(async () => within(dossier).getByRole('button', { name: 'Changer' }).click());
+		await cliquerQuandAffiche(within(dossier).findByRole('button', { name: 'Déplier Documents/Paula' }));
+		await cliquerQuandAffiche(within(dossier).findByRole('button', { name: /^\.archives/ }));
+		expect(dossier.textContent).toContain('Developer / Documents / Paula / .archives');
+		await act(async () => within(dialogue).getByRole('button', { name: /^Lancer / }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions', { profil: PROFIL_TRAVAIL, dossier: 'Documents/Paula/.archives' });
 	});
 
@@ -510,7 +655,7 @@ describe('vue Sessions', () => {
 		expect(grille.classList.contains('drag')).toBe(false);
 		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
 		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
-		await act(async () => within(dialogue).getByRole('button', { name: 'Lancer' }).click());
+		await act(async () => within(dialogue).getByRole('button', { name: /^Lancer / }).click());
 		await act(async () => faux.connexion.emettre({ type: 'session', session: nouvelle }));
 		expect(cellule('s5').style.flexGrow).toBe('400');
 	});
@@ -598,7 +743,7 @@ describe('vue Sessions', () => {
 
 		await act(async () => within(dossier).getByRole('button', { name: '+ session' }).click());
 		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
-		await act(async () => within(dialogue).getByRole('button', { name: 'Lancer' }).click());
+		await act(async () => within(dialogue).getByRole('button', { name: /^Lancer / }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions', { profil: PROFIL_TRAVAIL, dossier: '' });
 	});
 
@@ -625,7 +770,7 @@ describe('vue Sessions', () => {
 		expect(faux.api.lire).not.toHaveBeenCalledWith('/api/dossiers/git', { chemin: 'Documents/Paula/.archives' });
 		await act(async () => within(dossier).getByRole('button', { name: '+ session' }).click());
 		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
-		await act(async () => within(dialogue).getByRole('button', { name: 'Lancer' }).click());
+		await act(async () => within(dialogue).getByRole('button', { name: /^Lancer / }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions', { profil: PROFIL_TRAVAIL, dossier: 'Documents/Paula/.archives' });
 	});
 
@@ -661,7 +806,7 @@ describe('vue Sessions', () => {
 		await act(async () => screen.getByRole('button', { name: '+ Nouvelle session' }).click());
 		const dialogue = screen.getByRole('dialog', { name: 'Nouvelle session' });
 		expect(within(dialogue).getByLabelText('Objectif (facultatif)').getAttribute('maxlength')).toBe(String(OBJECTIF_MAX));
-		await act(async () => within(dialogue).getByRole('button', { name: 'Lancer' }).click());
+		await act(async () => within(dialogue).getByRole('button', { name: /^Lancer / }).click());
 		expect((await within(dialogue).findByRole('alert')).textContent).toContain('Profil inconnu.');
 	});
 

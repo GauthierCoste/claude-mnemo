@@ -162,6 +162,12 @@ describe('mode démo', () => {
 		const proposes = (id: string) => moteurs.find((m) => m.id === id)!.modeles;
 		for (const p of profils) if (p.modele !== '') expect(proposes(p.moteur)).toContain(p.modele);
 		expect(new Set(profils.map((p) => p.moteur))).toEqual(new Set(IDS_MOTEURS));
+		// Nouvelle session : un agent sur Mistral Vibe, moteur pas encore lié (sa fiche montre « Lier à Mnemo ») ; chaque profil équipé
+		expect(profils.some((p) => p.moteur === 'mistral-vibe' && p.lanceur === 'dialogue')).toBe(true);
+		expect(moteurs.find((m) => m.id === 'mistral-vibe')!.poste!.some((x) => x.cle === 'mcp' && x.ok === false)).toBe(true);
+		for (const p of profils) expect(p.equipement.hooks.length).toBeGreaterThan(0);
+		// « ancien@marketplace » est listé mais pas installé : seul superpowers s'allume
+		expect(profils.find((p) => p.nom === 'redaction')!.equipement).toMatchObject({ skills: 2, plugins: 1 });
 		const { sessions } = await api.lire<{ sessions: SessionVue[] }>(ROUTES.sessions);
 		for (const x of sessions) {
 			expect(estIdMoteur(x.moteur ?? 'claude-code')).toBe(true);

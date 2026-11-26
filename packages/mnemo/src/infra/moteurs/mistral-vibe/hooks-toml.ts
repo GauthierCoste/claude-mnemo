@@ -26,7 +26,7 @@ async function lire(a: AppelHooksDuPoste, plateforme: string): Promise<LectureHo
 /**
  * Installe les hooks de ce Node et ce `main.ts` s'il n'y en a aucun de Mnemo, ou refait ceux de cette même installation. Des
  * hooks d'une autre installation de Mnemo : échec `perime`, rien n'est écrit (`mnemo declarer --moteur mistral-vibe
- * --remplacer` les reprend).
+ * --lier` les reprend).
  */
 async function installer(a: AppelHooksDuPoste, plateforme: string): Promise<ResultatInstallationHooks> {
 	const chemin = cheminHooksToml(a.env);
@@ -34,7 +34,7 @@ async function installer(a: AppelHooksDuPoste, plateforme: string): Promise<Resu
 	if ('echec' in f) return f;
 	const { etat, autres } = etatDesHooksMistralVibe(f.lu.texte ?? '', f.elements, a.node, a.main, plateforme);
 	if (etat === 'a_jour') return 'deja';
-	if (autres) return { echec: `${chemin} porte des hooks de Mnemo d’une autre installation (autre Node ou autre Mnemo) : lancez « mnemo declarer --moteur mistral-vibe --remplacer » pour les reprendre.`, perime: true };
+	if (autres) return { echec: `${chemin} porte des hooks de Mnemo d’une autre installation (autre Node ou autre Mnemo) : « mnemo declarer --moteur mistral-vibe --lier » les reprend.`, perime: true };
 	const echec = await ecrireConfiguration(chemin, f.lu, texteAvecHooks(f.lu.texte, f.elements, blocsAttendus(a.node, a.main, plateforme)));
 	return echec ?? (etat === 'absent' ? 'installe' : 'mis_a_jour');
 }

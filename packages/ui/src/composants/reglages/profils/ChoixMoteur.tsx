@@ -1,9 +1,9 @@
 /**
- * Moteur et modèle d'un profil (Réglages › Profils) : l'agent de code de ses sessions, chacun avec son état sur ce poste
+ * Moteur et modèle d'un profil (Réglages › Profils) : l'agent de code de ses sessions et son fournisseur, chacun avec son état sur ce poste
  * (version, ou pourquoi il ne lancera pas de session : il reste choisissable), puis le modèle, en saisie libre avec les
  * modèles proposés par le moteur ; vide : le modèle par défaut du moteur. L'archiviste reste sur Claude Code.
  */
-import { estModele, IDS_MOTEURS, MODELE_MAX, PROFIL_ARCHIVISTE } from '@mnemo/commun';
+import { estModele, FOURNISSEURS_MOTEURS, IDS_MOTEURS, MODELE_MAX, PROFIL_ARCHIVISTE } from '@mnemo/commun';
 import type { IdMoteur } from '@mnemo/commun';
 import type { MoteurVue } from '@mnemo/contrat';
 import { useId, type ReactNode } from 'react';
@@ -55,7 +55,7 @@ export function ChoixMoteur(p: { profil: string; moteur: IdMoteur; modele: strin
 							<label className={s.case}>
 								<input type="radio" name={`${id}-moteur`} checked={p.moteur === m} disabled={reserve} aria-describedby={reserve ? `${id}-${m}` : `${id}-${m}-etat ${id}-${m}-effet`} onChange={() => p.surMoteur(m)} />
 								<span>
-									{NOMS_MOTEURS[m]} {etat.manque && <span className={s.inactif}>indisponible</span>}
+									{NOMS_MOTEURS[m]} <span className={s.fournisseurChoix}>· {FOURNISSEURS_MOTEURS[m]}</span> {etat.manque && <span className={s.inactif}>indisponible</span>}
 								</span>
 							</label>
 							{reserve ? (

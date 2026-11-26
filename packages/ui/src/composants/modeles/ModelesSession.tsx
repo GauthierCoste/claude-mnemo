@@ -15,6 +15,7 @@ import { useToast } from '../Toast.tsx';
 import { IconeModeles } from './IconeModeles.tsx';
 import { DETAILS_SESSION, NOMS_NIVEAUX, libelleActivite } from './libelles.ts';
 import { GroupeMenu, ItemMenu, MenuModeles } from './MenuModeles.tsx';
+import r from '../commun/Reflet.module.css';
 import s from './Modeles.module.css';
 
 /** Texte du bouton : rien pour le cas courant (complets), un mot sinon ; la place est comptée à côté du titre. */
@@ -39,7 +40,7 @@ export function ModelesSession(p: { session: string; niveau: NiveauModeles | nul
 		if (p.classement?.affinage === true)
 			return (
 				<span className={s.etatSeul} title={TITRE_AFFINAGE}>
-					<span className={s.reflet}>affinage…</span>
+					<span className={r.reflet}>affinage…</span>
 				</span>
 			);
 		return ordre === null ? null : (
@@ -69,7 +70,7 @@ export function ModelesSession(p: { session: string; niveau: NiveauModeles | nul
 			contenuBouton={
 				<>
 					{/* le texte à gauche de l'icône : il s'étend vers la gauche, l'icône ne bouge pas ; un reflet tant que c'est en cours */}
-					{texte !== '' && <span className={cx(s.texte, enCours !== null && s.reflet)}>{texte}</span>}
+					{texte !== '' && <span className={cx(s.texte, enCours !== null && r.reflet)}>{texte}</span>}
 					<span className={s.icone}>
 						<IconeModeles coupes={effectif === 'coupes'} taille={13} />
 						{enCours !== null && <span className={cx(s.point, s.actif)} aria-hidden="true" />}

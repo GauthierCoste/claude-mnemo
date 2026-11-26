@@ -8,7 +8,7 @@ import { lotsDemo } from './demo-lots.ts';
 import { creerModelesDemo } from './demo-modeles.ts';
 import { creerClaudeDesktopDemo } from './demo-claude-desktop.ts';
 import { creerProfilsDemo } from './demo-profils.ts';
-import { moteursDemo } from './demo-moteurs.ts';
+import { creerMoteursDemo } from './demo-moteurs.ts';
 import type { Connexion, EtatConnexion, FluxTerminal } from './connexion.ts';
 import type { Client } from './contexte.tsx';
 import { ecranInitial, EFFACER_LIGNE, effacerInvite, indicateur, invite, majIndicateur, messageUtilisateur, NL, outil, reponse, sansSequences } from './demo-terminal.ts';
@@ -81,6 +81,8 @@ import { A_TRAITER_MAX, avecAvertissements, consigneATraiter, demandeTout, DOCUM
 
 const MINUTE = 60_000;
 const LATENCE_MS = 90;
+/** Durée d'une liaison de moteur en démo (« Lier à Mnemo »). */
+const DUREE_LIAISON_MS = 700;
 const COLONNES_PAR_DEFAUT = 80;
 
 // --- Lecture des fiches (analyse simplifiée du format du coffre, suffisante pour les données fictives) ---
@@ -936,7 +938,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			if (!session) throw introuvable('Session');
 			return { session };
 		}
-		if (chemin === ROUTES.moteurs) return moteursDemo(params['poste'] === '1');
+		if (chemin === ROUTES.moteurs) return moteursDemo.lire(params['poste'] === '1');
 		switch (chemin) {
 			case ROUTES.ecarteesToujours:
 				return { ecarteesToujours: monde.ecarteesToujours };
@@ -967,7 +969,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			case ROUTES.reglages:
 				return reglagesDemo();
 			case ROUTES.sante:
-				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.7.2' } satisfies SanteVue;
+				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.8.0' } satisfies SanteVue;
 			case ROUTES.graphe:
 				return graphe(monde.memoire);
 			case ROUTES.fiche:
@@ -1050,6 +1052,19 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 	}
 
 	function envoyer(chemin: string, corps: Record<string, unknown>): unknown {
+		const aLier = idDans(ROUTES.moteurLier, chemin);
+		// une liaison prend du temps chez le service (commandes du moteur) : le reflet du bouton se voit
+		if (aLier !== undefined) {
+			return new Promise((resoudre, rejeter) =>
+				setTimeout(() => {
+					try {
+						resoudre(moteursDemo.lier(decodeURIComponent(aLier)));
+					} catch (e) {
+						rejeter(e);
+					}
+				}, DUREE_LIAISON_MS),
+			);
+		}
 		const aValider = idDans(ROUTES.lotValider, chemin);
 		if (aValider !== undefined) return validerLot(decodeURIComponent(aValider), corps);
 		const aRejeter = idDans(ROUTES.lotRejeter, chemin);
@@ -1236,6 +1251,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 		return { session };
 	};
 	const claudeDesktopDemo = creerClaudeDesktopDemo();
+	const moteursDemo = creerMoteursDemo();
 	/** Route de profil (`:id`) du chemin, décodée ; undefined sinon. */
 	const profilDe = (route: string, chemin: string) => {
 		const id = idDans(route, chemin);

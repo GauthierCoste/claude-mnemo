@@ -381,10 +381,11 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 
 	/**
 	 * Fichiers de session écrits, arguments, environnement et dossier du moteur pour cette session ; `manuel` : la même chose en
-	 * une ligne à coller. Lève si les fichiers, le dossier ou le moteur font défaut.
+	 * une ligne à coller. Lève si les fichiers, le dossier ou le moteur font défaut. `lu` : le moteur et la commande déjà lus
+	 * par l'appelant (une commande adoptée entre-temps par « Relire » ne remplace pas celle qu'il a vérifiée) ; absent : lus ici.
 	 */
-	const preparer = async (session: Session, mode: ModeLancement, objectif?: string) => {
-		const duService = moteurDe(session);
+	const preparer = async (session: Session, mode: ModeLancement, objectif?: string, lu?: MoteurDuService) => {
+		const duService = lu ?? moteurDe(session);
 		if (duService === null) throw new ErreurMoteurIndisponible(moteurIndisponible(session.moteur ?? MOTEUR_PAR_DEFAUT));
 		const { moteur, commande } = duService;
 		const sansReprise = mode === 'reprise' ? moteur.motifSansReprise(session) : null;
@@ -433,10 +434,10 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 	/**
 	 * Prépare la session, puis lance son moteur dans un terminal ; sans terminal possible (mode dégradé, commande du moteur
 	 * introuvable, lancement en échec), rend la ligne de commande à coller. Les hooks du moteur absents ou non approuvés ne
-	 * l'empêchent pas : une ligne le dit en tête du terminal.
+	 * l'empêchent pas : une ligne le dit en tête du terminal. `lu` : comme pour `preparer`.
 	 */
-	const demarrer = async (session: Session, mode: ModeLancement, objectif?: string): Promise<{ manuel: string } | { terminal: Terminal }> => {
-		const { moteur, commande, args, env, dossier, manuel } = await preparer(session, mode, objectif);
+	const demarrer = async (session: Session, mode: ModeLancement, objectif?: string, lu?: MoteurDuService): Promise<{ manuel: string } | { terminal: Terminal }> => {
+		const { moteur, commande, args, env, dossier, manuel } = await preparer(session, mode, objectif, lu);
 		if (commande === null || !pil.terminaux.disponibles().ok) return manuel();
 		const avertissements = await avertissementsDuMoteur(moteur);
 		let terminal: Terminal;
@@ -576,12 +577,13 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		const refus = refusDuMoteur(profil);
 		if (refus !== null) return { refus: `Le profil « ${profil.nom} » ne peut pas être lancé : ${refus.motif}.` };
 		// le moteur du profil doit être implémenté ici ; introuvable sur le poste, la ligne à coller est rendue (mode dégradé),
-		// sauf pour un moteur dont la ligne ne lancerait rien (`sansCommande: 'refus'` : Codex, Mistral Vibe) : refusé
+		// sauf pour un moteur dont la ligne ne lancerait rien (`sansCommande: 'refus'` : Codex, Mistral Vibe) : refusé. Lu une
+		// seule fois : la commande dont la version est vérifiée est celle lancée, même adoptée entre-temps par « Relire »
 		const duService = moteurDe(profil);
 		if (duService === null) return { refus: `Le profil « ${profil.nom} » utilise le moteur « ${profil.moteur} », pas encore pris en charge par ce service.` };
 		const { moteur: duProfil, commande } = duService;
 		if (commande === null && duProfil.sansCommande === 'refus') {
-			return { refus: `Le profil « ${profil.nom} » utilise ${NOMS_MOTEURS[duProfil.id]}, introuvable sur ce poste (commande « ${duProfil.commandeParDefaut} ») : installe-le, puis relance le service.` };
+			return { refus: `Le profil « ${profil.nom} » utilise ${NOMS_MOTEURS[duProfil.id]}, introuvable sur ce poste (commande « ${duProfil.commandeParDefaut} ») : installe-le, puis « Relire » dans Réglages › Système › Moteurs.` };
 		}
 		// une version trop ancienne du moteur est refusée ; illisible, elle n'empêche rien
 		if (commande !== null && duProfil.version !== undefined && duProfil.refusDeVersion !== undefined) {
@@ -620,7 +622,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 			signaler(session);
 			let r: Awaited<ReturnType<typeof demarrer>>;
 			try {
-				r = await demarrer(session, 'nouvelle', objectif === '' ? undefined : objectif);
+				r = await demarrer(session, 'nouvelle', objectif === '' ? undefined : objectif, duService);
 			} catch (erreur) {
 				await abandonner(session.id);
 				return { refus: `Lancement impossible : ${(erreur as Error).message}` };

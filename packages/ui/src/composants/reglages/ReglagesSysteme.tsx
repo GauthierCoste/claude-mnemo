@@ -1,6 +1,6 @@
 /**
  * Onglet Système de la vue Réglages, disposé comme l'onglet Profils (groupes à gauche, le groupe choisi à droite) : l'état
- * des moteurs sur ce poste (groupe « Moteurs », en lecture seule), puis les réglages du dossier (`.mnemo/reglages.json`), groupés par thème,
+ * des moteurs sur ce poste et leur liaison à Mnemo (groupe « Moteurs », sans réglage à enregistrer), puis les réglages du dossier (`.mnemo/reglages.json`), groupés par thème,
  * chacun avec son explication, son défaut et « Rétablir le défaut » ; enregistrement explicite, validé par le service (tout
  * ou rien). Ce qui ne vaut qu'au redémarrage du service (ou au prochain démarrage des modèles) est signalé, comme un réglage
  * remplacé par une variable d'environnement. Quitter la vue avec des modifications non enregistrées est retenu : un
@@ -11,13 +11,15 @@ import { ROUTES } from '@mnemo/contrat';
 import { appliquerAccent, CONTRASTE_MINIMAL, contraste } from '../../reglages/accent.ts';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ACCENT_PAR_DEFAUT, estCouleurHex, GROUPES_REGLAGES } from '@mnemo/commun';
+import type { IdMoteur } from '@mnemo/commun';
 import { ErreurApi } from '../../client/api.ts';
 import { useClient } from '../../client/contexte.tsx';
 import { useReglages } from '../../client/hooks.ts';
 import { enSaisie, enValeur, egales, modifications, valeurLisible, type Saisie } from '../../reglages/brouillon.ts';
+import { oublierSectionSysteme, sectionSystemeALire } from '../../reglages/onglet-retenu.ts';
 import { useNavigation } from '../../navigation.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
-import { EtatMoteurs } from './EtatMoteurs.tsx';
+import { EtatMoteurs } from './moteurs/EtatMoteurs.tsx';
 // disposition partagée avec l'onglet Profils : liste à gauche, carte à droite, pied collant
 import d from './profils/Profils.module.css';
 import s from './Reglages.module.css';
@@ -42,8 +44,11 @@ const EFFETS: Record<ChampReglageVue['effet'], string | null> = {
 
 const saisiesDe = (vue: ReglagesVue): Record<string, Saisie> => Object.fromEntries(vue.champs.map((c) => [c.cle, enSaisie(c, c.valeur)]));
 
-/** `surModifie` : prévenu quand la saisie diffère (ou plus) des réglages enregistrés (changement d'onglet retenu). */
-export function ReglagesSysteme(p: { surModifie?(modifie: boolean): void }): ReactNode {
+/**
+ * `surModifie` : prévenu quand la saisie diffère (ou plus) des réglages enregistrés (changement d'onglet retenu) ;
+ * `surNouveauProfil` : « Nouveau profil » d'un moteur (ouvre Réglages › Profils).
+ */
+export function ReglagesSysteme(p: { surModifie?(modifie: boolean): void; surNouveauProfil?(moteur: IdMoteur): void }): ReactNode {
 	const ressource = useReglages();
 	const [enregistree, setEnregistree] = useState<ReglagesVue | null>(null);
 	const vue = enregistree ?? ressource.donnees;
@@ -59,10 +64,18 @@ export function ReglagesSysteme(p: { surModifie?(modifie: boolean): void }): Rea
 		// le cache des réglages suit : la couleur principale ne dépend pas d'une relecture tardive
 		ressource.recharger();
 	};
-	return <Formulaire vue={vue} enregistree={enregistree !== null} surEnregistree={surEnregistree} {...(p.surModifie ? { surModifie: p.surModifie } : {})} />;
+	return (
+		<Formulaire
+			vue={vue}
+			enregistree={enregistree !== null}
+			surEnregistree={surEnregistree}
+			{...(p.surModifie ? { surModifie: p.surModifie } : {})}
+			{...(p.surNouveauProfil ? { surNouveauProfil: p.surNouveauProfil } : {})}
+		/>
+	);
 }
 
-function Formulaire(p: { vue: ReglagesVue; enregistree: boolean; surEnregistree(v: ReglagesVue): void; surModifie?(modifie: boolean): void }): ReactNode {
+function Formulaire(p: { vue: ReglagesVue; enregistree: boolean; surEnregistree(v: ReglagesVue): void; surModifie?(modifie: boolean): void; surNouveauProfil?(moteur: IdMoteur): void }): ReactNode {
 	const { api } = useClient();
 	const [saisies, setSaisies] = useState(() => saisiesDe(p.vue));
 	// réglages relus ou enregistrés : la saisie repart de ce que le service a gardé
@@ -74,7 +87,9 @@ function Formulaire(p: { vue: ReglagesVue; enregistree: boolean; surEnregistree(
 	const [envoi, setEnvoi] = useState(false);
 	const [erreur, setErreur] = useState<string | null>(null);
 	// « moteurs » : l'état des moteurs, pas un groupe de réglages
-	const [choisi, setChoisi] = useState<GroupeReglageVue | 'moteurs' | null>(null);
+	// « Voir dans Réglages » d'une autre vue : la section Moteurs ouverte d'emblée
+	const [choisi, setChoisi] = useState<GroupeReglageVue | 'moteurs' | null>(sectionSystemeALire);
+	useEffect(() => oublierSectionSysteme(), []);
 	const aEnvoyer = modifications(p.vue.champs, saisies);
 	const modifie = Object.keys(aEnvoyer).length > 0;
 	const libelles = (cles: string[]) => cles.map((c) => p.vue.champs.find((x) => x.cle === c)?.libelle ?? c).join(', ');
@@ -146,7 +161,7 @@ function Formulaire(p: { vue: ReglagesVue; enregistree: boolean; surEnregistree(
 						<button type="button" className={d.ligneProfil} aria-current={voirMoteurs ? 'true' : undefined} onClick={() => setChoisi('moteurs')}>
 							<span className={d.identite}>
 								<span className={d.nomProfil}>Moteurs</span>
-								<span className={d.description}>État sur ce poste, en lecture seule</span>
+								<span className={d.description}>Liaison à Mnemo sur ce poste</span>
 							</span>
 						</button>
 					</li>
@@ -168,7 +183,7 @@ function Formulaire(p: { vue: ReglagesVue; enregistree: boolean; surEnregistree(
 						<p>Redémarrage du service requis pour : {libelles(p.vue.enAttente)} — « mnemo arreter » puis « mnemo ouvrir ».</p>
 					</div>
 				)}
-				{voirMoteurs && <EtatMoteurs />}
+				{voirMoteurs && <EtatMoteurs {...(p.surNouveauProfil ? { surNouveauProfil: p.surNouveauProfil } : {})} />}
 				{groupe !== undefined && (
 					<fieldset className={d.section}>
 						<legend className={d.titreSection}>{groupe.titre}</legend>
@@ -177,7 +192,7 @@ function Formulaire(p: { vue: ReglagesVue; enregistree: boolean; surEnregistree(
 						))}
 					</fieldset>
 				)}
-				{/* Moteurs, en lecture seule : sans pied, sauf pour l'avertissement de sortie ou une erreur d'enregistrement */}
+				{/* Moteurs, sans réglage à enregistrer : sans pied, sauf pour l'avertissement de sortie ou une erreur d'enregistrement */}
 				{(!voirMoteurs || nav.sortieRetenue || erreur !== null) && (
 					<footer className={d.pied}>
 						{nav.sortieRetenue && (

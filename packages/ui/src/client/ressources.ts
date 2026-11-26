@@ -11,14 +11,17 @@ import { useCacheRessources, useVersionMemoire } from './contexte.tsx';
 /** Une lecture en cours, partagée par ses lecteurs ; abandonnée quand le dernier s'en va avant la réponse. */
 type Lecture = { promesse: Promise<unknown>; controleur: AbortController; lecteurs: number };
 
-/** Par cache (donc par client) : les lectures en cours, et le nombre de demandes `recharger` de chaque clé, avec leurs écouteurs. */
-type Partage = { lectures: Map<string, Lecture>; demandes: Map<string, number>; ecouteurs: Map<string, Set<() => void>> };
+/**
+ * Par cache (donc par client) : les lectures en cours, le nombre de demandes `recharger` de chaque clé, le nombre de données
+ * publiées sans lecture (`publierRessource`), avec leurs écouteurs.
+ */
+type Partage = { lectures: Map<string, Lecture>; demandes: Map<string, number>; publiees: Map<string, number>; ecouteurs: Map<string, Set<() => void>> };
 const partages = new WeakMap<CacheBorne, Partage>();
 
 function partageDe(cache: CacheBorne): Partage {
 	let p = partages.get(cache);
 	if (p === undefined) {
-		p = { lectures: new Map(), demandes: new Map(), ecouteurs: new Map() };
+		p = { lectures: new Map(), demandes: new Map(), publiees: new Map(), ecouteurs: new Map() };
 		partages.set(cache, p);
 	}
 	return p;
@@ -33,6 +36,24 @@ function nettoyer(p: Partage, cle: string): void {
 	if ([...p.lectures.keys()].some((id) => id.startsWith(`${cle}${SEPARATEUR}`))) return;
 	p.ecouteurs.delete(cle);
 	p.demandes.delete(cle);
+	p.publiees.delete(cle);
+}
+
+/**
+ * Données de `cle` rendues par une écriture (la vue relue qu'elle renvoie) : elles remplacent celles du cache et de tous ses
+ * lecteurs montés, sans nouvelle lecture ; les lectures de `cle` en cours, d'avant l'écriture, sont abandonnées (leur
+ * réponse, si elle arrive quand même, est ignorée par chaque lecteur).
+ */
+export function publierRessource(cache: CacheBorne, cle: string, donnees: unknown): void {
+	const p = partageDe(cache);
+	for (const [id, lecture] of [...p.lectures]) {
+		if (!id.startsWith(`${cle}${SEPARATEUR}`)) continue;
+		p.lectures.delete(id);
+		lecture.controleur.abort();
+	}
+	cache.set(cle, donnees);
+	p.publiees.set(cle, (p.publiees.get(cle) ?? 0) + 1);
+	for (const f of [...(p.ecouteurs.get(cle) ?? [])]) f();
 }
 
 /** Ce que le partage d'un cache suit : clés écoutées, clés rechargées, lectures en cours (pour l'observer). */
@@ -99,6 +120,7 @@ export function useRessource<T>(cle: string | null, charger: (signal: AbortSigna
 		[partage, cleDemandes],
 	);
 	const demandes = useSyncExternalStore(ecouter, () => partage.demandes.get(cleDemandes) ?? 0);
+	const publiees = useSyncExternalStore(ecouter, () => partage.publiees.get(cleDemandes) ?? 0);
 	const chargerCourant = useRef(charger);
 	chargerCourant.current = charger;
 	const sequence = useRef(0);
@@ -147,6 +169,17 @@ export function useRessource<T>(cle: string | null, charger: (signal: AbortSigna
 			lecture.quitter();
 		};
 	}, [cle, version, demandes, cache, partage]);
+
+	// données publiées par une écriture depuis le montage (ou le changement de clé) : prises dans le cache, sans lecture ni
+	// erreur ; la lecture en cours de ce lecteur devient caduque (sa réponse, plus ancienne, ne les écrase pas)
+	const publieesVues = useRef({ cle, n: publiees });
+	useEffect(() => {
+		const vues = publieesVues.current;
+		publieesVues.current = { cle, n: publiees };
+		if (cle === null || vues.cle !== cle || vues.n === publiees) return;
+		sequence.current++;
+		setEtat((e) => ({ ...e, cle, donnees: cache.get(cle) as T, erreur: null, statut: null, chargement: false }));
+	}, [cle, publiees, cache]);
 
 	const recharger = useCallback(() => {
 		partage.demandes.set(cleDemandes, (partage.demandes.get(cleDemandes) ?? 0) + 1);

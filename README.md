@@ -34,8 +34,12 @@ it.
   and Mistral Vibe get the memory through MCP, the context and reminders through their hooks, the checked instructions,
   and sessions started, resumed and wrapped up from the interface. Codex also shows its ChatGPT quotas next to the
   Claude ones in the title bar; Mistral Vibe does not report readable quotas. Claude Code plugins, the archivist and the
-  import of Claude Code's own memory stay with Claude Code. See [installation.md](docs/installation.md#codex) and
-  [Mistral Vibe](docs/installation.md#mistral-vibe).
+  import of Claude Code's own memory stay with Claude Code. **Settings › Système › Moteurs** shows one card per engine
+  with its provider (Anthropic, OpenAI, Mistral) and how far it is linked to Mnemo; « Lier à Mnemo » links it in one
+  click (or `mnemo declarer --moteur <engine> --lier` in a terminal), and an engine installed while Mnemo runs is
+  picked up by « Relire », without a restart. New session lets you pick the agent like a character, with its provider,
+  engine, model and equipment, and does not start an engine that is not linked. See
+  [installation.md](docs/installation.md#codex) and [Mistral Vibe](docs/installation.md#mistral-vibe).
 - **Search that knows where you are.** One score ranks every result: how well it matches (words, meaning, a local
   reranker, the links between notes), plus small weights for being close to the current project, trusted, part of the
   memory rather than an imported document, and recent. A weight moves a result up or down but never lets an irrelevant
@@ -129,7 +133,8 @@ run `pnpm installer` inside it.)
 
 1. the folder that holds your projects (the memory goes into its `_mnemo/`; an existing memory is reused as is);
 2. whether to declare the Mnemo MCP server to Claude Code (`mnemo init --codex` or `--mistral` also declares it to that
-   engine and installs the Mnemo hooks there);
+   engine and installs the Mnemo hooks there; an engine can also be linked later, from the interface or with
+   `mnemo declarer --moteur <engine> --lier`);
 3. whether to download the optional local models (about 1.3 GB; no by default);
 4. whether to install the `mnemo` command (`~/.local/bin/mnemo`; yes by default);
 5. whether to install the Mnemo launcher (`~/Applications/Mnemo.app`, which opens the interface in a browser window;
@@ -155,7 +160,7 @@ tokens, private keys) are masked before anything is written or indexed. What the
 
 ## Status
 
-Version 1.7.2. Mnemo runs on macOS (Apple silicon and Intel) and is being adapted to Windows, where it has not been
+Version 1.8.0. Mnemo runs on macOS (Apple silicon and Intel) and is being adapted to Windows, where it has not been
 tried in real use yet; Linux has not been used. The CI runs the type check and the tests at each push on Linux and
 Windows with Node.js 24, and on macOS with Node.js 26. The interface runs in the browser, or in its own window with the macOS app.
 

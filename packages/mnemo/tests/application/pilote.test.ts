@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { enregistrerProfil } from '../../src/application/gerer-profils.ts';
 import { creerPilote, ErreurMoteurIndisponible, ErreurRepriseImpossible, ErreurSessionNonCommencee, ligneManuelle } from '../../src/application/pilote.ts';
 import type { Pilote } from '../../src/application/pilote.ts';
-import { profilsDisponibles } from '../../src/application/profil.ts';
-import type { CommandeMoteur, EtatSessions, FichierPlugin, Pilotage } from '../../src/application/ports.ts';
+import { profilsDisponibles } from '../../src/application/profils-disponibles.ts';
+import type { CommandeMoteur, EtatSessions, FichierPlugin, Moteur, Pilotage } from '../../src/application/ports.ts';
 import type { Session } from '../../src/domaine/session.ts';
 import { ouvrirEtat } from '../../src/infra/etat-sqlite.ts';
 import { MOTEUR_CODEX } from '../../src/infra/moteurs/codex.ts';
@@ -635,7 +635,7 @@ describe('Pilote : sessions Codex', () => {
 		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
 		c.terminaux.lances[0]!.emettre('codex> ');
 		const relecture = c.pilote.abonner(s.id, () => {})!.relecture;
-		expect(relecture).toMatch(/^\r\n\[Mnemo\] Hooks de Mnemo pour Codex non installés .*mnemo init --codex.*\r\n\r\ncodex> $/su);
+		expect(relecture).toMatch(/^\r\n\[Mnemo\] Hooks de Mnemo pour Codex non installés .*mnemo declarer --moteur codex --lier.*\r\n\r\ncodex> $/su);
 		await hooksCodex(maison, false);
 		const t = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
 		expect(c.pilote.abonner(t.id, () => {})!.relecture).toMatch(/Hooks de Mnemo pour Codex non approuvés : .*\(\/hooks\)/su);
@@ -664,6 +664,26 @@ describe('Pilote : sessions Codex', () => {
 		await avecCodex(c, CODEX, null);
 		await lancee(c, { profil: 'redaction', dossier: 'alpha' });
 		expect(c.terminaux.lances).toHaveLength(1);
+	});
+
+	it('commande adoptée par « Relire » pendant la lecture de la version : lancée celle dont la version a été vérifiée', async () => {
+		const c = await contexte();
+		await avecCodex(c);
+		const adoptee = { commande: '/opt/autre/codex', avant: [] };
+		const verifiees: CommandeMoteur[] = [];
+		const moteur: Moteur = {
+			...c.pil.moteurs.codex!.moteur,
+			version: async (commande) => {
+				verifiees.push(commande);
+				c.pil.moteurs.codex = { moteur, commande: adoptee };
+				return '0.171.0';
+			},
+		};
+		c.pil.moteurs.codex = { moteur, commande: CODEX };
+		await lancee(c, { profil: 'redaction', dossier: 'alpha' });
+		expect(verifiees).toEqual([CODEX]);
+		expect(c.terminaux.lances[0]!.options.commande).toBe(CODEX.commande);
+		expect(c.terminaux.lances[0]!.options.args.slice(0, 1)).toEqual(CODEX.avant);
 	});
 
 	it('ligne PowerShell : sans guillemet double, telle quelle ; avec, passage « Standard » des arguments (PowerShell 7.3 ou plus)', () => {

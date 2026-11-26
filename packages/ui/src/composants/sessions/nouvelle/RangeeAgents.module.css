@@ -1,0 +1,65 @@
+/* Rangée des vignettes des agents, sous la scène, centrée sur elle comme l'agent choisi. */
+.rangee {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 6px;
+	padding: 12px 18px 4px;
+}
+
+.vignette {
+	position: relative;
+	width: 44px;
+	height: 44px;
+	border-radius: 12px;
+	border: 1px solid var(--bd);
+	background: var(--s2);
+	padding: 5px;
+	cursor: pointer;
+	transition:
+		border-color 0.2s,
+		transform 0.2s;
+}
+
+.vignette > svg {
+	display: block;
+}
+
+.vignette:hover {
+	transform: translateY(-2px);
+	border-color: var(--bd2);
+}
+
+.vignette[aria-selected='true'] {
+	border-color: var(--profil);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--profil) 22%, transparent);
+}
+
+.vignette[data-eteint] > svg {
+	filter: grayscale(1) brightness(0.7);
+}
+
+/* marque d'un agent dont le moteur bloque le lancement */
+.vignette[data-eteint]::after {
+	content: '!';
+	position: absolute;
+	right: -4px;
+	top: -4px;
+	width: 15px;
+	height: 15px;
+	border-radius: 50%;
+	background: var(--amber);
+	color: var(--bg);
+	font: 700 10px/15px var(--sans);
+	text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.vignette {
+		transition: none;
+	}
+
+	.vignette:hover {
+		transform: none;
+	}
+}

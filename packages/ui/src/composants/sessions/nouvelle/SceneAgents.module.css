@@ -1,0 +1,189 @@
+/* Scène du carrousel des agents : le choisi en grand sur son sol lumineux, les voisins réduits et estompés. */
+.carrousel {
+	position: relative;
+	height: 300px;
+	border-radius: var(--r-4);
+	overflow: hidden;
+	background: radial-gradient(120% 80% at 50% 100%, color-mix(in srgb, var(--profil) 22%, transparent), transparent 60%), var(--s2);
+	border: 1px solid var(--bd);
+}
+
+/* le sol : une ellipse lumineuse sous l'agent choisi */
+.carrousel::after {
+	content: '';
+	position: absolute;
+	left: 50%;
+	bottom: 46px;
+	width: 190px;
+	height: 26px;
+	transform: translateX(-50%);
+	border-radius: 50%;
+	background: radial-gradient(closest-side, color-mix(in srgb, var(--profil) 55%, transparent), transparent);
+	filter: blur(2px);
+}
+
+.piste {
+	position: absolute;
+	inset: 0;
+}
+
+.agent {
+	position: absolute;
+	left: 50%;
+	bottom: 58px;
+	width: 190px;
+	height: 190px;
+	margin-left: -95px;
+	cursor: pointer;
+	transition:
+		transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1),
+		opacity 0.45s,
+		filter 0.45s;
+}
+
+.agent[data-pos='0'] {
+	transform: translateX(0) scale(1);
+	z-index: 3;
+	cursor: default;
+}
+
+/* la respiration de l'agent choisi : sur son dessin, pour ne pas gêner le glissement de la scène */
+.agent[data-pos='0'] > svg {
+	animation: respire 3.2s ease-in-out infinite;
+}
+
+.agent[data-pos='-1'],
+.agent[data-pos='1'] {
+	opacity: 0.45;
+	filter: saturate(0.4);
+	z-index: 2;
+}
+
+.agent[data-pos='-1'] {
+	transform: translateX(-62%) scale(0.42);
+}
+
+.agent[data-pos='1'] {
+	transform: translateX(62%) scale(0.42);
+}
+
+.agent[data-pos='-1']:hover,
+.agent[data-pos='1']:hover {
+	opacity: 0.8;
+}
+
+.agent[data-pos='-2'],
+.agent[data-pos='2'],
+.agent[data-pos='loin'] {
+	opacity: 0;
+	z-index: 1;
+	pointer-events: none;
+}
+
+.agent[data-pos='-2'] {
+	transform: translateX(-100%) scale(0.3);
+}
+
+.agent[data-pos='2'] {
+	transform: translateX(100%) scale(0.3);
+}
+
+.agent[data-pos='loin'] {
+	transform: scale(0.2);
+}
+
+/* moteur qui bloque le lancement : silhouette éteinte */
+.agent[data-eteint] > svg {
+	filter: grayscale(1) brightness(0.7);
+}
+
+@keyframes respire {
+	50% {
+		translate: 0 -5px;
+	}
+}
+
+.fleche {
+	position: absolute;
+	top: 50%;
+	translate: 0 -50%;
+	z-index: 4;
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	border: 1px solid var(--bd2);
+	background: color-mix(in srgb, var(--s1) 80%, transparent);
+	color: var(--tx);
+	font-size: 16px;
+	cursor: pointer;
+	display: grid;
+	place-items: center;
+}
+
+.fleche:hover {
+	border-color: var(--profil);
+	color: var(--profil);
+}
+
+.gauche {
+	left: 10px;
+}
+
+.droite {
+	right: 10px;
+}
+
+.plaque {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 12px;
+	z-index: 4;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 0 52px;
+}
+
+.nom {
+	max-width: 100%;
+	font-size: 20px;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.rang {
+	color: var(--mu);
+	font: 11px var(--mono);
+}
+
+/* Fenêtre étroite : une scène plus basse, des agents plus petits. */
+@container (max-width: 480px) {
+	.carrousel {
+		height: 240px;
+	}
+
+	.agent {
+		width: 140px;
+		height: 140px;
+		margin-left: -70px;
+		bottom: 56px;
+	}
+
+	.carrousel::after {
+		width: 140px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.agent {
+		transition: none;
+	}
+
+	.agent[data-pos='0'] > svg {
+		animation: none;
+	}
+}

@@ -17,9 +17,12 @@ export const JETONS_COULEUR: Record<CouleurAvatar, string> = {
 /** Avatar par défaut (celui du profil `travail`), pour un profil inconnu ou supprimé. */
 export const AVATAR_PAR_DEFAUT: Avatar = { forme: 'robot', couleur: 'vert' };
 
-/** `sansFond` : sans la pastille ronde, pour un avatar posé sur un fond à lui (tuile de l'en-tête de session). */
-export function AvatarProfil(p: { avatar: Avatar; taille?: 12 | 16 | 24 | 32 | 48 | 64; titre?: string; sansFond?: boolean }): ReactNode {
-	const taille = p.taille ?? 24;
+/**
+ * `sansFond` : sans la pastille ronde, pour un avatar posé sur un fond à lui (tuile de l'en-tête de session) ; `taille`
+ * `pleine` : il remplit son conteneur (le personnage en grand de la Nouvelle session, sa vignette).
+ */
+export function AvatarProfil(p: { avatar: Avatar; taille?: 12 | 16 | 24 | 32 | 48 | 64 | 'pleine'; titre?: string; sansFond?: boolean }): ReactNode {
+	const taille = p.taille === 'pleine' ? '100%' : (p.taille ?? 24);
 	return (
 		<svg
 			role="img"

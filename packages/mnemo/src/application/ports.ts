@@ -1112,8 +1112,8 @@ export type TelemetrieDuMoteur = {
 
 /**
  * Ce que Mnemo dit d'un moteur sur le poste (`mnemo init`, `verifier-poste`, `declarer`, Réglages › Système, avertissements de
- * session) ; les commandes `mnemo` qui y remédient en sont tirées (`remedesDuMoteur`, avec l'option de `mnemo init` du
- * catalogue). `recherche` : où sa commande est cherchée (dit quand elle est introuvable) ; `desactivation` : le réglage qui éteint sa
+ * session) ; les commandes `mnemo` qui y remédient sont celles de `remedesDuMoteur`.
+ * `recherche` : où sa commande est cherchée (dit quand elle est introuvable) ; `desactivation` : le réglage qui éteint sa
  * déclaration MCP ; `retraitManuel` : comment retirer une déclaration « mnemo » qui ne lance pas Mnemo ; `approbation` : ce
  * qu'il faut faire pour qu'il lance des hooks installés (`commande` à taper dans le moteur, `consigne` à dire) ; null : il
  * les lance sans approbation.
@@ -1173,7 +1173,10 @@ export type Moteur = MoteurDuPoste & {
 	telemetrie: TelemetrieDuMoteur;
 };
 
-/** Un moteur connu du service, et sa commande trouvée au démarrage (null : introuvable, mode dégradé). */
+/**
+ * Un moteur connu du service, et sa commande : trouvée au démarrage, ou adoptée depuis à la lecture du poste (Réglages ›
+ * Système › Moteurs, « Relire ») ; null : introuvable, mode dégradé.
+ */
 export type MoteurDuService = { moteur: Moteur; commande: CommandeMoteur | null };
 
 /**

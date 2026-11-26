@@ -3,6 +3,9 @@ export type IdMoteur = 'claude-code' | 'codex' | 'mistral-vibe';
 export const IDS_MOTEURS: readonly IdMoteur[] = ['claude-code', 'codex', 'mistral-vibe'];
 /** Nom de chaque moteur, tel que l'interface et les messages le disent. */
 export const NOMS_MOTEURS: Readonly<Record<IdMoteur, string>> = { 'claude-code': 'Claude Code', codex: 'Codex', 'mistral-vibe': 'Mistral Vibe' };
+/** Fournisseur (l'éditeur du modèle et de l'agent) de chaque moteur, tel que l'interface le nomme à côté du moteur. */
+export type FournisseurMoteur = 'Anthropic' | 'OpenAI' | 'Mistral';
+export const FOURNISSEURS_MOTEURS: Readonly<Record<IdMoteur, FournisseurMoteur>> = { 'claude-code': 'Anthropic', codex: 'OpenAI', 'mistral-vibe': 'Mistral' };
 /** Moteur d'une session ou d'un profil qui n'en dit rien (état, profils et hooks d'avant les moteurs). */
 export const MOTEUR_PAR_DEFAUT: IdMoteur = 'claude-code';
 

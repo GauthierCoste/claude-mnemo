@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { initialiser } from '../../src/application/initialiser.ts';
 import { PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
-import { CHEMIN_PROFIL_TRAVAIL, CONSIGNE_ARCHIVISTE_PAR_DEFAUT, CONSIGNE_TRAVAIL_PAR_DEFAUT, lireProfil, PHRASE_RELATIONS, profilsDisponibles } from '../../src/application/profil.ts';
+import { CHEMIN_PROFIL_TRAVAIL, CONSIGNE_ARCHIVISTE_PAR_DEFAUT, CONSIGNE_TRAVAIL_PAR_DEFAUT, lireProfil, PHRASE_RELATIONS } from '../../src/application/profil.ts';
+import { profilsDisponibles } from '../../src/application/profils-disponibles.ts';
 import { TABLES_DEMANDE } from '../../src/application/validation.ts';
 import { lireFiche } from '../../src/domaine/fiche.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
@@ -74,11 +75,11 @@ describe('profilsDisponibles', () => {
 		dep.fichiers.set('profils/calculs/calculs.md', '---\ntype: profil\nmoteur: codex\nmodele: gpt-6.2-sol\n---\n# Profil calculs\n\nFait les calculs.\n');
 		const r = await profilsDisponibles(dep);
 		expect(r.profils).toEqual([
-			{ nom: PROFIL_ARCHIVISTE, description: CONSIGNE_ARCHIVISTE_PAR_DEFAUT.split('\n')[0], lancement: 'memoire', lanceur: 'propre', avatar: { forme: 'chouette', couleur: 'violet' }, personnalise: false, moteur: 'claude-code', modele: '' },
-			{ nom: 'calculs', description: 'Fait les calculs.', lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: true, moteur: 'codex', modele: 'gpt-6.2-sol' },
+			{ nom: PROFIL_ARCHIVISTE, description: CONSIGNE_ARCHIVISTE_PAR_DEFAUT.split('\n')[0], lancement: 'memoire', lanceur: 'propre', avatar: { forme: 'chouette', couleur: 'violet' }, personnalise: false, moteur: 'claude-code', modele: '', equipement: { skills: 0, plugins: 0, hooks: ['debut', 'arret', 'fin'] } },
+			{ nom: 'calculs', description: 'Fait les calculs.', lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: true, moteur: 'codex', modele: 'gpt-6.2-sol', equipement: { skills: 0, plugins: 0, hooks: ['debut', 'message', 'outil', 'apres_outil', 'arret', 'fin'] } },
 			// profil de l'utilisateur sans avatar déclaré : celui de `travail` ; sa consigne n'est pas celle par défaut ; ni moteur ni modèle : Claude Code et celui par défaut
-			{ nom: 'redaction', description: 'Rédige les courriers.', lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: true, moteur: 'claude-code', modele: '' },
-			{ nom: PROFIL_TRAVAIL, description: CONSIGNE_TRAVAIL_PAR_DEFAUT.split('\n')[0], lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: false, moteur: 'claude-code', modele: '' },
+			{ nom: 'redaction', description: 'Rédige les courriers.', lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: true, moteur: 'claude-code', modele: '', equipement: { skills: 0, plugins: 0, hooks: ['debut', 'message', 'outil', 'apres_outil', 'arret', 'fin'] } },
+			{ nom: PROFIL_TRAVAIL, description: CONSIGNE_TRAVAIL_PAR_DEFAUT.split('\n')[0], lancement: 'projet', lanceur: 'dialogue', avatar: { forme: 'robot', couleur: 'vert' }, personnalise: false, moteur: 'claude-code', modele: '', equipement: { skills: 0, plugins: 0, hooks: ['debut', 'message', 'outil', 'apres_outil', 'arret', 'fin'] } },
 		]);
 		expect(r.ignores).toEqual([]);
 		expect(r.avertissements).toEqual([]);
@@ -102,6 +103,37 @@ describe('profilsDisponibles', () => {
 			{ nom: 'redaction', motif: expect.stringContaining('moteur « Codex » inconnu') },
 			{ nom: 'redaction', motif: expect.stringContaining('modèle « 4.5 » refusé') },
 		]);
+	});
+
+	it('équipement : skills reçues (du profil, puis celles de la mémoire qu\'il retient) sans lire leur texte, plugins installés allumés avec Claude Code seulement, événements de hook', async () => {
+		const dep = fauxPorts();
+		const skill = (nom: string) => `---\nname: ${nom}\ndescription: ${nom}.\n---\n\nCorps.\n`;
+		dep.fichiers.set('skills/devis/SKILL.md', skill('devis'));
+		dep.fichiers.set('skills/relecture/SKILL.md', skill('relecture'));
+		dep.fichiers.set('skills/archives/SKILL.md', skill('archives'));
+		dep.fichiers.set('profils/redaction/redaction.md', '---\ntype: profil\nskills_memoire: [relecture, devis]\nplugins: [superpowers@marketplace, pdf@marketplace]\nhooks: [debut, message, fin]\n---\n# Rédaction\n\nRédige.\n');
+		// une skill du profil de même nom qu'une de la mémoire la remplace : comptée une fois
+		dep.fichiers.set('profils/redaction/skills/relecture/SKILL.md', skill('relecture'));
+		dep.fichiers.set('profils/redaction/skills/signature/SKILL.md', skill('signature'));
+		dep.fichiers.set('profils/calculs/calculs.md', '---\ntype: profil\nmoteur: codex\nplugins: [superpowers@marketplace]\n---\n# Calculs\n\nCalcule.\n');
+		// un seul des deux plugins du profil est installé : seul lui s'allume
+		dep.pluginsClaude.plugins = [{ id: 'superpowers@marketplace', nom: 'superpowers', version: '1.0.0', portee: 'utilisateur', skills: [], hooks: false }];
+		const lus: string[] = [];
+		const lire = dep.coffre.lire.bind(dep.coffre);
+		dep.coffre.lire = async (chemin) => {
+			lus.push(chemin);
+			return lire(chemin);
+		};
+		const { profils } = await profilsDisponibles(dep);
+		// compter les skills ne lit aucun SKILL.md
+		expect(lus.filter((c) => c.endsWith('SKILL.md'))).toEqual([]);
+		const de = (nom: string) => profils.find((p) => p.nom === nom)!.equipement;
+		expect(de('redaction')).toEqual({ skills: 3, plugins: 1, hooks: ['debut', 'message', 'fin'] });
+		// toutes les skills de la mémoire ; des plugins avec Codex ne s'allument pas
+		expect(de('calculs')).toEqual({ skills: 3, plugins: 0, hooks: ['debut', 'message', 'outil', 'apres_outil', 'arret', 'fin'] });
+		expect(de(PROFIL_TRAVAIL).skills).toBe(3);
+		// l'archiviste ne retient aucune skill de la mémoire, et ses skills par défaut ne sont déposées qu'à son lancement
+		expect(de(PROFIL_ARCHIVISTE)).toEqual({ skills: 0, plugins: 0, hooks: ['debut', 'arret', 'fin'] });
 	});
 
 	it('un dossier de profils/ au nom invalide est rendu dans ignores avec son motif, jamais lancé comme travail en silence', async () => {

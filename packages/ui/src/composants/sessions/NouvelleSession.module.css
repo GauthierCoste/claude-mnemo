@@ -1,13 +1,15 @@
-/* Dialogue « Nouvelle session », dans le style des cartes. */
+/* Dialogue « Nouvelle session » : en-tête, scène et fiche, rangée des agents, mission, pied. Se règle sur sa propre largeur. */
 .dialogue {
-	width: 440px;
+	width: 860px;
 	max-width: calc(100vw - 32px);
+	max-height: calc(100vh - 32px);
 	padding: 0;
 	border: 1px solid var(--bd2);
-	border-radius: var(--r-4);
+	border-radius: 16px;
 	background: var(--s1);
 	color: var(--tx);
 	box-shadow: var(--ombre);
+	overflow: auto;
 }
 
 .dialogue::backdrop {
@@ -15,10 +17,18 @@
 }
 
 .formulaire {
+	container-type: inline-size;
 	display: flex;
 	flex-direction: column;
+	min-width: 0;
+}
+
+.entete {
+	display: flex;
+	align-items: center;
 	gap: 12px;
-	padding: 16px 18px;
+	padding: 14px 18px;
+	border-bottom: 1px solid var(--bd);
 }
 
 .titre {
@@ -27,28 +37,136 @@
 	font-weight: 600;
 }
 
-.champ,
-.groupe {
-	display: flex;
-	flex-direction: column;
-	gap: 5px;
+.aide {
+	margin-left: auto;
+	color: var(--dim);
+	font-size: 12px;
+	white-space: nowrap;
 }
 
-.lbl {
-	font: 500 10.5px var(--mono);
-	text-transform: uppercase;
-	letter-spacing: 0.08em;
-	color: var(--dim);
+.scene {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 300px);
+	gap: 18px;
+	padding: 18px 18px 0;
+	align-items: start;
+}
+
+.colonneFiche {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 0;
+}
+
+.squelette {
+	position: relative;
+	height: 300px;
+	border: 1px solid var(--bd);
+	border-radius: var(--r-4);
+	background: linear-gradient(100deg, var(--s2) 40%, var(--s3) 50%, var(--s2) 60%) 0 0 / 300% 100%;
+	animation: squelette 1.6s linear infinite;
+}
+
+@keyframes squelette {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: 0 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.squelette {
+		animation: none;
+	}
+}
+
+.horsVue {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.attente {
+	margin: 0;
+	padding: 18px;
+	min-height: 120px;
+	border: 1px solid var(--bd);
+	border-radius: var(--r-4);
+	background: var(--s2);
+	color: var(--mu);
+}
+
+.erreur {
+	margin: 10px 18px 0;
+	color: var(--red);
+}
+
+.pied {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 14px 18px;
+	margin-top: 10px;
+	border-top: 1px solid var(--bd);
+}
+
+.resume {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--mu);
+	font-size: 12px;
+}
+
+.boutons {
+	margin-left: auto;
+	display: flex;
+	gap: 8px;
+	min-width: 0;
+}
+
+.bouton {
+	flex: none;
+	min-height: 32px;
+	white-space: nowrap;
+}
+
+/* « Lancer <agent> » rétrécit avant de déborder : le nom long se coupe, entier dans l'infobulle */
+.lancer {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* « Lancer <agent> » à la couleur de l'agent, tant qu'il peut partir */
+.lancer:not([aria-disabled='true']):not(:disabled) {
+	background: var(--profil);
+	border-color: transparent;
+	color: var(--bg);
+}
+
+.lancer:not([aria-disabled='true']):not(:disabled):hover {
+	filter: brightness(1.08);
+}
+
+.manuel {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px 18px;
 }
 
 .mu {
 	margin: 0;
 	color: var(--mu);
-}
-
-.erreur {
-	margin: 0;
-	color: var(--red);
 }
 
 .commande {
@@ -63,10 +181,31 @@
 	user-select: all;
 }
 
-.boutons {
+.boutonsManuel {
 	display: flex;
-	justify-content: flex-start;
 	gap: 8px;
+}
+
+/* Sous 640 px : la fiche passe sous la scène. */
+@container (max-width: 640px) {
+	.scene {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.aide {
+		display: none;
+	}
+}
+
+/* Étroit : le résumé passe au-dessus des boutons. */
+@container (max-width: 480px) {
+	.pied {
+		flex-wrap: wrap;
+	}
+
+	.resume {
+		flex-basis: 100%;
+	}
 }
 
 /* App de bureau : le dialogue et son fond recouvrent la barre de titre, poignée de la fenêtre ; ils restent cliquables. */

@@ -61,9 +61,26 @@ export type SuggestionEcarteeToujoursVue = { chemin: string; sessions: number; j
  * Un profil de session qui peut être lancé : `description`, première ligne de sa consigne ; `lancement` : `projet` (dans le
  * dossier choisi) ou `memoire` (dans `_mnemo/`, quel que soit le dossier) ; `lanceur` : `dialogue` (choix de Nouvelle
  * session) ou `propre` (son propre chemin, montré à part) ; `moteur` et `modele` (« » : celui par défaut du moteur) de ses
- * sessions.
+ * sessions ; `equipement`.
  */
-export type ProfilVue = { nom: string; description: string; lancement: 'projet' | 'memoire'; lanceur: LanceurDeProfil; avatar: Avatar; personnalise: boolean; moteur: IdMoteur; modele: string };
+export type ProfilVue = {
+	nom: string;
+	description: string;
+	lancement: 'projet' | 'memoire';
+	lanceur: LanceurDeProfil;
+	avatar: Avatar;
+	personnalise: boolean;
+	moteur: IdMoteur;
+	modele: string;
+	equipement: EquipementProfilVue;
+};
+
+/**
+ * Équipement d'un profil, compté comme l'aperçu de Réglages › Profils : `skills`, celles que ses sessions reçoivent (du
+ * profil, puis de la mémoire qu'il retient, sans filtre par projet) ; `plugins`, les plugins Claude Code qu'il allume (0 avec
+ * un autre moteur) ; `hooks`, ses événements de hook de Mnemo.
+ */
+export type EquipementProfilVue = { skills: number; plugins: number; hooks: EvenementHookVue[] };
 
 /**
  * Ce qui se règle d'un profil dans Réglages › Profils ; `consigne` : `null` = la consigne par défaut du code ; `moteur` : l'agent
@@ -481,6 +498,12 @@ export type MessageClient =
  *   (un commit par fiche ; celles déjà traitées sont ignorées) ;
  * - `moteurs` GET (`?poste=1` : avec les points vérifiés du poste, plus lent) → `ReponseMoteurs` : chaque moteur, sa commande
  *   trouvée au démarrage du service, sa version et ses modèles (en cache, quelques secondes au plus à la première lecture) ;
+ * - `moteurLier` POST (sans corps ; `:id` : `IdMoteur`) → `ReponseLiaisonMoteur` : lie ce moteur à Mnemo comme `mnemo
+ *   declarer --moteur <id> --lier` (serveur MCP absent : déclaré, périmé : refait ; hooks du poste absents : installés,
+ *   périmés : refaits), rien d'autre ; une déclaration de l'utilisateur (désactivée, ou « mnemo » qui ne lance pas Mnemo)
+ *   n'est jamais touchée (étape `laisse`) ; rend la liaison et la vue relue de tous les moteurs, comme
+ *   `moteurs?poste=1` ; 404 moteur inconnu du service ; 409 : commande du moteur introuvable, `MNEMO_SANS_MCP=1` dans
+ *   l'environnement du service, ou une liaison de ce moteur déjà en cours ;
  * - `reglages` GET → `ReglagesVue` ; PUT `{ valeurs: { "<cle>": valeur | null } }` → `ReglagesVue` (voir `ReglagesVue`) ;
  * - `claudeDesktop` GET → `ClaudeDesktopVue` : la configuration de l'app Claude (Claude Desktop), sans valeur de variable ;
  * - `claudeDesktopMnemo` PUT (sans corps) → `ClaudeDesktopVue` : branche ou met à jour l'entrée `mnemo` ; DELETE → `ClaudeDesktopVue` : la retire ;
@@ -553,6 +576,7 @@ export const ROUTES = {
 	sourcesMarquerTraite: '/api/memoire/sources/marquer-traite',
 	dossiersTraiter: '/api/memoire/dossiers-non-rattaches/traiter',
 	moteurs: '/api/moteurs',
+	moteurLier: '/api/moteurs/:id/lier',
 	reglages: '/api/reglages',
 	claudeDesktop: '/api/claude-desktop',
 	claudeDesktopMnemo: '/api/claude-desktop/mnemo',
@@ -566,7 +590,7 @@ export const ROUTES = {
 
 /**
  * Un point vérifié d'un moteur sur le poste (`moteurs?poste=1`) : `cle` ; `libelle` à montrer ; `ok` (null : inconnu, à
- * vérifier) ; `etat`, court ; `detail`, le motif ; `remede` : la commande qui y remédie, `dans` un terminal ou dans le moteur, et celle à lancer `puis` (redémarrage du service).
+ * vérifier) ; `etat`, court ; `detail`, le motif ; `remede` : la commande qui y remédie, `dans` un terminal ou dans le moteur.
  */
 export type PointMoteurVue = {
 	cle: 'commande' | 'version' | 'mcp' | 'hooks' | 'approbation';
@@ -574,7 +598,7 @@ export type PointMoteurVue = {
 	ok: boolean | null;
 	etat: string;
 	detail?: string;
-	remede?: { texte: string; dans: 'terminal' | 'moteur'; puis?: string };
+	remede?: { texte: string; dans: 'terminal' | 'moteur' };
 };
 
 /**
@@ -593,6 +617,24 @@ export type MoteurVue = {
 	poste?: PointMoteurVue[];
 };
 export type ReponseMoteurs = { moteurs: MoteurVue[] };
+
+/**
+ * Une étape de la liaison d'un moteur (`moteurLier`) : `declare` (serveur MCP absent, déclaré), `remplace` (déclaration ou
+ * hooks de Mnemo faits pour un autre Node ou un autre Mnemo, refaits), `installe` (hooks absents, installés), `deja` (rien à
+ * faire), `laisse` (déclaration de l'utilisateur, désactivée, d'une autre portée ou qui ne lance pas Mnemo : jamais
+ * touchée), `echec` ;
+ * `message` à montrer.
+ */
+export type EtapeLiaisonVue = { resultat: 'declare' | 'remplace' | 'installe' | 'deja' | 'laisse' | 'echec'; message: string };
+/**
+ * Liaison d'un moteur : `lie` : serveur MCP et hooks déclarés et installés par Mnemo, tous (ni échec, ni déclaration de
+ * l'utilisateur laissée) : seul cas où dire « <moteur> lié à Mnemo » ; `ok` : aucune étape en échec (vrai aussi quand une
+ * déclaration de l'utilisateur est laissée, `lie` est alors faux) ; `hooks` : seulement pour un moteur qui en a pour tout le
+ * poste.
+ */
+export type LiaisonMoteurVue = { id: IdMoteur; lie: boolean; ok: boolean; mcp: EtapeLiaisonVue; hooks?: EtapeLiaisonVue };
+/** Réponse de `moteurLier` : la liaison, et tous les moteurs relus avec leurs points du poste (comme `moteurs?poste=1`). */
+export type ReponseLiaisonMoteur = ReponseMoteurs & { liaison: LiaisonMoteurVue };
 
 /** Fichiers d'un genre importés par `amorce` : nouveaux, modifiés (réécrits), inchangés. */
 export type CompteAmorceVue = { nouvelles: number; modifiees: number; inchangees: number };
@@ -943,7 +985,7 @@ export type ReponseRejetLot = { id: string };
  * sans ; de même `mistral` et `mistral_hooks` avec `--mistral` (déclaration MCP dans `~/.vibe/config.toml`, hooks dans
  * `~/.vibe/hooks.toml`). `motif` (étapes `mcp`, `codex`, `codex_hooks`, `mistral` et `mistral_hooks`, `echec` seulement) :
  * `perime`, une déclaration (ou des hooks) de Mnemo de portée utilisateur existe déjà et lance un autre Node ou un autre
- * `main.ts` (autre installation de Mnemo), que `mnemo declarer --remplacer` (`--moteur codex` ou `--moteur mistral-vibe`)
+ * `main.ts` (autre installation de Mnemo), que `mnemo declarer --lier` (`--moteur codex` ou `--moteur mistral-vibe`)
  * reprend. Absent : tout autre échec.
  */
 export type EtapeInit = 'memoire' | 'mcp' | 'codex' | 'codex_hooks' | 'mistral' | 'mistral_hooks' | 'modeles' | 'commande' | 'lanceur';
@@ -969,8 +1011,8 @@ export type EtatMcpVerifie = { etat: 'deja' | 'absent' | 'perime' | 'autre' | 'd
 
 /**
  * Hooks de Mnemo de `~/.codex/hooks.json`, lus sans rien changer : `a_jour` (ceux de ce Node et ce Mnemo), `perime` (d'une
- * autre installation : `mnemo declarer --moteur codex --remplacer`), `absent` (`mnemo init --codex`), `echec` (fichier
- * illisible, `motif`). `approbation` (à jour seulement), lue dans `hooks.state` de `config.toml` : `approuves`,
+ * autre installation) et `absent` (`mnemo declarer --moteur codex --lier` dans les deux cas), `echec` (fichier illisible,
+ * `motif`). `approbation` (à jour seulement), lue dans `hooks.state` de `config.toml` : `approuves`,
  * `a_approuver` (dans Codex, `/hooks` ; désactivés compris), `inconnu` ; Mnemo ne recalcule pas l'empreinte de Codex, une
  * approbation périmée n'est donc pas vue (`motif` le dit).
  */
@@ -1007,3 +1049,11 @@ export type PosteVerifie = {
  */
 export type SortieDeclarer = { resultat: ResultatDeclarer; message: string; hooks?: { resultat: ResultatDeclarer; message: string } };
 export type ResultatDeclarer = 'absent' | 'deja' | 'remplace' | 'autre' | 'retire' | 'echec';
+/**
+ * `mnemo declarer --lier [--moteur claude-code | codex | mistral-vibe] --json` : une ligne, de même forme que `SortieDeclarer`.
+ * La liaison est celle de `moteurLier` (mêmes étapes, mêmes messages) : `resultat`, `message` : le serveur MCP ; `hooks`
+ * (Codex, Mistral Vibe) : les hooks de Mnemo du poste ; `lie` : tout est déclaré et installé par Mnemo (comme
+ * `LiaisonMoteurVue.lie`). Commande du moteur introuvable ou `MNEMO_SANS_MCP=1` : `resultat` `echec`, sans `hooks`. Une étape
+ * en échec donne le code de sortie 1.
+ */
+export type SortieDeclarerLier = { lie: boolean; resultat: EtapeLiaisonVue['resultat']; message: string; hooks?: EtapeLiaisonVue };

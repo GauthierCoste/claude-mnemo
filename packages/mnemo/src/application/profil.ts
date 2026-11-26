@@ -1,6 +1,6 @@
 import { DOSSIERS_FIXES, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { lireFiche } from '../domaine/fiche.ts';
-import { estNomDeProfil, lanceurPropreSansChemin, moteurOuModeleInvalides, estConsigneParDefaut, lireProfil as profilDeFiche, MOTIF_LANCEUR_PROPRE, MOTIF_NOM_DE_PROFIL, PROFILS_PAR_DEFAUT } from '../domaine/profil.ts';
+import { estNomDeProfil, estConsigneParDefaut, lireProfil as profilDeFiche, PROFILS_PAR_DEFAUT } from '../domaine/profil.ts';
 import type { Fiche } from '../domaine/fiche.ts';
 import type { Profil } from '../domaine/profil.ts';
 import { commiter, sousVerrou } from './commun.ts';
@@ -211,36 +211,8 @@ export async function chargerProfil(dep: Dependances, brut: string): Promise<Pro
 	}
 }
 
-async function ficheDeProfil(dep: Dependances, nom: string): Promise<Fiche | null> {
+/** Fiche du profil `nom` ; null si elle n'existe pas. Lève si elle est illisible. */
+export async function ficheDeProfil(dep: Dependances, nom: string): Promise<Fiche | null> {
 	const texte = await dep.coffre.lire(cheminDeProfil(nom));
 	return texte === null ? null : lireFiche(cheminDeProfil(nom), texte);
-}
-
-/**
- * Un profil qui peut être lancé : `description`, première ligne de sa consigne ; `lancement` : dans le dossier choisi ou
- * dans la mémoire ; `lanceur` : par le dialogue Nouvelle session ou par son propre chemin ; `avatar` ; `personnalise` : sa
- * consigne remplace celle par défaut ; `moteur` et `modele` (« » : celui par défaut du moteur) de ses sessions.
- */
-export type ProfilDisponible = { nom: string; description: string; lancement: Profil['lancement']; lanceur: Profil['lanceur']; avatar: Profil['avatar']; personnalise: boolean; moteur: Profil['moteur']; modele: string };
-
-/**
- * Profils qui peuvent être lancés, triés par nom : ceux du paquet et chaque dossier de `profils/`, lus par `chargerProfil`.
- * Un dossier au nom refusé par `estNomDeProfil` est rendu dans `ignores` avec son motif ; un profil lu autrement qu'il ne
- * se déclare, dans `avertissements`.
- */
-export async function profilsDisponibles(
-	dep: Dependances,
-): Promise<{ profils: ProfilDisponible[]; ignores: { nom: string; motif: string }[]; avertissements: { nom: string; motif: string }[] }> {
-	const dossiers = (await dep.coffre.lister(DOSSIERS_FIXES.profils)).dossiers.map((d) => d.slice(d.lastIndexOf('/') + 1));
-	const noms = [...new Set([...Object.keys(PROFILS_PAR_DEFAUT), ...dossiers.filter(estNomDeProfil)])].sort();
-	const profils: ProfilDisponible[] = [];
-	const avertissements: { nom: string; motif: string }[] = [];
-	for (const nom of noms) {
-		const profil = await chargerProfil(dep, nom);
-		profils.push({ nom, description: profil.consigne.split('\n')[0]!.trim(), lancement: profil.lancement, lanceur: profil.lanceur, avatar: profil.avatar, personnalise: profil.consignePersonnalisee, moteur: profil.moteur, modele: profil.modele });
-		const fiche = await ficheDeProfil(dep, nom).catch(() => null);
-		if (lanceurPropreSansChemin(fiche, profilParDefaut(nom))) avertissements.push({ nom, motif: MOTIF_LANCEUR_PROPRE });
-		for (const motif of moteurOuModeleInvalides(fiche)) avertissements.push({ nom, motif });
-	}
-	return { profils, ignores: dossiers.filter((nom) => !estNomDeProfil(nom)).map((nom) => ({ nom, motif: MOTIF_NOM_DE_PROFIL })), avertissements };
 }

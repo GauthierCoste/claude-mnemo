@@ -5,41 +5,24 @@
  * Le dernier onglet ouvert est retenu dans ce navigateur. Changer d'onglet avec des modifications non enregistrées est
  * retenu : un avertissement propose de les abandonner ou de rester.
  */
+import type { IdMoteur } from '@mnemo/commun';
 import { useCallback, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { ONGLETS_REGLAGES, ongletRetenu, retenirOnglet, type OngletReglages } from '../../reglages/onglet-retenu.ts';
 import { Bouton } from '../commun/Bouton.tsx';
 import { AppClaude } from './claude-desktop/AppClaude.tsx';
 import { Profils } from './profils/Profils.tsx';
 import { ReglagesSysteme } from './ReglagesSysteme.tsx';
 import s from './Reglages.module.css';
 
-type Onglet = 'profils' | 'systeme' | 'app-claude';
-const ONGLETS: { cle: Onglet; titre: string }[] = [
-	{ cle: 'profils', titre: 'Profils' },
-	{ cle: 'systeme', titre: 'Système' },
-	{ cle: 'app-claude', titre: 'App Claude' },
-];
-const CLE_ONGLET = 'mnemo.reglages.onglet';
-
-function ongletRetenu(): Onglet {
-	try {
-		const v = localStorage.getItem(CLE_ONGLET);
-		return ONGLETS.find((o) => o.cle === v)?.cle ?? 'profils';
-	} catch {
-		return 'profils';
-	}
-}
-
-function retenirOnglet(o: Onglet): void {
-	try {
-		localStorage.setItem(CLE_ONGLET, o);
-	} catch {
-		// stockage indisponible : l'onglet n'est pas retenu
-	}
-}
+type Onglet = OngletReglages;
+const TITRES_ONGLETS: Readonly<Record<Onglet, string>> = { profils: 'Profils', systeme: 'Système', 'app-claude': 'App Claude' };
+const ONGLETS = ONGLETS_REGLAGES.map((cle) => ({ cle, titre: TITRES_ONGLETS[cle] }));
 
 export function Reglages(): ReactNode {
 	const [onglet, setOnglet] = useState<Onglet>(ongletRetenu);
 	const [demande, setDemande] = useState<Onglet | null>(null);
+	// « Nouveau profil » d'un moteur (Système › Moteurs) : l'onglet Profils s'ouvre sur la création d'un profil de ce moteur
+	const [nouveauProfil, setNouveauProfil] = useState<IdMoteur | null>(null);
 	const modifie = useRef(false);
 	const surModifie = useCallback((m: boolean) => {
 		modifie.current = m;
@@ -51,7 +34,8 @@ export function Reglages(): ReactNode {
 		setOnglet(o);
 		retenirOnglet(o);
 	};
-	const choisir = (o: Onglet) => {
+	const choisir = (o: Onglet, moteur: IdMoteur | null = null) => {
+		setNouveauProfil(moteur);
 		if (o === onglet) return;
 		if (modifie.current) setDemande(o);
 		else ouvrir(o);
@@ -100,9 +84,9 @@ export function Reglages(): ReactNode {
 			)}
 			<div id={`panneau-${onglet}`} role="tabpanel" aria-labelledby={`onglet-${onglet}`} className={s.panneau}>
 				{onglet === 'profils' ? (
-					<Profils surModifie={surModifie} />
+					<Profils surModifie={surModifie} {...(nouveauProfil === null ? {} : { nouveauAvecMoteur: nouveauProfil })} />
 				) : onglet === 'systeme' ? (
-					<ReglagesSysteme surModifie={surModifie} />
+					<ReglagesSysteme surModifie={surModifie} surNouveauProfil={(m) => choisir('profils', m)} />
 				) : (
 					<AppClaude surModifie={surModifie} />
 				)}

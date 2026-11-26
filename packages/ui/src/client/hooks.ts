@@ -2,7 +2,7 @@
  * Un hook par ressource du service : seuls ces hooks appellent l'`Api`. Les sessions sont tenues par les messages
  * `sessions` / `session` du WebSocket (une seule lecture initiale, aucune requête périodique).
  */
-import type { EtapeCalcul } from '@mnemo/commun';
+import type { EtapeCalcul, IdMoteur } from '@mnemo/commun';
 import { AffichageEtape } from '../sessions/etapes.ts';
 import { PARAMETRES_TOUT } from '@mnemo/commun';
 import type { NiveauModeles } from '@mnemo/commun';
@@ -32,6 +32,8 @@ import {
 	type GitDossierVue,
 	type LotVue,
 	type ReponseLots,
+	type LiaisonMoteurVue,
+	type ReponseLiaisonMoteur,
 	type ReponseMoteurs,
 	type ReponseDocuments,
 	type ApercuProfilVue,
@@ -49,7 +51,7 @@ import type { Niveau } from '../dossiers/arbre.ts';
 import { estAbandon } from './api.ts';
 import type { Client } from './contexte.tsx';
 import { useCacheRessources, useClient } from './contexte.tsx';
-import { useRessource, type Ressource } from './ressources.ts';
+import { publierRessource, useRessource, type Ressource } from './ressources.ts';
 
 export const ATTENTE_RECHERCHE_MS = 200;
 
@@ -88,7 +90,27 @@ export function useClaudeDesktop(): Ressource<ClaudeDesktopVue> {
  */
 export function useMoteurs(poste = false): Ressource<ReponseMoteurs> {
 	const { api } = useClient();
-	return useRessource(poste ? 'moteurs:poste' : 'moteurs', () => api.lire<ReponseMoteurs>(ROUTES.moteurs, poste ? { poste: '1' } : undefined));
+	return useRessource(poste ? CLE_MOTEURS_POSTE : CLE_MOTEURS, () => api.lire<ReponseMoteurs>(ROUTES.moteurs, poste ? { poste: '1' } : undefined));
+}
+const CLE_MOTEURS = 'moteurs';
+const CLE_MOTEURS_POSTE = 'moteurs:poste';
+
+/**
+ * Lie un moteur à Mnemo (`moteurLier` : serveur MCP et hooks du poste) ; la vue relue que rend le service remplace celle des
+ * moteurs (`useMoteurs`, avec et sans le poste) sans nouvelle lecture. Rejette une `ErreurApi` (404, 409) avec son motif.
+ */
+export function useLierMoteur(): (id: IdMoteur) => Promise<LiaisonMoteurVue> {
+	const { api } = useClient();
+	const cache = useCacheRessources();
+	return useCallback(
+		async (id: IdMoteur) => {
+			const r = await api.envoyer<ReponseLiaisonMoteur>(avecId(ROUTES.moteurLier, id));
+			publierRessource(cache, CLE_MOTEURS_POSTE, { moteurs: r.moteurs } satisfies ReponseMoteurs);
+			publierRessource(cache, CLE_MOTEURS, { moteurs: r.moteurs.map(({ poste: _, ...m }) => m) } satisfies ReponseMoteurs);
+			return r.liaison;
+		},
+		[api, cache],
+	);
 }
 
 /** Profils de session qui peuvent être lancés ; relus quand la mémoire change (un profil ajouté sous `profils/`). */

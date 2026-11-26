@@ -51,7 +51,7 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   `null` when the size is unknown) comes at most once per second and per piece. The last line is `fin`; `ok` is false
   when a step failed (exit code 1). In JSON, a declaration that must be done by hand (Claude Code not found, declared
   with another path) is a failure; when a user-scope declaration of Mnemo already runs another Node.js or another copy
-  of Mnemo, the failure line also carries `"motif":"perime"` (`mnemo declarer --remplacer` then rewrites it). The
+  of Mnemo, the failure line also carries `"motif":"perime"` (`mnemo declarer --lier` then rewrites it). The
   types are `LigneInit` and `PosteVerifie` in `@mnemo/contrat`.
 - `mnemo verifier-poste [--json]` (check this computer): `git` (runs `git --version`), Claude Code (the `claude` the
   sessions will run), Codex and Mistral Vibe (optional: where each is, its version, the MCP
@@ -59,17 +59,34 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   Without `--json`, one line each, exit code 1 if git or Claude Code is missing (never for an optional engine); with
   `--json`, one line, exit code 0 (the block `mistral` has the form of `codex`):
   `{"git":{"ok":true,"version":"2.50.1"},"claude":{"ok":false,"motif":"…"},"codex":{"ok":true,"chemin":"…","version":"…","mcp":{"etat":"deja"},"hooks":{"etat":"a_jour","approbation":{"etat":"a_approuver","motif":"…"}}},"node":{"version":"26.13.1"}}`.
-- `mnemo declarer (--remplacer | --retirer) [--moteur claude-code|codex|mistral-vibe] [--json]` (declare):
-  looks after an existing MCP declaration of Mnemo to Claude Code (default) or another engine, of user scope; it never
-  declares anew, which is `mnemo init --mcp` (or `--codex`, `--mistral`). `--remplacer` (replace): a Mnemo declaration that runs another Node.js or another copy of Mnemo is
-  removed and made again with this Node.js and this Mnemo; `--retirer` (remove): the declaration is removed only if it
-  runs this Node.js and this Mnemo. A declaration named `mnemo` that does not run Mnemo, or of another scope, is left
-  alone. With another engine, its Mnemo hooks follow the same way (`~/.codex/hooks.json`, `~/.vibe/hooks.toml`; those
-  of another installation of Mnemo are left by `--retirer`), and a declaration that
-  is turned off or carries your own settings is never rewritten: the message says what to change by hand. With `--json`,
-  one line `{"resultat":"…","message":"…"}` (plus `"hooks":{"resultat":"…","message":"…"}` for an engine with hooks), `resultat` being `absent` (nothing declared), `deja`
-  (already up to date), `remplace`, `retire`, `autre` (left alone) or `echec` (type `SortieDeclarer` in
-  `@mnemo/contrat`). Exit code 1 on a failure (`claude` not found, for example), 2 on a usage error.
+- `mnemo declarer (--lier | --remplacer | --retirer) [--moteur claude-code|codex|mistral-vibe] [--json]` (declare):
+  the MCP declaration of Mnemo to Claude Code (default) or another engine, of user scope, and, for Codex and Mistral
+  Vibe, the Mnemo hooks installed for the whole machine (`~/.codex/hooks.json`, `~/.vibe/hooks.toml`).
+  - `--lier` (link): links the engine to Mnemo without asking anything, from any folder, exactly like the « Lier à
+    Mnemo » button (see [Engines](#engines)): a missing MCP declaration is made, a Mnemo declaration that runs another
+    Node.js or another copy of Mnemo is made again with this one; missing hooks are installed, out-of-date ones
+    rewritten. A declaration of yours (turned off, of another scope, or named `mnemo` but not running Mnemo) is left
+    alone and the message says so. Nothing else is touched (no memory, models, command or launcher). It is the command
+    `mnemo verifier-poste`, the interface and the session warnings give when an engine is not linked. Refused, with
+    nothing changed, when the engine's command cannot be found or `MNEMO_SANS_MCP=1` is set.
+  - `--remplacer` (replace): only an existing Mnemo declaration that runs another Node.js or another copy of Mnemo is
+    removed and made again with this Node.js and this Mnemo; nothing new is declared. Existing Mnemo hooks follow the
+    same way.
+  - `--retirer` (remove): the declaration (and the hooks) are removed only if they run this Node.js and this Mnemo;
+    those of another installation of Mnemo are left.
+
+  A declaration named `mnemo` that does not run Mnemo, or of another scope, is never rewritten, nor one that is turned
+  off or carries your own settings: the message says what to change by hand. Without `--json`, one line per step (and,
+  with `--lier`, « <engine> lié à Mnemo. » when everything is linked). With `--json`, one line:
+  - `--remplacer`, `--retirer`: `{"resultat":"…","message":"…"}` (plus `"hooks":{"resultat":"…","message":"…"}` for an
+    engine with hooks), `resultat` being `absent` (nothing declared), `deja` (already up to date), `remplace`, `retire`,
+    `autre` (left alone) or `echec` (type `SortieDeclarer` in `@mnemo/contrat`);
+  - `--lier`: `{"lie":true,"resultat":"declare","message":"…","hooks":{"resultat":"installe","message":"…"}}`, with the
+    steps of the route `POST /api/moteurs/:id/lier`: `declare`, `remplace`, `installe`, `deja`, `laisse` (a declaration
+    of yours, left alone) or `echec`; `lie` is true only when the MCP server and the hooks are all Mnemo's (type
+    `SortieDeclarerLier`).
+
+  Exit code 1 when a step fails (`claude` not found, for example), 2 on a usage error.
 - `mnemo lit <path>` (read): prints a note (path relative to `_mnemo/`, for example `clients/acme/acme.md`).
 - `mnemo liste [folder]` (list): prints the note of the folder, its notes, then its subfolders.
 - `mnemo cherche <text…> [--dossier <path>] [--tout] [--limite N] [--contexte]` (search): searches the memory (the index
@@ -92,7 +109,8 @@ grouped the first time. A copy that later changes gets its own note and leaves t
   (see "Documents"). Exit code: 0 written or already referenced, 1 refused, 2 near copy exists (nothing written).
 
 `lit`, `liste`, `cherche`, `index` and `source` look for the memory in the current folder, then in its parents.
-`mnemo --aide` lists the commands.
+`mnemo --help` (or `-h`, `--aide`) lists the commands; `mnemo <command> --help` (or `-h`) prints the usage of that
+command only, for example `mnemo init --help` or `mnemo declarer --help`, with exit code 0 and nothing else done.
 
 ## Settings
 
@@ -103,6 +121,46 @@ confirmation, service port, launcher browser and the main colour of the interfac
 The main colour is applied as soon as it is picked; below the picker, a warning appears when it is hard to read on the dark background (contrast under 3:1). The logo and the session state colours keep their own colours.
 The **App Claude** tab connects the memory to the Claude app (Claude Desktop) and manages its other MCP servers: see
 [Connecting the Claude app](#connecting-the-claude-app).
+
+### Engines
+
+**Settings › Système › Moteurs** (engines) shows one card per engine the service knows (Claude Code, Codex, Mistral
+Vibe), each with its provider (Anthropic, OpenAI, Mistral), shown as a letter in the provider's colour (no brand logo),
+and a one-word status:
+
+- « Prêt » (ready): linked and usable;
+- « À lier » (to link): the MCP declaration or the hooks are missing or out of date, « Lier à Mnemo » fixes it;
+- « À approuver » (to approve): the hooks are installed but not yet approved in the engine (Codex);
+- « À vérifier » (to check): whether the hooks are approved cannot be read;
+- « À mettre à jour » (to update): the engine's version is too old for Mnemo;
+- « À régler » (to set): a declaration of yours (turned off, of another scope, or not running Mnemo) or an unreadable
+  file, to fix by hand;
+- « Introuvable » (not found): the command the service started with has disappeared since;
+- « Pas installé » (not installed): no command found on this computer.
+
+Each card draws the **link circuit** of the engine on this computer: Installé (command found) → Version →
+Mémoire (MCP declaration) → Suivi (Mnemo hooks) → Approbation (for an engine that asks for it, Codex). Steps already
+done are lit in the provider's colour; the first broken one pulses, and a single action box below says what is wrong
+and what to do:
+
+- **« Lier à Mnemo »** (link to Mnemo) when the MCP declaration or the hooks are missing or out of date. It calls
+  `POST /api/moteurs/:id/lier` (no body), which does for this engine only what `mnemo declarer --moteur <id> --lier`
+  does, then reads the machine again; the steps light up and a toast says « <engine> lié à Mnemo. ». A failure is shown
+  in the box. The same command is offered below, to copy, for a terminal. The route answers 404 for an engine the
+  service does not know, 409 when the engine's command cannot be found, when `MNEMO_SANS_MCP=1` is set in the service's
+  environment, or while a link of the same engine is already running; its answer carries the steps of the link and
+  every engine read again (like `GET /api/moteurs?poste=1`), types `ReponseLiaisonMoteur` and `LiaisonMoteurVue` in
+  `@mnemo/contrat`.
+- **« Copier »** copies the command to type in the engine (`/hooks` in Codex) when the hooks wait for an approval.
+
+Each card also lists its **team** (the profiles that run on this engine, with « Nouveau profil » to create one on it)
+and its **models** (the list the engine gives).
+
+**« Relire »** (read again, with the time of the last check) checks the machine again. An engine installed or moved
+after the service started is picked up there: the service adopts the command it finds now, new sessions start it, and
+its version is read again; running sessions keep their process. No restart of the service is needed. A command that has
+disappeared is not adopted: the card says it can no longer be found. The light reading of the engines (Settings ›
+Profiles, `GET /api/moteurs` without `poste=1`) looks for nothing new.
 
 ## Documents
 
@@ -371,6 +429,21 @@ Without the interface, sessions are driven from the command line, with the servi
 
 `<id>` can be shortened to its start (8 characters are enough).
 
+In the interface, **New session** (« + Nouvelle session » in the session bar, or « + session » on a folder) works like a
+character select.
+The chosen agent (a work profile started in a dialog) stands large in the middle, on a floor in its colour, its
+neighbours smaller on each side; the arrows, ← and → (outside a text field), a click on a neighbour or on the row of
+agents below choose another. Its sheet gives its name, whether it is the default, built-in or your own, its
+description, its provider, engine and version, its model (the one the profile sets, or « par défaut du moteur », the
+engine's default), where it starts, and its equipment (skills, plugins, hooks). Below, the state of its engine:
+« Prêt » (ready), or what blocks it. An engine that is not linked to Mnemo blocks the launch (« Lancer » unavailable,
+with the reason), since without its MCP server and hooks Mnemo cannot follow the session; « Lier à Mnemo » links it on
+the spot, « Voir dans Réglages » opens Settings › Système. Hooks still to approve in the engine, or a state that cannot
+be read, are only flagged. The folder is folded behind « Changer » (fixed for a profile that starts in the memory), the
+objective is optional, and the footer sums up the choice and starts it with « Lancer <agent> » (Enter). Profiles started
+outside a dialog, warnings and ignored profiles are listed under the sheet. Motion is turned off under « reduce
+motion ».
+
 A session follows a simple cycle: "travaille" (working) during a turn of the agent, "attend" (waiting) when it is done or asks
 for a permission, "en pause" (paused) when you stopped it, "à relire" (to review) when it stopped by itself, "terminée"
 (finished) after the wrap-up or the abandon. The **wrap-up** types an instruction into the session: the agent writes the
@@ -408,7 +481,8 @@ own. Deleting a session keeps its gestures but erases the text and the vectors o
 
 A profile whose engine is Codex starts `codex` (0.171 or later; `MNEMO_CODEX` names another binary) in the terminal of
 the session, without a shell, with your ChatGPT subscription (`CODEX_API_KEY` is removed from its environment). The hooks
-are those installed once for the machine by `mnemo init --codex` and approved in Codex (`/hooks`): see
+are those installed once for the machine (« Lier à Mnemo », `mnemo declarer --moteur codex --lier` or `mnemo init
+--codex`) and approved in Codex (`/hooks`): see
 [installation.md](installation.md#codex). They act only in a session started by Mnemo, and follow the hooks of the
 profile.
 
@@ -442,9 +516,10 @@ profile.
 ### Mistral Vibe sessions
 
 A profile whose engine is Mistral Vibe starts `vibe` (3.1.5 or later; `MNEMO_VIBE` names another binary) in the terminal
-of the session, without a shell, with the sign-in of your own `vibe`. The hooks are those installed once for the
-machine by `mnemo init --mistral`: see [installation.md](installation.md#mistral-vibe). They act only in a session
-started by Mnemo, and follow the hooks of the profile.
+of the session, without a shell, with the sign-in of your own `vibe`. The hooks are those installed once for the machine
+(« Lier à Mnemo », `mnemo declarer --moteur mistral-vibe --lier` or `mnemo init --mistral`): see
+[installation.md](installation.md#mistral-vibe). They act only in a session started by Mnemo, and follow the hooks of
+the profile.
 
 - **What it receives.** The instruction of the profile, followed by the list of its skills, goes into an agent profile
   of the session (`--agent mnemo-<session>`), kept in the session folder of Mnemo; the Mnemo MCP server and its tools,
@@ -767,9 +842,10 @@ A profile is a note of the memory, `_mnemo/profils/<name>/<name>.md`: see [forma
 **Settings › Profiles** lists the profiles in two groups: **Memory**, the archivist, always there, which files and keeps the memory (started from the Archivist drawer); and **Work profiles**, the sessions on your projects, started from New session, `travail` first (the default one, always there). Each line shows the avatar, the name and the first line of the instruction; the chosen profile is edited on the right:
 
 - **Avatar**: a small creature (12 shapes) and a colour, chosen separately; shown in New session and in the session lists.
-- **Engine**: Claude Code or Codex, the coding agent that runs the sessions of the profile. Each line says whether the
-  engine is ready on this computer; one that cannot be found is greyed out with the reason. The archivist stays on Claude
-  Code. A profile on Codex shows a badge in the list and in New session.
+- **Engine**: Claude Code, Codex or Mistral Vibe, the coding agent that runs the sessions of the profile, shown with its
+  provider (Anthropic, OpenAI, Mistral). Each line says whether the engine is ready on this computer; one that cannot be
+  found is greyed out with the reason. The archivist stays on Claude Code. A profile on another engine shows a badge in
+  the list.
 - **Model**: a model of the engine, chosen among the proposed ones (Claude Code: `opus`, `sonnet`, `haiku`; Codex: the
   list given by `codex debug models`) or typed freely. **Empty: the engine's default model.** It is passed as `--model`
   (Claude Code) or `-m` (Codex). Changing the engine empties the model and the plugins; going back to the saved engine
@@ -866,9 +942,10 @@ To undo: `claude mcp remove mnemo --scope user`. `MNEMO_SANS_MCP=1` is the same 
 
 ## Connecting Codex
 
-`mnemo init --codex` declares the same server to Codex at user level, so every Codex session reaches the memory, and
-installs the Mnemo hooks for the sessions started by Mnemo. If `codex` cannot be found, it prints the command to run
-yourself:
+`mnemo init --codex`, `mnemo declarer --moteur codex --lier` or « Lier à Mnemo » in Settings › Système › Moteurs
+declares the same server to Codex at user level, so every Codex session reaches the memory, and installs the Mnemo hooks
+for the sessions started by Mnemo. If `codex` cannot be found, `init --codex` prints the command to run yourself;
+`--lier` and the button refuse, and link nothing:
 
 ```
 codex mcp add mnemo -- '<path to node>' '<path to main.ts>' mcp

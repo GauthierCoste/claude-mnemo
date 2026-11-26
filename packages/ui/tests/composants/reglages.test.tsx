@@ -112,7 +112,7 @@ describe('vue Réglages', () => {
 		const { page, groupe } = await ouvrirReglages();
 		// les groupes à gauche, dans l'ordre de GROUPES_REGLAGES ; le premier est ouvert
 		const groupes = within(page).getByRole('navigation', { name: 'Groupes de réglages' });
-		expect(within(groupes).getAllByRole('button').map((b) => b.textContent?.replace(/\d+ réglage\(s\)$/u, ''))).toEqual(['Contexte injecté', 'Archiviste', 'Projets', 'Modèles', 'Service', 'MoteursÉtat sur ce poste, en lecture seule']);
+		expect(within(groupes).getAllByRole('button').map((b) => b.textContent?.replace(/\d+ réglage\(s\)$/u, ''))).toEqual(['Contexte injecté', 'Archiviste', 'Projets', 'Modèles', 'Service', 'MoteursLiaison à Mnemo sur ce poste']);
 		expect(within(page).getByRole('group', { name: 'Contexte injecté' })).toBeTruthy();
 		expect(within(page).getByText('Taille maximale servie à chaque message.')).toBeTruthy();
 		expect(within(page).getByText('Défaut : 3000 caractères')).toBeTruthy();

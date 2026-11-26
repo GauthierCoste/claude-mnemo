@@ -42,36 +42,6 @@
 	text-overflow: ellipsis;
 }
 
-/*
- * Reflet d'une action en cours (activité, chargement, « affinage… ») : un dégradé lent qui passe sur les lettres. Partagé par
- * le bouton Modèles de l'en-tête et celui d'une session ; jamais sur un état stable. Mouvement réduit : le texte atténué, fixe.
- */
-.reflet {
-	color: var(--mu);
-	background: linear-gradient(100deg, var(--mu) 40%, var(--tx) 50%, var(--mu) 60%) 0 0 / 300% 100%;
-	-webkit-background-clip: text;
-	background-clip: text;
-	-webkit-text-fill-color: transparent;
-	animation: reflet 2.8s linear infinite;
-}
-
-@keyframes reflet {
-	from {
-		background-position: 100% 0;
-	}
-	to {
-		background-position: 0 0;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.reflet {
-		animation: none;
-		background: none;
-		-webkit-text-fill-color: currentColor;
-	}
-}
-
 .icone {
 	position: relative;
 	display: inline-flex;

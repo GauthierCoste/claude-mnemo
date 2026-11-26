@@ -1,20 +1,30 @@
 import { NOMS_MOTEURS } from '@mnemo/commun';
 /**
- * Route des moteurs (`ROUTES.moteurs`) : chaque agent de code du service, sa commande trouvée au démarrage, sa version et ses
- * modèles (Réglages › Profils) ; avec `poste=1`, ce que vérifie `mnemo verifier-poste` (déclaration MCP, hooks du poste et
- * leur approbation), la commande cherchée de nouveau et la version relue (« Relire »), chaque point non satisfaisant avec
- * la commande qui y remédie (Réglages › Système). Lecture seule ; une seule vérification du poste en vol à la fois.
+ * Route des moteurs (`ROUTES.moteurs`) : chaque agent de code du service, sa commande, sa version et ses modèles (Réglages ›
+ * Profils) ; avec `poste=1`, ce que vérifie `mnemo verifier-poste` (déclaration MCP, hooks du poste et leur approbation), la
+ * commande cherchée de nouveau (adoptée par le service si elle a changé) et la version relue (« Relire »), chaque point non
+ * satisfaisant avec la commande qui y remédie (Réglages › Système). Une seule vérification du poste en vol à la fois.
+ * `ROUTES.moteurLier` : lie un moteur à Mnemo (serveur MCP, hooks du poste : `lierMoteur`), puis relit le poste.
  */
 import { ROUTES } from '@mnemo/contrat';
-import type { MoteurVue, PointMoteurVue, ReponseMoteurs } from '@mnemo/contrat';
+import type { EtapeLiaisonVue, LiaisonMoteurVue, MoteurVue, PointMoteurVue, ReponseLiaisonMoteur, ReponseMoteurs } from '@mnemo/contrat';
 import type { CommandeMoteur, Executer, Moteur, MoteurDuService, Pilotage } from '../../application/ports.ts';
+import { liaisonEchouee, lierMoteur, moteurLie } from '../../application/moteurs/lier.ts';
+import type { EtapeLiaison } from '../../application/moteurs/lier.ts';
 import { remedesDuMoteur } from '../../application/moteurs/remedes.ts';
+import { estIdMoteur } from '../../domaine/moteurs/moteur.ts';
+import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
+import { ErreurHttp } from './routes.ts';
 import type { Route } from './routes.ts';
 
-/** Délai de chaque commande du moteur lue pour le poste (`claude mcp get`, `codex mcp get`), comme `verifier-poste`. */
+/** Délai de chaque commande du moteur pour le poste (`claude mcp get`, `codex mcp add`…), lecture et liaison, comme `verifier-poste`. */
 const DELAI_POSTE_MS = 10_000;
 
-/** Ce que la route lit : les moteurs du service, l'exécuteur, le Node durable et le `main.ts` attendus, la plateforme, l'environnement. */
+/**
+ * Ce que la route lit : les moteurs du service (le `Pilotage['moteurs']` qui lance les sessions, dont la route remplace une
+ * entrée quand elle adopte une commande), l'exécuteur, le Node durable et le `main.ts` attendus, la plateforme,
+ * l'environnement.
+ */
 export type PosteDesMoteurs = {
 	moteurs: Pilotage['moteurs'];
 	executer: Executer;
@@ -40,24 +50,32 @@ async function versionDe(moteur: Moteur, commande: CommandeMoteur | null, p: Pos
 	return moteur.version(commande, p.env, p.executer, { relire }).catch(() => null);
 }
 
-/** Le service garde la commande trouvée à son démarrage : en prendre une autre demande de le redémarrer. */
-const REDEMARRER: Remede = { texte: 'mnemo arreter', dans: 'terminal', puis: 'mnemo ouvrir' };
 const chemin = (c: CommandeMoteur): string => c.avant[0] ?? c.commande;
 const memeCommande = (a: CommandeMoteur | null, b: CommandeMoteur | null): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 /**
- * Point « commande » : celle du service (trouvée à son démarrage), comparée à celle trouvée maintenant (`trouvee`, cherchée
- * de nouveau pour le poste : moteur installé, déplacé ou retiré depuis).
+ * Le service adopte la commande trouvée maintenant (`trouvee`, cherchée de nouveau pour le poste) quand elle n'est pas null
+ * et diffère de la sienne (moteur installé ou déplacé depuis) : l'entrée de `p.moteurs`, le `Pilotage['moteurs']` qui lance
+ * les sessions, est remplacée ; les sessions déjà lancées gardent leur processus, les suivantes prennent la nouvelle
+ * commande. Une commande disparue (null) n'est pas adoptée : le service garde la sienne.
+ */
+function adopter(duService: MoteurDuService, trouvee: CommandeMoteur | null, p: PosteDesMoteurs): MoteurDuService {
+	if (trouvee === null || memeCommande(duService.commande, trouvee)) return duService;
+	const adopte: MoteurDuService = { moteur: duService.moteur, commande: trouvee };
+	p.moteurs[duService.moteur.id] = adopte;
+	return adopte;
+}
+
+/**
+ * Point « commande » : celle du service (déjà adoptée si elle a changé), comparée à celle trouvée maintenant (`trouvee`) ;
+ * seule une commande disparue depuis les sépare (le service lance encore l'ancienne).
  */
 function pointCommande(moteur: Moteur, commande: CommandeMoteur | null, trouvee: CommandeMoteur | null): PointMoteurVue {
 	const c = { cle: 'commande', libelle: 'Commande' } as const;
 	const introuvable = commandesDe(moteur).introuvable;
-	if (memeCommande(commande, trouvee)) return commande === null ? { ...c, ok: false, etat: 'introuvable', detail: introuvable } : { ...c, ok: true, etat: 'trouvée', detail: chemin(commande) };
-	if (commande === null) {
-		return { ...c, ok: false, etat: 'trouvée depuis le démarrage', detail: `${chemin(trouvee!)} : le service, démarré sans ${NOMS_MOTEURS[moteur.id]}, ne la prend qu'en redémarrant.`, remede: REDEMARRER };
-	}
-	if (trouvee === null) return { ...c, ok: false, etat: 'introuvable maintenant', detail: `Le service lance encore ${chemin(commande)}, trouvée à son démarrage ; ${introuvable}.` };
-	return { ...c, ok: false, etat: 'changée', detail: `Le service lance ${chemin(commande)}, trouvée à son démarrage ; trouvée maintenant : ${chemin(trouvee)}. Il ne la prend qu'en redémarrant.`, remede: REDEMARRER };
+	if (commande === null) return { ...c, ok: false, etat: 'introuvable', detail: introuvable };
+	if (trouvee === null) return { ...c, ok: false, etat: 'introuvable maintenant', detail: `Le service lance encore ${chemin(commande)} ; ${introuvable}.` };
+	return { ...c, ok: true, etat: 'trouvée', detail: chemin(commande) };
 }
 
 /** Points de la déclaration MCP, des hooks du poste et de leur approbation. */
@@ -95,8 +113,13 @@ async function pointsDuPoste(duService: MoteurDuService, p: PosteDesMoteurs): Pr
 	return points;
 }
 
-/** Vue d'un moteur ; `poste` : avec ses points vérifiés, la commande cherchée de nouveau et la version relue. */
-async function vueMoteur(duService: MoteurDuService, p: PosteDesMoteurs, poste: boolean): Promise<MoteurVue> {
+/**
+ * Vue d'un moteur ; `poste` : la commande cherchée de nouveau (adoptée par le service si elle a changé, avant tout le reste :
+ * version relue et points vérifiés pour la nouvelle), avec ses points vérifiés.
+ */
+async function vueMoteur(entree: MoteurDuService, p: PosteDesMoteurs, poste: boolean): Promise<MoteurVue> {
+	const trouvee = poste ? entree.moteur.trouver(p.env, p.plateforme) : null;
+	const duService = poste ? adopter(entree, trouvee, p) : entree;
 	const { moteur, commande } = duService;
 	const [version, modeles] = await Promise.all([
 		versionDe(moteur, commande, p, poste),
@@ -106,7 +129,7 @@ async function vueMoteur(duService: MoteurDuService, p: PosteDesMoteurs, poste: 
 	const indisponible = commande === null ? `${NOMS_MOTEURS[moteur.id]} introuvable sur ce poste (${commandesDe(moteur).introuvable}).` : tropAncien === null ? null : `${tropAncien}.`;
 	const vue: MoteurVue = { id: moteur.id, nom: NOMS_MOTEURS[moteur.id], indisponible, manuel: commande === null && moteur.sansCommande === 'manuel', version, modeles: [...modeles] };
 	if (!poste) return vue;
-	const points: PointMoteurVue[] = [pointCommande(moteur, commande, moteur.trouver(p.env, p.plateforme))];
+	const points: PointMoteurVue[] = [pointCommande(moteur, commande, trouvee)];
 	if (commande !== null && moteur.version !== undefined) {
 		points.push(
 			version === null
@@ -128,7 +151,43 @@ export function routesMoteurs(p: PosteDesMoteurs): Route[] {
 		(posteEnVol ??= lire(true).finally(() => {
 			posteEnVol = null;
 		}));
+	// une seule liaison à la fois par moteur : la seconde est refusée (409) tant que la première n'est pas finie
+	const liaisonsEnCours = new Set<IdMoteur>();
+	/**
+	 * Lie le moteur `id` avec sa commande cherchée de nouveau (adoptée par le service si elle a changé, comme à la lecture du
+	 * poste) ; 404 moteur inconnu du service, 409 `MNEMO_SANS_MCP=1`, liaison déjà en cours ou commande introuvable.
+	 */
+	const lier = async (id: string): Promise<LiaisonMoteurVue> => {
+		const entree = estIdMoteur(id) ? p.moteurs[id] : undefined;
+		if (entree === undefined) throw new ErreurHttp(404, `Moteur inconnu : « ${id.slice(0, 80)} ».`);
+		const { moteur } = entree;
+		const nom = NOMS_MOTEURS[moteur.id];
+		if (p.env.MNEMO_SANS_MCP === '1') throw new ErreurHttp(409, `MNEMO_SANS_MCP=1 dans l'environnement du service : ${nom} n'est pas lié (ni serveur MCP, ni hooks).`);
+		if (liaisonsEnCours.has(moteur.id)) throw new ErreurHttp(409, `Liaison de ${nom} à Mnemo déjà en cours.`);
+		liaisonsEnCours.add(moteur.id);
+		try {
+			const trouvee = moteur.trouver(p.env, p.plateforme);
+			if (trouvee === null) throw new ErreurHttp(409, `${nom} introuvable sur ce poste (${commandesDe(moteur).introuvable}) : rien n'est lié.`);
+			adopter(entree, trouvee, p);
+			const r = await lierMoteur(moteur, { executer: p.executer, main: p.main, node: p.node, commande: trouvee, plateforme: p.plateforme, env: p.env, delaiMs: DELAI_POSTE_MS });
+			const etape = (e: EtapeLiaison): EtapeLiaisonVue => ({ resultat: e.resultat, message: e.message });
+			return { id: moteur.id, lie: moteurLie(r), ok: !liaisonEchouee(r), mcp: etape(r.mcp), ...(r.hooks === undefined ? {} : { hooks: etape(r.hooks) }) };
+		} finally {
+			liaisonsEnCours.delete(moteur.id);
+		}
+	};
 	return [
+		{
+			methode: 'POST',
+			chemin: ROUTES.moteurLier,
+			action: async (r) => {
+				const liaison = await lier(r.id);
+				// une vérification du poste lancée avant la liaison ne la voit pas : attendue, puis le poste relu
+				await posteEnVol?.catch(() => []);
+				const moteurs = await lirePoste();
+				return { statut: 200, corps: { moteurs, liaison } satisfies ReponseLiaisonMoteur };
+			},
+		},
 		{
 			methode: 'GET',
 			chemin: ROUTES.moteurs,

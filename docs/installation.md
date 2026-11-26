@@ -89,8 +89,8 @@ After an update (`git pull`, then `pnpm installer`), restart what was already ru
 from the Mnemo folder), then open Mnemo again, and restart the sessions opened before the update.
 Until then, they run the old code, and only one set of models should run for the machine. If you use Codex, run
 `mnemo verifier-poste`: when the update changed the Mnemo hooks, approve them again in Codex (`/hooks`). For Mistral
-Vibe, `mnemo verifier-poste` says when the hooks are out of date, and `mnemo declarer --moteur mistral-vibe --remplacer`
-rewrites them; Vibe does not ask for an approval.
+Vibe, `mnemo verifier-poste` says when the hooks are out of date, and « Lier à Mnemo » in **Settings › Système ›
+Moteurs** (or `mnemo declarer --moteur mistral-vibe --lier`) rewrites them; Vibe does not ask for an approval.
 
 ## The questions of `mnemo init`
 
@@ -119,10 +119,12 @@ that declares the MCP server. Running `init` on a folder that already has a memo
 the MCP declaration, the command and the application: this is also how an existing installation gets them, and how you
 plug a new installation into a memory you already have (give its folder at the first question). If Claude Code already
 declares a Mnemo MCP server pointing to another copy of Mnemo, `init` leaves it and prints the two commands that replace
-it (`claude mcp remove mnemo --scope user`, then `claude mcp add …`); `mnemo declarer --remplacer` does both at once.
+it (`claude mcp remove mnemo --scope user`, then `claude mcp add …`); `mnemo declarer --lier` does both at once.
 `--codex` also declares the MCP server to Codex and installs the Mnemo hooks there (see [Codex](#codex)); without it,
 Codex is never touched. `--mistral` does the same for Mistral Vibe (see [Mistral
-Vibe](#mistral-vibe)). Explicit options (`--mcp`, `--sans-modeles`…) decide a step without asking, and `--json` gives one JSON line per event,
+Vibe](#mistral-vibe)). To link one engine later, `init` is not needed: « Lier à Mnemo » in **Settings › Système ›
+Moteurs**, or `mnemo declarer --moteur <claude-code|codex|mistral-vibe> --lier` from any folder, links it without any
+question and touches nothing else. `mnemo init --help` (or `-h`) prints the options of `init`. Explicit options (`--mcp`, `--sans-modeles`…) decide a step without asking, and `--json` gives one JSON line per event,
 for a program that drives the installation; `mnemo verifier-poste` checks git, Claude Code and the optional engines first (see
 [usage.md](usage.md#command-line)).
 
@@ -147,28 +149,32 @@ mnemo jeton
 Codex is optional. Mnemo needs **Codex 0.171 or later** (`codex --version`), signed in with your ChatGPT subscription; it
 never uses an API key (`CODEX_API_KEY` is removed from the environment of the sessions). Mnemo looks for `codex` in
 `MNEMO_CODEX`, then in the `PATH`, then, on macOS, in the copy that comes with the ChatGPT app.
+Installed after the Mnemo service started? Click « Relire » in **Settings › Système › Moteurs**: the service picks up
+the command it finds now, without a restart.
 
-1. **Declare.** From the Mnemo folder:
+1. **Link it to Mnemo.** In **Settings › Système › Moteurs**, click « Lier à Mnemo » on the Codex card, or, from any
+   folder:
 
    ```sh
-   mnemo init --codex
+   mnemo declarer --moteur codex --lier
    ```
 
-   It declares the Mnemo MCP server to Codex at user level (`codex mcp add`), so every Codex session reads and writes the
-   memory, even one started outside Mnemo. It also installs the Mnemo hooks in `~/.codex/hooks.json` (or
-   `$CODEX_HOME/hooks.json`), keeping the other entries of that file. The hooks do nothing outside a session started by
-   Mnemo.
+   (`mnemo init --codex`, from the Mnemo folder, does the same while installing Mnemo.) It declares the Mnemo MCP server to
+   Codex at user level (`codex mcp add`), so every Codex session reads and writes the memory, even one started outside
+   Mnemo. It also installs the Mnemo hooks in `~/.codex/hooks.json` (or `$CODEX_HOME/hooks.json`), keeping the other
+   entries of that file. The hooks do nothing outside a session started by Mnemo.
 2. **Approve the hooks once.** Codex runs a hook only after you have approved it: open Codex, type `/hooks` and approve
-   the Mnemo hooks. Do it again after `mnemo declarer --moteur codex --remplacer` or an update that changes them.
+   the Mnemo hooks. Do it again after Mnemo rewrites them (a new link of an out-of-date installation, or an update that
+   changes them).
 3. **Trust each folder.** The first time Codex starts in a folder, it asks « Trust this folder? » in the terminal of the
    session. Answer it yourself: Mnemo shows the terminal but never answers for you. Until the first message of the
    session has reached the Mnemo hooks, the session can only be abandoned: no pause, wrap-up or resume.
 4. **Check.** `mnemo verifier-poste` prints a Codex line: where it was found, its version, the MCP declaration, the hooks
-   and whether they are approved. The interface shows the same in **Settings › Système › Moteurs**, with the command to
-   run, or the action to take in Codex, when something is missing.
+   and whether they are approved. The interface shows the same in **Settings › Système › Moteurs**, with « Lier à
+   Mnemo », the command to run, or the action to take in Codex, when something is missing.
 
-A Mnemo declaration made for another Node.js or another copy of Mnemo is not rewritten by `init`:
-`mnemo declarer --moteur codex --remplacer` rewrites the declaration and the hooks of this installation. Your own
+A Mnemo declaration made for another Node.js or another copy of Mnemo is not rewritten by `init`: « Lier à Mnemo » or
+`mnemo declarer --moteur codex --lier` rewrites the declaration and the hooks for this installation. Your own
 settings are never overwritten either: a Mnemo declaration turned off in Codex (`enabled = false`), or one that carries
 settings Mnemo does not write (tool approvals, environment, enabled or disabled tools in `[mcp_servers.mnemo]` of
 `config.toml`), is left as it is, and the command says what to change by hand. Sessions started by Mnemo still get the
@@ -183,28 +189,35 @@ Node.js and this Mnemo.
 Mistral Vibe (Mistral's terminal coding agent) is optional. Mnemo needs **Mistral Vibe 3.1.5 or later** (`vibe
 --version`). Mnemo looks for `vibe` in `MNEMO_VIBE`, then in the `PATH`, then in `~/.local/bin`.
 
-1. **Install it** (with [uv](https://docs.astral.sh/uv/)):
+1. **Install the `vibe` command** (with [uv](https://docs.astral.sh/uv/)):
 
    ```sh
    uv tool install --python 3.14 mistral-vibe
    ```
 
+   This puts `vibe` in `~/.local/bin`. The Vibe desktop app does not provide this command: Mnemo needs the command
+   line tool. If the Mnemo service was already running, click « Relire » in **Settings › Système › Moteurs**: the
+   service picks up the new command, no restart needed.
+
 2. **Sign in yourself.** Run `vibe` once in a terminal: its setup asks how to sign in (browser or API key). Mnemo never
    signs in for you, never reads your key and never changes how Vibe signs in: a session started by Mnemo uses the same
    sign-in as your own `vibe`.
-3. **Declare.** From the Mnemo folder:
+3. **Link it to Mnemo.** In **Settings › Système › Moteurs**, click « Lier à Mnemo » on the Mistral Vibe card, or, from
+   any folder:
 
    ```sh
-   mnemo init --mistral
+   mnemo declarer --moteur mistral-vibe --lier
    ```
 
-   It writes one `[[mcp_servers]]` block named `mnemo` in `~/.vibe/config.toml` (or `$VIBE_HOME/config.toml`), so every
-   Vibe session reads and writes the memory, even one started outside Mnemo, and one `[[hooks]]` block per event, named
-   `mnemo-<event>`, in `~/.vibe/hooks.toml`. Everything else in these files is kept as it is, line endings included.
-   The hooks do nothing outside a session started by Mnemo. Vibe runs them without an approval step. Without `vibe` on
-   the computer, the hooks are installed anyway and the declaration is printed as a command to paste later.
+   (`mnemo init --mistral`, from the Mnemo folder, does the same while installing Mnemo.) It writes one `[[mcp_servers]]`
+   block named `mnemo` in `~/.vibe/config.toml` (or `$VIBE_HOME/config.toml`), so every Vibe session reads and writes
+   the memory, even one started outside Mnemo, and one `[[hooks]]` block per event, named `mnemo-<event>`, in
+   `~/.vibe/hooks.toml`. Everything else in these files is kept as it is, line endings included. The hooks do nothing
+   outside a session started by Mnemo. Vibe runs them without an approval step. Without `vibe` on the computer, the
+   button and `--lier` link nothing and say so; `init --mistral` installs the hooks anyway and prints the declaration as
+   a command to paste later.
 4. **Check.** `mnemo verifier-poste` prints a Mistral Vibe line (where it was found, its version, the MCP declaration,
-   the hooks), and **Settings › Système › Moteurs** shows the same with the command to run when something is missing.
+   the hooks), and **Settings › Système › Moteurs** shows the same, with « Lier à Mnemo » when something is missing.
 
 What Mnemo writes, and nothing else: the `mnemo` block of `config.toml` and the `mnemo-…` blocks of `hooks.toml`. For each
 session, an agent profile with the instruction of the profile (`mnemo-<session>.toml`) goes into the session folder of
@@ -240,8 +253,9 @@ Open the interface and click the gear at the bottom of the left rail (shortcut: 
 next to M on a US keyboard), then the **Système** tab (the **Profils** tab manages session profiles, see
 [usage.md](usage.md#managing-profiles); the **App Claude** tab, the MCP servers of the Claude app, see
 [usage.md](usage.md#connecting-the-claude-app)). The groups are listed on the left, by how often you will use them: injected
-context, memory, archivist, search, projects, models, service, interface; the last one, **Moteurs** (engines), is read-only
-and shows the state of each engine (Claude Code, Codex, Mistral Vibe) on this computer. Each setting shows a one-line explanation, its default, and "Rétablir le défaut" (reset to
+context, memory, archivist, search, projects, models, service, interface; the last one, **Moteurs** (engines), shows
+the state of each engine (Claude Code, Codex, Mistral Vibe) on this computer and links it to Mnemo with « Lier à Mnemo »
+(see [usage.md](usage.md#engines)). Each setting shows a one-line explanation, its default, and "Rétablir le défaut" (reset to
 default); changes are saved only when you click "Enregistrer" (save; leaving the page with unsaved changes asks first).
 They are stored in `.mnemo/reglages.json` (only the values that differ from the defaults). A missing or invalid value
 falls back to its default with a warning, never a crash.

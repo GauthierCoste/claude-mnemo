@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estIdMoteur, estModele, IDS_MOTEURS, MODELE_MAX, MOTEUR_PAR_DEFAUT } from '../src/index.ts';
+import { estIdMoteur, estModele, FOURNISSEURS_MOTEURS, IDS_MOTEURS, MODELE_MAX, MOTEUR_PAR_DEFAUT } from '../src/index.ts';
 
 describe('moteurs', () => {
 	it('Claude Code, Codex et Mistral Vibe ; Claude Code par défaut', () => {
@@ -9,6 +9,10 @@ describe('moteurs', () => {
 		expect(estIdMoteur('mistral-vibe')).toBe(true);
 		expect(estIdMoteur('gemini')).toBe(false);
 		expect(estIdMoteur(undefined)).toBe(false);
+	});
+
+	it('un fournisseur par moteur : Anthropic, OpenAI, Mistral', () => {
+		expect(IDS_MOTEURS.map((m) => FOURNISSEURS_MOTEURS[m])).toEqual(['Anthropic', 'OpenAI', 'Mistral']);
 	});
 
 	it('modèle : vide (celui par défaut du moteur) ou un nom ASCII court de la liste blanche, jamais une option', () => {
