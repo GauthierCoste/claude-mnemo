@@ -93,7 +93,7 @@ function faux(cas: CasContexte[], o: Partial<PortsEntrainement> & { modeles?: Mo
 				etat.retours++;
 				return true;
 			},
-			rapport: async () => etat.rapports.at(-1)?.rapport ?? null,
+			rapport: async () => etat.rapports.at(-1) ?? null,
 		},
 		apprenti: { apprendre: async () => rapportFactice() },
 		historique: {
@@ -228,6 +228,51 @@ describe('entraînement de la note : une tâche à la fois (D7)', () => {
 		expect((await autre.e.etat()).derniereErreur).toBe('index fermé');
 	});
 
+	it("une écriture en cours (qui tient le verrou un instant) ne fait pas refuser la tâche qui démarre : le verrou de la tâche est pris après elle, dans la file", async () => {
+		const ecriture = enMain<void>();
+		const { e, etat, ports } = faux([unCas('m', ['a.md'])]);
+		const ecrireReel = ports.banc.ecrire;
+		let premiere = true;
+		ports.banc.ecrire = async (c) => {
+			if (premiere) {
+				premiere = false;
+				await ecriture.promesse;
+			}
+			await ecrireReel(c);
+		};
+		const reponse = e.repondre(0, { jugements: { 'a.md': 'pertinente' }, resteNonUtile: true });
+		await vi.waitFor(() => expect(etat.verrou).toBe('enregistrer des jugements'));
+		const demarrage = e.preparer({ nombre: 1 });
+		ecriture.resoudre();
+		await reponse;
+		await (await demarrage).fin;
+		expect(etat.prises).toEqual(['enregistrer des jugements', 'préparer des messages']);
+		expect(etat.fichier[0]).toMatchObject({ jugements: { 'a.md': 'pertinente' } });
+		expect(etat.verrou).toBeNull();
+	});
+
+	it('fermé (arrêt du service) : plus aucune tâche ne démarre', async () => {
+		const { e, etat } = faux([valide('v', ['a.md'])]);
+		await e.fermer();
+		await expect(e.preparer()).rejects.toMatchObject({ genre: 'refuse' });
+		await expect(e.apprendre({ origine: 'manuel' })).rejects.toMatchObject({ genre: 'refuse' });
+		expect(e.tache()).toBeNull();
+		expect(etat.prises).toEqual([]);
+	});
+
+	it('pré-juger cherche le juge de nouveau (frais), l’état peut lire celui gardé', async () => {
+		const demandes: (boolean | undefined)[] = [];
+		const { e } = faux([unCas('m', ['a.md'])], {
+			juge: (o) => {
+				demandes.push(o?.frais);
+				return { raison: 'Claude Code introuvable' };
+			},
+		});
+		await e.etat();
+		await expect(e.prejuger()).rejects.toMatchObject({ genre: 'refuse', message: 'Claude Code introuvable' });
+		expect(demandes).toEqual([undefined, true]);
+	});
+
 	it('fermer arrête la tâche en cours et attend sa fin', async () => {
 		const { e } = faux([], {
 			extraire: (_, o) => new Promise((_r, rejeter) => o.signal.addEventListener('abort', () => rejeter(Object.assign(new Error('arrêté'), { name: 'AbortError' })))),
@@ -337,12 +382,40 @@ describe('entraînement de la note : apprendre et revenir (D6)', () => {
 		expect(vue.historique[0]!.origine).toBe('manuel');
 	});
 
-	it('remplacer refuse le nouveau modèle : seul le rapport est écrit, la ligne le dit', async () => {
+	it('remplacer refuse le nouveau modèle : seul le rapport est écrit, la ligne et le résultat le disent', async () => {
 		const { e, etat } = faux([valide('v', ['a.md'])]);
 		await (await e.apprendre({ origine: 'automatique', remplacer: () => false })).fin;
 		expect(etat.coefficients).toEqual([]);
 		expect(etat.rapports.map((r) => r.remplace)).toEqual([false]);
 		expect(etat.historique[0]).toMatchObject({ origine: 'automatique', remplace: false });
+		expect((await e.etat()).resultat).toMatchObject({ remplace: false });
+	});
+
+	it("à la main, un modèle refusé remplace un modèle accepté (« Revenir au modèle d'avant » le rend) : la ligne, le résultat et l'état le disent", async () => {
+		const modeles: ModelesDeNote = { complets: { modele: appris({ accepte: true }), etat: 'accepte' }, sens: { modele: appris({ accepte: true }), etat: 'accepte' } };
+		const { e, etat } = faux([valide('v', ['a.md'])], { modeles });
+		await (await e.apprendre({ origine: 'manuel' })).fin;
+		expect(etat.coefficients).toHaveLength(1);
+		expect(etat.historique[0]).toMatchObject({ origine: 'manuel', verdicts: { complets: 'refuse', sens: 'refuse' }, remplace: true });
+		const vue = await e.etat();
+		expect(vue.resultat).toMatchObject({ remplace: true });
+		expect(vue.resultat!.niveaux.map((n) => n.verdict)).toEqual(['Refusé : la note ordonne le classement, sans %', 'Refusé : la note ordonne le classement, sans %']);
+		expect(vue.note.avant).toBe(true);
+	});
+
+	it('deux retours au modèle d’avant demandés ensemble passent l’un après l’autre', async () => {
+		let enCours = 0;
+		let chevauchement = false;
+		const { e, ports } = faux([], { avant: true });
+		ports.note.revenir = async () => {
+			enCours++;
+			if (enCours > 1) chevauchement = true;
+			await new Promise((r) => setTimeout(r, 5));
+			enCours--;
+			return true;
+		};
+		await Promise.all([e.revenir(), e.revenir()]);
+		expect(chevauchement).toBe(false);
 	});
 
 	it('arrêté pendant l’apprentissage : rien n’est écrit ; revenir est refusé pendant un apprentissage', async () => {

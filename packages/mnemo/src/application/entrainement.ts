@@ -7,8 +7,10 @@
  *   la tâche (une commande `mnemo banc contexte` ne peut pas écrire en même temps) ; chaque tâche s'arrête (`AbortController`).
  * - Toutes les écritures du fichier des jugements (réponses, propositions du juge, messages préparés, « Accepter les sûres »,
  *   annulations) passent par une seule file : chacune relit le fichier juste avant d'écrire. Hors tâche, chaque écriture prend
- *   le verrou le temps de l'écrire. Juger reste permis pendant une tâche.
- * - Apprendre : le modèle d'avant est gardé (`revenir` l'échange) ; une ligne d'historique par essai.
+ *   le verrou le temps de l'écrire. Juger reste permis pendant une tâche. Le verrou d'une tâche est pris dans cette file : une
+ *   écriture en cours ne fait jamais refuser la tâche qui démarre.
+ * - Apprendre : le modèle d'avant est gardé (`revenir` l'échange) ; une ligne d'historique par essai. Les écritures des fichiers
+ *   de la note (nouveau modèle, retour au modèle d'avant) passent l'une après l'autre.
  */
 import type { BilanExtraction, MessageAExtraire } from './banc-extraire.ts';
 import { fusionnerCas, messagesAExtraire } from './banc-extraire.ts';
@@ -35,10 +37,13 @@ export type FichierDuBanc = { lire(): Promise<CasContexte[]>; ecrire(cas: readon
 export type Apprenti = { apprendre(jeu: JeuDApprentissage, options: OptionsApprentissage, signal?: AbortSignal): Promise<RapportDApprentissage> };
 /** Le juge, ou pourquoi il n'est pas là (Claude Code introuvable). */
 export type JugeDisponible = { juge: Juge } | { raison: string };
+/** Le dernier rapport et si son modèle a remplacé le modèle d'alors. */
+export type DernierRapport = { rapport: RapportDApprentissage; remplace: boolean };
 /**
  * Les fichiers de la note : `modeles()` les modèles actifs et leur état (coupures du suivi comprises) ; `ecrire` garde le modèle
  * actuel comme modèle d'avant puis écrit `coefficients` ; `ecrireRapport` : le rapport de l'essai (JSON et texte) ; `revenir`
- * échange le modèle et le modèle d'avant (faux : pas de modèle d'avant) ; `rapport` : le dernier rapport (null : aucun).
+ * échange le modèle et le modèle d'avant (faux : pas de modèle d'avant) ; `rapport` : le dernier rapport et si son modèle a
+ * remplacé l'actuel (null : aucun).
  */
 export type FichiersDeNote = {
 	modeles(): Promise<ModelesDeNote>;
@@ -50,7 +55,7 @@ export type FichiersDeNote = {
 	ecrireRapport(rapport: RapportDApprentissage, remplace: boolean): Promise<void>;
 	avant(): Promise<boolean>;
 	revenir(): Promise<boolean>;
-	rapport(): Promise<RapportDApprentissage | null>;
+	rapport(): Promise<DernierRapport | null>;
 };
 /** L'historique des apprentissages (`.mnemo/entrainements.json`), plus récents d'abord. */
 export type HistoriqueDesApprentissages = { lire(): Promise<LigneHistorique[]>; ecrire(lignes: readonly LigneHistorique[]): Promise<void> };
@@ -63,7 +68,8 @@ export type PortsEntrainement = {
 	extraire(messages: readonly MessageAExtraire[], o: { signal: AbortSignal; avancement: (faits: number, total: number) => void }): Promise<BilanExtraction>;
 	/** Synthèse de chaque fiche demandée (absente : vide). */
 	syntheses(chemins: readonly string[]): Promise<ReadonlyMap<string, string>>;
-	juge(): JugeDisponible;
+	/** Le juge (peut être gardé un moment : lu à chaque état) ; `frais` : cherché de nouveau (avant de pré-juger). */
+	juge(o?: { frais?: boolean }): JugeDisponible;
 	note: FichiersDeNote;
 	apprenti: Apprenti;
 	historique: HistoriqueDesApprentissages;
@@ -80,8 +86,10 @@ export type OrigineApprentissage = 'manuel' | 'automatique';
 export type LigneHistorique = { date: string; origine: OrigineApprentissage; verdicts: Record<NiveauDeNote, EtatDuModele>; remplace: boolean };
 export type NoteDuNiveau = { niveau: NiveauDeNote; etat: EtatDuModele; origine: 'appris' | 'depart' | 'non_appris'; date: string | null; verdict: string; criteres: string[]; refus: string[] };
 export type BancEntrainement = { messages: number; valides: number; aJuger: number; aRelire: number; aPrejuger: number; silences: number; sautes: number; paires: number };
+/** `remplace` : le modèle de cet essai a remplacé le modèle d'alors (faux : l'ancien est gardé). */
 export type ResultatApprentissage = {
 	date: string;
+	remplace: boolean;
 	messages: number;
 	sessions: number;
 	niveaux: { niveau: NiveauDeNote; accepte: boolean; verdict: string; criteres: string[]; refus: string[]; paires: number; fiabilite: TrancheFiabilite[] }[];
@@ -169,15 +177,31 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 	let rendreVerrou: (() => void) | null = null;
 	let derniereErreur: string | undefined;
 	let ecritures: Promise<unknown> = Promise.resolve();
+	/** File des écritures des fichiers de la note (nouveau modèle, retour au modèle d'avant). */
+	let ecrituresNote: Promise<unknown> = Promise.resolve();
+	/** Fermé (arrêt du service) : plus aucune tâche ne démarre. */
+	let ferme = false;
 	const annulations: Annulation[] = [];
 	const changer = (): void => p.surChangement?.();
+
+	/** `travail` dans la file du fichier des jugements, après tout ce qui y est déjà. */
+	const enFile = <T>(travail: () => Promise<T> | T): Promise<T> => {
+		const suite = ecritures.then(travail);
+		ecritures = suite.catch(() => {});
+		return suite;
+	};
+	const enFileNote = <T>(travail: () => Promise<T>): Promise<T> => {
+		const suite = ecrituresNote.then(travail);
+		ecrituresNote = suite.catch(() => {});
+		return suite;
+	};
 
 	/**
 	 * Une écriture du fichier des jugements, dans la file : relu, transformé (`faire` rend les cas à écrire, ou null : rien), écrit.
 	 * Hors tâche, le verrou est pris le temps de l'écriture (refus : `occupe`).
 	 */
-	const ecrire = <T>(faire: (cas: CasContexte[]) => { cas: CasContexte[] | null; resultat: T }): Promise<T> => {
-		const travail = ecritures.then(async () => {
+	const ecrire = <T>(faire: (cas: CasContexte[]) => { cas: CasContexte[] | null; resultat: T }): Promise<T> =>
+		enFile(async () => {
 			const rendre = rendreVerrou === null ? verrouiller(ENREGISTRER) : null;
 			try {
 				const { cas, resultat } = faire(await p.banc.lire());
@@ -186,10 +210,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 			} finally {
 				rendre?.();
 			}
-		});
-		ecritures = travail.catch(() => {});
-		return travail.finally(changer);
-	};
+		}).finally(changer);
 
 	const verrouiller = (operation: string): (() => void) => {
 		try {
@@ -199,10 +220,10 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 		}
 	};
 
-	/** Réserve la place de la tâche (synchrone : deux demandes ne la prennent jamais toutes deux) et le verrou du banc. */
+	/** Réserve la place de la tâche (synchrone : deux demandes ne la prennent jamais toutes deux) ; le verrou est pris ensuite, dans la file. */
 	const reserver = (genre: GenreTache): (() => void) => {
+		if (ferme) throw new ErreurEntrainement('refuse', 'Le service Mnemo s’arrête : aucune tâche ne démarre.');
 		if (tache !== null) throw new ErreurEntrainement('occupe', `Une tâche est déjà en cours (${OPERATIONS[tache.genre]}) : attends sa fin ou arrête-la.`);
-		rendreVerrou = verrouiller(OPERATIONS[genre]);
 		tache = { genre, fait: 0, total: 0, depuis: p.maintenant().toISOString() };
 		controle = new AbortController();
 		return () => {
@@ -241,11 +262,17 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 		changer();
 	};
 
-	/** Réserve, prépare (vérifications : en échec, la place est rendue), puis lance. */
+	/**
+	 * Réserve, prend le verrou du banc dans la file (après les écritures en cours, qui le tiennent un instant), vérifie (en échec,
+	 * place et verrou sont rendus), puis lance.
+	 */
 	const tacheVerifiee = async <C>(genre: GenreTache, verifier: () => Promise<C>, travail: (contexte: C, signal: AbortSignal) => Promise<void>): Promise<{ fin: Promise<void> }> => {
 		const liberer = reserver(genre);
 		let contexte: C;
 		try {
+			await enFile(() => {
+				rendreVerrou = verrouiller(OPERATIONS[genre]);
+			});
 			contexte = await verifier();
 		} catch (e) {
 			liberer();
@@ -259,8 +286,9 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 		return { niveau, etat, origine: origineDu(modele, etat), date: modele.apprisLe, verdict: verdictEnClair(etat), criteres: criteresEnClair(modele, etat), refus: [...modele.refus] };
 	};
 
-	const resultatDu = (r: RapportDApprentissage): ResultatApprentissage => ({
+	const resultatDu = ({ rapport: r, remplace }: DernierRapport): ResultatApprentissage => ({
 		date: r.date,
+		remplace,
 		messages: r.messages,
 		sessions: r.sessions,
 		niveaux: r.niveaux.map((n) => {
@@ -327,7 +355,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 			return tacheVerifiee(
 				'prejuger',
 				async () => {
-					const j = p.juge();
+					const j = p.juge({ frais: true });
 					if (!('juge' in j)) throw new ErreurEntrainement('refuse', j.raison);
 					return j.juge;
 				},
@@ -360,15 +388,19 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 					const date = p.maintenant().toISOString();
 					const rapport = await p.apprenti.apprendre(jeu, { date, echelle: p.note.echelle(), ...(o.implicites === undefined ? {} : { implicites: o.implicites }) }, signal);
 					if (signal.aborted) return;
-					const actuel = await p.note.modeles();
-					const remplace = o.remplacer?.(rapport, actuel) ?? true;
-					if (remplace) await p.note.ecrire(rapport.coefficients);
-					await p.note.ecrireRapport(rapport, remplace);
-					const installes = p.note.installes();
-					const echelle = p.note.echelle();
-					const verdicts = Object.fromEntries(NIVEAUX_DE_NOTE.map((n) => [n, etatDuModele(rapport.coefficients[n], n, installes, echelle)])) as Record<NiveauDeNote, EtatDuModele>;
-					const ligne: LigneHistorique = { date, origine: o.origine, verdicts, remplace };
-					await p.historique.ecrire([ligne, ...(await p.historique.lire())].slice(0, HISTORIQUE_MAX));
+					await enFileNote(async () => {
+						const actuel = await p.note.modeles();
+						// geste de l'utilisateur (manuel) : le nouveau modèle remplace toujours, même refusé ; « Revenir au modèle d'avant »
+						// rend l'ancien, et la ligne d'historique comme le résultat disent qu'il a été remplacé
+						const remplace = o.remplacer?.(rapport, actuel) ?? true;
+						if (remplace) await p.note.ecrire(rapport.coefficients);
+						await p.note.ecrireRapport(rapport, remplace);
+						const installes = p.note.installes();
+						const echelle = p.note.echelle();
+						const verdicts = Object.fromEntries(NIVEAUX_DE_NOTE.map((n) => [n, etatDuModele(rapport.coefficients[n], n, installes, echelle)])) as Record<NiveauDeNote, EtatDuModele>;
+						const ligne: LigneHistorique = { date, origine: o.origine, verdicts, remplace };
+						await p.historique.ecrire([ligne, ...(await p.historique.lire())].slice(0, HISTORIQUE_MAX));
+					});
 				},
 			);
 		},
@@ -379,10 +411,13 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 			return true;
 		},
 
-		async revenir() {
-			if (tache?.genre === 'apprendre') throw new ErreurEntrainement('occupe', 'Un apprentissage est en cours : attends sa fin ou arrête-le.');
-			if (!(await p.note.revenir())) throw new ErreurEntrainement('refuse', "Aucun modèle d'avant.");
-			changer();
+		revenir() {
+			// dans la file de la note : deux retours demandés ensemble ne s'entremêlent jamais, ni avec l'écriture d'un nouveau modèle
+			return enFileNote(async () => {
+				if (tache?.genre === 'apprendre') throw new ErreurEntrainement('occupe', 'Un apprentissage est en cours : attends sa fin ou arrête-le.');
+				if (!(await p.note.revenir())) throw new ErreurEntrainement('refuse', "Aucun modèle d'avant.");
+				changer();
+			});
 		},
 
 		async message(indice) {
@@ -452,9 +487,11 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 		},
 
 		async fermer() {
+			ferme = true;
 			controle?.abort();
 			await enCours;
 			await ecritures;
+			await ecrituresNote;
 		},
 	};
 }

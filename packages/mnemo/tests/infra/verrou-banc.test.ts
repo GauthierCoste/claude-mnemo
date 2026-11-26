@@ -39,6 +39,16 @@ describe('verrou du banc entre le service et le CLI (D7)', () => {
 		autre();
 	});
 
+	it("le service reprend le verrou « du service » d'un autre processus, même vivant (service d'avant mort, pid réutilisé) ; un verrou du CLI vivant, non", async () => {
+		const fichier = join(await dossierTemporaire(), 'banc-contexte.json');
+		writeFileSync(`${fichier}.verrou`, JSON.stringify({ pid: process.ppid, operation: 'apprendre la note', depuis: 'x', service: true }));
+		const rendre = prendreVerrouBanc(fichier, 'préparer des messages', { service: true });
+		expect(JSON.parse(readFileSync(`${fichier}.verrou`, 'utf8'))).toMatchObject({ pid: process.pid, operation: 'préparer des messages' });
+		rendre();
+		writeFileSync(`${fichier}.verrou`, JSON.stringify({ pid: process.ppid, operation: '--juger', depuis: 'x' }));
+		expect(() => prendreVerrouBanc(fichier, 'préparer des messages', { service: true })).toThrow(ErreurVerrouBanc);
+	});
+
 	it('le CLI qui trouve le verrou du service (autre pid vivant) refuse en nommant la tâche du service', async () => {
 		const fichier = join(await dossierTemporaire(), 'banc-contexte.json');
 		// un processus vivant (le parent de ce test) joue le service

@@ -3,7 +3,9 @@
  * note », D7). `--juger` ouvert pendant `--extraire` (ou l'inverse), ou pendant une tâche de la page Entraîner du service,
  * perdrait des réponses ; la seconde est refusée et le refus nomme celle qui le tient. Un verrou laissé par un processus mort
  * est repris ; un verrou du processus lui-même ne l'est que s'il ne le tient plus (laissé par un arrêt brutal, pid réutilisé) :
- * le service, qui en a plusieurs tâches, ne se le vole jamais.
+ * le service, qui en a plusieurs tâches, ne se le vole jamais. Le service reprend aussi un verrou « du service » d'un autre
+ * processus : il n'y a qu'un service par dossier (`service.verrou`), celui-là est mort, même si son pid a été réutilisé par un
+ * autre programme (sans quoi le fichier resterait refusé à tous jusqu'à ce qu'on retire le verrou à la main).
  */
 import { closeSync, openSync, readFileSync, unlinkSync, writeSync } from 'node:fs';
 
@@ -90,7 +92,9 @@ export function prendreVerrouBanc(fichier: string, operation: string, options: {
 			if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
 			const tenant = lireTenant(chemin);
 			if (tenant !== null && tenant.pid !== null) {
-				const autreVivant = tenant.pid !== process.pid && vivant(tenant.pid);
+				// un verrou du service d'un autre processus, vu par le service : celui d'un service d'avant, mort
+				const serviceMort = options.service === true && tenant.service && tenant.pid !== process.pid;
+				const autreVivant = tenant.pid !== process.pid && !serviceMort && vivant(tenant.pid);
 				const ici = tenant.pid === process.pid && tenus.has(chemin);
 				if (autreVivant || ici) throw new ErreurVerrouBanc(motifDuRefus(tenant, operation), tenant);
 			}

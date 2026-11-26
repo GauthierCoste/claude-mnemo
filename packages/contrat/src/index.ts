@@ -1025,9 +1025,14 @@ export type TacheEntrainementVue = { genre: 'preparer' | 'prejuger' | 'apprendre
 export type LigneHistoriqueVue = { date: string; origine: 'manuel' | 'automatique'; verdicts: Record<NiveauNoteVue, EtatNoteVue>; remplace: boolean };
 /** Une tranche de la table de fiabilité : notes de `de` à `a`, `paires`, note moyenne `pMoyen`, part réellement utile `frequence`. */
 export type TrancheFiabiliteVue = { de: number; a: number; paires: number; pMoyen: number; frequence: number };
-/** Le dernier apprentissage (rapport) : par niveau, le verdict, les critères manqués en clair et la table de fiabilité. */
+/**
+ * Le dernier apprentissage (rapport) : `remplace` (son modèle a remplacé le modèle d'alors, même refusé quand l'apprentissage
+ * est demandé à la main ; faux : l'ancien est gardé), puis par niveau le verdict, les critères manqués en clair et la table de
+ * fiabilité.
+ */
 export type ResultatApprentissageVue = {
 	date: string;
+	remplace: boolean;
 	messages: number;
 	sessions: number;
 	niveaux: { niveau: NiveauNoteVue; accepte: boolean; verdict: string; criteres: string[]; refus: string[]; paires: number; fiabilite: TrancheFiabiliteVue[] }[];

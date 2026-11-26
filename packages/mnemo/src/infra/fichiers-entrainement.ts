@@ -4,12 +4,13 @@
  * (`coefficients-note.avant.json` ; `{ "aucun": true }` : il n'y avait pas de fichier, le module livré valait) ; le rapport du
  * dernier essai (`apprentissage-note.json` et `.txt`) ; l'historique des apprentissages (`entrainements.json`, 10 lignes).
  * Écritures entières (fichier voisin puis renommage) : le service, qui relit les coefficients quand ils changent, ne lit jamais
- * un fichier à moitié écrit.
+ * un fichier à moitié écrit, ni ne les trouve absents pendant un retour au modèle d'avant.
  */
-import { copyFile, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { RapportDApprentissage } from '../application/apprendre-note.ts';
-import type { FichierDuBanc, HistoriqueDesApprentissages, LigneHistorique } from '../application/entrainement.ts';
+import type { CasContexte } from '../application/banc-contexte.ts';
+import type { DernierRapport, FichierDuBanc, HistoriqueDesApprentissages, LigneHistorique } from '../application/entrainement.ts';
 import { rapportEnTexte } from '../application/rapport-apprentissage.ts';
 import { DOSSIER_LOCAL } from '../domaine/dossier-memoire.ts';
 import { jsonDeCoefficients, NIVEAUX_DE_NOTE } from '../domaine/modele-de-note.ts';
@@ -61,11 +62,34 @@ const estAucun = (texte: string): boolean => {
 const niveauLisible = (n: unknown): boolean =>
 	estObjet(n) && typeof n['niveau'] === 'string' && Array.isArray(n['fiabilite']) && estObjet(n['modele']) && Array.isArray(n['modele']['refus']) && typeof n['modele']['accepte'] === 'boolean' && estObjet(n['modele']['poids']);
 
-/** Le fichier des jugements de la mémoire, son verrou pris au nom du service. */
+/**
+ * Le fichier des jugements de la mémoire, son verrou pris au nom du service. Relu (plusieurs mégaoctets d'analyse sur le fil du
+ * service) seulement s'il a changé : même inode, date et taille, les cas déjà lus sont rendus (partagés : jamais modifiés,
+ * l'entraînement n'écrit que des copies). Toute écriture, ici ou par le CLI, remplace le fichier par renommage : nouvel inode.
+ */
 export function bancDuService(racine: string): FichierDuBanc {
 	const fichier = fichierBancContexte(racine);
+	let lu: { cle: string; cas: Promise<CasContexte[]> } | null = null;
 	return {
-		lire: () => lireCasDuFichier(fichier),
+		async lire() {
+			let cle: string;
+			try {
+				const s = await stat(fichier, { bigint: true });
+				cle = `${s.ino}:${s.mtimeNs}:${s.size}`;
+			} catch (e) {
+				if ((e as NodeJS.ErrnoException).code === 'ENOENT') return [];
+				throw e;
+			}
+			if (lu?.cle !== cle) {
+				const cas = lireCasDuFichier(fichier);
+				lu = { cle, cas };
+				// une lecture en échec n'est pas gardée
+				cas.catch(() => {
+					if (lu?.cas === cas) lu = null;
+				});
+			}
+			return lu.cas;
+		},
 		ecrire: (cas) => enregistrerCas(fichier, cas),
 		verrouiller: (operation) => prendreVerrouBanc(fichier, operation, { service: true }),
 	};
@@ -76,42 +100,56 @@ export function fichiersDeLaNote(racine: string) {
 	const courant = fichierDesCoefficients(racine);
 	const avant = fichierAvant(racine);
 	return {
-		/** Garde le modèle actuel comme modèle d'avant, puis écrit les nouveaux coefficients. */
+		/** Garde le modèle actuel comme modèle d'avant (écrit entier), puis écrit les nouveaux coefficients. */
 		async ecrire(coefficients: CoefficientsNote): Promise<void> {
-			if (await existe(courant)) await copyFile(courant, avant);
-			else await ecrireEntier(avant, AUCUN);
+			await ecrireEntier(avant, (await lireOuNull(courant)) ?? AUCUN);
 			await ecrireEntier(courant, jsonDeCoefficients(coefficients));
 		},
+		/** Le rapport (JSON, avec `remplace`) et son texte, qui dit si le modèle a été écrit ou si l'actuel est gardé. */
 		async ecrireRapport(rapport: RapportDApprentissage, remplace: boolean): Promise<void> {
-			await ecrireEntier(fichierRapport(racine, 'json'), `${JSON.stringify(rapport, null, 2)}\n`);
+			await ecrireEntier(fichierRapport(racine, 'json'), `${JSON.stringify({ ...rapport, remplace }, null, 2)}\n`);
 			await ecrireEntier(fichierRapport(racine, 'txt'), `${rapportEnTexte(rapport, remplace ? [courant] : [])}\n`);
 		},
-		avant: () => existe(avant),
-		/** Échange le modèle et le modèle d'avant ; faux : aucun modèle d'avant. */
+		/** Un modèle d'avant à rendre : le marqueur « aucun » n'en est un que s'il y a un modèle à retirer. */
+		async avant(): Promise<boolean> {
+			const texteAvant = await lireOuNull(avant);
+			return texteAvant !== null && (!estAucun(texteAvant) || (await existe(courant)));
+		},
+		/**
+		 * Échange le modèle et le modèle d'avant ; faux : aucun modèle d'avant. Le modèle d'avant prend la place de l'actuel d'un
+		 * seul renommage (le fichier des coefficients n'est jamais absent un instant) ; l'actuel, écrit à côté avant, devient le
+		 * modèle d'avant.
+		 */
 		async revenir(): Promise<boolean> {
 			const texteAvant = await lireOuNull(avant);
 			if (texteAvant === null) return false;
-			const courantExiste = await existe(courant);
+			const texteCourant = await lireOuNull(courant);
 			if (estAucun(texteAvant)) {
 				// avant, aucun fichier : l'actuel devient le modèle d'avant, le module livré revaut
-				if (!courantExiste) return false;
+				if (texteCourant === null) return false;
 				await rename(courant, avant);
 				return true;
 			}
-			const echange = `${courant}.${process.pid}.echange`;
-			if (courantExiste) await rename(courant, echange);
-			await rename(avant, courant);
-			if (courantExiste) await rename(echange, avant);
-			else await ecrireEntier(avant, AUCUN);
+			const echange = `${avant}.${process.pid}.echange`;
+			await ecrireEntier(echange, texteCourant ?? AUCUN);
+			try {
+				await rename(avant, courant);
+			} catch (erreur) {
+				await rm(echange, { force: true }).catch(() => {});
+				throw erreur;
+			}
+			await rename(echange, avant);
 			return true;
 		},
-		/** Le dernier rapport (null : aucun, ou illisible). */
-		async rapport(): Promise<RapportDApprentissage | null> {
+		/** Le dernier rapport et s'il a remplacé le modèle d'alors (null : aucun, ou illisible ; sans `remplace`, d'avant : vrai). */
+		async rapport(): Promise<DernierRapport | null> {
 			const texte = await lireOuNull(fichierRapport(racine, 'json')).catch(() => null);
 			if (texte === null) return null;
 			try {
 				const r: unknown = JSON.parse(texte);
-				return estObjet(r) && typeof r['date'] === 'string' && Array.isArray(r['niveaux']) && r['niveaux'].every(niveauLisible) ? (r as RapportDApprentissage) : null;
+				if (!(estObjet(r) && typeof r['date'] === 'string' && Array.isArray(r['niveaux']) && r['niveaux'].every(niveauLisible))) return null;
+				const { remplace, ...rapport } = r;
+				return { rapport: rapport as RapportDApprentissage, remplace: remplace !== false };
 			} catch {
 				return null;
 			}

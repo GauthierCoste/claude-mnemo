@@ -1,7 +1,8 @@
 /**
  * L'entraînement de la note de confiance dans le service (page Mémoire › Entraîner ; spec « entraîner la note », § Service) :
- * les ports de `application/entrainement.ts` branchés sur le service (modèles déjà chargés, reranker en arrière-plan, niveau
- * des modèles respecté, gestes de l'état des sessions, juge Claude s'il est trouvé, apprentissage dans un fil à part), ses
+ * les ports de `application/entrainement.ts` branchés sur le service (modèles déjà chargés, reranker en arrière-plan et par
+ * morceaux, niveau des modèles respecté, gestes de l'état des sessions, juge Claude s'il est trouvé (recherche gardée 30 s :
+ * l'état est relu jusqu'à quatre fois par seconde), apprentissage dans un fil à part), ses
  * routes, et la diffusion de son état (`{ type: 'entrainement' }`) à chaque changement, au plus quatre fois par seconde.
  */
 import { join } from 'node:path';
@@ -14,7 +15,9 @@ import type { GestesDuBanc } from '../../application/banc-signaux.ts';
 import { creerEntrainement, ErreurEntrainement, PREPARER_MAX } from '../../application/entrainement.ts';
 import type { Entrainement, PortsEntrainement } from '../../application/entrainement.ts';
 import type { DureeDuReranker } from '../../application/duree-reranker.ts';
+import { MORCEAU_AFFINAGE } from '../../application/affiner.ts';
 import { modelesActifs } from '../../application/note-du-classement.ts';
+import { rerankerParMorceaux } from '../../application/reranker-par-morceaux.ts';
 import type { Dependances, EtatSessions, Modeles, Pilotage, Reranker, Sens } from '../../application/ports.ts';
 import { modelesSuivis } from '../../application/suivi-injection.ts';
 import type { SuiviDesInjections } from '../../application/suivi-injection.ts';
@@ -33,6 +36,9 @@ import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts
 import { ErreurHttp } from './routes.ts';
 import type { Reponse, Route } from './routes.ts';
 
+/** Durée pendant laquelle la recherche de Claude Code (fichiers du PATH, lus de façon synchrone) est gardée. */
+export const JUGE_GARDE_MS = 30_000;
+
 export const CLAUDE_INTROUVABLE = 'Claude Code introuvable (commande claude absente du PATH, ou MNEMO_CLAUDE) : le pré-jugement par Claude n’est pas disponible.';
 
 /** Ce que le service donne à l'entraînement. */
@@ -47,7 +53,10 @@ export type ServicePourEntrainement = {
 };
 
 /** Ports remplacés (tests) : jamais de vrai juge, de vrai fil ni de vrais modèles dans les essais du service. */
-export type RemplacementsEntrainement = Partial<Pick<PortsEntrainement, 'juge' | 'apprenti' | 'extraire' | 'journal' | 'maintenant'>>;
+export type RemplacementsEntrainement = Partial<Pick<PortsEntrainement, 'juge' | 'apprenti' | 'extraire' | 'journal' | 'maintenant'>> & {
+	/** Cherche Claude Code (par défaut `trouverClaude` dans l'environnement du service). */
+	trouverClaude?: () => ReturnType<typeof trouverClaude>;
+};
 
 const SENS_ABSENT: Sens = { modele: () => null, vecteurs: async () => null };
 const RERANKER_ABSENT: Reranker = { noter: async () => null };
@@ -69,6 +78,9 @@ export function entrainementDuService(s: ServicePourEntrainement, remplacements:
 	const { racine, dep, pil } = s;
 	const fichiers = fichiersDeLaNote(racine);
 	const installes = () => dep.note?.().installes ?? ggufInstalles();
+	const { trouverClaude: chercherClaude = () => trouverClaude(pil.hote.env, pil.hote.plateforme as NodeJS.Platform), ...remplaces } = remplacements;
+	// la recherche de Claude Code, gardée JUGE_GARDE_MS (refaite avant de pré-juger)
+	let juge: { valeur: ReturnType<PortsEntrainement['juge']>; ms: number } | null = null;
 	const ports: PortsEntrainement = {
 		banc: bancDuService(racine),
 		// le journal lu sans migration ni écriture, comme le banc le lit (une lecture à part de la base du service)
@@ -83,7 +95,9 @@ export function entrainementDuService(s: ServicePourEntrainement, remplacements:
 		// les modèles du service, au niveau de la machine ; le reranker en arrière-plan : un hook n'attend jamais la préparation
 		extraire: async (messages, o) => {
 			const permis = modelesPermis((await s.modeles.etat()).niveau);
-			const reranker = !permis.reranker ? RERANKER_ABSENT : s.dureeReranker === undefined ? dep.reranker : s.dureeReranker.envelopper(dep.reranker, { arrierePlan: true });
+			// par morceaux : un hook qui arrive n'attend jamais plus d'un morceau au serveur du reranker
+			const enMorceaux = rerankerParMorceaux(dep.reranker, MORCEAU_AFFINAGE);
+			const reranker = !permis.reranker ? RERANKER_ABSENT : s.dureeReranker === undefined ? enMorceaux : s.dureeReranker.envelopper(enMorceaux, { arrierePlan: true });
 			const d: Dependances = { ...dep, sens: permis.sens ? dep.sens : SENS_ABSENT, reranker };
 			return extraireJugements(d, messages, {
 				requeteJointe,
@@ -99,9 +113,13 @@ export function entrainementDuService(s: ServicePourEntrainement, remplacements:
 			if (chemins.length === 0) return new Map();
 			return new Map((await dep.index.elements({ genres: ['fiche'], chemins: [...chemins] })).map((e) => [e.chemin, syntheseDe(e)]));
 		},
-		juge: () => {
-			const claude = trouverClaude(pil.hote.env, pil.hote.plateforme as NodeJS.Platform);
-			return claude === null ? { raison: CLAUDE_INTROUVABLE } : { juge: jugeClaude({ executer: executeurReel(), claude, env: pil.hote.env }) };
+		juge: (o) => {
+			const ms = Date.now();
+			if (juge === null || o?.frais === true || ms - juge.ms >= JUGE_GARDE_MS) {
+				const claude = chercherClaude();
+				juge = { valeur: claude === null ? { raison: CLAUDE_INTROUVABLE } : { juge: jugeClaude({ executer: executeurReel(), claude, env: pil.hote.env }) }, ms };
+			}
+			return juge.valeur;
 		},
 		note: {
 			...fichiers,
@@ -114,7 +132,7 @@ export function entrainementDuService(s: ServicePourEntrainement, remplacements:
 		historique: historiqueDuDossier(racine),
 		maintenant: () => dep.systeme.maintenant(),
 		surChangement: s.surChangement,
-		...remplacements,
+		...remplaces,
 	};
 	return creerEntrainement(ports);
 }

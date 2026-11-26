@@ -75,6 +75,20 @@ describe('routes de l’entraînement de la note', () => {
 		expect(etat.historique).toEqual([]);
 	});
 
+	it('Claude Code est cherché une fois pour plusieurs lectures de l’état (gardé 30 s), et de nouveau avant de pré-juger', async () => {
+		let recherches = 0;
+		const c = await avecBanc([unCas('m', ['a.md'])], {
+			trouverClaude: () => {
+				recherches++;
+				return null;
+			},
+		});
+		for (let i = 0; i < 5; i++) expect((await api(c).get(ROUTES.entrainement)).statut).toBe(200);
+		expect(recherches).toBe(1);
+		expect((await api(c).post(ROUTES.entrainementPrejuger)).statut).toBe(409);
+		expect(recherches).toBe(2);
+	});
+
 	it('corps invalides : 400', async () => {
 		const c = await avecBanc([unCas('m', ['a.md'])]);
 		for (const corps of [{ nombre: 0 }, { nombre: 201 }, { nombre: 'dix' }, { nombre: 1.5 }, { autre: 1 }, []]) expect((await api(c).post(ROUTES.entrainementPreparer, corps)).statut).toBe(400);

@@ -18,7 +18,7 @@ function mesuresEnTexte(m: MesuresDAcceptation): string {
 		`bootstrap 2,5 % ${pourcent(m.bootstrapP025)}`,
 		`pente ${nombre(m.pente)} (ordonnée ${nombre(m.ordonnee)})`,
 		`ECE ${nombre(m.ece, 3)}`,
-		`silences servis ${m.silencesAvecInjection} / ${m.silences} (${m.sessionsSilence} sessions)`,
+		`silences avec injection ${m.silencesAvecInjection} / ${m.silences} (${m.sessionsSilence} sessions)`,
 		`rappel ${pourcent(m.rappel)}, atteintes ${pourcent(m.utilesAtteintes)}, 10 premières ${pourcent(m.rappel10)}`,
 	].join(', ');
 }
@@ -54,6 +54,6 @@ export function rapportEnTexte(r: RapportDApprentissage, ecrits: readonly string
 		}
 		lignes.push(`  fiabilité : ${n.fiabilite.filter((t) => t.paires > 0).map((t) => `[${pourcent(t.de)} ; ${pourcent(t.a)}[ ${t.paires} paires, p ${pourcent(t.pMoyen)}, observé ${pourcent(t.frequence)}`).join(' · ')}`);
 	}
-	lignes.push('', `Écrits : ${ecrits.join(', ')}`);
+	lignes.push('', ecrits.length === 0 ? 'Modèle non écrit : le modèle actuel est gardé.' : `Écrits : ${ecrits.join(', ')}`);
 	return lignes.join('\n');
 }
