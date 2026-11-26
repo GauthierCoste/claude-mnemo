@@ -5,6 +5,7 @@
  * tableau des capacités prend noms, symboles et caractère toujours actif dans `profils/hooks.ts` ; ce fichier n'en donne que
  * l'effet, par hook.
  */
+import { DOSSIERS_FIXES, PROFIL_ARCHIVISTE } from '@mnemo/commun';
 import type { EvenementHookVue } from '@mnemo/contrat';
 
 export type BlocDoc =
@@ -63,12 +64,12 @@ export const SECTIONS_DOC: readonly SectionDoc[] = [
 			{
 				genre: 'definitions',
 				termes: [
-					['Fiche', '`_mnemo/profils/<nom>/<nom>.md`.'],
+					['Fiche', `\`_mnemo/${DOSSIERS_FIXES.profils}/<nom>/<nom>.md\`.`],
 					['Classe', 'moteur et modèle ; moteur non lié verrouillé.'],
 					['Mission', 'consigne ajoutée aux instructions système.'],
 					[
 						'Skills',
-						'`_mnemo/skills/<nom>/SKILL.md` et `_mnemo/profils/<nom>/skills/` (prioritaire) ; chargées selon `description` ; icône : `metadata.icone`.',
+						`\`_mnemo/${DOSSIERS_FIXES.skills}/<nom>/SKILL.md\` et \`_mnemo/${DOSSIERS_FIXES.profils}/<nom>/${DOSSIERS_FIXES.skills}/\` (prioritaire) ; chargées selon \`description\` ; icône : \`metadata.icone\`.`,
 					],
 					['Skill fournie', 'de l’archiviste : modifiable, rétablissable ; ni renommée ni supprimée.'],
 					['Plugins', 'Claude Code : cochés activés, autres désactivés.'],
@@ -181,9 +182,9 @@ export const SECTIONS_DOC: readonly SectionDoc[] = [
 			{
 				genre: 'definitions',
 				termes: [
-					['Profil', '`archiviste`, Claude Code, dans `_mnemo/` (racine en `--add-dir`).'],
+					['Profil', `\`${PROFIL_ARCHIVISTE}\`, Claude Code, dans \`_mnemo/\` (racine en \`--add-dir\`).`],
 					['Rôle', 'sources (`extraire_source`), ménage (`diagnostiquer`, `entretenir`, `deplacer`).'],
-					['Skills', '`_mnemo/profils/archiviste/skills/` : `emails`, `specs`, `comptes-rendus`, `menage`.'],
+					['Skills', `\`_mnemo/${DOSSIERS_FIXES.profils}/${PROFIL_ARCHIVISTE}/${DOSSIERS_FIXES.skills}/\` : \`emails\`, \`specs\`, \`comptes-rendus\`, \`menage\`.`],
 					['Sans confirmation', 'types allumés (Réglages › Mémoire › Confiance).'],
 					['À arbitrer', 'faits à confirmer, montées, lots (`proposer_lot`).'],
 				],
