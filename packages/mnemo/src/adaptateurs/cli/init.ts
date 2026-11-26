@@ -229,10 +229,14 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 				return message;
 			});
 		} else {
-			sansDeclaration =
-				q === null
-					? `Serveur MCP non déclaré (ni terminal ni --oui) : relancez « mnemo init --oui », ou lancez vous-même : ${commandeManuelle(nodeDurable(), MAIN, process.platform)}`
-					: 'Serveur MCP non déclaré ; plus tard : mnemo init (dans ce dossier).';
+			// sous Windows, pas de commande « mnemo » à relancer : seule la commande de Claude Code est donnée
+			const manuel = commandeManuelle(nodeDurable(plateforme), MAIN, plateforme);
+			if (plateforme === 'win32') sansDeclaration = `Serveur MCP non déclaré : lancez vous-même : ${manuel}`;
+			else
+				sansDeclaration =
+					q === null
+						? `Serveur MCP non déclaré (ni terminal ni --oui) : relancez « mnemo init --oui », ou lancez vous-même : ${manuel}`
+						: 'Serveur MCP non déclaré ; plus tard : mnemo init (dans ce dossier).';
 			j.evenement('mcp', 'saute', sansDeclaration);
 		}
 		for (const ligne of messagesInit(racine, resultat, declaration)) ecrire(ligne);

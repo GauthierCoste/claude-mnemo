@@ -227,6 +227,21 @@ describe('mnemo init : déclaration MCP', () => {
 		expect(sortie.texte()).toContain('claude mcp add --scope user mnemo');
 	});
 
+	it('sous Windows, non déclarée : seule la commande de Claude Code est donnée (pas de commande « mnemo » à relancer)', async () => {
+		avecMcpFactice();
+		for (const interactif of [false, true]) {
+			const racine = await dossierTemporaire();
+			const sortie = capture();
+			const entree = new PassThrough();
+			entree.end('n\nn\n');
+			const a = actions();
+			await commandeInit([racine, '--sans-lanceur'], { entree, sortie: sortie.flux, interactif, plateforme: 'win32', actions: a });
+			expect(a.declarerMcp).not.toHaveBeenCalled();
+			expect(sortie.texte()).toContain('Serveur MCP non déclaré : lancez vous-même : claude mcp add --scope user mnemo -- ');
+			expect(sortie.texte()).not.toMatch(/mnemo init/u);
+		}
+	});
+
 	it('mémoire existante, dans un terminal : la déclaration est demandée ; « n » : non déclarée', async () => {
 		const racine = await dossierTemporaire();
 		await commandeInit([racine, '--oui', '--sans-mcp'], { sortie: capture().flux, interactif: false, plateforme: 'linux', actions: actions() });
