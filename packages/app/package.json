@@ -1,0 +1,24 @@
+{
+  "name": "@mnemo/app",
+  "version": "1.7.2",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "construire": "vite build && vite build -c vite.assistant.config.ts && vite build -c vite.preload.config.ts",
+    "test": "vitest run",
+    "verifier": "tsc --noEmit && tsc --noEmit -p src/assistant"
+  },
+  "dependencies": {
+    "@mnemo/commun": "workspace:*",
+    "@mnemo/contrat": "workspace:*",
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "@types/ws": "^8.18.2",
+    "electron": "45.4.1",
+    "tar": "^7.5.23",
+    "vite": "^7.0.0"
+  }
+}

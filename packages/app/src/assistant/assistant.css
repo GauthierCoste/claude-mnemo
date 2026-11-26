@@ -1,0 +1,447 @@
+/*
+ * Page de l'assistant : les jetons de l'interface (couleurs, rayons, espacements, sombre comme elle), importés à la
+ * construction ; ici aucune couleur en clair. La fenêtre est l'app : pas de marge autour, la barre de titre est la poignée
+ * de la fenêtre, 78 px laissés à gauche aux boutons de macOS (`titleBarStyle: 'hiddenInset'`).
+ */
+@import '../../../ui/src/styles/jetons.css';
+
+:root {
+	color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	display: flex;
+	flex-direction: column;
+	background: var(--fond-page);
+	color: var(--tx);
+	font: 13px/1.5 var(--sans);
+	-webkit-font-smoothing: antialiased;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+button,
+input {
+	font: inherit;
+	color: inherit;
+}
+
+:focus-visible {
+	outline: 2px solid var(--ac);
+	outline-offset: 2px;
+}
+
+code {
+	font: 12px var(--mono);
+	color: var(--texte-reponse);
+	-webkit-user-select: text;
+	user-select: text;
+	overflow-wrap: anywhere;
+}
+
+/* --- Barre de titre : poignée de la fenêtre --- */
+
+.titre {
+	height: 44px;
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: var(--esp-4);
+	padding: 0 var(--esp-4) 0 78px;
+	border-bottom: 1px solid var(--bd);
+	background: var(--degrade-titre);
+	-webkit-app-region: drag;
+	app-region: drag;
+}
+
+.marque {
+	font-weight: 600;
+	color: var(--vert);
+}
+
+.fil {
+	display: flex;
+	gap: var(--esp-2);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: 12px;
+	color: var(--dim);
+}
+
+.fil li + li::before {
+	content: '›';
+	margin-right: var(--esp-2);
+	color: var(--dim);
+}
+
+.fil .passee {
+	color: var(--mu);
+}
+
+.fil .courante {
+	color: var(--tx);
+}
+
+/* --- Contenu --- */
+
+.contenu {
+	flex: 1;
+	overflow-y: auto;
+	padding: 36px var(--esp-5) var(--esp-5);
+}
+
+.contenu > section {
+	max-width: 560px;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-4);
+}
+
+h1 {
+	margin: 0;
+	font-size: 20px;
+	font-weight: 600;
+}
+
+.intro,
+.attente {
+	margin: 0;
+	color: var(--mu);
+}
+
+.erreur,
+.avertissement {
+	margin: 0;
+	padding: var(--esp-3) var(--esp-4);
+	border-radius: var(--r-2);
+	-webkit-user-select: text;
+	user-select: text;
+}
+
+.erreur {
+	border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+	background: color-mix(in srgb, var(--red) 8%, transparent);
+	color: var(--red);
+}
+
+.avertissement {
+	border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+	background: color-mix(in srgb, var(--amber) 8%, transparent);
+	color: var(--amber);
+}
+
+a {
+	color: var(--blue);
+}
+
+.actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--esp-2);
+	margin-top: var(--esp-2);
+}
+
+/* Boutons de l'interface (composants/commun/Bouton.module.css). */
+.bouton {
+	background: var(--s3);
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-2);
+	padding: 6px 13px;
+	cursor: pointer;
+}
+
+.bouton:hover {
+	border-color: var(--ac);
+}
+
+.bouton:disabled {
+	cursor: default;
+	opacity: 0.55;
+	border-color: var(--bd2);
+}
+
+.bouton.primaire {
+	background: var(--ac);
+	border-color: var(--ac);
+	color: var(--sur-accent);
+	font-weight: 600;
+}
+
+.bouton.primaire:disabled {
+	background: var(--s3);
+	border-color: var(--bd2);
+	color: var(--mu);
+	opacity: 1;
+}
+
+/* --- Vérifications --- */
+
+.verifs,
+.etapes,
+.pieces {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.verifs,
+.etapes {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--bd);
+	border-radius: var(--r-3);
+	background: var(--s1);
+}
+
+.verif {
+	display: grid;
+	grid-template-columns: 10px 110px 1fr;
+	align-items: baseline;
+	column-gap: var(--esp-3);
+	padding: var(--esp-3) var(--esp-4);
+}
+
+.verif + .verif,
+.etape + .etape {
+	border-top: 1px solid var(--bd);
+}
+
+.verif .puce {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	align-self: center;
+	background: var(--vert);
+}
+
+.verif.manque .puce {
+	background: var(--red);
+}
+
+.verif .detail {
+	color: var(--mu);
+	font: 12px var(--mono);
+	overflow-wrap: anywhere;
+}
+
+.verif .aide {
+	grid-column: 2 / -1;
+	margin-top: var(--esp-1);
+	color: var(--mu);
+}
+
+/* --- Dossier --- */
+
+.dossier {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--esp-3);
+	padding: var(--esp-4);
+	border: 1px solid var(--bd);
+	border-radius: var(--r-3);
+	background: var(--s1);
+}
+
+.dossier .chemin {
+	flex: 1 1 100%;
+}
+
+.dossier .vide {
+	flex: 1;
+	color: var(--dim);
+}
+
+.dossier .bouton {
+	margin-left: auto;
+}
+
+.pastille {
+	font-size: 11px;
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-pastille);
+	padding: 1px 9px;
+	color: var(--mu);
+}
+
+.pastille.existante {
+	border-color: color-mix(in srgb, var(--vert) 40%, transparent);
+	color: var(--vert);
+}
+
+/* --- Choix --- */
+
+.choix {
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-2);
+}
+
+.case {
+	display: flex;
+	gap: var(--esp-3);
+	align-items: flex-start;
+	padding: var(--esp-3) var(--esp-4);
+	border: 1px solid var(--bd);
+	border-radius: var(--r-3);
+	background: var(--s1);
+	cursor: pointer;
+}
+
+.case:hover {
+	border-color: var(--bd2);
+}
+
+.case input {
+	margin: 3px 0 0;
+	accent-color: var(--ac);
+}
+
+.texte {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.titre-case {
+	font-weight: 500;
+}
+
+.texte .detail {
+	color: var(--mu);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+
+/* --- Installation --- */
+
+.etape {
+	display: grid;
+	grid-template-columns: 18px 1fr;
+	column-gap: var(--esp-3);
+	padding: var(--esp-3) var(--esp-4);
+}
+
+.etape .symbole {
+	display: grid;
+	place-items: center;
+	width: 18px;
+	height: 18px;
+	margin-top: 1px;
+	border-radius: 50%;
+	border: 1px solid var(--bd2);
+	font-size: 11px;
+	line-height: 1;
+}
+
+.etape.attente {
+	color: var(--dim);
+}
+
+.etape.debut .symbole {
+	border-color: var(--ac);
+	border-right-color: transparent;
+	animation: tourner 0.9s linear infinite;
+}
+
+.etape.fait .symbole {
+	border-color: var(--vert);
+	color: var(--vert);
+}
+
+.etape.saute .symbole,
+.etape.laisse .symbole {
+	color: var(--dim);
+}
+
+.etape.saute .titre-case,
+.etape.laisse .titre-case {
+	color: var(--mu);
+}
+
+.etape.echec .symbole {
+	border-color: var(--red);
+	color: var(--red);
+}
+
+.etape.echec .detail {
+	color: var(--red);
+}
+
+.pieces {
+	grid-column: 2;
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-2);
+	margin-top: var(--esp-3);
+}
+
+.piece {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	row-gap: var(--esp-1);
+	font-size: 12px;
+}
+
+.piece progress {
+	grid-column: 1 / -1;
+	grid-row: 2;
+	width: 100%;
+	height: 6px;
+	appearance: none;
+	border: 0;
+	border-radius: 3px;
+	overflow: hidden;
+	background: var(--s3);
+}
+
+.piece progress::-webkit-progress-bar {
+	background: var(--s3);
+}
+
+.piece progress::-webkit-progress-value {
+	background: var(--ac);
+}
+
+.piece progress:indeterminate {
+	background: linear-gradient(90deg, var(--s3) 0%, color-mix(in srgb, var(--ac) 50%, transparent) 50%, var(--s3) 100%) 0 0 / 200% 100%;
+	animation: defiler 1.4s linear infinite;
+}
+
+.piece .taille {
+	color: var(--mu);
+	font: 11px var(--mono);
+}
+
+@keyframes tourner {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@keyframes defiler {
+	to {
+		background-position: -200% 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.etape.debut .symbole,
+	.piece progress:indeterminate {
+		animation: none;
+	}
+}

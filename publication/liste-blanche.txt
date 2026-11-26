@@ -37,6 +37,9 @@ packages/mnemo/modeles/**
 packages/ui/index.html
 packages/ui/public/**
 packages/ui/outils/**
+packages/app/vite.*.config.ts
+packages/app/outils/**
+packages/app/ressources/**
 
 # Documentation destinée aux utilisateurs (en anglais)
 docs/installation.md
@@ -45,6 +48,7 @@ docs/format-coffre.md
 docs/coming-next.md
 docs/references/**
 docs/images/**
+docs/app/**
 
 # Documents de conception et notes de travail : locaux, ignorés par git (.gitignore), jamais publiés (exclus
 # explicitement, même si un motif plus large venait à les couvrir).
