@@ -65,6 +65,9 @@ const PERMIS = new Set([
 	'composants/reglages/agents/Agents.module.css .case',
 	'composants/reglages/agents/Agents.module.css .rune',
 	'composants/reglages/agents/EditeurSkill.module.css .icone',
+	// Documentation : la flèche entre deux étapes du schéma (tournée d'un quart quand il s'empile), la rune dans son rond
+	'composants/reglages/documentation/Documentation.module.css .fleche',
+	'composants/reglages/documentation/Documentation.module.css .rune',
 ]);
 
 function trouves(): Map<string, string[]> {

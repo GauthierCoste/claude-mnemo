@@ -7,6 +7,10 @@ import type { Client } from '../../src/client/contexte.tsx';
 import { creerClientDemo } from '../../src/client/demo.ts';
 import { Application } from '../../src/composants/Application.tsx';
 
+// Les terminaux de la vue Sessions (restée montée) : huit xterm injecteraient ~440 Ko de CSS et réécriraient le DOM en
+// continu ; chaque requête par rôle recalculerait alors les styles (50 à 150 ms l'une). Un simple champ les remplace.
+vi.mock('../../src/terminal/Terminal.tsx', () => ({ Terminal: (p: { session: string }) => <textarea aria-label={`terminal ${p.session}`} readOnly /> }));
+
 afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
@@ -20,12 +24,16 @@ async function ouvrirReglages(client: Client = creerClientDemo()) {
 	return screen.findByRole('navigation', { name: 'Agents' });
 }
 
-/** Réglages › Branchements de la démo (la section par défaut de l'onglet Réglages) : le groupe Moteurs, une fois les lignes affichées. */
+/**
+ * Réglages › Branchements de la démo (la section par défaut de l'onglet Réglages) : le groupe Moteurs, une fois les lignes
+ * affichées et la vérification du poste terminée (pendant, « Lier à Mnemo » est indisponible).
+ */
 async function ouvrirMoteurs(client: Client = creerClientDemo()): Promise<HTMLElement> {
 	await ouvrirReglages(client);
 	await act(async () => screen.getByRole('tab', { name: 'Réglages' }).click());
 	const section = await screen.findByRole('region', { name: 'Moteurs' });
 	await within(section).findByRole('listitem', { name: 'Mistral Vibe' });
+	await waitFor(() => expect(section.getAttribute('aria-busy')).not.toBe('true'));
 	return section;
 }
 

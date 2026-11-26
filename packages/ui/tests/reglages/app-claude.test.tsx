@@ -7,6 +7,10 @@ import { Application } from '../../src/composants/Application.tsx';
 import { creerFauxClient } from '../aides/faux-client.tsx';
 import { stockage } from '../aides/stockage.ts';
 
+// Les terminaux de la vue Sessions (restée montée) : huit xterm injecteraient ~440 Ko de CSS et réécriraient le DOM en
+// continu ; chaque requête par rôle recalculerait alors les styles (50 à 150 ms l'une). Un simple champ les remplace.
+vi.mock('../../src/terminal/Terminal.tsx', () => ({ Terminal: (p: { session: string }) => <textarea aria-label={`terminal ${p.session}`} readOnly /> }));
+
 let stocke = new Map<string, string>();
 beforeEach(() => {
 	stocke = stockage();
