@@ -604,12 +604,18 @@ export type ReponseMoteurs = { moteurs: MoteurVue[] };
 /**
  * Une étape de la liaison d'un moteur (`moteurLier`) : `declare` (serveur MCP absent, déclaré), `remplace` (déclaration ou
  * hooks de Mnemo faits pour un autre Node ou un autre Mnemo, refaits), `installe` (hooks absents, installés), `deja` (rien à
- * faire), `laisse` (déclaration de l'utilisateur, désactivée ou qui ne lance pas Mnemo : jamais touchée), `echec` ;
+ * faire), `laisse` (déclaration de l'utilisateur, désactivée, d'une autre portée ou qui ne lance pas Mnemo : jamais
+ * touchée), `echec` ;
  * `message` à montrer.
  */
 export type EtapeLiaisonVue = { resultat: 'declare' | 'remplace' | 'installe' | 'deja' | 'laisse' | 'echec'; message: string };
-/** Liaison d'un moteur : `ok` faux si une étape a échoué ; `hooks` : seulement pour un moteur qui en a pour tout le poste. */
-export type LiaisonMoteurVue = { id: IdMoteur; ok: boolean; mcp: EtapeLiaisonVue; hooks?: EtapeLiaisonVue };
+/**
+ * Liaison d'un moteur : `lie` : serveur MCP et hooks déclarés et installés par Mnemo, tous (ni échec, ni déclaration de
+ * l'utilisateur laissée) : seul cas où dire « <moteur> lié à Mnemo » ; `ok` : aucune étape en échec (vrai aussi quand une
+ * déclaration de l'utilisateur est laissée, `lie` est alors faux) ; `hooks` : seulement pour un moteur qui en a pour tout le
+ * poste.
+ */
+export type LiaisonMoteurVue = { id: IdMoteur; lie: boolean; ok: boolean; mcp: EtapeLiaisonVue; hooks?: EtapeLiaisonVue };
 /** Réponse de `moteurLier` : la liaison, et tous les moteurs relus avec leurs points du poste (comme `moteurs?poste=1`). */
 export type ReponseLiaisonMoteur = ReponseMoteurs & { liaison: LiaisonMoteurVue };
 

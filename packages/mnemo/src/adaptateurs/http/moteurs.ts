@@ -9,7 +9,7 @@ import { NOMS_MOTEURS } from '@mnemo/commun';
 import { ROUTES } from '@mnemo/contrat';
 import type { EtapeLiaisonVue, LiaisonMoteurVue, MoteurVue, PointMoteurVue, ReponseLiaisonMoteur, ReponseMoteurs } from '@mnemo/contrat';
 import type { CommandeMoteur, Executer, Moteur, MoteurDuService, Pilotage } from '../../application/ports.ts';
-import { liaisonEchouee, lierMoteur } from '../../application/moteurs/lier.ts';
+import { liaisonEchouee, lierMoteur, moteurLie } from '../../application/moteurs/lier.ts';
 import type { EtapeLiaison } from '../../application/moteurs/lier.ts';
 import { remedesDuMoteur } from '../../application/moteurs/remedes.ts';
 import { estIdMoteur } from '../../domaine/moteurs/moteur.ts';
@@ -17,7 +17,7 @@ import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
 import { ErreurHttp } from './routes.ts';
 import type { Route } from './routes.ts';
 
-/** Délai de chaque commande du moteur lue pour le poste (`claude mcp get`, `codex mcp get`), comme `verifier-poste`. */
+/** Délai de chaque commande du moteur pour le poste (`claude mcp get`, `codex mcp add`…), lecture et liaison, comme `verifier-poste`. */
 const DELAI_POSTE_MS = 10_000;
 
 /**
@@ -169,9 +169,9 @@ export function routesMoteurs(p: PosteDesMoteurs): Route[] {
 			const trouvee = moteur.trouver(p.env, p.plateforme);
 			if (trouvee === null) throw new ErreurHttp(409, `${nom} introuvable sur ce poste (${commandesDe(moteur).introuvable}) : rien n'est lié.`);
 			adopter(entree, trouvee, p);
-			const r = await lierMoteur(moteur, { executer: p.executer, main: p.main, node: p.node, commande: trouvee, plateforme: p.plateforme, env: p.env });
+			const r = await lierMoteur(moteur, { executer: p.executer, main: p.main, node: p.node, commande: trouvee, plateforme: p.plateforme, env: p.env, delaiMs: DELAI_POSTE_MS });
 			const etape = (e: EtapeLiaison): EtapeLiaisonVue => ({ resultat: e.resultat, message: e.message });
-			return { id: moteur.id, ok: !liaisonEchouee(r), mcp: etape(r.mcp), ...(r.hooks === undefined ? {} : { hooks: etape(r.hooks) }) };
+			return { id: moteur.id, lie: moteurLie(r), ok: !liaisonEchouee(r), mcp: etape(r.mcp), ...(r.hooks === undefined ? {} : { hooks: etape(r.hooks) }) };
 		} finally {
 			liaisonsEnCours.delete(moteur.id);
 		}

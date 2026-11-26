@@ -189,6 +189,7 @@ describe('route moteurLier', () => {
 		const corps = r.corps as ReponseLiaisonMoteur;
 		expect(corps.liaison).toEqual({
 			id: 'mistral-vibe',
+			lie: true,
 			ok: true,
 			mcp: { resultat: 'declare', message: 'Serveur MCP déclaré pour toutes les sessions Mistral Vibe.' },
 			hooks: { resultat: 'installe', message: expect.stringContaining('hooks.toml') },
@@ -210,15 +211,17 @@ describe('route moteurLier', () => {
 		await writeFile(join(home, 'config.toml'), config);
 		const r = await lier({ 'mistral-vibe': { moteur: vibe(), commande: VIBE } }, 'mistral-vibe', { env: { VIBE_HOME: home } });
 		const { liaison } = r.corps as ReponseLiaisonMoteur;
-		expect(liaison).toMatchObject({ ok: true, mcp: { resultat: 'laisse', message: expect.stringContaining('laissé tel quel') }, hooks: { resultat: 'installe' } });
+		expect(liaison).toMatchObject({ lie: false, ok: true, mcp: { resultat: 'laisse', message: expect.stringContaining('laissée telle quelle') }, hooks: { resultat: 'installe' } });
 		expect(await readFile(join(home, 'config.toml'), 'utf8')).toBe(config);
 	});
 
 	it('Claude Code : déclaré par `claude mcp add-json` (portée utilisateur), avec l’exécuteur de la route ; aucun hook du poste', async () => {
 		const appels: string[][] = [];
 		let declare = false;
-		const executer: Executer = async (commande, args) => {
+		const delais = new Set<unknown>();
+		const executer: Executer = async (commande, args, options) => {
 			appels.push([commande, ...args]);
+			delais.add(options?.delaiMs);
 			if (args[1] === 'add-json') {
 				declare = true;
 				return { code: 0, sortie: '', erreur: '' };
@@ -230,9 +233,11 @@ describe('route moteurLier', () => {
 		const r = await lier({ 'claude-code': { moteur: { ...MOTEUR_CLAUDE_CODE, trouver: () => claude }, commande: claude } }, 'claude-code', { executer, env: {} });
 		expect(r.statut).toBe(200);
 		const corps = r.corps as ReponseLiaisonMoteur;
-		expect(corps.liaison).toEqual({ id: 'claude-code', ok: true, mcp: { resultat: 'declare', message: 'Serveur MCP déclaré pour toutes les sessions Claude Code.' } });
+		expect(corps.liaison).toEqual({ id: 'claude-code', lie: true, ok: true, mcp: { resultat: 'declare', message: 'Serveur MCP déclaré pour toutes les sessions Claude Code.' } });
 		expect(appels.find((a) => a[2] === 'add-json')?.slice(0, 6)).toEqual(['/opt/bin/claude', 'mcp', 'add-json', '--scope', 'user', 'mnemo']);
 		expect(corps.moteurs[0]?.poste?.find((p) => p.cle === 'mcp')).toMatchObject({ ok: true, etat: 'déclaré' });
+		// chaque commande du moteur, liaison comprise, avec le délai de la lecture du poste
+		expect([...delais]).toEqual([10_000]);
 	});
 
 	it('Codex périmé : déclaration et hooks refaits (comme declarer --remplacer)', async () => {
@@ -259,7 +264,7 @@ describe('route moteurLier', () => {
 		await writeFile(join(home, 'config.toml'), '[[mcp_servers]\n');
 		const r = await lier({ 'mistral-vibe': { moteur: vibe(), commande: VIBE } }, 'mistral-vibe', { env: { VIBE_HOME: home } });
 		expect(r.statut).toBe(200);
-		expect((r.corps as ReponseLiaisonMoteur).liaison).toMatchObject({ ok: false, mcp: { resultat: 'echec' } });
+		expect((r.corps as ReponseLiaisonMoteur).liaison).toMatchObject({ lie: false, ok: false, mcp: { resultat: 'echec' } });
 	});
 
 	it('commande installée depuis le démarrage : adoptée par le service, puis liée', async () => {

@@ -1,6 +1,6 @@
 /** Liaison d'un moteur à Mnemo (`lierMoteur`) : déclaration MCP et hooks du poste factices, rien n'est lancé ni écrit. */
 import { describe, expect, it } from 'vitest';
-import { liaisonEchouee, lierMoteur } from '../../src/application/moteurs/lier.ts';
+import { liaisonEchouee, lierMoteur, moteurLie } from '../../src/application/moteurs/lier.ts';
 import type { AppelLiaison } from '../../src/application/moteurs/lier.ts';
 import type { DeclarationMcp, HooksDuPoste, LectureDeclaration, LectureHooksDuPoste, MoteurDuPoste, ResultatDeclaration, ResultatInstallationHooks, ResultatRedeclaration, ResultatRemplacementHooks } from '../../src/application/ports.ts';
 
@@ -55,16 +55,18 @@ describe('lierMoteur', () => {
 		const { moteur: m, appels } = moteur({});
 		const r = await lierMoteur(m, APPEL);
 		expect(r.mcp).toEqual({ resultat: 'declare', message: 'Serveur MCP déclaré pour toutes les sessions Codex.' });
-		expect(r.hooks).toEqual({ resultat: 'installe', message: expect.stringContaining('approuvez-les une fois dans Codex (/hooks)') });
+		expect(r.hooks).toEqual({ resultat: 'installe', message: 'Hooks de Mnemo installés chez Codex (/maison/.codex/hooks.json) ; à approuver dans Codex (/hooks) : sans approbation, Codex ne les lance pas.' });
 		expect(appels).toEqual(['mcp.lire', 'mcp.declarer', 'hooks.lire', 'hooks.installer']);
 		expect(liaisonEchouee(r)).toBe(false);
+		expect(moteurLie(r)).toBe(true);
 	});
 
 	it('périmés : déclaration et hooks de Mnemo refaits (comme declarer --remplacer)', async () => {
 		const { moteur: m, appels } = moteur({ mcp: 'perime', hooks: { etat: 'perime', chemin: '/h' } });
 		const r = await lierMoteur(m, APPEL);
 		expect(r.mcp.resultat).toBe('remplace');
-		expect(r.hooks?.resultat).toBe('remplace');
+		expect(r.hooks).toEqual({ resultat: 'remplace', message: expect.stringContaining('à approuver de nouveau dans Codex (/hooks).') });
+		expect(moteurLie(r)).toBe(true);
 		expect(appels).toEqual(['mcp.lire', 'mcp.remplacer', 'hooks.lire', 'hooks.remplacer']);
 	});
 
@@ -73,25 +75,36 @@ describe('lierMoteur', () => {
 		const r = await lierMoteur(m, APPEL);
 		expect([r.mcp.resultat, r.hooks?.resultat]).toEqual(['deja', 'deja']);
 		expect(appels).toEqual(['mcp.lire', 'hooks.lire']);
+		expect(moteurLie(r)).toBe(true);
 	});
 
-	it('déclaration de l’utilisateur (désactivée, autre serveur) : jamais touchée, le message le dit ; hooks tout de même installés', async () => {
-		for (const [mcp, attendu] of [
-			['desactive', 'enabled = false'],
-			['autre', 'codex mcp remove mnemo'],
-		] as const) {
-			const { moteur: m, appels } = moteur({ mcp });
-			const r = await lierMoteur(m, APPEL);
-			expect(r.mcp).toEqual({ resultat: 'laisse', message: expect.stringContaining(attendu) });
-			expect(r.hooks?.resultat).toBe('installe');
-			expect(appels).toEqual(['mcp.lire', 'hooks.lire', 'hooks.installer']);
-			expect(liaisonEchouee(r)).toBe(false);
-		}
+	it('déclaration désactivée : jamais touchée, le message le dit ; hooks tout de même installés ; lié : non', async () => {
+		const { moteur: m, appels } = moteur({ mcp: 'desactive' });
+		const r = await lierMoteur(m, APPEL);
+		expect(r.mcp).toEqual({ resultat: 'laisse', message: 'Serveur MCP : déclaration désactivée dans Codex (enabled = false), laissée telle quelle.' });
+		expect(r.hooks?.resultat).toBe('installe');
+		expect(appels).toEqual(['mcp.lire', 'hooks.lire', 'hooks.installer']);
+		expect(liaisonEchouee(r)).toBe(false);
+		expect(moteurLie(r)).toBe(false);
 	});
 
-	it('déclarée entre la lecture et la déclaration (périmée ou non) : laissée, jamais remplacée', async () => {
+	it('« mnemo » qui ne lance pas Mnemo : `declarer` (qui n’écrit rien) dit pourquoi ; laissée, avec le retrait à la main', async () => {
+		const { moteur: m, appels } = moteur({ mcp: 'autre', declarer: { perime: true, manuel: 'codex mcp add mnemo -- …', remplacable: false } });
+		const r = await lierMoteur(m, APPEL);
+		expect(r.mcp).toEqual({ resultat: 'laisse', message: expect.stringContaining('qui ne lance pas Mnemo existe chez Codex : laissée telle quelle ; pour la remplacer, commandes à lancer à la main : `codex mcp remove mnemo`, puis : codex mcp add mnemo -- …') });
+		expect(appels.slice(0, 2)).toEqual(['mcp.lire', 'mcp.declarer']);
+	});
+
+	it('Claude Code, déclaration « mnemo » d’une autre portée : laissée, sans commande de retrait de portée utilisateur', async () => {
+		const { moteur: m } = moteur({ mcp: 'autre', declarer: { perime: true, manuel: 'claude mcp add …', portee: 'Local config (private to you in this project)', scope: 'local', remplacable: false }, hooks: null });
+		const r = await lierMoteur({ ...m, id: 'claude-code', installation: { ...m.installation, retraitManuel: '`claude mcp remove mnemo --scope user`', approbation: null } }, APPEL);
+		expect(r.mcp).toEqual({ resultat: 'laisse', message: 'Une déclaration MCP « mnemo » d\'une autre portée (Local config (private to you in this project)) existe chez Claude Code : laissée telle quelle.' });
+		expect(r.mcp.message).not.toContain('remove');
+	});
+
+	it('déclaration de Mnemo apparue entre la lecture et la déclaration : laissée, jamais remplacée, liaison à relancer', async () => {
 		const { moteur: m, appels } = moteur({ declarer: { perime: true, manuel: 'm', remplacable: true } });
-		expect((await lierMoteur(m, APPEL)).mcp.resultat).toBe('laisse');
+		expect((await lierMoteur(m, APPEL)).mcp).toEqual({ resultat: 'laisse', message: 'Déclaration MCP de Mnemo pour un autre Node ou un autre Mnemo, apparue entre-temps chez Codex : laissée ; liaison à relancer.' });
 		expect(appels).not.toContain('mcp.remplacer');
 	});
 
@@ -109,7 +122,8 @@ describe('lierMoteur', () => {
 		expect(r.hooks).toEqual({ resultat: 'echec', message: 'Hooks de Mnemo chez Codex : hooks.json illisible' });
 		expect(liaisonEchouee(r)).toBe(true);
 		const manuel = await lierMoteur(moteur({ declarer: { manuel: 'codex mcp add …', introuvable: false, raison: 'code 1' } }).moteur, APPEL);
-		expect(manuel.mcp).toEqual({ resultat: 'echec', message: expect.stringContaining('codex mcp add …') });
+		expect(manuel.mcp).toEqual({ resultat: 'echec', message: 'Déclaration automatique à Codex impossible (code 1) : commande à lancer à la main : codex mcp add …' });
+		expect(moteurLie(manuel)).toBe(false);
 		const illisible = await lierMoteur(moteur({ mcp: { echec: 'config.toml illisible' }, hooks: { echec: 'hooks illisibles' } }).moteur, APPEL);
 		expect([illisible.mcp.resultat, illisible.hooks?.resultat]).toEqual(['echec', 'echec']);
 	});

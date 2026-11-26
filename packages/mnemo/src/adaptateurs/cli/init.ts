@@ -1,4 +1,3 @@
-import { NOMS_MOTEURS } from '@mnemo/commun';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -16,7 +15,7 @@ import { commandeManuelle, declarerServeurMcp } from '../../infra/moteurs/claude
 import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
 import { MOTEURS_DU_POSTE } from '../../infra/moteurs/moteurs.ts';
 import { MOTEURS_FACULTATIFS } from './moteurs-facultatifs.ts';
-import { remedesDuMoteur } from '../../application/moteurs/remedes.ts';
+import { messageDeclarationMoteur, messageHooksMoteur } from '../../application/moteurs/messages-liaison.ts';
 import type { IdMoteur } from '../../domaine/moteurs/moteur.ts';
 import { commandeAJour, dossierDeCommande } from '../../infra/commande-mnemo.ts';
 import type { Piece } from '../../infra/modeles/catalogue.ts';
@@ -252,7 +251,7 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 			let ligne: string | null = null;
 			await mener(m.etape, `Serveur MCP (${nom})`, `Déclaration du serveur MCP à ${nom}.`, async () => {
 				const declarationMoteur = await actions.declarerAuMoteur(m.id);
-				ligne = messageDeclarationMoteur(m.id, declarationMoteur);
+				ligne = messageDeclarationMoteur(MOTEURS_DU_POSTE[m.id], declarationMoteur);
 				if (declarationMoteur === 'desactive') return { laisse: ligne };
 				if (json && declarationMoteur !== 'declare' && declarationMoteur !== 'deja')
 					throw 'perime' in declarationMoteur && declarationMoteur.remplacable === true ? new EchecMotive(ligne, 'perime') : new Error(ligne);
@@ -266,7 +265,7 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 				// hooks d'une autre installation de Mnemo : `mnemo declarer --moteur <id> --remplacer` les reprend
 				if (typeof r !== 'string' && r.perime === true) throw new EchecMotive(r.echec, 'perime');
 				if (typeof r !== 'string') throw new Error(r.echec);
-				ligneHooks = messageHooksMoteur(m.id, r, cheminHooks);
+				ligneHooks = messageHooksMoteur(MOTEURS_DU_POSTE[m.id], r, cheminHooks);
 				return ligneHooks;
 			});
 			if (ligneHooks !== null) ecrire(ligneHooks);
@@ -406,31 +405,6 @@ export function messagesInit(racine: string, resultat: ResultatInitialisation, d
 	else if (declaration.introuvable) lignes.push(`Claude Code introuvable : lancez vous-même : ${declaration.manuel}`);
 	else lignes.push(`Déclaration automatique impossible (${declaration.raison}) : lancez vous-même : ${declaration.manuel}`);
 	return lignes;
-}
-
-/** Une ligne pour la déclaration MCP chez un moteur facultatif. */
-export function messageDeclarationMoteur(id: IdMoteur, declaration: ResultatDeclaration): string {
-	const moteur = MOTEURS_DU_POSTE[id];
-	const { installation } = moteur;
-	const nom = NOMS_MOTEURS[id];
-	if (declaration === 'declare') return `Serveur MCP déclaré pour toutes les sessions ${nom}.`;
-	if (declaration === 'deja') return `Serveur MCP déjà déclaré à ${nom}.`;
-	if (declaration === 'desactive') return `Serveur MCP : déclaration désactivée dans ${nom} (${installation.desactivation}), laissée telle quelle.`;
-	if ('perime' in declaration)
-		return declaration.remplacable === true
-			? `Serveur MCP déclaré à ${nom} pour un autre Node ou un autre Mnemo : lancez « ${remedesDuMoteur(moteur).remplacer} ».`
-			: `Une déclaration MCP « mnemo » qui ne lance pas Mnemo existe chez ${nom} : retirez-la (${installation.retraitManuel}) puis : ${declaration.manuel}`;
-	if (declaration.introuvable) return `${nom} introuvable : lancez vous-même : ${declaration.manuel}`;
-	return `Déclaration automatique à ${nom} impossible (${declaration.raison}) : lancez vous-même : ${declaration.manuel}`;
-}
-
-/** Une ligne pour les hooks installés chez un moteur facultatif ; s'il demande de les approuver (Codex), comment. */
-export function messageHooksMoteur(id: IdMoteur, r: Exclude<ResultatInstallationHooks, { echec: string }>, chemin: string): string {
-	const nom = NOMS_MOTEURS[id];
-	const { approbation } = MOTEURS_DU_POSTE[id].installation;
-	if (r === 'deja') return `Hooks de Mnemo déjà installés chez ${nom} (${chemin})${approbation === null ? '.' : ` ; s’ils ne sont pas encore approuvés, approuvez-les dans ${nom} (${approbation.commande}).`}`;
-	const fait = r === 'installe' ? 'installés' : 'mis à jour';
-	return `Hooks de Mnemo ${fait} chez ${nom} (${chemin})${approbation === null ? '.' : ` ; ${approbation.consigne}`}`;
 }
 
 /** Ligne de démarrage à copier-coller sans la commande `mnemo` : PowerShell (`& 'node.exe' …`) sous Windows, POSIX ailleurs. */
