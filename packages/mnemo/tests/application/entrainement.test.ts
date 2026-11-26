@@ -183,7 +183,7 @@ describe("entraînement de la note : l'état", () => {
 		expect((await e.etat()).banc).toMatchObject({ valides: 4, nouveauxDepuisApprentissage: 1 });
 	});
 
-	it('date du dernier apprentissage : l’essai réussi le plus récent de l’historique, sinon un modèle appris sur la mémoire (pas de départ)', () => {
+	it('date du dernier apprentissage : la plus récente des essais réussis de l’historique et des modèles appris sur la mémoire (pas de départ)', () => {
 		const ligne = (date: string, erreur?: string): LigneHistorique => ({ date, origine: 'automatique', verdicts: { complets: 'refuse', sens: 'refuse' }, remplace: false, ...(erreur === undefined ? {} : { erreur }) });
 		const aucun: ModelesDeNote = { complets: { modele: modeleNonAppris(), etat: 'non_appris' }, sens: { modele: modeleNonAppris(), etat: 'non_appris' } };
 		const depart: ModelesDeNote = { ...aucun, sens: { modele: appris({ origine: 'depart' }), etat: 'depart' } };
@@ -194,6 +194,38 @@ describe("entraînement de la note : l'état", () => {
 		// un essai en échec n'a rien appris
 		expect(dateDuDernierApprentissage([ligne('2026-11-25T10:00:00.000Z', 'panne')], refuse)).toBe('2026-11-21T10:00:00.000Z');
 		expect(dateDuDernierApprentissage([ligne('2026-11-25T10:00:00.000Z', 'panne'), ligne('2026-11-22T10:00:00.000Z'), ligne('2026-11-23T10:00:00.000Z')], refuse)).toBe('2026-11-23T10:00:00.000Z');
+		// un modèle appris après la dernière ligne (au terminal, par une version qui n'écrivait pas l'historique) : sa date
+		expect(dateDuDernierApprentissage([ligne('2026-11-19T10:00:00.000Z')], refuse)).toBe('2026-11-21T10:00:00.000Z');
+		expect(dateDuDernierApprentissage([ligne('2026-11-19T10:00:00.000Z')], depart)).toBe('2026-11-19T10:00:00.000Z');
+	});
+
+	it("un message validé pendant que l'apprentissage lit les jugements compte parmi les nouveaux (la date de l'essai est prise avant la lecture)", async () => {
+		let horloge = new Date('2026-11-26T10:00:00.000Z');
+		const { e, ports } = faux([valide('v', ['a.md']), unCas('j', ['j.md'])], { maintenant: () => horloge });
+		// la lecture des jugements par l'apprentissage, retenue : elle voit le fichier d'avant la réponse
+		const lire = ports.banc.lire;
+		let porte: { promesse: Promise<void>; resoudre: (v: void) => void } | null = null;
+		ports.banc.lire = async () => {
+			const lus = await lire();
+			const p = porte;
+			porte = null;
+			if (p !== null) await p.promesse;
+			return lus;
+		};
+		const retenue = enMain<void>();
+		porte = retenue;
+		const lancement = e.apprendre({ origine: 'manuel' });
+		await new Promise((r) => setTimeout(r, 0));
+		horloge = new Date('2026-11-26T10:01:00.000Z');
+		const reponse = e.repondre(1, { jugements: { 'j.md': 'pertinente' }, resteNonUtile: true });
+		await new Promise((r) => setTimeout(r, 0));
+		horloge = new Date('2026-11-26T10:02:00.000Z');
+		retenue.resoudre();
+		await (await lancement).fin;
+		await reponse;
+		const etat = await e.etat();
+		expect(etat.historique[0]!.date).toBe('2026-11-26T10:00:00.000Z');
+		expect(etat.banc).toMatchObject({ valides: 2, nouveauxDepuisApprentissage: 1 });
 	});
 
 	it('un message jugé au terminal (sans date de validation) ne compte que s’il a été préparé après le dernier apprentissage', () => {
@@ -541,6 +573,27 @@ describe('entraînement de la note : apprendre et revenir (D6)', () => {
 		expect(etat.rapports).toEqual([]);
 		expect(etat.historique).toEqual([]);
 		expect((await e.etat()).derniereErreur).toBeUndefined();
+	});
+
+	it('revenir : sous le verrou du banc hors tâche (refusé si le terminal le tient) ; pendant une préparation, sous le sien', async () => {
+		const { e, etat } = faux([], { avant: true });
+		etat.ailleurs = '--apprendre';
+		await expect(e.revenir()).rejects.toMatchObject({ genre: 'occupe' });
+		expect(etat.retours).toBe(0);
+		etat.ailleurs = null;
+		await e.revenir();
+		expect(etat.retours).toBe(1);
+		expect(etat.prises).toEqual(["revenir au modèle d'avant"]);
+		expect(etat.verrou).toBeNull();
+		// une préparation tient le verrou : revenir passe sans le reprendre
+		const extraction = enMain<BilanExtraction>();
+		const prepa = faux([], { avant: true, extraire: () => extraction.promesse });
+		const { fin } = await prepa.e.preparer();
+		await prepa.e.revenir();
+		expect(prepa.etat.retours).toBe(1);
+		expect(prepa.etat.prises).toEqual(['préparer des messages']);
+		extraction.resoudre(bilan([]));
+		await fin;
 	});
 
 	it("revenir : échange le modèle et le modèle d'avant ; sans modèle d'avant, refusé", async () => {

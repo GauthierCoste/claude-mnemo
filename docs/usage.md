@@ -788,9 +788,10 @@ thread of the service (the sessions are not slowed down), and checks the accepta
 refused; a level with no judged pair (for example « Complets » when the messages were prepared without the reranker)
 keeps its current model, so it never falls back to the provisional rule for lack of data. The service takes the new model
 at the next message, without a restart. « Arrêter » leaves the current model in place. Once the score has been learned,
-the card says how many messages were judged since the last learning (the latest successful line of the history, or the
-date of a learned model): a message counts from its validation; one judged in the terminal with `--juger`, which has no
-validation date, counts only if it was prepared after the last learning.
+the card says how many messages were judged since the last learning (the most recent of the successful lines of the
+history and of the dates of the learned models; « Revenir au modèle d’avant » does not change it): a message counts from
+its validation; one judged in the terminal with `--juger`, which has no validation date, counts only if it was prepared
+after the last learning.
 
 **The verdict, in plain words.** « Accepté : les % sont justes et Mnemo injecte seul au-dessus de 90 % »; « Refusé : la
 note ordonne le classement, sans % », with each missed criterion in plain words (for example « trop peu de fiches
@@ -800,7 +801,8 @@ reliability, folded (the predicted score against the share really useful).
 
 **Revenir au modèle d’avant** (back to the previous model), in the ⋯ menu: each learning keeps the model it replaced
 (`.mnemo/coefficients-note.avant.json`); this gesture puts it back, and doing it again returns to the newer one. Not
-available during a learning.
+available during a learning, nor while a `mnemo banc contexte` command (`--apprendre`, `--juger`…) holds the file of
+judgements in a terminal.
 
 **History.** The last 10 learnings: date, « Manuel » or « Automatique », the verdict of each level, and whether the
 model was « Remplacé » (replaced), « Gardé » (kept) or « Gardé (échec) » (kept after a failure, with the error).

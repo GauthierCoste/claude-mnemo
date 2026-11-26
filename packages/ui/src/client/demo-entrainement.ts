@@ -207,11 +207,10 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 	const aJuger = (c: Cas) => !c.valide && !c.silence && !c.saute;
 	const aRelire = (c: Cas) => aJuger(c) && c.propositions !== null;
 	const paires = (c: Cas) => (c.valide ? Object.values(c.jugements).filter((j) => j !== 'indecise').length : 0);
-	/** Comme le service : l'essai réussi le plus récent de l'historique, sinon la date d'une note apprise ; null : jamais appris. */
+	/** Comme le service : le plus récent des essais réussis de l'historique et des dates des notes apprises ; null : jamais appris. */
 	const dernierApprentissage = (): string | null => {
-		const dates = historique.filter((l) => l.erreur === undefined).map((l) => l.date);
-		const sources = dates.length > 0 ? dates : note.flatMap((n) => (n.origine === 'appris' && n.date !== null ? [n.date] : []));
-		return sources.reduce<string | null>((a, d) => (a === null || d > a ? d : a), null);
+		const dates = [...historique.filter((l) => l.erreur === undefined).map((l) => l.date), ...note.flatMap((n) => (n.origine === 'appris' && n.date !== null ? [n.date] : []))];
+		return dates.reduce<string | null>((a, d) => (a === null || d > a ? d : a), null);
 	};
 
 	function vue(): VueEntrainement {

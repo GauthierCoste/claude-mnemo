@@ -141,6 +141,7 @@ export const SEUIL_SUR = 0.9;
 
 const OPERATIONS: Record<GenreTache, string> = { preparer: 'préparer des messages', prejuger: 'pré-juger avec Claude', apprendre: 'apprendre la note' };
 const ENREGISTRER = 'enregistrer des jugements';
+const REVENIR = "revenir au modèle d'avant";
 
 /** Même message du banc : même texte, position, session et rang (son indice ne change pas : les cas ne font que s'ajouter). */
 const memeMessage = (a: CasContexte, b: CasContexte): boolean => a.message === b.message && a.position === b.position && a.session === b.session && a.rang === b.rang;
@@ -159,17 +160,19 @@ type Annulation = { avant: { indice: number; cas: CasContexte }[] };
 const origineDu = (m: ModeleDeNote, etat: EtatDuModele): NoteDuNiveau['origine'] => (etat === 'non_appris' ? 'non_appris' : m.origine === 'depart' ? 'depart' : 'appris');
 
 /**
- * La date du dernier apprentissage : la ligne la plus récente de l'historique, hors essai en échec (il n'a rien appris) ; sans
- * historique, le plus récent `apprisLe` d'un modèle appris sur cette mémoire (pas un modèle de départ) ; null : aucun.
+ * La date du dernier apprentissage : la plus récente des lignes de l'historique, hors essai en échec (il n'a rien appris), et des
+ * `apprisLe` des modèles appris sur cette mémoire, pas de départ (un apprentissage au terminal d'une version d'avant n'a pas de
+ * ligne d'historique) ; null : aucun.
  */
 export function dateDuDernierApprentissage(historique: readonly LigneHistorique[], modeles: ModelesDeNote): string | null {
-	const plusRecente = (dates: readonly string[]): string | null => dates.reduce<string | null>((a, d) => (Number.isNaN(Date.parse(d)) ? a : a === null || Date.parse(d) > Date.parse(a) ? d : a), null);
-	const lignes = plusRecente(historique.filter((l) => l.erreur === undefined).map((l) => l.date));
-	if (lignes !== null) return lignes;
-	return plusRecente(NIVEAUX_DE_NOTE.flatMap((n) => {
-		const { modele, etat } = modeles[n];
-		return origineDu(modele, etat) === 'appris' && modele.apprisLe !== null ? [modele.apprisLe] : [];
-	}));
+	const dates = [
+		...historique.filter((l) => l.erreur === undefined).map((l) => l.date),
+		...NIVEAUX_DE_NOTE.flatMap((n) => {
+			const { modele, etat } = modeles[n];
+			return origineDu(modele, etat) === 'appris' && modele.apprisLe !== null ? [modele.apprisLe] : [];
+		}),
+	];
+	return dates.reduce<string | null>((a, d) => (Number.isNaN(Date.parse(d)) ? a : a === null || Date.parse(d) > Date.parse(a) ? d : a), null);
 }
 
 /**
@@ -481,13 +484,16 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 			};
 			return tacheVerifiee(
 				'apprendre',
-				async () => {
-					const cas = (await p.banc.lire()).filter((c) => c.candidates !== undefined);
-					if (progression(cas).pairesValidees === 0) throw new ErreurEntrainement('refuse', 'Aucun jugement validé : juge des messages avant d’apprendre.');
-					return cas;
-				},
-				async (cas, signal) => {
-					const date = p.maintenant().toISOString();
+				// la date de l'essai prise avant de lire les jugements, dans leur file : un message validé après elle n'est pas dans le
+				// jeu, et il compte parmi les messages jugés depuis le dernier apprentissage (`nouveauxDepuis`)
+				() =>
+					enFile(async () => {
+						const date = p.maintenant().toISOString();
+						const cas = (await p.banc.lire()).filter((c) => c.candidates !== undefined);
+						if (progression(cas).pairesValidees === 0) throw new ErreurEntrainement('refuse', 'Aucun jugement validé : juge des messages avant d’apprendre.');
+						return { cas, date };
+					}),
+				async ({ cas, date }, signal) => {
 					try {
 						await apprendreEtEcrire(cas, date, signal);
 					} catch (e) {
@@ -506,12 +512,21 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 		},
 
 		revenir() {
-			// dans la file de la note : deux retours demandés ensemble ne s'entremêlent jamais, ni avec l'écriture d'un nouveau modèle
-			return enFileNote(async () => {
-				if (tache?.genre === 'apprendre') throw new ErreurEntrainement('occupe', 'Un apprentissage est en cours : attends sa fin ou arrête-le.');
-				if (!(await p.note.revenir())) throw new ErreurEntrainement('refuse', "Aucun modèle d'avant.");
-				changer();
-			});
+			// dans la file de la note : deux retours demandés ensemble ne s'entremêlent jamais, ni avec l'écriture d'un nouveau modèle ;
+			// puis dans celle des jugements, hors tâche sous le verrou du banc (que `mnemo banc contexte --apprendre`, qui écrit les
+			// mêmes fichiers, tient) : pris après les écritures en cours, jamais refusé par l'une d'elles
+			return enFileNote(() =>
+				enFile(async () => {
+					if (tache?.genre === 'apprendre') throw new ErreurEntrainement('occupe', 'Un apprentissage est en cours : attends sa fin ou arrête-le.');
+					const rendre = rendreVerrou === null ? verrouiller(REVENIR) : null;
+					try {
+						if (!(await p.note.revenir())) throw new ErreurEntrainement('refuse', "Aucun modèle d'avant.");
+					} finally {
+						rendre?.();
+					}
+					changer();
+				}),
+			);
 		},
 
 		async message(indice) {
