@@ -17,12 +17,15 @@
  * documenté dans l'aide). Les hooks de Mnemo installés pour tout le poste restent inertes : l'environnement n'a aucune
  * variable `MNEMO_*` (`environnementClaudeHorsSession`).
  */
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { environnementClaudeHorsSession } from '../application/moteurs/claude-code/plugin.ts';
 import type { CommandeMoteur, Executer } from '../application/ports.ts';
+import type { Prejugement } from '../application/banc-contexte.ts';
 import type { Juge } from '../application/prejuger.ts';
 import { CONSIGNE_JUGE, lireReponseDuJuge, ReponseDuJugeIllisible, texteAJuger } from '../domaine/consigne-juge.ts';
-import type { ReponseDuJuge } from '../domaine/consigne-juge.ts';
+import type { MessageAJuger, ReponseDuJuge } from '../domaine/consigne-juge.ts';
 import { EchecClaudePrint, executerClaudePrint, extraitDeSortie } from './moteurs/claude-code/claude-print.ts';
 
 /** Un message se juge en moins de deux minutes ; au-delà, l'appel est tué. */
@@ -55,7 +58,9 @@ export function resultatDeClaude(sortie: string): string {
 
 /**
  * `claude` : la commande trouvée (`trouverClaude`) ; `env` : l'environnement de l'utilisateur ; `cwd` : dossier courant, neutre
- * (aucun CLAUDE.md de projet : le dossier temporaire par défaut) ; `delaiMs` : par appel.
+ * (par défaut, un dossier vide créé pour chaque message dans le dossier temporaire et retiré après : jamais le dossier
+ * temporaire lui-même, partagé sous Linux, où un `.claude/settings.json` ou un `CLAUDE.md` déposé par un autre compte serait
+ * lu comme réglages et consigne du projet) ; `delaiMs` : par appel.
  */
 export type OptionsJugeClaude = { executer: Executer; claude: CommandeMoteur; env: Record<string, string | undefined>; cwd?: string; delaiMs?: number };
 
@@ -67,28 +72,36 @@ export type OptionsJugeClaude = { executer: Executer; claude: CommandeMoteur; en
 export function jugeClaude(o: OptionsJugeClaude): Juge {
 	const env = environnementClaudeHorsSession(o.env);
 	const delaiMs = o.delaiMs ?? DELAI_JUGE_MS;
-	const cwd = o.cwd ?? tmpdir();
 	return {
 		async juger(message, signal) {
-			const chemins = message.candidates.map((c) => c.chemin);
-			const entree = texteAJuger(message);
-			let meilleure: ReponseDuJuge | null = null;
-			let illisible: ReponseDuJugeIllisible | null = null;
-			for (let tentative = 0; tentative < TENTATIVES; tentative++) {
-				const { sortie } = await executerClaudePrint(o.executer, o.claude, { args: argumentsDuJuge(), cwd, env, delaiMs, entree, ...(signal === undefined ? {} : { signal }) });
-				let reponse: ReponseDuJuge;
-				try {
-					reponse = lireReponseDuJuge(resultatDeClaude(sortie), chemins);
-				} catch (e) {
-					if (!(e instanceof ReponseDuJugeIllisible)) throw e;
-					illisible = e;
-					continue;
-				}
-				if (reponse.manquants.length === 0) return reponse.propositions;
-				if (meilleure === null || reponse.manquants.length < meilleure.manquants.length) meilleure = reponse;
+			const cwd = o.cwd ?? (await mkdtemp(join(tmpdir(), 'mnemo-juge-')));
+			try {
+				return await jugerDans(cwd, message, signal);
+			} finally {
+				if (o.cwd === undefined) await rm(cwd, { recursive: true, force: true }).catch(() => {});
 			}
-			if (meilleure !== null && Object.keys(meilleure.propositions).length > 0) return meilleure.propositions;
-			throw illisible ?? new ReponseDuJugeIllisible('le juge n\'a proposé aucune candidate.');
 		},
 	};
+
+	async function jugerDans(cwd: string, message: MessageAJuger, signal: AbortSignal | undefined): Promise<Record<string, Prejugement>> {
+		const chemins = message.candidates.map((c) => c.chemin);
+		const entree = texteAJuger(message);
+		let meilleure: ReponseDuJuge | null = null;
+		let illisible: ReponseDuJugeIllisible | null = null;
+		for (let tentative = 0; tentative < TENTATIVES; tentative++) {
+			const { sortie } = await executerClaudePrint(o.executer, o.claude, { args: argumentsDuJuge(), cwd, env, delaiMs, entree, ...(signal === undefined ? {} : { signal }) });
+			let reponse: ReponseDuJuge;
+			try {
+				reponse = lireReponseDuJuge(resultatDeClaude(sortie), chemins);
+			} catch (e) {
+				if (!(e instanceof ReponseDuJugeIllisible)) throw e;
+				illisible = e;
+				continue;
+			}
+			if (reponse.manquants.length === 0) return reponse.propositions;
+			if (meilleure === null || reponse.manquants.length < meilleure.manquants.length) meilleure = reponse;
+		}
+		if (meilleure !== null && Object.keys(meilleure.propositions).length > 0) return meilleure.propositions;
+		throw illisible ?? new ReponseDuJugeIllisible('le juge n\'a proposé aucune candidate.');
+	}
 }

@@ -1,3 +1,6 @@
+import { existsSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { environnementClaudeHorsSession } from '../../src/application/moteurs/claude-code/plugin.ts';
 import type { Executer, OptionsExecution } from '../../src/application/ports.ts';
@@ -60,6 +63,26 @@ describe('juge Claude : la commande', () => {
 		expect(options?.delaiMs).toBe(DELAI_JUGE_MS);
 		// ni clé d'API, ni autre fournisseur, ni session Mnemo (les hooks du poste restent inertes) ; auto-mémoire coupée
 		expect(options?.env).toEqual({ PATH: '/bin', CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' });
+	});
+
+	it('dossier courant par défaut : un dossier vide propre à chaque message, dans le dossier temporaire (jamais lui-même), retiré après, en succès comme en échec', async () => {
+		const vus: string[] = [];
+		const executer = (code: number): Executer => async (_c, _a, options) => {
+			const cwd = options!.cwd!;
+			vus.push(cwd);
+			expect(existsSync(cwd)).toBe(true);
+			expect(readdirSync(cwd)).toEqual([]);
+			return { code, sortie: sortieJson(DEUX), erreur: 'refus' };
+		};
+		await jugeClaude({ executer: executer(0), claude: CLAUDE, env: {} }).juger(MESSAGE);
+		await jugeClaude({ executer: executer(0), claude: CLAUDE, env: {} }).juger(MESSAGE);
+		await expect(jugeClaude({ executer: executer(1), claude: CLAUDE, env: {} }).juger(MESSAGE)).rejects.toThrow(EchecClaudePrint);
+		expect(new Set(vus).size).toBe(3);
+		for (const cwd of vus) {
+			expect(dirname(cwd)).toBe(tmpdir());
+			expect(cwd).not.toBe(tmpdir());
+			expect(existsSync(cwd)).toBe(false);
+		}
 	});
 
 	it('environnement hors session : aucune variable MNEMO_ (sans la casse), ni clé d\'API ni marque de session Claude parente', () => {
@@ -137,5 +160,12 @@ describe('claude -p hors session', () => {
 	it('l\'exécuteur réel écrit `entree` sur l\'entrée du programme, puis la ferme', async () => {
 		const r = await executeurReel()(process.execPath, ['-e', 'let t = ""; process.stdin.on("data", (d) => (t += d)); process.stdin.on("end", () => process.stdout.write(t.toUpperCase()));'], { entree: 'é et ça\n' });
 		expect(r).toEqual({ code: 0, sortie: 'É ET ÇA\n', erreur: '' });
+	});
+
+	it('l\'exécuteur réel : un programme qui sort sans lire une grosse entrée rend son code, sans erreur d\'écriture (EPIPE)', async () => {
+		const r = await executeurReel()(process.execPath, ['-e', 'process.exit(3)'], { entree: 'x'.repeat(8 * 1024 * 1024) });
+		expect(r.code).toBe(3);
+		const lu = await executeurReel()(process.execPath, ['-e', 'let n = 0; process.stdin.on("data", (d) => (n += d.length)); process.stdin.on("end", () => process.stdout.write(String(n)));'], { entree: 'é'.repeat(2 * 1024 * 1024) });
+		expect(lu.sortie).toBe(String(4 * 1024 * 1024));
 	});
 });

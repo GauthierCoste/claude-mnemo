@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { lireCasContexte, lireOptionsContexte } from '../../src/adaptateurs/cli/banc-contexte.ts';
@@ -40,6 +40,17 @@ async function banc(depart: CasContexte[]): Promise<string> {
 	await enregistrerCas(fichier, depart);
 	return fichier;
 }
+
+describe('enregistrerCas', () => {
+	it('en échec, aucun fichier provisoire ne reste', async () => {
+		const dossier = await dossierTemporaire();
+		const fichier = join(dossier, 'banc-contexte.json');
+		// un dossier non vide à la place du fichier : le renommage échoue
+		await mkdir(join(fichier, 'plein'), { recursive: true });
+		await expect(enregistrerCas(fichier, [cas('m1', ['a.md'])])).rejects.toThrow();
+		expect(readdirSync(dossier)).toEqual(['banc-contexte.json']);
+	});
+});
 
 describe('mnemo banc contexte --prejuger : options', () => {
 	it('--prejuger, avec --nombre et --json ; refusé avec une autre action, --par-session ou --empreintes', () => {
