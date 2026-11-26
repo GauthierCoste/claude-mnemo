@@ -71,8 +71,8 @@ function fauxMonde() {
 }
 
 const suivis: SuiviService[] = [];
-function suivre(acces: AccesService, focus = false): { suivi: SuiviService; vies: string[]; notifications: NotificationSession[]; dernier: () => InstantaneSuivi | null } {
-	const suivi = creerSuivi({ acces, fenetreAuFocus: () => focus, intervalleSondageMs: INTERVALLE, attenteArretMs: 2000 });
+function suivre(acces: AccesService, focus = false, plateforme: NodeJS.Platform = 'darwin'): { suivi: SuiviService; vies: string[]; notifications: NotificationSession[]; dernier: () => InstantaneSuivi | null } {
+	const suivi = creerSuivi({ acces, fenetreAuFocus: () => focus, intervalleSondageMs: INTERVALLE, attenteArretMs: 2000, plateforme, attenteAvantForceMs: 300 });
 	suivis.push(suivi);
 	const vies: string[] = [];
 	const notifications: NotificationSession[] = [];
@@ -176,6 +176,28 @@ describe('suivi du service', () => {
 		monde.vivants.delete(1);
 		expect(await arret).toEqual({ ok: true });
 		expect(monde.signaux).toEqual([1]);
+	});
+
+	it('Windows, connexion refusée : le processus a le temps de s’arrêter seul ; forcé en dernier recours, et dit', async () => {
+		const { monde, acces } = fauxMonde();
+		monde.lancer(service(1));
+		const { suivi } = suivre(acces, false, 'win32');
+		await suivi.ouvrir();
+		monde.suiteArret = 'signal';
+		const seul = suivi.arreter();
+		await pause(50);
+		monde.vivants.delete(1);
+		expect(await seul).toEqual({ ok: true });
+		expect(monde.signaux).toEqual([]);
+
+		monde.lancer(service(2));
+		monde.prochains.push({ ok: true, service: service(2) });
+		await suivi.demarrer();
+		const force = suivi.arreter();
+		expect(await jusqua(() => monde.signaux.length === 1)).toBe(true);
+		monde.vivants.delete(2);
+		expect(await force).toEqual({ ok: true, force: true });
+		expect(monde.signaux).toEqual([2]);
 	});
 
 	it('fermé pendant l’ouverture : aucun flux ouvert ; fermé pendant l’attente d’un arrêt : la promesse se résout', async () => {

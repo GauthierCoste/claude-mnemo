@@ -18,7 +18,10 @@ export type AccesService = {
 	/** `ouvrir` : démarre le service (ou trouve celui qui tourne) et rend celui qui répond. */
 	demarrer(): Promise<ResultatDemarrage>;
 	demanderArret(s: ServiceLocal): Promise<SuiteArret>;
-	/** SIGTERM au processus du service (quand la demande d'arrêt n'a pas pu lui parvenir). */
+	/**
+	 * SIGTERM au processus du service (quand la demande d'arrêt n'a pas pu lui parvenir). Sous Windows, c'est un arrêt
+	 * brutal (`TerminateProcess`) : le suivi n'y recourt qu'en dernier recours.
+	 */
 	signalerArret(pid: number): void;
 	/** Flux des messages du service (reconnexion comprise), jusqu'à `fermer`. */
 	ouvrirFlux(s: ServiceLocal, surMessage: (m: MessageServeur) => void): { fermer(): void };

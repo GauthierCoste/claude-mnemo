@@ -36,7 +36,14 @@ export type InstantaneSuivi = {
 	service: ServiceLocal | null;
 };
 
-export type ResultatArret = { ok: true } | { ok: false; raison: string };
+/** `force` : sous Windows, le service n'a pu être arrêté que de force (sans arrêt propre de ses sessions). */
+export type ResultatArret = { ok: true; force?: true } | { ok: false; raison: string };
+
+/**
+ * Sous Windows, un signal au processus est un arrêt brutal (le service ne ferme rien) : quand la demande d'arrêt ne peut pas
+ * lui parvenir, on attend d'abord qu'il s'arrête seul, ce temps au plus, avant de le forcer.
+ */
+export const ATTENTE_AVANT_FORCE_MS = 10_000;
 
 export type SuiviService = {
 	instantane(): InstantaneSuivi;
@@ -64,6 +71,9 @@ export type OptionsSuivi = {
 	maintenant?: () => number;
 	intervalleSondageMs?: number;
 	attenteArretMs?: number;
+	/** Par défaut celle du processus. */
+	plateforme?: NodeJS.Platform;
+	attenteAvantForceMs?: number;
 };
 
 const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -73,6 +83,8 @@ export function creerSuivi(o: OptionsSuivi): SuiviService {
 	const maintenant = o.maintenant ?? Date.now;
 	const intervalle = o.intervalleSondageMs ?? INTERVALLE_SONDAGE_MS;
 	const attenteArret = o.attenteArretMs ?? ATTENTE_ARRET_MS;
+	const windows = (o.plateforme ?? process.platform) === 'win32';
+	const attenteAvantForce = o.attenteAvantForceMs ?? ATTENTE_AVANT_FORCE_MS;
 	const surChangements = new Set<(i: InstantaneSuivi) => void>();
 	const surNotifications = new Set<(n: NotificationSession) => void>();
 
@@ -197,7 +209,16 @@ export function creerSuivi(o: OptionsSuivi): SuiviService {
 		appliquer({ type: 'arretDemande' });
 		const suite = await acces.demanderArret(s);
 		if (typeof suite === 'object') return echec(suite.refus);
-		if (suite === 'signal') acces.signalerArret(s.pid);
+		let force = false;
+		if (suite === 'signal' && windows) {
+			// Windows : le signal tue sans rien fermer ; en dernier recours seulement
+			const limite = maintenant() + attenteAvantForce;
+			while (!ferme && acces.processusVivant(s.pid) && maintenant() < limite) await pause(PAS_ARRET_MS);
+			if (!ferme && acces.processusVivant(s.pid)) {
+				acces.signalerArret(s.pid);
+				force = true;
+			}
+		} else if (suite === 'signal') acces.signalerArret(s.pid);
 		const fin = maintenant() + attenteArret;
 		// suivi fermé pendant l'attente : plus rien ne la retient (le service, lui, continue de s'arrêter)
 		while (!ferme && acces.processusVivant(s.pid) && maintenant() < fin) await pause(PAS_ARRET_MS);
@@ -207,7 +228,7 @@ export function creerSuivi(o: OptionsSuivi): SuiviService {
 		fermerFlux();
 		if (service !== null && memeService(service, s)) service = null;
 		if (!appliquer({ type: 'arrete' })) emettre();
-		return { ok: true };
+		return force ? { ok: true, force: true } : { ok: true };
 	}
 
 	return {
