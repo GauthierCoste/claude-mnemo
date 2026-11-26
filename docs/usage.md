@@ -678,6 +678,11 @@ aside a note Mnemo injected counts as an error for the watch above.
   « seuil d’injection 90 % »; when it is cut, grey again, « seuil 90 % – coupé ». Under it, when cut, the notice and
   « Réactiver ». A note above the threshold that was not injected (refined later, or the cap per message reached) stays
   under the line: the session has not seen it.
+- Just under the separator (at the top of what the session has not seen when nothing is injected), « Chercher une
+  fiche… » (find a note): from two characters, a targeted search of the memory (the same search as the palette, notes
+  only) replaces the ranking and the earlier notes below it, one line per note, without %; ➤ injects it, a click on the
+  title opens it, and a note already injected is marked ◆, without ➤. ↓ moves to the first result; Escape or × empties
+  the field and brings the ranking back.
 - The ranking of the last meaningful message: on the left the calibrated score in %; in « ordre seul », the uncalibrated
   score in grey (« ≈ 42 % »: the refused model, the provisional rule, or an entry from before the live ranking), or ◇
   when there is none; the type dot and the title, with the reason under it and « piste » when the note was sent as a

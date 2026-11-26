@@ -6,6 +6,9 @@
  *   (vert pointillé) quand l'injection automatique est active, gris « coupé » si elle l'est ; dessous, l'injection
  *   automatique coupée par le suivi, avec son motif et « Réactiver ». L'état du classement qui sort de l'ordinaire (« affinage… », « ordre seul » et sa raison) est dit dans le bouton des
  *   modèles de la session, à droite du titre. Le message classé n'est pas rappelé ;
+ * - juste sous la jonction (sans fiche injectée : en tête du pas vu), le champ « Chercher une fiche… » (`RechercheFiche`,
+ *   session modifiable seulement) : dès deux caractères, les fiches trouvées remplacent le classement et « Plus tôt », sans %,
+ *   avec ➤ (une fiche déjà injectée : ◆, sans ➤) ; Échap ou la croix rendent le classement ;
  * - le classement du dernier message porteur : la note en % (calibrée) ; en ordre seul, « ≈ 42 % » en gris (note non
  *   calibrée) ou ◇ sans aucune note ; le titre et, dessous, la raison et « piste » (envoyée en piste dans la session) ;
  * - « Plus tôt dans la session » : les pistes plus anciennes et les fiches lues (◈) absentes du classement, plus récentes
@@ -33,6 +36,7 @@ import { avisModeles } from '../modeles/avis-modeles.ts';
 import { ModelesSession } from '../modeles/ModelesSession.tsx';
 import { cx } from '../commun/classes.ts';
 import { useToast } from '../Toast.tsx';
+import { RechercheFiche, rechercheActive, type FicheTrouvee } from './RechercheFiche.tsx';
 import s from './ClassementEnDirect.module.css';
 
 /** Durée d'affichage des ▲/▼ et du fondu d'une nouvelle venue. */
@@ -223,6 +227,10 @@ export function ClassementEnDirect(p: {
 	const [demarrage, setDemarrage] = useState<{ pour: string } | null>(null);
 	const [jamaisIci, setJamaisIci] = useState<string[]>([]);
 	const [, rafraichir] = useState(0);
+	// la recherche ciblée : propre à la session affichée
+	const [recherche, setRecherche] = useState({ session: p.session, texte: '' });
+	const texteCherche = recherche.session === p.session ? recherche.texte : '';
+	const enRecherche = p.modifiable && rechercheActive(texteCherche);
 	const suggestion = (p.suggestions ?? []).find((x) => !suggestionsGardees.has(`${p.session}|${x.chemin}`) && !jamais.has(x.chemin)) ?? null;
 
 	const titreSection = useRef<HTMLSpanElement>(null);
@@ -523,6 +531,38 @@ export function ClassementEnDirect(p: {
 		);
 	};
 
+	/** Une fiche trouvée par la recherche : sans % ; déjà injectée, ◆ et pas de ➤. */
+	const ligneTrouvee = (f: FicheTrouvee): ReactNode => {
+		const c = f.chemin;
+		const injectee = injectees.has(c);
+		const attend = aServir.chemins.includes(c);
+		const t = titres.get(c) ?? f.titre;
+		const quoi = injectee ? 'déjà injectée dans la session' : attend ? null : 'trouvée par la recherche';
+		return (
+			<li key={`trouvee:${c}`} className={s.ligne} data-id={c} data-trouvee="true" data-servie={injectee ? 'true' : 'false'} style={{ '--c': p.couleur(c) } as CSSProperties}>
+				<span className={`${s.note} ${s.injectee}`} role={injectee ? 'img' : undefined} aria-label={injectee ? 'Injectée dans la session' : undefined} title={injectee ? 'Déjà injectée dans la session' : undefined}>
+					{injectee ? '◆' : ''}
+				</span>
+				<span className={s.corps}>
+					<button type="button" className={s.fiche} title={`${injectee ? 'Déjà injectée dans la session' : 'Trouvée par la recherche'}\n${c}`} onClick={() => p.surOuvrirFiche(c)}>
+						<i aria-hidden="true" />
+						<span className={s.titre}>{t}</span>
+					</button>
+					<span className={s.sous}>{quoi === null ? <span className={s.attend}>injectée au prochain message</span> : quoi}</span>
+				</span>
+				{!injectee &&
+					gestes({
+						id: c,
+						titre: t,
+						ecartableIci: classees.some((l) => chemin(l.id) === c),
+						motifIci: "Indisponible : trouvée par la recherche, Mnemo ne l'a pas proposée à ce message.",
+						resume: 'trouvée par la recherche',
+						injecter: true,
+					})}
+			</li>
+		);
+	};
+
 	// Un seul séparateur entre ce que la session a vu (◆, en tête) et ce qu'elle n'a pas vu (le classement, puis plus tôt) : jamais
 	// retiré. Filet gris par défaut ; injection automatique active (note calibrée, ni coupée ni modèles coupés) : le seuil
 	// d'injection, vert pointillé ; coupée : de nouveau gris, avec « coupé ».
@@ -563,7 +603,7 @@ export function ClassementEnDirect(p: {
 					)
 				)}
 			</div>
-			{ordreServies.length + enLice.length === 0 && !jonctionVisible ? (
+			{ordreServies.length + enLice.length === 0 && !jonctionVisible && !p.modifiable ? (
 				<p className={s.mu}>Aucune fiche pour l’instant.</p>
 			) : (
 				<ol className={s.liste} aria-label="Injecté dans la session" ref={liste}>
@@ -597,13 +637,23 @@ export function ClassementEnDirect(p: {
 							)}
 						</li>
 					)}
-					{lignesClassees}
-					{classees.length > 0 && plusTot.length > 0 && (
-						<li key="plus-tot" className={s.intertitre} role="presentation">
-							Plus tôt dans la session
-						</li>
+					{p.modifiable && <RechercheFiche texte={texteCherche} surTexte={(texte) => setRecherche({ session: p.session, texte })} rendreTrouvee={ligneTrouvee} />}
+					{!enRecherche && (
+						<>
+							{ordreServies.length + enLice.length === 0 && !jonctionVisible && (
+								<li key="vide" className={s.mu} role="presentation">
+									Aucune fiche pour l’instant.
+								</li>
+							)}
+							{lignesClassees}
+							{classees.length > 0 && plusTot.length > 0 && (
+								<li key="plus-tot" className={s.intertitre} role="presentation">
+									Plus tôt dans la session
+								</li>
+							)}
+							{plusTot.map((l) => lignePlusTot(l))}
+						</>
 					)}
-					{plusTot.map((l) => lignePlusTot(l))}
 				</ol>
 			)}
 			{suggestion !== null && p.modifiable && (
