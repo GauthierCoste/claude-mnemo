@@ -129,8 +129,10 @@ opened is remembered in this browser:
   it does; « Défaut : x · Rétablir » appears only when the value differs from the default; finer settings are folded
   under « Réglages fins · N ». Mémoire and Système share one Cancel / Save footer; leaving the tab or the view with
   unsaved changes asks first. An engine waiting for a gesture puts an amber dot on the Réglages tab and on Branchements.
-- **Documentation**: how Mnemo works, in six chapters (the principle, a session and its six capabilities, agents, recall,
-  confidence, the archivist), checked against the code. The chapter opened is remembered too.
+- **Documentation**: a technical reference on one scrolling page (principle, session, agents, recall, search,
+  confidence, archivist): definitions and tables (capability → hook → effect, setting → effect → default, source →
+  reliability), checked against the code. The panel is a table of contents: a link scrolls to its section and the
+  section in view is marked.
 
 The settings of a folder are in `.mnemo/reglages.json` (local state, never versioned); the rules of the memory
 (reliabilities, fact weights, recall threshold, repetitions) are in `SCHEMA.md`, versioned (one commit per save). They

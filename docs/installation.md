@@ -251,7 +251,7 @@ this way. Nothing is registered to run at login.
 
 Open the interface and click the gear at the bottom of the left rail (shortcut: ⌥, on macOS, Alt+, elsewhere; the key
 next to M on a US keyboard). The settings have three tabs: **Agents** (session profiles, see
-[usage.md](usage.md#managing-profiles)), **Réglages** and **Documentation** (how Mnemo works, in six chapters, see
+[usage.md](usage.md#managing-profiles)), **Réglages** and **Documentation** (a technical reference on one page, see
 [usage.md](usage.md#settings)). **Réglages** has three sections,
 listed on the left:
 

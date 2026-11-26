@@ -31,7 +31,7 @@ it.
   the hooks, where it starts, and an avatar shown on its sessions. **Settings › Agents** edits it like a game character
   (appearance, class, equipment, capabilities, mission); the skills of the memory and of an agent are edited there too. A
   read-only preview shows everything a session of the profile receives, and where each part comes from. **Settings ›
-  Documentation** explains how Mnemo works, in six short chapters.
+  Documentation** is a one-page technical reference of how Mnemo works.
 - **Three engines.** Each profile chooses its engine and model; a session keeps the ones it was started with. Codex
   and Mistral Vibe get the memory through MCP, the context and reminders through their hooks, the checked instructions,
   and sessions started, resumed and wrapped up from the interface. Codex also shows its ChatGPT quotas next to the

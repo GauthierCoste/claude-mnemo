@@ -8,7 +8,7 @@
 
 - **Settings redesign (26/11/2026, 1.9.0).** Three tabs, Agents · Réglages · Documentation: an agent is edited like a
   game character (appearance, class, equipment, powers, mission); Réglages holds Branchements (engines, Claude app),
-  Mémoire (Rappel, Confiance) and Système; Documentation explains how Mnemo works in six chapters. The skills of the
+  Mémoire (Rappel, Confiance) and Système; Documentation is a one-page technical reference. The skills of the
   memory and of an agent are created, edited, renamed and deleted from the interface (icon in `metadata.icone`); a
   skill provided by Mnemo can be edited or reverted, not renamed or deleted. The screens named below are the ones of
   their time: Settings › Système › Moteurs is now Settings › Réglages › Branchements. See
