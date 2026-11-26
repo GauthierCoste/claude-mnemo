@@ -16,16 +16,6 @@
 	display: block;
 }
 
-.racine {
-	font: 12px var(--mono);
-	color: var(--mu);
-	border: 1px solid var(--bd);
-	border-radius: 7px;
-	padding: 3px 9px;
-	background: var(--s2);
-	white-space: nowrap;
-}
-
 .fictif {
 	font: 11px var(--mono);
 	color: var(--amber);
@@ -35,7 +25,7 @@
 	white-space: nowrap;
 }
 
-/* Le champ de recherche suit la racine, aligné à gauche ; les quotas et l'archiviste restent à droite. */
+/* Le champ de recherche suit le logo, aligné à gauche ; les quotas et l'archiviste restent à droite. */
 .commande {
 	margin: 0;
 	width: 420px;

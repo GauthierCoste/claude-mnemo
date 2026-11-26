@@ -5,11 +5,10 @@ import { BoutonModeles } from './modeles/BoutonModeles.tsx';
 import s from './BarreTitre.module.css';
 
 /**
- * Barre de titre (`.title`) : logo de Mnemo, racine du dossier Mnemo, champ de la palette (aligné à gauche, après la racine ; la
- * palette s'y pose, `champPalette`) ; à droite, les quotas des abonnements (Claude, ChatGPT), le bouton des modèles locaux, puis celui de l'archiviste.
+ * Barre de titre (`.title`) : logo de Mnemo, champ de la palette (aligné à gauche, après le logo ; la
+ * palette s'y pose, `champPalette`) ; le dossier Mnemo est dans la barre d'état, en bas, pas ici (décision de Gauthier) ; à droite, les quotas des abonnements (Claude, ChatGPT), le bouton des modèles locaux, puis celui de l'archiviste.
  */
 export function BarreTitre(p: {
-	racine: string | null;
 	fictif: boolean;
 	tiroirOuvert: boolean;
 	/**
@@ -25,7 +24,6 @@ export function BarreTitre(p: {
 		<header className={s.titre}>
 			{/* chemin relatif à la base de l'application (`public/icone.svg`, comme le manifeste) */}
 			<img className={s.marque} src={`${import.meta.env.BASE_URL}icone.svg`} alt="Mnemo" width={28} height={28} />
-			{p.racine !== null && <span className={s.racine}>{p.racine}</span>}
 			{p.fictif && <span className={s.fictif}>données fictives</span>}
 			<button ref={p.champPalette} type="button" className={s.commande} onClick={p.surPalette} aria-keyshortcuts={[...new Set(['Meta', toucheCommande().aria])].map((touche) => `${touche}+K`).join(' ')}>
 				<span>Chercher une session, un fichier, une fiche...</span>
