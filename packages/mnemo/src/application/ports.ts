@@ -718,6 +718,8 @@ export type GesteNote = {
 	rangMessage: number;
 	note: NoteDuGeste | null;
 	vecteur: VecteurDuMessage | null;
+	/** Identité du modèle du vecteur (`bge-m3@…`), lue même sans le vecteur (`sansVecteur`) ; null : pas de vecteur ; absente : non lue. */
+	modeleVecteur?: string | null;
 };
 
 /**

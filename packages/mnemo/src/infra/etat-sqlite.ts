@@ -364,6 +364,7 @@ function ligneVersGeste(l: Ligne): GesteNote {
 		message: (l.message as string | null) ?? null,
 		rangMessage: Number(l.rang_message),
 		note: noteLue(l.note),
+		modeleVecteur: modele ?? null,
 		vecteur: octets === null || modele === null || octets.byteLength % 4 !== 0 ? null : ({ modele, valeurs: octetsEnVecteur(octets) } satisfies VecteurDuMessage),
 	};
 }
@@ -1111,7 +1112,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 				conditions.push(`geste IN (${filtre.sortes.map(() => '?').join(', ')})`);
 				parametres.push(...filtre.sortes);
 			}
-			const colonnes = filtre.sansVecteur === true ? 'rang, horodatage_ms, geste, origine, session, dossier, position, fiche, empreinte, message, rang_message, note' : '*';
+			const colonnes = filtre.sansVecteur === true ? 'rang, horodatage_ms, geste, origine, session, dossier, position, fiche, empreinte, message, rang_message, note, modele_vecteur' : '*';
 			const ou = conditions.length === 0 ? '' : `WHERE ${conditions.join(' AND ')}`;
 			// LIMIT -1 : sans limite (SQLite)
 			return reessayer(() =>

@@ -96,11 +96,11 @@ describe('pairesDesGestes', () => {
 		expect(rare.paires.find((p) => p.origine === 'ecartee_ici')!.poids).toBe(5);
 	});
 
-	it('top 3 sans geste ni lecture dans la session : pas utile faible (0,3 × min(5, 1 / propension)) ; rangs 4 et suivants laissés', () => {
+	it('top 3 sans geste ni lecture dans la session : pas utile faible (0,3 × min(5, 1 / propension)) ; rangs 4 et suivants laissés ; une paire par (session, fiche)', () => {
 		const classements = session('S1', 2);
 		const { paires } = pairesDesGestes([geste('injectee_main', 'S1', 'notes/S1-a.md', 1, 1)], classements);
 		const faibles = paires.filter((p) => p.origine === 'sans_geste');
-		expect(faibles.map((p) => `${p.fiche}#${p.rangMessage}`).sort()).toEqual(['notes/S1-b.md#1', 'notes/S1-b.md#2', 'notes/S1-c.md#1', 'notes/S1-c.md#2']);
+		expect(faibles.map((p) => `${p.fiche}#${p.rangMessage}`).sort()).toEqual(['notes/S1-b.md#1', 'notes/S1-c.md#1']);
 		for (const p of faibles) {
 			expect(p.y).toBe(false);
 			// rangs 2 et 3 : aucun geste, propension au plancher : 1 / 0,05 = 20 plafonné à 5, × 0,3 : 1,5 (jamais plus qu'un geste)
@@ -117,6 +117,21 @@ describe('pairesDesGestes', () => {
 		expect(faibleB).toHaveLength(3);
 		for (const p of faibleB) expect(p.poids).toBeCloseTo(1.2, 12);
 		expect(paires.find((p) => p.origine === 'ecartee_ici')!.poids).toBeCloseTo(4, 12);
+	});
+
+	it('pas utile faible : la ligne de meilleur rang de la fiche dans la session, une seule paire', () => {
+		const classements: ClassementServi[] = [
+			{ session: 'S1', rangMessage: 1, lignes: [ligne('notes/x.md', 1), ligne('notes/y.md', 3)] },
+			{ session: 'S1', rangMessage: 2, lignes: [ligne('notes/y.md', 1), ligne('notes/x.md', 2)] },
+			{ session: 'S1', rangMessage: 3, lignes: [ligne('notes/z.md', 4), ligne('notes/y.md', 2)] },
+			{ session: 'S2', rangMessage: 1, lignes: [ligne('notes/y.md', 2)] },
+		];
+		const { paires } = pairesDesGestes([], classements);
+		expect(paires.map((p) => [p.session, p.fiche, p.rangMessage, p.rang])).toEqual([
+			['S1', 'notes/x.md', 1, 1],
+			['S1', 'notes/y.md', 2, 1],
+			['S2', 'notes/y.md', 1, 2],
+		]);
 	});
 
 	it('pas utile faible : jamais pour une fiche lue, injectée, ou touchée par un geste quelconque dans la session', () => {
@@ -164,5 +179,23 @@ describe('pairesDesGestes', () => {
 		expect(paires[0]!.signaux).toEqual({ cosinusRelatif: 0.1, bm25Relatif: null, signalSession: 0.2, logit: 2.5 });
 		// aucune exposition connue : pas de correction
 		expect(paires[0]!.poids).toBe(1);
+	});
+
+	it('modèles : une session dont un geste porte le vecteur d’un autre modèle de sens est écartée entière ; sans vecteur, gardée', () => {
+		const classements = [...session('S1', 1), ...session('S2', 1), ...session('S3', 1)];
+		const gestes = [
+			{ ...geste('injectee_main', 'S1', 'notes/S1-a.md', 1, 1), modeleVecteur: 'bge-m3@aaaaaaaaaaaa' },
+			{ ...geste('ecartee_ici', 'S1', 'notes/S1-b.md', 1, 2), modeleVecteur: null },
+			{ ...geste('injectee_main', 'S2', 'notes/S2-a.md', 1, 1), modeleVecteur: 'bge-m3@bbbbbbbbbbbb' },
+			geste('injectee_main', 'S3', 'notes/S3-a.md', 1, 1),
+		];
+		const r = pairesDesGestes(gestes, classements, { sens: 'bge-m3-Q8_0.gguf@aaaaaaaaaaaa' });
+		expect(r.autresModeles).toBe(1);
+		expect(new Set(r.paires.map((p) => p.session))).toEqual(new Set(['S1', 'S3']));
+		expect(r.paires.filter((p) => p.origine !== 'sans_geste').map((p) => p.fiche)).toEqual(['notes/S1-a.md', 'notes/S1-b.md', 'notes/S3-a.md']);
+		// modèle installé inconnu : rien n'est écarté
+		const sans = pairesDesGestes(gestes, classements, { sens: null });
+		expect(sans.autresModeles).toBe(0);
+		expect(new Set(sans.paires.map((p) => p.session))).toEqual(new Set(['S1', 'S2', 'S3']));
 	});
 });

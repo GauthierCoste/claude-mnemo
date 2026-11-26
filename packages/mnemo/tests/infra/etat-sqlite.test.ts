@@ -1207,12 +1207,16 @@ describe('etat.sqlite', () => {
 			rangMessage: 2,
 			note: { note: 0.72 },
 			vecteur: null,
+			modeleVecteur: null,
 		});
 		// une carte sans note : note inconnue ; un vecteur d'un autre message que le porteur du geste n'est pas gardé
 		expect(gestes[2]).toMatchObject({ fiche: 'c.md', note: null, message: 'le porteur', origine: 'claude', vecteur: null });
 		expect(gestes[1]).toMatchObject({ message: 'le porteur', note: { note: 0.9 }, origine: 'utilisateur' });
 		expect(gestes[1]!.vecteur?.modele).toBe('bge-m3@abc');
 		expect([...gestes[1]!.vecteur!.valeurs]).toEqual([0.25, -0.5, 1]);
+		// le modèle du vecteur, lu aussi sans le vecteur
+		expect(gestes[1]!.modeleVecteur).toBe('bge-m3@abc');
+		expect((await etat.gestes({ sortes: ['injectee_main'], sansVecteur: true, limite: null }))[0]).toMatchObject({ vecteur: null, modeleVecteur: 'bge-m3@abc' });
 		expect(gestes[0]).toMatchObject({ origine: 'auto', message: 'explicite', rangMessage: 1, vecteur: null });
 		// note en JSON, vecteur en Float32 petit-boutiste, quelle que soit la machine
 		const base = new DatabaseSync(chemin);
