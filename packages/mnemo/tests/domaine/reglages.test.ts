@@ -89,12 +89,29 @@ describe('lireReglages', () => {
 });
 
 describe('réglages retirés du contexte', () => {
-	it('un fichier qui porte les anciennes clés se charge avec un avertissement par clé et les défauts', () => {
+	it('un fichier qui porte les clés retirées en 1.5.0 se charge sans avertissement, aux défauts', () => {
 		const anciennes = ['fichesMax', 'fichesMin', 'caracteres', 'fichesListees', 'scoreMin', 'messages', 'reponses', 'reranker'];
 		const { reglages, avertissements } = lireReglages({ contexte: Object.fromEntries(anciennes.map((k) => [k, 5])) });
 		expect(reglages).toEqual(REGLAGES_PAR_DEFAUT);
-		expect(avertissements).toHaveLength(anciennes.length);
-		for (const k of anciennes) expect(avertissements.join('\n')).toContain(`contexte.${k}`);
+		expect(avertissements).toEqual([]);
+		for (const k of anciennes) expect(modifierReglages(REGLAGES_PAR_DEFAUT, { [`contexte.${k}`]: 5 })).toEqual({ ok: false, motifs: [`Réglage retiré « contexte.${k} ».`] });
+	});
+
+	it('un ancien fichier réel reste muet ; une clé vraiment inconnue avertit toujours', () => {
+		const ancien = { contexte: { fichesMax: 4, scoreMin: 0.6, reponses: 4, reranker: 50 }, modeles: { inactiviteMinutes: 120 } };
+		expect(lireReglages(ancien)).toEqual({
+			reglages: { ...REGLAGES_PAR_DEFAUT, modeles: { ...REGLAGES_PAR_DEFAUT.modeles, inactiviteMinutes: 120 } },
+			avertissements: [],
+		});
+		expect(lireReglages({ contexte: { inventee: 1 } }).avertissements).toEqual(['Réglage inconnu « contexte.inventee » : ignoré.']);
+		expect(lireReglages({ inconnu: {} }).avertissements).toEqual(['Réglage inconnu « inconnu » : ignoré.']);
+	});
+
+	it('l’écriture du fichier efface les clés retirées, groupe vidé compris, et garde le reste', () => {
+		const ancien = { contexte: { fichesMax: 4, scoreMin: 0.6, reponses: 4, reranker: 50 }, modeles: { inactiviteMinutes: 120 }, futur: { x: 1 } };
+		const r = { ...REGLAGES_PAR_DEFAUT, modeles: { ...REGLAGES_PAR_DEFAUT.modeles, inactiviteMinutes: 120 } };
+		expect(fusionnerFichier(ancien, r, ['interface.accent'])).toEqual({ modeles: { inactiviteMinutes: 120 }, futur: { x: 1 } });
+		expect(fusionnerFichier({ contexte: { fichesMax: 4, seuilPiste: 20 } }, r, ['interface.accent'])).toEqual({ contexte: { seuilPiste: 20 } });
 	});
 
 	it('cartesNommees : 5 (0 à 15)', () => {
@@ -170,8 +187,8 @@ describe('injection automatique et pistes', () => {
 			avertissements: [],
 		});
 		expect(modifierReglages(REGLAGES_PAR_DEFAUT, { 'contexte.cartesPerimetre': 5 })).toEqual({ ok: false, motifs: ['Réglage retiré « contexte.cartesPerimetre ».'] });
-		// l'ancienne clé reste telle quelle dans le fichier, comme toute entrée non touchée
-		expect(fusionnerFichier({ contexte: { cartesPerimetre: 12 } }, REGLAGES_PAR_DEFAUT, ['contexte.pistesParMessage'])).toEqual({ contexte: { cartesPerimetre: 12 } });
+		// l'ancienne clé est effacée du fichier à sa prochaine écriture
+		expect(fusionnerFichier({ contexte: { cartesPerimetre: 12 } }, REGLAGES_PAR_DEFAUT, ['contexte.pistesParMessage'])).toEqual({});
 	});
 });
 
