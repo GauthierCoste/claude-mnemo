@@ -12,7 +12,7 @@ export type EtatEtape = 'ok' | 'casse' | 'attente' | 'inconnu';
 
 export type EtapeCircuit = { cle: CleEtape; nom: string; valeur: string; infobulle: string; etat: EtatEtape };
 
-export type CleStatut = 'pret' | 'a-lier' | 'a-approuver' | 'a-mettre-a-jour' | 'a-regler' | 'pas-installe';
+export type CleStatut = 'pret' | 'a-lier' | 'a-approuver' | 'a-verifier' | 'a-mettre-a-jour' | 'a-regler' | 'introuvable' | 'pas-installe';
 export type StatutMoteur = { cle: CleStatut; libelle: string };
 
 /**
@@ -27,7 +27,7 @@ export type ActionMoteur = {
 	commande: NonNullable<PointMoteurVue['remede']> | null;
 };
 
-export const NOMS_ETAPES: Readonly<Record<CleEtape, string>> = {
+const NOMS_ETAPES: Readonly<Record<CleEtape, string>> = {
 	commande: 'Installé',
 	version: 'Version',
 	mcp: 'Mémoire',
@@ -39,8 +39,10 @@ const LIBELLES_STATUTS: Readonly<Record<CleStatut, string>> = {
 	pret: 'Prêt',
 	'a-lier': 'À lier',
 	'a-approuver': 'À approuver',
+	'a-verifier': 'À vérifier',
 	'a-mettre-a-jour': 'À mettre à jour',
 	'a-regler': 'À régler',
+	introuvable: 'Introuvable',
 	'pas-installe': 'Pas installé',
 };
 
@@ -75,9 +77,10 @@ export function statutDuMoteur(m: MoteurVue): StatutMoteur {
 	if (points.length === 0) return statut(m.indisponible === null ? 'pret' : 'pas-installe');
 	const x = points[indiceCasse(points)];
 	if (x === undefined) return statut('pret');
-	if (x.cle === 'commande') return statut('pas-installe');
+	// introuvable maintenant : le service lance encore la commande trouvée à son démarrage
+	if (x.cle === 'commande') return statut(x.etat === 'introuvable' ? 'pas-installe' : 'introuvable');
 	if (x.cle === 'version') return statut('a-mettre-a-jour');
-	if (x.cle === 'approbation') return statut('a-approuver');
+	if (x.cle === 'approbation') return statut(x.ok === null ? 'a-verifier' : 'a-approuver');
 	return statut(points.some(liable) ? 'a-lier' : 'a-regler');
 }
 
@@ -103,7 +106,7 @@ export function actionDuMoteur(m: MoteurVue): ActionMoteur | null {
 		const titre = !liable(x) ? `${x.libelle} : ${x.etat}.` : perime ? `La liaison de ${m.nom} à Mnemo est périmée.` : `${m.nom} n’est pas lié à Mnemo.`;
 		return { ...base, titre, motif: !liable(x) || perime ? (x.detail ?? null) : motifNonLie(points), geste: 'lier', commande: aLier.remede ?? null };
 	}
-	if (x.cle === 'commande') return { ...base, titre: x.ok === false && x.etat === 'introuvable' ? 'Pas installé sur ce poste.' : `${m.nom} introuvable maintenant.`, motif: x.detail ?? null, geste: null };
+	if (x.cle === 'commande') return { ...base, titre: x.etat === 'introuvable' ? 'Pas installé sur ce poste.' : `${m.nom} introuvable maintenant.`, motif: x.detail ?? null, geste: null };
 	if (x.cle === 'approbation') {
 		return {
 			...base,

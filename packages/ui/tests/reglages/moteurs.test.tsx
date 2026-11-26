@@ -161,14 +161,25 @@ const carte = (section: HTMLElement, nom: string): HTMLElement => within(section
 const etapes = (c: HTMLElement) =>
 	within(within(c).getByRole('list', { name: /^Circuit de liaison de / })).getAllByRole('listitem').map((li) => ({ texte: li.textContent, etat: li.getAttribute('data-etat') }));
 
-/** Liaison rendue telle quelle par le service (les moteurs relus inchangés), pour Mistral Vibe. */
-function lierRend(client: Client, liaison: ReponseLiaisonMoteur['liaison'] | Error) {
+/** Liaison rendue par le service pour Mistral Vibe, avec les moteurs relus (inchangés, ou retouchés par `relus`). */
+function lierRend(client: Client, liaison: ReponseLiaisonMoteur['liaison'] | Error, relus?: (r: ReponseMoteurs) => void) {
 	const envoyer = client.api.envoyer.bind(client.api);
 	return vi.spyOn(client.api, 'envoyer').mockImplementation(async (chemin, corps) => {
 		if (chemin !== ROUTES.moteurLier.replace(':id', 'mistral-vibe')) return envoyer(chemin, corps);
 		if (liaison instanceof Error) throw liaison;
-		const { moteurs } = await client.api.lire<ReponseMoteurs>(ROUTES.moteurs, { poste: '1' });
-		return { moteurs, liaison } satisfies ReponseLiaisonMoteur as never;
+		const r = await client.api.lire<ReponseMoteurs>(ROUTES.moteurs, { poste: '1' });
+		relus?.(r);
+		return { moteurs: r.moteurs, liaison } satisfies ReponseLiaisonMoteur as never;
+	});
+}
+
+/** Les moteurs lus avec le poste, retouchés par `retoucher`. */
+function lireRetouche(client: Client, retoucher: (r: ReponseMoteurs) => void) {
+	const lire = client.api.lire.bind(client.api);
+	vi.spyOn(client.api, 'lire').mockImplementation(async (chemin, params, options) => {
+		const r = await lire<ReponseMoteurs>(chemin, params, options);
+		if (chemin === ROUTES.moteurs && params?.['poste'] === '1') retoucher(r);
+		return r as never;
 	});
 }
 
@@ -180,7 +191,7 @@ describe('Réglages › Système › Moteurs', () => {
 			'Codex À approuver',
 			'Mistral Vibe À lier',
 		]);
-		expect(within(section).getByText(/un par fournisseur : Claude Code \(Anthropic\), Codex \(OpenAI\), Mistral Vibe \(Mistral\)/u)).toBeTruthy();
+		expect(within(section).getByText('Les agents de code qui font tourner les sessions, un par fournisseur. Un moteur est prêt quand son circuit est allumé jusqu’au bout.')).toBeTruthy();
 		const vibe = carte(section, 'Mistral Vibe');
 		expect(within(vibe).getByText('Mistral')).toBeTruthy();
 		// équipe : les profils qui tournent sur ce moteur
@@ -255,6 +266,70 @@ describe('Réglages › Système › Moteurs', () => {
 		expect(screen.queryByText('Mistral Vibe lié à Mnemo.')).toBeNull();
 	});
 
+	it('liaison partielle (serveur MCP déclaré, hooks en échec) : l’étape qui bloque passe à Suivi, le message d’échec reste', async () => {
+		const client = creerClientDemo();
+		lierRend(
+			client,
+			{
+				id: 'mistral-vibe',
+				lie: false,
+				ok: false,
+				mcp: { resultat: 'declare', message: 'Serveur MCP déclaré pour toutes les sessions Mistral Vibe.' },
+				hooks: { resultat: 'echec', message: 'Hooks de Mistral Vibe illisibles : fichier refusé.' },
+			},
+			(r) => {
+				const points = r.moteurs.find((m) => m.id === 'mistral-vibe')!.poste!;
+				points[2] = { cle: 'mcp', libelle: 'Serveur MCP mnemo', ok: true, etat: 'déclaré' };
+			},
+		);
+		const section = await ouvrirMoteurs(client);
+		await act(async () => within(carte(section, 'Mistral Vibe')).getByRole('button', { name: 'Lier à Mnemo' }).click());
+		await waitFor(() => expect(etapes(carte(section, 'Mistral Vibe')).map((e) => e.etat)).toEqual(['ok', 'ok', 'ok', 'casse']));
+		expect(within(carte(section, 'Mistral Vibe')).getByRole('alert').textContent).toBe('Hooks de Mistral Vibe illisibles : fichier refusé.');
+	});
+
+	it('« Lier à Mnemo » indisponible pendant une vérification du poste (« Relire »)', async () => {
+		const client = creerClientDemo();
+		const section = await ouvrirMoteurs(client);
+		const lire = client.api.lire.bind(client.api);
+		const enAttente: (() => void)[] = [];
+		vi.spyOn(client.api, 'lire').mockImplementation(async (chemin, params, options) => {
+			const r = await lire(chemin, params, options);
+			if (chemin === ROUTES.moteurs && params?.['poste'] === '1') await new Promise<void>((f) => enAttente.push(f));
+			return r as never;
+		});
+		await act(async () => within(section).getByRole('button', { name: 'Relire' }).click());
+		await waitFor(() => expect(enAttente).toHaveLength(1));
+		expect((within(carte(section, 'Mistral Vibe')).getByRole('button', { name: 'Lier à Mnemo' }) as HTMLButtonElement).disabled).toBe(true);
+		await act(async () => enAttente[0]!());
+		await waitFor(() => expect((within(carte(section, 'Mistral Vibe')).getByRole('button', { name: 'Lier à Mnemo' }) as HTMLButtonElement).disabled).toBe(false));
+	});
+
+	it('moteur pas installé : éteint (sans la couleur de son fournisseur), « Nouveau profil » indisponible avec sa raison ; Claude Code manuel, lui, reste utilisable', async () => {
+		const client = creerClientDemo();
+		lireRetouche(client, (r) => {
+			for (const m of r.moteurs.filter((x) => x.id !== 'mistral-vibe')) {
+				m.indisponible = `${m.nom} introuvable sur ce poste.`;
+				m.manuel = m.id === 'claude-code';
+				m.poste = [{ cle: 'commande', libelle: 'Commande', ok: false, etat: 'introuvable', detail: `${m.nom} absent du PATH` }];
+			}
+		});
+		const section = await ouvrirMoteurs(client);
+		await waitFor(() => expect(carte(section, 'Codex').getAttribute('aria-labelledby')!.split(' ').map((id) => document.getElementById(id)?.textContent)).toEqual(['Codex', 'Pas installé']));
+		const codex = carte(section, 'Codex');
+		expect(codex.hasAttribute('data-absent')).toBe(true);
+		expect(codex.style.getPropertyValue('--c')).toBe('');
+		expect(within(codex).getByText('Pas installé sur ce poste.')).toBeTruthy();
+		const nouveau = within(codex).getByRole('button', { name: 'Nouveau profil sur Codex' });
+		expect(nouveau.getAttribute('aria-disabled')).toBe('true');
+		expect(document.getElementById(nouveau.getAttribute('aria-describedby')!)?.textContent).toBe('Pas installé sur ce poste');
+		await act(async () => nouveau.click());
+		expect(screen.getByRole('tab', { name: 'Système' }).getAttribute('aria-selected')).toBe('true');
+		const claude = within(carte(section, 'Claude Code')).getByRole('button', { name: 'Nouveau profil sur Claude Code' });
+		expect(claude.getAttribute('aria-disabled')).toBeNull();
+		expect(carte(section, 'Mistral Vibe').style.getPropertyValue('--c')).toBe('var(--fournisseur-mistral)');
+	});
+
 	it('Codex à approuver : « Copier « /hooks » » copie la commande à taper dans Codex', async () => {
 		const writeText = vi.fn(async () => {});
 		Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
@@ -269,12 +344,20 @@ describe('Réglages › Système › Moteurs', () => {
 	});
 
 	it('« Nouveau profil » d’un moteur : Réglages › Profils, création d’un profil qui tournera sur lui', async () => {
-		const section = await ouvrirMoteurs();
+		const client = creerClientDemo();
+		const remplacer = vi.spyOn(client.api, 'remplacer');
+		const section = await ouvrirMoteurs(client);
 		await act(async () => within(carte(section, 'Mistral Vibe')).getByRole('button', { name: 'Nouveau profil sur Mistral Vibe' }).click());
 		expect(screen.getByRole('tab', { name: 'Profils' }).getAttribute('aria-selected')).toBe('true');
 		const liste = await screen.findByRole('navigation', { name: 'Profils' });
 		expect(document.activeElement).toBe(within(liste).getByLabelText('Nom du nouveau profil'));
 		expect(screen.getByText(/Il tournera sur Mistral Vibe/u)).toBeTruthy();
+		fireEvent.change(within(liste).getByLabelText('Nom du nouveau profil'), { target: { value: 'vibe-essai' } });
+		await act(async () => within(liste).getByRole('button', { name: 'Créer' }).click());
+		await screen.findByRole('form', { name: 'Profil vibe-essai' });
+		const [chemin, corps] = remplacer.mock.calls.find(([c]) => c === ROUTES.profil.replace(':id', 'vibe-essai'))!;
+		expect(chemin).toBe(ROUTES.profil.replace(':id', 'vibe-essai'));
+		expect((corps as { editable: { moteur: string } }).editable.moteur).toBe('mistral-vibe');
 	});
 
 	it('« Relire » : désactivé, section occupée et « Vérification… » pendant chaque lecture ; l’heure de la vérification ; la carte relue', async () => {
@@ -309,7 +392,7 @@ describe('Réglages › Système › Moteurs', () => {
 		await waitFor(() => expect(relire.disabled).toBe(false));
 		expect(statut()).toMatch(/^Vérifié à \d\d:\d\d$/u);
 		const codex = carte(section, 'Codex');
-		expect(codex.getAttribute('aria-labelledby')!.split(' ').map((id) => document.getElementById(id)?.textContent)).toEqual(['Codex', 'Pas installé']);
+		expect(codex.getAttribute('aria-labelledby')!.split(' ').map((id) => document.getElementById(id)?.textContent)).toEqual(['Codex', 'Introuvable']);
 		expect(within(codex).getByText('Codex introuvable maintenant.')).toBeTruthy();
 		expect(within(codex).getByText(/commande disparue/u)).toBeTruthy();
 		await act(async () => relire.click());

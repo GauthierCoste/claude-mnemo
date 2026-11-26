@@ -41,10 +41,16 @@ function nettoyer(p: Partage, cle: string): void {
 
 /**
  * Données de `cle` rendues par une écriture (la vue relue qu'elle renvoie) : elles remplacent celles du cache et de tous ses
- * lecteurs montés, sans nouvelle lecture.
+ * lecteurs montés, sans nouvelle lecture ; les lectures de `cle` en cours, d'avant l'écriture, sont abandonnées (leur
+ * réponse, si elle arrive quand même, est ignorée par chaque lecteur).
  */
 export function publierRessource(cache: CacheBorne, cle: string, donnees: unknown): void {
 	const p = partageDe(cache);
+	for (const [id, lecture] of [...p.lectures]) {
+		if (!id.startsWith(`${cle}${SEPARATEUR}`)) continue;
+		p.lectures.delete(id);
+		lecture.controleur.abort();
+	}
 	cache.set(cle, donnees);
 	p.publiees.set(cle, (p.publiees.get(cle) ?? 0) + 1);
 	for (const f of [...(p.ecouteurs.get(cle) ?? [])]) f();
@@ -164,10 +170,15 @@ export function useRessource<T>(cle: string | null, charger: (signal: AbortSigna
 		};
 	}, [cle, version, demandes, cache, partage]);
 
-	// données publiées par une écriture : prises dans le cache, sans lecture ni erreur
+	// données publiées par une écriture depuis le montage (ou le changement de clé) : prises dans le cache, sans lecture ni
+	// erreur ; la lecture en cours de ce lecteur devient caduque (sa réponse, plus ancienne, ne les écrase pas)
+	const publieesVues = useRef({ cle, n: publiees });
 	useEffect(() => {
-		if (cle === null || publiees === 0) return;
-		setEtat((e) => ({ ...e, cle, donnees: cache.get(cle) as T, erreur: null, statut: null }));
+		const vues = publieesVues.current;
+		publieesVues.current = { cle, n: publiees };
+		if (cle === null || vues.cle !== cle || vues.n === publiees) return;
+		sequence.current++;
+		setEtat((e) => ({ ...e, cle, donnees: cache.get(cle) as T, erreur: null, statut: null, chargement: false }));
 	}, [cle, publiees, cache]);
 
 	const recharger = useCallback(() => {

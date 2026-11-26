@@ -69,6 +69,31 @@ describe('useRessource', () => {
 		expect(attentes).toHaveLength(1);
 	});
 
+	it('lecture en vol puis publication : la publication gagne, la lecture abandonnée ne l’écrase pas', async () => {
+		const faux = creerFauxClient();
+		const attentes: { resoudre(v: string): void }[] = [];
+		const signaux: AbortSignal[] = [];
+		const charger = (signal: AbortSignal) => {
+			const d = differe<string>();
+			attentes.push(d);
+			signaux.push(signal);
+			return d.promesse;
+		};
+		const wrapper = ({ children }: { children: ReactNode }) => createElement(FournisseurClient, { client: faux.client, children });
+		const rendu = renderHook(() => ({ r: useRessource('moteurs', charger), cache: useCacheRessources() }), { wrapper });
+		await act(async () => attentes[0]!.resoudre('v1'));
+		act(() => rendu.result.current.r.recharger());
+		await waitFor(() => expect(attentes).toHaveLength(2));
+		expect(rendu.result.current.r.chargement).toBe(true);
+		act(() => publierRessource(rendu.result.current.cache, 'moteurs', 'publiee'));
+		expect(signaux[1]!.aborted).toBe(true);
+		expect(rendu.result.current.r).toMatchObject({ donnees: 'publiee', chargement: false });
+		// la lecture d'avant répond quand même (chargeur qui ignore le signal) : ignorée
+		await act(async () => attentes[1]!.resoudre('ancienne'));
+		expect(rendu.result.current.r.donnees).toBe('publiee');
+		expect(rendu.result.current.cache.get('moteurs')).toBe('publiee');
+	});
+
 	it('sans memoire : pas de rechargement ; recharger() recharge', async () => {
 		const { faux, attentes, rendu } = monter(false);
 		await act(async () => attentes[0]!.resoudre('v1'));

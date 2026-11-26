@@ -1,12 +1,14 @@
 /**
  * L'encadré d'action d'un moteur, pour sa première étape cassée : pourquoi elle bloque, et le geste qui la débloque.
- * « Lier à Mnemo » (serveur MCP et hooks du poste) : désactivé pendant l'appel, avec le reflet des actions en cours ; lié, un
- * toast ; une déclaration de l'utilisateur laissée ou une étape en échec, leurs messages ici (en alerte pour un échec) ; la
+ * « Lier à Mnemo » (serveur MCP et hooks du poste) : désactivé pendant l'appel (avec le reflet des actions en cours) et pendant
+ * une vérification du poste ; lié, un
+ * toast ; une déclaration de l'utilisateur laissée ou une étape en échec, leurs messages ici (en alerte pour un échec), gardés
+ * quand l'étape qui bloque change avec la vue relue, jusqu'à la vérification suivante ; la
  * commande à lancer soi-même reste en repli discret. Sinon « Copier » la commande (dans un terminal, ou à taper dans le moteur).
  */
 import type { IdMoteur } from '@mnemo/commun';
 import type { EtapeLiaisonVue, LiaisonMoteurVue } from '@mnemo/contrat';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ErreurApi } from '../../../client/api.ts';
 import { useLierMoteur } from '../../../client/hooks.ts';
 import type { ActionMoteur as Action } from '../../../moteurs/circuit.ts';
@@ -25,13 +27,18 @@ function retourDe(l: LiaisonMoteurVue): Retour | null {
 	return { alerte: !l.ok, messages: etapes.length > 0 ? etapes.map((e) => e.message) : ['Liaison incomplète.'] };
 }
 
-export function ActionMoteur(p: { id: IdMoteur; moteur: string; action: Action }): ReactNode {
+/** `lecture` : une vérification du poste en cours (« Relire ») : « Lier à Mnemo » attend qu'elle soit finie. */
+export function ActionMoteur(p: { id: IdMoteur; moteur: string; action: Action; lecture: boolean }): ReactNode {
 	const a = p.action;
 	const toast = useToast();
 	const lier = useLierMoteur();
 	const [enCours, setEnCours] = useState(false);
 	const [retour, setRetour] = useState<Retour | null>(null);
 	const copier = (texte: string) => copierTexte(texte, toast, 'Commande copiée.');
+	// une nouvelle vérification du poste : le retour de la dernière liaison n'est plus à jour
+	useEffect(() => {
+		if (p.lecture) setRetour(null);
+	}, [p.lecture]);
 
 	const surLier = async () => {
 		setEnCours(true);
@@ -56,7 +63,7 @@ export function ActionMoteur(p: { id: IdMoteur; moteur: string; action: Action }
 				{a.motif !== null && ` ${a.motif}`}
 			</p>
 			{a.geste === 'lier' && (
-				<Bouton petit className={`${s.geste} ${s.cible}`} disabled={enCours} onClick={() => void surLier()}>
+				<Bouton petit className={`${s.geste} ${s.cible}`} disabled={enCours || p.lecture} onClick={() => void surLier()}>
 					{enCours ? <span className={r.reflet}>Liaison…</span> : 'Lier à Mnemo'}
 				</Bouton>
 			)}

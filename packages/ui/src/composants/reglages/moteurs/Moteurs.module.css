@@ -238,21 +238,23 @@ section.moteurs {
 	}
 }
 
+/* le nom d'une étape passe à la ligne en étroit ; sa valeur garde une ligne (en entier dans l'infobulle) */
 .nomEtape,
 .valeur {
 	max-width: 100%;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 	padding: 0 4px;
 }
 
 .nomEtape {
 	font-size: 12px;
 	font-weight: 600;
+	overflow-wrap: anywhere;
 }
 
 .valeur {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	font-size: 11px;
 	color: var(--mu);
 }
