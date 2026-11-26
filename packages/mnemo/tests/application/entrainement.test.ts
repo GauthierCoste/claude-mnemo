@@ -264,6 +264,30 @@ describe('entraînement de la note : une tâche à la fois (D7)', () => {
 		expect((await autre.e.etat()).derniereErreur).toBe('index fermé');
 	});
 
+	it("un réapprentissage automatique n'efface pas l'erreur d'une tâche manuelle ; son échec la remplace ; une tâche manuelle l'efface", async () => {
+		let echoue = false;
+		const { e } = faux([valide('v', ['a.md'])], {
+			journal: async () => [],
+			apprenti: { apprendre: async () => (echoue ? Promise.reject(new Error('fil arrêté')) : rapportFactice()) },
+		});
+		await (await e.preparer()).fin;
+		const manuelle = (await e.etat()).derniereErreur;
+		expect(manuelle).toMatch(/Aucun message nouveau/u);
+		await (await e.apprendre({ origine: 'automatique' })).fin;
+		expect((await e.etat()).derniereErreur).toBe(manuelle);
+		echoue = true;
+		await (await e.apprendre({ origine: 'automatique' })).fin;
+		expect((await e.etat()).derniereErreur).toBe('fil arrêté');
+		// l'erreur d'une tâche automatique : la suivante, même automatique, l'efface
+		echoue = false;
+		await (await e.apprendre({ origine: 'automatique' })).fin;
+		expect((await e.etat()).derniereErreur).toBeUndefined();
+		await (await e.preparer()).fin;
+		expect((await e.etat()).derniereErreur).toBe(manuelle);
+		await (await e.apprendre({ origine: 'manuel' })).fin;
+		expect((await e.etat()).derniereErreur).toBeUndefined();
+	});
+
 	it("une écriture en cours (qui tient le verrou un instant) ne fait pas refuser la tâche qui démarre : le verrou de la tâche est pris après elle, dans la file", async () => {
 		const ecriture = enMain<void>();
 		const { e, etat, ports } = faux([unCas('m', ['a.md'])]);

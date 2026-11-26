@@ -12,6 +12,8 @@
  * - Apprendre : le modèle d'avant est gardé (`revenir` l'échange) ; une ligne d'historique par essai (`enregistrerApprentissage`,
  *   partagé avec `mnemo banc contexte --apprendre`). Les écritures des fichiers de la note (nouveau modèle, retour au modèle
  *   d'avant) passent l'une après l'autre.
+ * - `derniereErreur` : l'échec de la dernière tâche ; une tâche qui démarre l'efface, sauf une tâche automatique l'erreur d'une
+ *   tâche manuelle.
  */
 import type { BilanExtraction, MessageAExtraire } from './banc-extraire.ts';
 import { fusionnerCas, messagesAExtraire } from './banc-extraire.ts';
@@ -246,6 +248,12 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 	/** Rend le verrou tenu par la tâche en cours (null : aucune tâche ne le tient). */
 	let rendreVerrou: (() => void) | null = null;
 	let derniereErreur: string | undefined;
+	/** `derniereErreur` vient d'une tâche automatique (réapprentissage en fond) : la tâche suivante, même automatique, l'efface. */
+	let erreurAutomatique = false;
+	const noterErreur = (message: string, automatique: boolean): void => {
+		derniereErreur = message;
+		erreurAutomatique = automatique;
+	};
 	let ecritures: Promise<unknown> = Promise.resolve();
 	/** File des écritures des fichiers de la note (nouveau modèle, retour au modèle d'avant). */
 	let ecrituresNote: Promise<unknown> = Promise.resolve();
@@ -305,16 +313,19 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 		};
 	};
 
-	/** Lance la tâche réservée ; sa fin libère la place, garde son erreur (sauf arrêt) et prévient. */
-	const lancer = (liberer: () => void, travail: (signal: AbortSignal) => Promise<void>): { fin: Promise<void> } => {
+	/**
+	 * Lance la tâche réservée ; sa fin libère la place, garde son erreur (sauf arrêt) et prévient. Elle efface l'erreur de la
+	 * tâche d'avant, sauf une tâche automatique celle d'une tâche manuelle (l'utilisateur ne l'a peut-être pas encore lue).
+	 */
+	const lancer = (liberer: () => void, automatique: boolean, travail: (signal: AbortSignal) => Promise<void>): { fin: Promise<void> } => {
 		const signal = controle!.signal;
-		derniereErreur = undefined;
+		if (!automatique || erreurAutomatique) derniereErreur = undefined;
 		changer();
 		const fin = (async () => {
 			try {
 				await travail(signal);
 			} catch (e) {
-				if (!signal.aborted && !estArret(e)) derniereErreur = motif(e);
+				if (!signal.aborted && !estArret(e)) noterErreur(motif(e), automatique);
 			} finally {
 				// les écritures lancées par la tâche finissent sous son verrou
 				await ecritures;
@@ -336,7 +347,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 	 * Réserve, prend le verrou du banc dans la file (après les écritures en cours, qui le tiennent un instant), vérifie (en échec,
 	 * place et verrou sont rendus), puis lance.
 	 */
-	const tacheVerifiee = async <C>(genre: GenreTache, verifier: () => Promise<C>, travail: (contexte: C, signal: AbortSignal) => Promise<void>): Promise<{ fin: Promise<void> }> => {
+	const tacheVerifiee = async <C>(genre: GenreTache, verifier: () => Promise<C>, travail: (contexte: C, signal: AbortSignal) => Promise<void>, o: { automatique?: boolean } = {}): Promise<{ fin: Promise<void> }> => {
 		const liberer = reserver(genre);
 		let contexte: C;
 		try {
@@ -348,7 +359,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 			liberer();
 			throw e;
 		}
-		return lancer(liberer, (signal) => travail(contexte, signal));
+		return lancer(liberer, o.automatique === true, (signal) => travail(contexte, signal));
 	};
 
 	const noteDuNiveau = (niveau: NiveauDeNote, m: ModelesDeNote): NoteDuNiveau => {
@@ -418,7 +429,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 						avancer(faits, choisis.length);
 					}
 					if (choisis.length === 0) throw new Error("Aucun message nouveau dans le journal des sessions : utilise Mnemo, puis prépares-en d'autres.");
-					if (sansModele > 0 && !signal.aborted) derniereErreur = `${sansModele} message(s) laissé(s) : un modèle local n'a pas répondu (repris à la prochaine préparation).`;
+					if (sansModele > 0 && !signal.aborted) noterErreur(`${sansModele} message(s) laissé(s) : un modèle local n'a pas répondu (repris à la prochaine préparation).`, false);
 				},
 			);
 		},
@@ -484,6 +495,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 						throw e;
 					}
 				},
+				{ automatique: o.origine === 'automatique' },
 			);
 		},
 
