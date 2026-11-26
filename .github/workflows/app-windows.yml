@@ -1,0 +1,170 @@
+# L'app de bureau sous Windows, validée de bout en bout sur une machine Windows de GitHub : types, tests de l'app,
+# construction de l'installeur, installation silencieuse par utilisateur, lancement en mode essai, essai avec le Node et le
+# Mnemo installés (init, service, santé, commit, terminal ConPTY), captures de l'assistant et de la fenêtre principale,
+# désinstallation. L'installeur et les captures sont gardés en artefacts ; sur une étiquette x.y.z, l'installeur est attaché
+# à la release de même nom (créée avant, avec le .dmg). Les essais sont des scripts Node (packages/app/outils/ci/) ; seule la
+# capture d'écran est en PowerShell.
+#
+# Lancé à chaque poussée de branche qui touche le code (packages/, verrou, ce fichier), à chaque étiquette (les filtres de
+# chemins ne s'appliquent pas aux étiquettes) et à la main.
+name: app-windows
+on:
+  push:
+    branches: ['**']
+    tags: ['**']
+    paths: ['packages/**', 'pnpm-lock.yaml', '.github/workflows/app-windows.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  app:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verifier
+
+      # Dossier personnel, APPDATA et LOCALAPPDATA temporaires : aucun test ne lit ni n'écrit ceux du compte (os.homedir()
+      # suit USERPROFILE sous Windows, pas HOME, que vitest remplace). Premier passage sous Windows (jamais lancés sur un
+      # Windows auparavant) : un échec n'arrête pas le job, pour que la construction, l'installation et les captures
+      # renseignent quand même ; l'étape « Bilan des tests » fait ensuite échouer le job.
+      - name: Tests de l'app
+        id: tests
+        continue-on-error: true
+        env:
+          USERPROFILE: ${{ runner.temp }}\profil-tests
+          APPDATA: ${{ runner.temp }}\profil-tests\AppData\Roaming
+          LOCALAPPDATA: ${{ runner.temp }}\profil-tests\AppData\Local
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:APPDATA, $env:LOCALAPPDATA | Out-Null
+          pnpm --filter @mnemo/app test
+
+      - name: Construction de l'app et de l'installeur
+        run: pnpm construire-app --installeur
+      - name: Chemins de l'essai
+        run: node packages/app/outils/ci/env-ci.ts
+      - name: Installation silencieuse
+        id: installation
+        run: node packages/app/outils/ci/installation.ts installer
+      - name: Lancement en mode essai
+        run: node packages/app/outils/ci/essai-app.ts $env:MNEMO_EXE
+      - name: Essai de bout en bout (Node et Mnemo installés)
+        run: node packages/app/outils/ci/bout-en-bout.ts --node $env:MNEMO_NODE --main $env:MNEMO_MAIN --dossier $env:MNEMO_ESSAI
+
+      # Sans configuration, l'app ouvre l'assistant ; avec une configuration minimale vers le dossier initialisé par l'essai
+      # de bout en bout, elle démarre le service et ouvre sa fenêtre principale. Chaque capture : l'écran entier et son coin
+      # inférieur droit (zone de notification). Les journaux de l'app et du service vont avec les captures.
+      - name: Captures d'écran
+        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
+        shell: powershell
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          function Capturer([string]$nom) {
+            $ecran = [System.Windows.Forms.SystemInformation]::VirtualScreen
+            $image = [System.Drawing.Bitmap]::new($ecran.Width, $ecran.Height)
+            $g = [System.Drawing.Graphics]::FromImage($image)
+            $g.CopyFromScreen($ecran.Left, $ecran.Top, 0, 0, $image.Size)
+            $g.Dispose()
+            $image.Save((Join-Path $env:MNEMO_CAPTURES "$nom.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+            $largeur = [Math]::Min(520, $image.Width)
+            $hauteur = [Math]::Min(140, $image.Height)
+            $coin = [System.Drawing.Rectangle]::new($image.Width - $largeur, $image.Height - $hauteur, $largeur, $hauteur)
+            $zone = $image.Clone($coin, $image.PixelFormat)
+            $zone.Save((Join-Path $env:MNEMO_CAPTURES "$nom-notification.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+            $zone.Dispose()
+            $image.Dispose()
+            Write-Host "capture : $nom ($($ecran.Width) x $($ecran.Height))"
+          }
+          $serviceJson = Join-Path $env:MNEMO_ESSAI '.mnemo\service.json'
+          try {
+            Remove-Item -LiteralPath (Join-Path $env:APPDATA 'Mnemo\config.json') -Force -ErrorAction SilentlyContinue
+            Start-Process -FilePath $env:MNEMO_EXE
+            Start-Sleep -Seconds 25
+            Capturer 'assistant'
+            if (-not (Get-Process -Name Mnemo -ErrorAction SilentlyContinue)) { throw "L'app ne tourne plus 25 s après son lancement (assistant)." }
+            Get-Process -Name Mnemo -ErrorAction SilentlyContinue | Stop-Process -Force
+            Start-Sleep -Seconds 3
+
+            node packages/app/outils/ci/configuration-essai.ts $env:MNEMO_ESSAI
+            if ($LASTEXITCODE -ne 0) { throw 'Configuration de l''app non écrite.' }
+            Start-Process -FilePath $env:MNEMO_EXE
+            $limite = (Get-Date).AddSeconds(90)
+            while (-not (Test-Path -LiteralPath $serviceJson) -and (Get-Date) -lt $limite) { Start-Sleep -Seconds 1 }
+            Start-Sleep -Seconds 15
+            Capturer 'fenetre'
+            if (-not (Test-Path -LiteralPath $serviceJson)) { throw "Le service n'a pas été démarré par l'app en 90 s." }
+            if (-not (Get-Process -Name Mnemo -ErrorAction SilentlyContinue)) { throw "L'app ne tourne plus (fenêtre principale)." }
+          } finally {
+            Get-Process -Name Mnemo -ErrorAction SilentlyContinue | Stop-Process -Force
+            foreach ($journal in @((Join-Path $env:APPDATA 'Mnemo\installation.log'), (Join-Path $env:MNEMO_ESSAI '.mnemo\service.log'))) {
+              if (Test-Path -LiteralPath $journal) { Copy-Item -LiteralPath $journal -Destination $env:MNEMO_CAPTURES }
+            }
+          }
+
+      - name: Désinstallation silencieuse
+        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
+        run: node packages/app/outils/ci/installation.ts desinstaller
+
+      - name: Installeur en artefact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: installeur
+          path: packages/app/dist/Mnemo-Setup-*.exe
+          if-no-files-found: warn
+      - name: Captures en artefact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures
+          path: ${{ runner.temp }}/captures
+          if-no-files-found: warn
+
+      - name: Bilan des tests
+        if: ${{ !cancelled() && steps.tests.outcome == 'failure' }}
+        run: |
+          throw "Des tests de l'app ont échoué : voir l'étape « Tests de l'app »."
+
+  # Sur une étiquette x.y.z : l'installeur est attaché à la release de même nom, qui doit déjà exister (créée avec le .dmg,
+  # construit sur un Mac) ; une étiquette d'une autre forme ne publie rien.
+  release:
+    needs: app
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: installeur
+          path: installeur
+      - name: Installeur attaché à la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ETIQUETTE: ${{ github.ref_name }}
+        run: |
+          if ! [[ "$ETIQUETTE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Étiquette $ETIQUETTE : pas une version x.y.z, rien n'est attaché."
+            exit 0
+          fi
+          installeur="installeur/Mnemo-Setup-$ETIQUETTE-x64.exe"
+          if [ ! -f "$installeur" ]; then
+            echo "::error::$installeur absent : la version de packages/app/package.json n'est pas celle de l'étiquette $ETIQUETTE ?"
+            ls installeur
+            exit 1
+          fi
+          if ! gh release view "$ETIQUETTE" > /dev/null; then
+            echo "::error::La release $ETIQUETTE n'existe pas : créez-la (gh release create $ETIQUETTE …, avec le .dmg), puis relancez ce workflow (Re-run jobs)."
+            exit 1
+          fi
+          gh release upload "$ETIQUETTE" "$installeur" --clobber
