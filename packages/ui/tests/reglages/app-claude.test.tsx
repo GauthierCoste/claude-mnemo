@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 const FICHIER = '~/Library/Application Support/Claude/claude_desktop_config.json';
-const RESTART = 'Redémarre l’app Claude pour prendre ce changement en compte.';
+const RESTART = 'Redémarrer l’app Claude pour prendre ce changement en compte.';
 
 const VUE: ClaudeDesktopVue = {
 	installee: true,
@@ -100,7 +100,7 @@ describe('Réglages › Branchements › App Claude', () => {
 		expect(within(panneau).queryByText(RESTART)).toBeNull();
 		await act(async () => interrupteur(memoire).click());
 		expect(faux.api.remplacer).toHaveBeenCalledWith('/api/claude-desktop/mnemo', {});
-		expect(memoireMnemo(panneau).textContent).toContain('Claude lit et écrit ta mémoire.');
+		expect(memoireMnemo(panneau).textContent).toContain('Claude lit et écrit la mémoire.');
 		expect(interrupteur(memoireMnemo(panneau)).getAttribute('aria-checked')).toBe('true');
 		expect(within(panneau).getByRole('status').textContent).toBe(RESTART);
 		await act(async () => interrupteur(memoireMnemo(panneau)).click());

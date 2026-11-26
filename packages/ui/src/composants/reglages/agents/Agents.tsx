@@ -123,7 +123,7 @@ export function Agents(p: { surModifie(modifie: boolean): void }): ReactNode {
 				)}
 				{creation ? (
 					<p className={c.discret}>
-						Nouvel agent : choisis son nom à gauche, puis Créer. Il tournera sur {NOMS_MOTEURS[NOUVEL_AGENT.moteur]} ; son apparence, sa classe et le reste se
+						Nouvel agent : son nom se saisit à gauche, puis Créer. Il tournera sur {NOMS_MOTEURS[NOUVEL_AGENT.moteur]} ; son apparence, sa classe et le reste se
 						règlent ici une fois l’agent créé.
 					</p>
 				) : detail.donnees === undefined || detail.donnees.nom !== choisi ? (

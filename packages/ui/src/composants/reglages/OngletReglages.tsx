@@ -176,7 +176,7 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 						<h2 id="titre-branchements" className={c.titreCarte}>
 							Branchements
 						</h2>
-						<p className={c.sous}>Les moteurs de tes agents, et ce que l’app Claude peut utiliser.</p>
+						<p className={c.sous}>Les moteurs des agents, et ce que l’app Claude peut utiliser.</p>
 						<Moteurs />
 						<AppClaude surModifie={setServeurModifie} autreBrouillon={reglagesModifies} />
 					</section>

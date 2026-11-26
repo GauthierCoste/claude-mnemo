@@ -1,7 +1,7 @@
 /**
  * Onglet Documentation de la vue Réglages : les six chapitres à gauche (le chapitre ouvert est retenu dans ce navigateur), le
  * chapitre choisi à droite. Le contenu vient de `reglages/documentation.ts` ; ce composant ne fait que le mettre en forme
- * (schémas, frise des pouvoirs, glossaire, sorts d'une fiche, formule de la confiance).
+ * (schémas, frise des capacités, glossaire, sorts d'une fiche, formule de la confiance).
  */
 import { Fragment, useState, type ReactNode } from 'react';
 import { HOOKS_PROFIL } from '../../../profils/hooks.ts';
@@ -65,13 +65,13 @@ function Bloc(p: { bloc: BlocDoc }): ReactNode {
 			);
 		case 'frise':
 			return (
-				<ol className={s.frise} aria-label="Les six pouvoirs, dans l’ordre de la session">
+				<ol className={s.frise} aria-label="Les six capacités, dans l’ordre de la session">
 					{HOOKS_PROFIL.map((h) => (
 						<li key={h.cle}>
-							<span className={s.rune} aria-hidden="true">
-								{h.rune}
+							<span className={s.symbole} aria-hidden="true">
+								{h.symbole}
 							</span>
-							<b>{h.pouvoir}</b>
+							<b>{h.capacite}</b>
 							<span className={s.etape}>{enLigne(b.etapes[h.cle])}</span>
 						</li>
 					))}

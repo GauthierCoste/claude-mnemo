@@ -161,7 +161,7 @@ export function BlocEquipement(p: {
 							＋
 						</span>
 						<span className={s.nomCase}>Nouvelle skill</span>
-						<span className={s.desc}>un savoir-faire à toi</span>
+						<span className={s.desc}>un savoir-faire à créer</span>
 					</button>
 				</li>
 			</ul>

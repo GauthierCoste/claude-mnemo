@@ -35,7 +35,7 @@ function verrouDe(id: IdMoteur, agent: string, enregistre: IdMoteur, m: MoteurVu
 	if (agent === PROFIL_ARCHIVISTE && id !== 'claude-code') return 'Réservé : l’archiviste reste sur Claude Code.';
 	if (id === enregistre || m?.poste === undefined) return null;
 	const statut = statutDuMoteur(m).cle;
-	if (statut === 'a-lier') return `À lier : lie ${m.nom} à Mnemo dans Réglages › Branchements.`;
+	if (statut === 'a-lier') return `À lier : ${m.nom} se lie à Mnemo dans Réglages › Branchements.`;
 	if (statut === 'pas-installe' && !m.manuel) return `Pas installé sur ce poste.`;
 	return null;
 }

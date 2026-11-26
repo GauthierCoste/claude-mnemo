@@ -20,8 +20,8 @@ import s from './AppClaude.module.css';
 export type Ecrire = (appel: () => Promise<ClaudeDesktopVue>) => Promise<string | null>;
 
 const ETATS: Record<ClaudeDesktopVue['mnemo'], string> = {
-	absent: 'Pas branchée : l’app Claude ne voit pas ta mémoire.',
-	branche: 'Claude lit et écrit ta mémoire.',
+	absent: 'Pas branchée : l’app Claude ne voit pas la mémoire.',
+	branche: 'Claude lit et écrit la mémoire.',
 	perime: 'Son entrée ne correspond plus à cette installation (autre Node, autre emplacement de Mnemo ou autre dossier).',
 };
 
@@ -72,13 +72,13 @@ export function AppClaude(p: { surModifie?(modifie: boolean): void; autreBrouill
 					<p>
 						Fichier : <code>{vue.fichier}</code>
 					</p>
-					<p className={c.discret}>Mnemo ne réécrit jamais un fichier qu’il ne sait pas lire : corrige-le, puis rouvre les Réglages.</p>
+					<p className={c.discret}>Mnemo ne réécrit jamais un fichier qu’il ne sait pas lire : à corriger, puis rouvrir les Réglages.</p>
 				</div>
 			) : (
 				<>
 					{fait && (
 						<p className={c.avis} role="status">
-							Redémarre l’app Claude pour prendre ce changement en compte.
+							Redémarrer l’app Claude pour prendre ce changement en compte.
 						</p>
 					)}
 					<MemoireMnemo

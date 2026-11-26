@@ -2,7 +2,7 @@
  * Contenu de l'onglet Documentation de la vue Réglages : six chapitres (Le principe, Une session, Les agents, Le rappel, La
  * confiance, L'archiviste), chacun une suite de blocs que `Documentation.tsx` met en forme. Chaque affirmation est vérifiée
  * dans le code du service (`packages/mnemo`) ; les chiffres sont les valeurs par défaut. Dans un texte, `**gras**` et
- * `` `code` `` sont rendus comme tels. Les pouvoirs (noms, runes) viennent de `profils/hooks.ts` : la frise ne donne que
+ * `` `code` `` sont rendus comme tels. Les capacités (noms, icônes) viennent de `profils/hooks.ts` : la frise ne donne que
  * leur explication, par événement.
  */
 import type { EvenementHookVue } from '@mnemo/contrat';
@@ -29,12 +29,12 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 	{
 		cle: 'principe',
 		titre: 'Le principe',
-		sous: 'une mémoire pour tes sessions',
+		sous: 'une mémoire pour les sessions',
 		titreLong: 'Le principe',
 		blocs: [
 			{
 				genre: 'chapo',
-				texte: 'Une session d’agent oublie tout en se fermant. Mnemo lui donne une mémoire : des fiches en Markdown dans ton dossier, versionnées avec git, qu’il injecte dans chaque session au bon moment.',
+				texte: 'Une session d’agent oublie tout en se fermant. Mnemo lui donne une mémoire : des fiches en Markdown dans le dossier, versionnées avec git, qu’il injecte dans chaque session au bon moment.',
 			},
 			{
 				genre: 'schema',
@@ -49,9 +49,9 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 			{
 				genre: 'points',
 				points: [
-					'**Tout est lisible.** Une fiche est un fichier texte que tu peux ouvrir, corriger, supprimer.',
+					'**Tout est lisible.** Une fiche est un fichier texte qui s’ouvre, se corrige, se supprime.',
 					'**Tout est réversible.** Chaque écriture est un commit git : rien ne se perd.',
-					'**La mémoire reste chez toi.** La recherche et la note des fiches tournent sur des modèles locaux ; seul ce que Mnemo injecte et ce que l’agent lit avec ses outils part, avec la session, chez le fournisseur de l’agent.',
+					'**La mémoire reste sur le poste.** La recherche et la note des fiches tournent sur des modèles locaux ; seul ce que Mnemo injecte et ce que l’agent lit avec ses outils part, avec la session, chez le fournisseur de l’agent.',
 				],
 			},
 		],
@@ -64,34 +64,34 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 		blocs: [
 			{
 				genre: 'chapo',
-				texte: 'Mnemo intervient à six moments de la vie d’une session. Ce sont les **pouvoirs** d’un agent (des « hooks »). Trois s’allument ou s’éteignent dans l’onglet Agents (Souffle, Bouclier, Carnet) ; Éveil, Veille et Récit tiennent l’état de la session et restent toujours actifs.',
+				texte: 'Mnemo intervient à six moments de la vie d’une session. Ce sont les **capacités** d’un agent (des « hooks »). Trois s’allument ou s’éteignent dans l’onglet Agents (Souffle, Bouclier, Carnet) ; Éveil, Veille et Récit tiennent l’état de la session et restent toujours actifs.',
 			},
 			{
 				genre: 'frise',
 				etapes: {
 					debut: 'La session démarre : Mnemo note sa branche et son commit de départ. Rien n’est encore injecté.',
 					message:
-						'À chaque message : Mnemo injecte tes consignes permanentes, la fiche du projet si elle n’y est pas déjà et les fiches très proches de ta demande, et propose des pistes (voir « Le rappel »).',
+						'À chaque message : Mnemo injecte les consignes permanentes, la fiche du projet si elle n’y est pas déjà et les fiches très proches de la demande, et propose des pistes (voir « Le rappel »).',
 					outil: 'Avant chaque action de l’agent : si elle viole une consigne vérifiée (un chemin ou une commande interdits), Mnemo la refuse.',
 					apres_outil: 'Après chaque action : Mnemo note les fiches que l’agent a lues ou écrites. Elles ne lui sont plus proposées, et une piste lue compte comme utile pour les notes suivantes.',
-					arret: 'L’agent s’arrête ou attend ton accord : la session passe « Attend ta réponse » dans Sessions.',
+					arret: 'L’agent s’arrête ou attend un accord : la session passe en attente de réponse dans Sessions.',
 					fin: 'À la fermeture : Mnemo termine la session et, si aucun bilan n’en a laissé, écrit un épisode minimal, sans IA (objectif, dates, branche, fichiers modifiés). Ce que la session a appris, elle l’a écrit en cours de route.',
 				},
 			},
 			{ genre: 'note', texte: 'Un agent sans Souffle travaille sans la mémoire : il peut la consulter avec ses outils, mais rien ne lui est injecté.' },
 			{
 				genre: 'note',
-				texte: 'Un **projet** est un dossier qui contient l’un des marqueurs choisis (`.git`, `package.json`… : Réglages › Mémoire › Rappel) : il porte ◆ dans l’arbre des dossiers où tu choisis où lancer une session.',
+				texte: 'Un **projet** est un dossier qui contient l’un des marqueurs choisis (`.git`, `package.json`… : Réglages › Mémoire › Rappel) : il porte ◆ dans l’arbre des dossiers où se choisit le dossier d’une session.',
 			},
 		],
 	},
 	{
 		cle: 'agents',
 		titre: 'Les agents',
-		sous: 'classe, équipement, pouvoirs',
+		sous: 'classe, équipement, capacités',
 		titreLong: 'Les agents',
 		blocs: [
-			{ genre: 'chapo', texte: 'Un agent, c’est un profil de session : ce qu’une session reçoit en démarrant. Tu en crées autant que de façons de travailler.' },
+			{ genre: 'chapo', texte: 'Un agent, c’est un profil de session : ce qu’une session reçoit en démarrant. Il en existe autant que de façons de travailler.' },
 			{
 				genre: 'glossaire',
 				termes: [
@@ -104,12 +104,12 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 						'Équipement',
 						'**Skills** : des savoir-faire écrits dans la mémoire (`_mnemo/skills/`) ou propres à l’agent ; l’agent en lit une quand sa tâche correspond à sa description. Le crayon ✎ d’une skill ouvre son éditeur. **Plugins** : des extensions de Claude Code (commandes, outils), propres à ce moteur.',
 					],
-					['Pouvoirs', 'Les moments où Mnemo agit dans la session (voir « Une session ») : Souffle, Bouclier et Carnet se basculent ; Éveil, Veille et Récit restent toujours actifs.'],
+					['Capacités', 'Les moments où Mnemo agit dans la session (voir « Une session ») : Souffle, Bouclier et Carnet se basculent ; Éveil, Veille et Récit restent toujours actifs.'],
 					[
 						'Départ',
 						'« Démarre dans la mémoire » : ses sessions s’ouvrent dans le dossier de la mémoire, pour ranger ou relire les fiches ; sinon dans le dossier choisi au lancement. L’archiviste démarre toujours dans la mémoire.',
 					],
-					['Stats', 'Ce que l’agent emporte : skills, plugins (avec Claude Code) et pouvoirs, chacun rapporté à ce qui peut être équipé.'],
+					['Stats', 'Ce que l’agent emporte : skills, plugins (avec Claude Code) et capacités, chacune rapportée à ce qui peut être équipé.'],
 				],
 			},
 		],
@@ -125,8 +125,8 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 				genre: 'schema',
 				fleche: '→',
 				cases: [
-					{ titre: '1 · Chercher', texte: 'autour du projet en cours, parmi les fiches que le message nomme (titre ou alias), et les voisines des fiches que tu as injectées' },
-					{ titre: '2 · Noter', texte: 'des modèles locaux et une note apprise de tes gestes estiment la chance qu’une fiche soit utile ici, de 0 à 100 %' },
+					{ titre: '1 · Chercher', texte: 'autour du projet en cours, parmi les fiches que le message nomme (titre ou alias), et les voisines des fiches injectées à la main' },
+					{ titre: '2 · Noter', texte: 'des modèles locaux et une note apprise des gestes passés estiment la chance qu’une fiche soit utile ici, de 0 à 100 %' },
 					{ titre: '3 · Décider', texte: 'injecter, proposer en piste, ou laisser de côté', accent: true },
 				],
 			},
@@ -134,27 +134,27 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 			{
 				genre: 'sorts',
 				sorts: [
-					{ ton: 'injectee', nom: 'Injectée', texte: 'Au-dessus du seuil d’injection : elle entre entière dans la session sans ton geste. Au plus « Fiches injectées » par message.' },
+					{ ton: 'injectee', nom: 'Injectée', texte: 'Au-dessus du seuil d’injection : elle entre entière dans la session sans geste. Au plus « Fiches injectées » par message.' },
 					{
 						ton: 'piste',
 						nom: 'Piste',
-						texte: 'Au-dessus du seuil des pistes : une carte (titre, chemin, première phrase) que l’agent lit s’il en a besoin, ou que tu injectes d’un geste. Les fiches que ton message nomme sont proposées en plus.',
+						texte: 'Au-dessus du seuil des pistes : une carte (titre, chemin, première phrase) que l’agent lit s’il en a besoin, ou qui s’injecte d’un geste. Les fiches que le message nomme sont proposées en plus.',
 					},
 					{ ton: 'aucun', nom: 'Laissée de côté', texte: 'En dessous : rien n’est envoyé.' },
 				],
 			},
 			{
 				genre: 'paragraphe',
-				texte: 'L’injection automatique attend une note **calibrée** (un modèle de note accepté). Avant, aucune fiche n’entre seule : les premières de l’ordre partent en pistes, au premier message et quand tu injectes une fiche à la main.',
+				texte: 'L’injection automatique attend une note **calibrée** (un modèle de note accepté). Avant, aucune fiche n’entre seule : les premières de l’ordre partent en pistes, au premier message et quand une fiche est injectée à la main.',
 			},
 			{ genre: 'intertitre', texte: 'L’ordre des recherches' },
 			{
 				genre: 'paragraphe',
-				texte: 'Quand l’agent ou toi cherchez (outil `chercher`, recherche de l’interface), entre deux résultats aussi pertinents passent devant ceux du **projet en cours**, les plus **sûrs**, ceux de la **mémoire** plutôt que des documents, et les plus **récents**, selon les poids « Ce qui passe devant » de Réglages › Mémoire › Recherche.',
+				texte: 'Pour une recherche (outil `chercher` de l’agent, recherche de l’interface), entre deux résultats aussi pertinents passent devant ceux du **projet en cours**, les plus **sûrs**, ceux de la **mémoire** plutôt que des documents, et les plus **récents**, selon les poids « Ce qui passe devant » de Réglages › Mémoire › Recherche.',
 			},
 			{
 				genre: 'note',
-				texte: 'Quand tu injectes une fiche à la main, ses voisines montent dans la note pendant quelques messages, puis l’effet s’estompe (la demi-vie, dans les réglages fins du Rappel).',
+				texte: 'Quand une fiche est injectée à la main, ses voisines montent dans la note pendant quelques messages, puis l’effet s’estompe (la demi-vie, dans les réglages fins du Rappel).',
 			},
 		],
 	},
@@ -175,16 +175,16 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 			},
 			{
 				genre: 'paragraphe',
-				texte: 'Une seconde source qui confirme le fait le fait monter, jusqu’à 0,9 (jusqu’à 1 si l’une d’elles est toi ou un contrat). Les valeurs se règlent dans Réglages › Mémoire › Confiance.',
+				texte: 'Une seconde source qui confirme le fait le fait monter, jusqu’à 0,9 (jusqu’à 1 si l’une d’elles est l’utilisateur ou un contrat). Les valeurs se règlent dans Réglages › Mémoire › Confiance.',
 			},
 			{ genre: 'intertitre', texte: 'Les consignes' },
 			{
 				genre: 'paragraphe',
-				texte: 'Une consigne est une règle que tu donnes à tes sessions. D’abord **rappelée** : injectée au premier message, puis quand un message en parle. Redite le nombre de fois choisi, Mnemo propose de la passer à **toujours** : injectée à chaque message. Si elle porte une règle vérifiable (chemins ou commandes interdits), elle peut devenir **vérifiée** : injectée à chaque message, et le pouvoir Bouclier refuse les actions qui la violent. Chaque montée attend ton accord.',
+				texte: 'Une consigne est une règle donnée aux sessions. D’abord **rappelée** : injectée au premier message, puis quand un message en parle. Redite le nombre de fois choisi, Mnemo propose de la passer à **toujours** : injectée à chaque message. Si elle porte une règle vérifiable (chemins ou commandes interdits), elle peut devenir **vérifiée** : injectée à chaque message, et la capacité Bouclier refuse les actions qui la violent. Chaque montée attend un accord.',
 			},
 			{
 				genre: 'note',
-				texte: 'Montants, échéances et périmètres sont des faits à fort enjeu : Mnemo ne les écrit jamais seul. Comme un fait inféré ou qui contredit une source plus fiable, ils sont écrits « à confirmer » et attendent ton accord dans Mémoire › Archiviste › À arbitrer.',
+				texte: 'Montants, échéances et périmètres sont des faits à fort enjeu : Mnemo ne les écrit jamais seul. Comme un fait inféré ou qui contredit une source plus fiable, ils sont écrits « à confirmer » et attendent un accord dans Mémoire › Archiviste › À arbitrer.',
 			},
 		],
 	},
@@ -196,17 +196,17 @@ export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
 		blocs: [
 			{
 				genre: 'chapo',
-				texte: 'L’archiviste est un agent comme les autres, dont la mission est de ranger : il classe ce que tu lui confies (documents, notes importées), fait le ménage (doublons, liens cassés, fiches mal nommées) et relie les fiches entre elles.',
+				texte: 'L’archiviste est un agent comme les autres, dont la mission est de ranger : il classe ce qui lui est confié (documents, notes importées), fait le ménage (doublons, liens cassés, fiches mal nommées) et relie les fiches entre elles.',
 			},
 			{
 				genre: 'points',
 				points: [
-					'**Il écrit seul** dans les types de fiche que tu laisses allumés (Réglages › Mémoire › Confiance, « L’archiviste écrit seul… ») ; dans les autres, ses informations sont écrites « à confirmer ».',
-					'**Il te demande** pour le reste : les informations à confirmer, les montées de consigne et ses lots (plusieurs suppressions, fusions ou confirmations d’un coup) attendent ton accord dans Mémoire › Archiviste › À arbitrer.',
+					'**Il écrit seul** dans les types de fiche laissés allumés (Réglages › Mémoire › Confiance, « L’archiviste écrit seul… ») ; dans les autres, ses informations sont écrites « à confirmer ».',
+					'**Il demande** pour le reste : les informations à confirmer, les montées de consigne et ses lots (plusieurs suppressions, fusions ou confirmations d’un coup) attendent un accord dans Mémoire › Archiviste › À arbitrer.',
 					'**Il tourne sur Claude Code** et démarre toujours dans la mémoire.',
 				],
 			},
-			{ genre: 'note', texte: 'Chaque écriture de l’archiviste est un commit : tu peux toujours revenir en arrière.' },
+			{ genre: 'note', texte: 'Chaque écriture de l’archiviste est un commit : un retour en arrière reste toujours possible.' },
 		],
 	},
 ];

@@ -1,20 +1,20 @@
 /**
  * Scène du créateur d'agent : l'agent en grand sur son podium (il respire, sauf mouvement réduit), son nom et son rôle, sa
- * classe (logo, moteur · modèle, fournisseur), ses stats en barres (skills, plugins avec Claude Code, pouvoirs ; chacune
+ * classe (logo, moteur · modèle, fournisseur), ses stats en barres (skills, plugins avec Claude Code, capacités ; chacune
  * rapportée à ce qui peut être équipé) et l'interrupteur « Démarre dans la mémoire » avec sa phrase. Tout suit le brouillon.
  */
 import { FOURNISSEURS_MOTEURS, NOMS_MOTEURS } from '@mnemo/commun';
 import type { ProfilDetailVue, ProfilEditableVue } from '@mnemo/contrat';
 import { useId, type ReactNode } from 'react';
 import { LogoMoteur } from '../../../moteurs/logos.tsx';
-import { HOOKS_PROFIL, pouvoirsActifs } from '../../../profils/hooks.ts';
+import { HOOKS_PROFIL, capacitesActives } from '../../../profils/hooks.ts';
 import { compterEquipement } from '../../../reglages/equipement.ts';
 import { AvatarProfil } from '../../commun/AvatarProfil.tsx';
 import s from './Agents.module.css';
 
 const DEPART: Readonly<Record<ProfilEditableVue['lancement'], string>> = {
 	memoire: 'Ses sessions s’ouvrent dans le dossier de la mémoire (_mnemo) : pour ranger ou relire les fiches, pas pour coder.',
-	projet: 'Ses sessions s’ouvrent dans le dossier que tu choisis au lancement, en général un projet.',
+	projet: 'Ses sessions s’ouvrent dans le dossier choisi au lancement, en général un projet.',
 };
 
 export function Scene(p: { nom: string; role: string; editable: ProfilEditableVue; detail: ProfilDetailVue; surLancement(l: ProfilEditableVue['lancement']): void }): ReactNode {
@@ -26,7 +26,7 @@ export function Scene(p: { nom: string; role: string; editable: ProfilEditableVu
 	const stats: { nom: string; valeur: number; sur: number }[] = [
 		{ nom: 'Skills', valeur: skills, sur: disponibles },
 		...(e.moteur === 'claude-code' ? [{ nom: 'Plugins', valeur: plugins, sur: p.detail.pluginsInstalles.length }] : []),
-		{ nom: 'Pouvoirs', valeur: pouvoirsActifs(e.hooks), sur: HOOKS_PROFIL.length },
+		{ nom: 'Capacités', valeur: capacitesActives(e.hooks), sur: HOOKS_PROFIL.length },
 	];
 	const memoire = e.lancement === 'memoire';
 	return (

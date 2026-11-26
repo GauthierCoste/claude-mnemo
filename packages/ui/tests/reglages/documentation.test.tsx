@@ -47,14 +47,14 @@ describe('onglet Documentation', () => {
 		expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Le principe');
 	});
 
-	it('Une session : la frise des six pouvoirs, avec leurs noms de l’onglet Agents, dans l’ordre', async () => {
+	it('Une session : la frise des six capacités, avec leurs noms de l’onglet Agents, dans l’ordre', async () => {
 		stockage().set('mnemo.reglages.chapitre', 'session');
 		render(<Documentation />);
-		const frise = screen.getByRole('list', { name: 'Les six pouvoirs, dans l’ordre de la session' });
+		const frise = screen.getByRole('list', { name: 'Les six capacités, dans l’ordre de la session' });
 		const etapes = within(frise).getAllByRole('listitem');
-		expect(etapes.map((li) => li.querySelector('b')?.textContent)).toEqual(HOOKS_PROFIL.map((h) => h.pouvoir));
-		expect(HOOKS_PROFIL.map((h) => h.pouvoir)).toEqual(['Éveil', 'Souffle', 'Bouclier', 'Carnet', 'Veille', 'Récit']);
-		expect(etapes[4]!.textContent).toContain('Attend ta réponse');
+		expect(etapes.map((li) => li.querySelector('b')?.textContent)).toEqual(HOOKS_PROFIL.map((h) => h.capacite));
+		expect(HOOKS_PROFIL.map((h) => h.capacite)).toEqual(['Éveil', 'Souffle', 'Bouclier', 'Carnet', 'Veille', 'Récit']);
+		expect(etapes[4]!.textContent).toContain('en attente de réponse');
 	});
 
 	it('gras et code rendus ; jamais « servir » ni « nourrir » dans le contenu ; chemins des nouveaux Réglages', async () => {

@@ -1,6 +1,6 @@
 /**
  * Créateur d'un agent (Réglages › Agents) : la scène à gauche (l'agent sur son podium, sa classe, ses stats, son lieu de
- * départ et le pied Annuler / Enregistrer), les blocs à droite (Apparence, Classe, Équipement, Pouvoirs, Mission), puis
+ * départ et le pied Annuler / Enregistrer), les blocs à droite (Apparence, Classe, Équipement, Capacités, Mission), puis
  * « Gérer l'agent » (sa fiche, ce que reçoit une session, dupliquer, supprimer). Tout se règle dans un brouillon, enregistré
  * d'un geste et validé par le service. Une modification faite ailleurs entre-temps est signalée (empreinte) : l'enregistrement
  * est alors refusé jusqu'au rechargement. Les skills s'écrivent, elles, tout de suite (éditeur de skill) : une skill créée
@@ -25,7 +25,7 @@ import { BlocApparence } from './BlocApparence.tsx';
 import { BlocClasse } from './BlocClasse.tsx';
 import { BlocEquipement } from './BlocEquipement.tsx';
 import { BlocMission } from './BlocMission.tsx';
-import { BlocPouvoirs } from './BlocPouvoirs.tsx';
+import { BlocCapacites } from './BlocCapacites.tsx';
 import { EditeurSkill, type EcritureSkill } from './EditeurSkill.tsx';
 import { GererAgent } from './GererAgent.tsx';
 import { Scene } from './Scene.tsx';
@@ -169,7 +169,7 @@ export function AtelierAgent(p: {
 
 	const raisonsBloquantes = changeAilleurs || modeleRefuse || relecture;
 	const texteRaison = modeleRefuse
-		? 'Enregistrement impossible : le nom du modèle est refusé (Classe) ; corrige-le ou reviens au modèle par défaut.'
+		? 'Enregistrement impossible : le nom du modèle est refusé (Classe) ; à corriger, ou revenir au modèle par défaut.'
 		: changeAilleurs
 			? 'Enregistrement impossible : l’agent a été modifié ailleurs, à recharger.'
 			: relecture
@@ -204,7 +204,7 @@ export function AtelierAgent(p: {
 					)}
 					{changeAilleurs && (
 						<div className={s.avis} role="alert">
-							<p>Cet agent a été modifié ailleurs depuis son ouverture. Recharger reprend sa version enregistrée ; tes modifications ici seront perdues.</p>
+							<p>Cet agent a été modifié ailleurs depuis son ouverture. Recharger reprend sa version enregistrée ; les modifications faites ici seront perdues.</p>
 							<div className={s.actions}>
 								<Bouton petit onClick={recharger}>
 									Recharger
@@ -268,7 +268,7 @@ export function AtelierAgent(p: {
 					focus={focus}
 					surFocusFait={() => setFocus(null)}
 				/>
-				<BlocPouvoirs hooks={brouillon.hooks} surChange={(hooks) => changer({ hooks })} />
+				<BlocCapacites hooks={brouillon.hooks} surChange={(hooks) => changer({ hooks })} />
 				<BlocMission consigne={brouillon.consigne} consigneParDefaut={d.consigneParDefaut} surChange={(consigne) => changer({ consigne })} />
 				<GererAgent detail={d} modifie={modifie} surDuplique={p.surDuplique} surSupprime={p.surSupprime} />
 			</div>

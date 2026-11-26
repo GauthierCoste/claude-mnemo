@@ -156,7 +156,7 @@ export function EditeurSkill(p: {
 			? `Propre à « ${p.agent} » : toujours équipée sur lui, créée tout de suite.`
 			: p.toutesLesSkills
 				? `Créée tout de suite dans la mémoire ; « ${p.agent} » l’équipe déjà (toutes les skills de la mémoire), les autres agents au choix.`
-				: `Créée tout de suite dans la mémoire, et équipée sur « ${p.agent} » : enregistre l’agent pour garder cet équipement. Les autres agents au choix.`
+				: `Créée tout de suite dans la mémoire, et équipée sur « ${p.agent} » : enregistrer l’agent pour garder cet équipement. Les autres agents au choix.`
 		: detail === null
 			? ''
 			: detail.profil !== null
@@ -284,7 +284,7 @@ export function EditeurSkill(p: {
 				)}
 				{conflit && (
 					<div className={f.avis} role="alert">
-						<p>Cette skill a été modifiée ailleurs depuis son ouverture. Recharger reprend sa version enregistrée ; ta saisie ici sera perdue.</p>
+						<p>Cette skill a été modifiée ailleurs depuis son ouverture. Recharger reprend sa version enregistrée ; la saisie faite ici sera perdue.</p>
 						<div className={f.actions}>
 							<Bouton petit onClick={() => void lire()}>
 								Recharger

@@ -138,7 +138,7 @@ describe('Éditeur de skill : créer', () => {
 		const client = await ouvrir('redaction');
 		const modale = await editer(null);
 		expect((within(modale).getByRole('radio', { name: /^Dans la mémoire/u }) as HTMLInputElement).checked).toBe(true);
-		expect(within(modale).getByText(/équipée sur « redaction » : enregistre l’agent pour garder cet équipement/u)).toBeTruthy();
+		expect(within(modale).getByText(/équipée sur « redaction » : enregistrer l’agent pour garder cet équipement/u)).toBeTruthy();
 		// nom et « Quand l'utiliser » obligatoires : Créer grisé, avec la raison
 		const creer = within(modale).getByRole('button', { name: 'Créer' });
 		expect(creer.getAttribute('aria-disabled')).toBe('true');

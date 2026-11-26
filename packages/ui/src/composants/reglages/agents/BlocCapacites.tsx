@@ -1,5 +1,5 @@
 /**
- * Pouvoirs d'un agent : les six hooks de Mnemo, chacun avec son effet. Éveil, Veille et Récit tiennent l'état de la session :
+ * Capacités d'un agent : les six hooks de Mnemo, chacun avec son effet. Éveil, Veille et Récit tiennent l'état de la session :
  * toujours actifs (le service les garde quel que soit l'agent), allumés et non basculables, avec la raison. Souffle,
  * Bouclier et Carnet se basculent. La liste enregistrée garde toujours les trois premiers : jamais vide (le service en
  * demande au moins un).
@@ -14,14 +14,14 @@ import { Bloc } from './Bloc.tsx';
 const ORDRE = HOOKS_PROFIL.map((h) => h.cle);
 
 /** `hooks` après la bascule de `cle`, les hooks toujours actifs compris. */
-const basculerPouvoir = (hooks: EvenementHookVue[], cle: EvenementHookVue, actif: boolean): EvenementHookVue[] =>
+const basculerCapacite = (hooks: EvenementHookVue[], cle: EvenementHookVue, actif: boolean): EvenementHookVue[] =>
 	HOOKS_TOUJOURS.reduce((h, t) => basculer(h, t, true, ORDRE), basculer(hooks, cle, actif, ORDRE));
 
-export function BlocPouvoirs(p: { hooks: EvenementHookVue[]; surChange(hooks: EvenementHookVue[]): void }): ReactNode {
+export function BlocCapacites(p: { hooks: EvenementHookVue[]; surChange(hooks: EvenementHookVue[]): void }): ReactNode {
 	const id = useId();
 	return (
-		<Bloc titre="Pouvoirs" sous="les hooks : les moments où Mnemo agit dans la session">
-			<ul className={s.pouvoirs}>
+		<Bloc titre="Capacités" sous="les hooks : les moments où Mnemo agit dans la session">
+			<ul className={s.capacites}>
 				{HOOKS_PROFIL.map((h) => {
 					const actif = h.toujours || p.hooks.includes(h.cle);
 					return (
@@ -29,18 +29,18 @@ export function BlocPouvoirs(p: { hooks: EvenementHookVue[]; surChange(hooks: Ev
 							<button
 								type="button"
 								role="switch"
-								className={s.pouvoir}
+								className={s.capacite}
 								aria-checked={actif}
-								aria-label={h.pouvoir}
+								aria-label={h.capacite}
 								aria-describedby={h.toujours ? `${id}-effet-${h.cle} ${id}-toujours` : `${id}-effet-${h.cle}`}
 								aria-disabled={h.toujours || undefined}
-								onClick={() => !h.toujours && p.surChange(basculerPouvoir(p.hooks, h.cle, !actif))}
+								onClick={() => !h.toujours && p.surChange(basculerCapacite(p.hooks, h.cle, !actif))}
 							>
-								<span className={s.rune} aria-hidden="true">
-									{h.rune}
+								<span className={s.symbole} aria-hidden="true">
+									{h.symbole}
 								</span>
 								<span className={s.identite}>
-									<b>{h.pouvoir}</b>
+									<b>{h.capacite}</b>
 									<small id={`${id}-effet-${h.cle}`}>{h.effet}</small>
 								</span>
 							</button>

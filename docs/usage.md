@@ -129,7 +129,7 @@ opened is remembered in this browser:
   it does; « Défaut : x · Rétablir » appears only when the value differs from the default; finer settings are folded
   under « Réglages fins · N ». Mémoire and Système share one Cancel / Save footer; leaving the tab or the view with
   unsaved changes asks first. An engine waiting for a gesture puts an amber dot on the Réglages tab and on Branchements.
-- **Documentation**: how Mnemo works, in six chapters (the principle, a session and its six powers, agents, recall,
+- **Documentation**: how Mnemo works, in six chapters (the principle, a session and its six capabilities, agents, recall,
   confidence, the archivist), checked against the code. The chapter opened is remembered too.
 
 The settings of a folder are in `.mnemo/reglages.json` (local state, never versioned); the rules of the memory
@@ -863,7 +863,7 @@ a draft saved with one gesture:
 
 - **The stage** (left, stays in view): the avatar large on its podium (a slow breathing motion, off under « reduce
   motion »), the name, the class summary (provider logo, engine · model, provider), stats as bars (skills, plugins with
-  Claude Code, powers, each against what can be equipped), the switch **« Démarre dans la mémoire »** (start in the
+  Claude Code, capabilities, each against what can be equipped), the switch **« Démarre dans la mémoire »** (start in the
   memory: `_mnemo/`, the root added with `--add-dir`; otherwise in the folder chosen at launch; the archivist always
   starts in the memory) and the Cancel / Save footer.
 - **Apparence** (appearance): a small creature (12 shapes) and a colour, chosen separately; shown in New session and in
@@ -880,7 +880,7 @@ a draft saved with one gesture:
   from `~/.claude/plugins/installed_plugins.json`, or `CLAUDE_CONFIG_DIR`). The ticked ones are switched on in the
   session, every other installed plugin is switched off, even one switched on in your Claude Code settings
   (`enabledPlugins` of the session settings). A profile with no plugin ticked gets none.
-- **Pouvoirs** (powers): the six Mnemo hooks, each with what it does: Éveil (start), Souffle (each message), Bouclier
+- **Capacités** (capabilities): the six Mnemo hooks, each with what it does: Éveil (start), Souffle (each message), Bouclier
   (before an action), Carnet (after an action), Veille (stop), Récit (end). Souffle, Bouclier and Carnet are switches;
   Éveil, Veille and Récit keep the session state and are always on (shown on, not switchable, with the reason).
 - **Mission**: the instruction, Mnemo's default one (which follows Mnemo updates) or your own text; « Revenir à la

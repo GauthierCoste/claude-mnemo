@@ -35,7 +35,7 @@ const barre = (cle: string, libelle: string): ChampDispose => ({ cle, libelle, f
 const RAPPEL: CarteDisposee = {
 	cle: 'rappel',
 	titre: 'Rappel',
-	sous: 'Ce que Mnemo injecte dans tes sessions, et ce qu’il propose en pistes.',
+	sous: 'Ce que Mnemo injecte dans les sessions, et ce qu’il propose en pistes.',
 	groupes: [
 		{
 			titre: null,
@@ -96,7 +96,7 @@ const RECHERCHE: CarteDisposee = {
 const CONFIANCE: CarteDisposee = {
 	cle: 'confiance',
 	titre: 'Confiance',
-	sous: 'À qui Mnemo fait confiance, et ce que l’archiviste écrit sans toi.',
+	sous: 'À qui Mnemo fait confiance, et ce que l’archiviste écrit sans confirmation.',
 	groupes: [
 		{
 			titre: 'Fiabilité des sources',
@@ -134,7 +134,7 @@ const SYSTEME: CarteDisposee = {
 			titre: 'Service',
 			etatService: true,
 			champs: [
-				{ cle: 'service.navigateur', libelle: 'S’ouvre dans', aide: 'quand tu lances Mnemo', forme: 'choix' },
+				{ cle: 'service.navigateur', libelle: 'S’ouvre dans', aide: 'au lancement de Mnemo', forme: 'choix' },
 				{ cle: 'service.port', libelle: 'Port', aide: 'l’adresse de l’interface', forme: 'nombre' },
 			],
 		},

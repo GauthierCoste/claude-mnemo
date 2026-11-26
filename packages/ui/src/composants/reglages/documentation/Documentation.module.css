@@ -1,6 +1,6 @@
 /*
  * Onglet Documentation : le chapitre choisi à droite du panneau, en colonne de lecture (760px au plus). Schémas en cases
- * fléchées, frise des pouvoirs, glossaire, sorts d'une fiche, formule. Tout se règle sur la largeur de la colonne
+ * fléchées, frise des capacités, glossaire, sorts d'une fiche, formule. Tout se règle sur la largeur de la colonne
  * (container queries) : une colonne en petite largeur, jamais de défilement horizontal.
  */
 
@@ -132,7 +132,7 @@
 	}
 }
 
-/* frise des pouvoirs : une rune sur un fil vertical, le nom, l'effet */
+/* frise des capacités : un symbole sur un fil vertical, le nom, l'effet */
 .frise {
 	list-style: none;
 	margin: 0;
@@ -159,7 +159,7 @@
 	position: relative;
 }
 
-.rune {
+.symbole {
 	width: 28px;
 	height: 28px;
 	border-radius: 50%;

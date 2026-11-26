@@ -35,7 +35,7 @@ async function choisir(liste: HTMLElement, nom: string): Promise<HTMLElement> {
 const bloc = (nom: string) => screen.getByRole('region', { name: nom });
 const classe = (nom: RegExp) => within(within(bloc('Classe')).getByRole('radiogroup', { name: 'Classe' })).getByRole('radio', { name: nom });
 const caseInventaire = (nom: string) => within(within(bloc('Équipement')).getByRole('list', { name: 'Inventaire' })).getByRole('checkbox', { name: nom });
-const pouvoir = (nom: string) => within(bloc('Pouvoirs')).getByRole('switch', { name: nom });
+const capacite = (nom: string) => within(bloc('Capacités')).getByRole('switch', { name: nom });
 const pied = () => screen.getByRole('contentinfo', { name: 'Enregistrement de l’agent' });
 const enregistrer = () => within(pied()).getByRole('button', { name: 'Enregistrer' });
 const description = (el: HTMLElement) =>
@@ -54,13 +54,13 @@ describe('Réglages › Agents : la scène', () => {
 		expect(within(scene).getByText('Anthropic')).toBeTruthy();
 		expect(within(scene).getByText('modèle par défaut')).toBeTruthy();
 		const stats = within(within(scene).getByRole('list', { name: 'Stats' })).getAllByRole('listitem');
-		expect(stats.map((x) => x.textContent)).toEqual(['Skills2', 'Plugins0', 'Pouvoirs6']);
+		expect(stats.map((x) => x.textContent)).toEqual(['Skills2', 'Plugins0', 'Capacités6']);
 		// pas de part de contexte : l'aperçu n'en donne aucune estimation
 		expect(within(scene).queryByText('Contexte')).toBeNull();
 
 		const depart = within(scene).getByRole('switch', { name: 'Démarre dans la mémoire' });
 		expect(depart.getAttribute('aria-checked')).toBe('false');
-		expect(description(depart)).toMatch(/dossier que tu choisis au lancement/u);
+		expect(description(depart)).toMatch(/dossier choisi au lancement/u);
 		expect(within(pied()).queryByText('Modifié, non enregistré')).toBeNull();
 		await act(async () => depart.click());
 		expect(depart.getAttribute('aria-checked')).toBe('true');
@@ -80,7 +80,7 @@ describe('Réglages › Agents : la scène', () => {
 		await act(async () => depart.click());
 		expect(depart.getAttribute('aria-checked')).toBe('true');
 		const codex = await choisir(liste, 'revue-code');
-		expect(within(within(codex).getByRole('list', { name: 'Stats' })).getAllByRole('listitem').map((x) => x.firstChild?.textContent)).toEqual(['Skills', 'Pouvoirs']);
+		expect(within(within(codex).getByRole('list', { name: 'Stats' })).getAllByRole('listitem').map((x) => x.firstChild?.textContent)).toEqual(['Skills', 'Capacités']);
 	});
 });
 
@@ -89,7 +89,7 @@ describe('Réglages › Agents : la classe', () => {
 		await ouvrirAgents();
 		const vibe = classe(/^Mistral Vibe/u);
 		await waitFor(() => expect(vibe.getAttribute('aria-disabled')).toBe('true'));
-		expect(description(vibe)).toBe('À lier : lie Mistral Vibe à Mnemo dans Réglages › Branchements.');
+		expect(description(vibe)).toBe('À lier : Mistral Vibe se lie à Mnemo dans Réglages › Branchements.');
 		await act(async () => vibe.click());
 		expect(vibe.getAttribute('aria-checked')).toBe('false');
 
@@ -182,25 +182,25 @@ describe('Réglages › Agents : l’équipement', () => {
 	});
 });
 
-describe('Réglages › Agents : pouvoirs et mission', () => {
-	it('pouvoirs : Éveil, Veille, Récit toujours actifs, et le disent ; Souffle, Bouclier, Carnet se basculent ; la liste garde les premiers', async () => {
+describe('Réglages › Agents : capacités et mission', () => {
+	it('capacités : Éveil, Veille, Récit toujours actifs, et le disent ; Souffle, Bouclier, Carnet se basculent ; la liste garde les premiers', async () => {
 		const { client } = await ouvrirAgents();
 		for (const nom of ['Éveil', 'Veille', 'Récit']) {
-			const p = pouvoir(nom);
+			const p = capacite(nom);
 			expect(p.getAttribute('aria-checked')).toBe('true');
 			expect(p.getAttribute('aria-disabled')).toBe('true');
 			expect(description(p)).toMatch(/ \| Éveil, Veille et Récit : toujours actifs, ils tiennent l’état de la session\.$/u);
 			await act(async () => p.click());
 			expect(p.getAttribute('aria-checked')).toBe('true');
 		}
-		expect(description(pouvoir('Éveil'))).toMatch(/^au démarrage : la session apparaît dans Sessions \|/u);
+		expect(description(capacite('Éveil'))).toMatch(/^au démarrage : la session apparaît dans Sessions \|/u);
 		for (const nom of ['Souffle', 'Bouclier', 'Carnet']) {
-			expect(pouvoir(nom).getAttribute('aria-disabled')).toBeNull();
-			await act(async () => pouvoir(nom).click());
-			expect(pouvoir(nom).getAttribute('aria-checked')).toBe('false');
+			expect(capacite(nom).getAttribute('aria-disabled')).toBeNull();
+			await act(async () => capacite(nom).click());
+			expect(capacite(nom).getAttribute('aria-checked')).toBe('false');
 		}
 		const stats = within(screen.getByRole('list', { name: 'Stats' })).getAllByRole('listitem');
-		expect(stats.at(-1)?.textContent).toBe('Pouvoirs3');
+		expect(stats.at(-1)?.textContent).toBe('Capacités3');
 		await act(async () => enregistrer().click());
 		await within(pied()).findByText('Enregistré.');
 		expect((await detail(client, 'travail')).editable.hooks).toEqual(['debut', 'arret', 'fin']);
@@ -320,7 +320,7 @@ describe('Réglages › Agents : créer, dupliquer, supprimer un agent', () => {
 		const { client, liste } = await ouvrirAgents();
 		await act(async () => within(liste).getByRole('button', { name: '+ Nouvel agent' }).click());
 		expect(screen.queryByRole('complementary', { name: 'Agent travail' })).toBeNull();
-		expect(screen.getByText(/Nouvel agent : choisis son nom à gauche/u)).toBeTruthy();
+		expect(screen.getByText(/Nouvel agent : son nom se saisit à gauche/u)).toBeTruthy();
 		fireEvent.change(within(liste).getByLabelText('Nom du nouvel agent'), { target: { value: 'codex-essai' } });
 		await act(async () => within(liste).getByRole('button', { name: 'Créer' }).click());
 		await screen.findByRole('complementary', { name: 'Agent codex-essai' });

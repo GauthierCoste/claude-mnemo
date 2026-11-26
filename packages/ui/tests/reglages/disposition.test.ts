@@ -57,7 +57,7 @@ describe('phrases d’effet', () => {
 			'Les fiches très sûres entrent seules.',
 			'Mnemo injecte généreusement.',
 		]);
-		expect([0, 1, 4].map((n) => phraseEffet('contexte.injectionsParMessage', n, aucune))).toEqual(['Rien n’entre sans ton geste.', 'Jusqu’à 1 fiche par message.', 'Jusqu’à 4 fiches par message.']);
+		expect([0, 1, 4].map((n) => phraseEffet('contexte.injectionsParMessage', n, aucune))).toEqual(['Rien n’entre sans un geste.', 'Jusqu’à 1 fiche par message.', 'Jusqu’à 4 fiches par message.']);
 		expect([0, 1, 3].map((n) => phraseEffet('contexte.pistesParMessage', n, aucune))).toEqual(['Aucune piste.', '1 carte à injecter d’un geste.', '3 cartes à injecter d’un geste.']);
 		expect([5, 20, 50].map((n) => phraseEffet('contexte.seuilPiste', n, aucune))).toEqual([
 			'Presque tout peut devenir une piste.',

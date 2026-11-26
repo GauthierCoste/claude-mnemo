@@ -29,7 +29,7 @@ it.
 - **Profiles.** A profile sets what a session receives: its engine (Claude Code, Codex or Mistral Vibe) and model, its
   instruction, the memory skills, the Claude Code plugins switched on (every other installed plugin is switched off),
   the hooks, where it starts, and an avatar shown on its sessions. **Settings › Agents** edits it like a game character
-  (appearance, class, equipment, powers, mission); the skills of the memory and of an agent are edited there too. A
+  (appearance, class, equipment, capabilities, mission); the skills of the memory and of an agent are edited there too. A
   read-only preview shows everything a session of the profile receives, and where each part comes from. **Settings ›
   Documentation** explains how Mnemo works, in six short chapters.
 - **Three engines.** Each profile chooses its engine and model; a session keeps the ones it was started with. Codex
