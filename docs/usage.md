@@ -783,7 +783,9 @@ note, each with a confidence of 90 % or more; a judgement you gave by hand is ke
 **3. Apprendre** (learn). « Apprendre la note » learns one model per level on your validated judgements, outside the
 thread of the service (the sessions are not slowed down), and checks the acceptance criteria (see
 [Benchmarks](#benchmarks)). Not available without a validated judgement. The new model replaces the current one, even
-refused; the service takes it at the next message, without a restart. « Arrêter » leaves the current model in place.
+refused; a level with no judged pair (for example « Complets » when the messages were prepared without the reranker)
+keeps its current model, so it never falls back to the provisional rule for lack of data. The service takes the new model
+at the next message, without a restart. « Arrêter » leaves the current model in place.
 
 **The verdict, in plain words.** « Accepté : les % sont justes et Mnemo injecte seul au-dessus de 90 % »; « Refusé : la
 note ordonne le classement, sans % », with each missed criterion in plain words (for example « trop peu de fiches

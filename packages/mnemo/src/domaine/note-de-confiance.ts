@@ -73,6 +73,17 @@ export function modelesDeNote(c: CoefficientsNote, installes: IdentiteDesModeles
 	return { complets: { modele: c.complets, etat: complets }, sens: { modele: c.sens, etat: sens } };
 }
 
+/**
+ * Les coefficients à écrire après un apprentissage : niveau par niveau, le nouveau modèle, sauf là où il n'a rien appris (aucune
+ * paire jugée pour ce niveau, ex. Complets préparé sans reranker) et où l'actuel a appris quelque chose : l'actuel y est gardé,
+ * pour qu'un niveau ne perde jamais sa note (de départ, refusée ou acceptée) faute de données.
+ */
+export function garderLesNiveauxSansPaire(nouveau: CoefficientsNote, actuel: ModelesDeNote): CoefficientsNote {
+	const vide = (m: ModeleDeNote) => m.apprisLe === null || Object.keys(m.poids).length === 0;
+	const garde = (n: NiveauDeNote): ModeleDeNote => (vide(nouveau[n]) && actuel[n].etat !== 'non_appris' ? actuel[n].modele : nouveau[n]);
+	return { complets: garde('complets'), sens: garde('sens') };
+}
+
 /** Vrai si au moins un niveau a un modèle appris (accepté, refusé ou de départ) : sa note ordonne ; sinon, la règle provisoire. */
 export function noteApprise(m: ModelesDeNote): boolean {
 	return m.complets.etat !== 'non_appris' || m.sens.etat !== 'non_appris';

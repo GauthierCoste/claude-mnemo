@@ -3,7 +3,7 @@ import { echelleDesSignaux, enModelesDeDepart, jsonDeCoefficients, lireCoefficie
 import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 import type { ModeleDeNote, SignauxDeNote } from '../../src/domaine/modele-de-note.ts';
 import { COEFFICIENTS_NOTE } from '../../src/domaine/coefficients-note.ts';
-import { classementCalibre, etatDuModele, modelesDeNote, noteApprise, noteDeConfiance, noterLaCandidate, ordonnerParNote, pCalibre } from '../../src/domaine/note-de-confiance.ts';
+import { classementCalibre, etatDuModele, garderLesNiveauxSansPaire, modelesDeNote, noteApprise, noteDeConfiance, noterLaCandidate, ordonnerParNote, pCalibre } from '../../src/domaine/note-de-confiance.ts';
 import { sigmoide } from '../../src/domaine/regression-logistique.ts';
 
 const INSTALLES = { sens: 'sens.gguf@aaaaaaaaaaaa', reranker: 'reranker.gguf@bbbbbbbbbbbb' };
@@ -177,6 +177,30 @@ describe('état des modèles et note d’une candidate', () => {
 		expect(classementCalibre([n(true), null])).toBe(true);
 		expect(classementCalibre([n(true), n(false)])).toBe(false);
 		expect(classementCalibre([null])).toBe(false);
+	});
+});
+
+describe('garderLesNiveauxSansPaire', () => {
+	const actuels = modelesDeNote({ complets: enModelesDeDepart({ complets: COMPLETS, sens: SENS }).complets, sens: SENS }, INSTALLES, ECHELLE);
+	const vide = { ...modeleNonAppris(), apprisLe: '2026-11-26', refus: ['aucune paire jugée pour ce niveau'] };
+	const nouveauSens = modele({ biais: -3, apprisLe: '2026-11-26' });
+
+	it('un niveau sans paire garde le modèle actuel (de départ ici) ; un niveau appris prend le nouveau', () => {
+		const c = garderLesNiveauxSansPaire({ complets: vide, sens: nouveauSens }, actuels);
+		expect(c.complets).toBe(actuels.complets.modele);
+		expect(c.complets.origine).toBe('depart');
+		expect(c.sens).toBe(nouveauSens);
+	});
+
+	it('un niveau sans paire, et rien d’appris avant : le nouveau (vide) est écrit', () => {
+		const rien = modelesDeNote({ complets: modeleNonAppris(), sens: modeleNonAppris() }, INSTALLES, ECHELLE);
+		expect(garderLesNiveauxSansPaire({ complets: vide, sens: nouveauSens }, rien).complets).toBe(vide);
+	});
+
+	it('un nouveau modèle appris remplace même un accepté (la règle de remplacement en décide ailleurs)', () => {
+		const accepte = modelesDeNote({ complets: COMPLETS, sens: SENS }, INSTALLES, ECHELLE);
+		const nouveauComplets = modele({ biais: -5, apprisLe: '2026-11-26', poids: { logit: 1, cosinusRelatif: 1 } });
+		expect(garderLesNiveauxSansPaire({ complets: nouveauComplets, sens: nouveauSens }, accepte)).toEqual({ complets: nouveauComplets, sens: nouveauSens });
 	});
 });
 

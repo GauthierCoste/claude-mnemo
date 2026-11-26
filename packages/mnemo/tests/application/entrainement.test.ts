@@ -439,6 +439,20 @@ describe('entraînement de la note : apprendre et revenir (D6)', () => {
 		expect(vue.note.avant).toBe(true);
 	});
 
+	it('un niveau sans paire jugée garde le modèle actuel (de départ) ; l’autre prend le nouveau ; la règle de remplacement voit le fichier écrit', async () => {
+		const depart = appris({ origine: 'depart', gguf: { sens: null, reranker: null }, echelle: null });
+		const modeles: ModelesDeNote = { complets: { modele: depart, etat: 'depart' }, sens: { modele: depart, etat: 'depart' } };
+		const rapport = rapportFactice();
+		const vide = { ...modeleNonAppris(), apprisLe: MAINTENANT.toISOString(), refus: ['aucune paire jugée pour ce niveau'] };
+		const sansComplets = { ...rapport, coefficients: { complets: vide, sens: rapport.coefficients.sens } } as RapportDApprentissage;
+		const vus: CoefficientsNote[] = [];
+		const { e, etat } = faux([valide('v', ['a.md'])], { modeles, apprenti: { apprendre: async () => sansComplets } });
+		await (await e.apprendre({ origine: 'automatique', remplacer: (n) => (vus.push(n.coefficients), true) })).fin;
+		expect(etat.coefficients).toEqual([{ complets: depart, sens: rapport.coefficients.sens }]);
+		expect(vus).toEqual(etat.coefficients);
+		expect(etat.historique[0]).toMatchObject({ verdicts: { complets: 'depart', sens: 'refuse' }, remplace: true });
+	});
+
 	it('deux retours au modèle d’avant demandés ensemble passent l’un après l’autre', async () => {
 		let enCours = 0;
 		let chevauchement = false;

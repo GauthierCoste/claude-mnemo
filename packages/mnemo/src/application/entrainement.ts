@@ -23,7 +23,7 @@ import { aPrejuger, fusionnerPrejugements, prejuger } from './prejuger.ts';
 import type { Juge } from './prejuger.ts';
 import { NIVEAUX_DE_NOTE } from '../domaine/modele-de-note.ts';
 import type { CoefficientsNote, EchelleDesSignaux, IdentiteDesModeles, ModeleDeNote, NiveauDeNote } from '../domaine/modele-de-note.ts';
-import { etatDuModele } from '../domaine/note-de-confiance.ts';
+import { etatDuModele, garderLesNiveauxSansPaire } from '../domaine/note-de-confiance.ts';
 import type { EtatDuModele, ModelesDeNote } from '../domaine/note-de-confiance.ts';
 import { requeteJointe } from '../domaine/requete-du-message.ts';
 import { criteresEnClair, verdictEnClair } from '../domaine/verdict-note.ts';
@@ -394,14 +394,16 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 				if (signal.aborted) return;
 				await enFileNote(async () => {
 					const actuel = await p.note.modeles();
+					// un niveau sans paire jugée garde le modèle actuel (il ne retombe jamais sur la règle provisoire faute de données)
+					const coefficients = garderLesNiveauxSansPaire(rapport.coefficients, actuel);
 					// geste de l'utilisateur (manuel) : le nouveau modèle remplace toujours, même refusé ; « Revenir au modèle d'avant »
 					// rend l'ancien, et la ligne d'historique comme le résultat disent qu'il a été remplacé
-					const remplace = o.remplacer?.(rapport, actuel) ?? true;
-					if (remplace) await p.note.ecrire(rapport.coefficients);
+					const remplace = o.remplacer?.({ ...rapport, coefficients }, actuel) ?? true;
+					if (remplace) await p.note.ecrire(coefficients);
 					await p.note.ecrireRapport(rapport, remplace);
 					const installes = p.note.installes();
 					const echelle = p.note.echelle();
-					const verdicts = Object.fromEntries(NIVEAUX_DE_NOTE.map((n) => [n, etatDuModele(rapport.coefficients[n], n, installes, echelle)])) as Record<NiveauDeNote, EtatDuModele>;
+					const verdicts = Object.fromEntries(NIVEAUX_DE_NOTE.map((n) => [n, etatDuModele(coefficients[n], n, installes, echelle)])) as Record<NiveauDeNote, EtatDuModele>;
 					await ajouterAlHistorique({ date, origine: o.origine, verdicts, remplace });
 				});
 			};
