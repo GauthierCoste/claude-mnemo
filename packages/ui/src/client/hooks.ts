@@ -48,7 +48,9 @@ import {
 	type DemandePreparer,
 	type ReponseAccepterSures,
 	type ReponseAnnulation,
+	type DemandeReponseMessage,
 	type ReponseMessageAJuger,
+	type ReponseReponseMessage,
 	type VueEntrainement,
 } from '@mnemo/contrat';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -624,7 +626,9 @@ const CLE_ENTRAINEMENT = 'entrainement';
 /**
  * Les gestes de la page Entraîner. Lancer une tâche (préparer, pré-juger, apprendre), l'arrêter ou revenir au modèle d'avant :
  * la vue que rend le service remplace celle du cache, sauf si une diffusion plus récente est arrivée entre-temps. « Accepter
- * les sûres » et « Annuler » rendent leur nombre ou leur indice ; l'état est relu (le service le diffuse aussi). Chacun rejette une `ErreurApi` (409 : occupé, sans juge, rien à annuler…).
+ * les sûres » et « Annuler » rendent leur nombre ou leur indice ; répondre à un message (`repondre`) rend l'indice du suivant
+ * (null : plus rien à juger) ; l'état est relu (le service le diffuse aussi). Chacun rejette une `ErreurApi` (409 : occupé,
+ * sans juge, rien à annuler, « Rien d'utile ici » refusé…).
  */
 export type ActionsEntrainement = {
 	preparer(nombre: number): Promise<void>;
@@ -634,6 +638,7 @@ export type ActionsEntrainement = {
 	revenir(): Promise<void>;
 	accepterSures(): Promise<number>;
 	annuler(): Promise<number>;
+	repondre(d: DemandeReponseMessage): Promise<number | null>;
 };
 
 export function useActionsEntrainement(): ActionsEntrainement {
@@ -666,14 +671,23 @@ export function useActionsEntrainement(): ActionsEntrainement {
 				recharger();
 				return r.indice;
 			},
+			async repondre(d) {
+				const r = await api.envoyer<ReponseReponseMessage>(ROUTES.entrainementMessage, d);
+				recharger();
+				return r.suivant;
+			},
 		};
 	}, [api, cache, recharger]);
 }
 
-/** Le prochain message à juger (ceux à relire d'abord) ; `actif` faux : rien à lire. Null : plus rien à juger. */
-export function useMessageAJuger(actif: boolean): Ressource<ReponseMessageAJuger> {
+/**
+ * Un message à juger : `indice`, ou le prochain (ceux à relire d'abord) ; message null : plus rien à juger. `cle` distingue
+ * chaque lecture (l'écran de jugement en change à chaque message, pour ne jamais montrer un message lu avant) ; null : rien à
+ * lire.
+ */
+export function useMessageAJuger(cle: string | null, indice: number | null): Ressource<ReponseMessageAJuger> {
 	const { api } = useClient();
-	return useRessource(actif ? 'entrainement:message' : null, () => api.lire<ReponseMessageAJuger>(ROUTES.entrainementMessage));
+	return useRessource(cle === null ? null : `entrainement:message:${cle}`, () => api.lire<ReponseMessageAJuger>(ROUTES.entrainementMessage, indice === null ? undefined : { indice: String(indice) }));
 }
 
 /** `jour` au format AAAA-MM-JJ. */

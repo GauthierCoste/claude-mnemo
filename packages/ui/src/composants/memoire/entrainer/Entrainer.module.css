@@ -563,17 +563,6 @@
 	border: 1px solid var(--bd);
 }
 
-/* ---------- écran de jugement (provisoire) ---------- */
-.message {
-	margin: 0;
-	padding: 10px 12px;
-	border-left: 0;
-	border-radius: var(--r-3);
-	background: var(--s2);
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-}
-
 @media (prefers-reduced-motion: reduce) {
 	.barre::after {
 		transition: none;

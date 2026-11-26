@@ -1,0 +1,345 @@
+/*
+ * Écran de jugement (Mémoire › Entraîner) : une colonne de lecture (880 px au plus) dans la colonne de la page ; en tête le
+ * titre, la progression et les gestes de tête, puis l'aide des raccourcis ; le message (et celui d'avant, atténué) ; les
+ * fiches, chacune une rangée « texte | trois choix » qui passe à la ligne quand la place manque ; la barre de décision collée
+ * en bas de la page qui défile.
+ */
+.juger {
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-4);
+	max-width: 880px;
+	min-width: 0;
+}
+
+.tete {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 4px var(--esp-3);
+}
+
+.titre {
+	margin: 0;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.progression {
+	margin: 0;
+	color: var(--mu);
+	font-variant-numeric: tabular-nums;
+}
+
+.gestesTete {
+	display: flex;
+	align-items: center;
+	gap: var(--esp-2);
+	margin-left: auto;
+}
+
+/* cible d'au moins 24 px pour les petits boutons */
+.cible {
+	min-height: 24px;
+}
+
+.raccourcis {
+	flex-basis: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px var(--esp-4);
+	margin: 0;
+	color: var(--dim);
+	font-size: 11.5px;
+}
+
+.raccourci {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	white-space: nowrap;
+}
+
+.horsEcran {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.aide {
+	margin: 0;
+	color: var(--mu);
+	font-size: 12px;
+}
+
+.refus {
+	margin: 0;
+	color: var(--red);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+
+/* ---------- le message ---------- */
+.corps {
+	display: flex;
+	flex-direction: column;
+	gap: var(--esp-3);
+	min-width: 0;
+	transition: opacity 0.15s;
+}
+
+/* un geste ou la lecture du suivant : le message reste affiché, estompé */
+.inerte {
+	opacity: 0.55;
+}
+
+.precedent {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 0 12px;
+}
+
+.etiquette {
+	color: var(--dim);
+	font-size: 11px;
+}
+
+.textePrecedent {
+	margin: 0;
+	color: var(--mu);
+	font-size: 12.5px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.message {
+	margin: 0;
+	padding: 10px 12px;
+	border-radius: var(--r-3);
+	background: var(--s2);
+	font-size: 14px;
+	line-height: 1.45;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* ---------- les fiches ---------- */
+.fiches {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	border-top: 1px solid var(--bd);
+}
+
+.fiche {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	gap: var(--esp-2) var(--esp-4);
+	padding: 10px 8px;
+	border-bottom: 1px solid var(--bd);
+	border-radius: var(--r-2);
+}
+
+/* la fiche courante au clavier */
+.fiche:focus-within {
+	background: var(--s1);
+}
+
+.texteFiche {
+	flex: 1 1 18rem;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.titreFiche {
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.ligneFiche {
+	color: var(--mu);
+	font-size: 12.5px;
+	overflow-wrap: anywhere;
+}
+
+/* la raison du juge : une ligne, coupée par « … », entière en bulle */
+.raison {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--dim);
+	font-size: 11.5px;
+}
+
+.synthese summary {
+	width: fit-content;
+	color: var(--mu);
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.synthese p {
+	margin: 4px 0 0;
+	color: var(--mu);
+	font-size: 12.5px;
+	overflow-wrap: anywhere;
+}
+
+/* trois choix segmentés ; le radio natif reste focalisable, caché sous son libellé */
+.choix {
+	flex: 0 0 auto;
+	display: inline-flex;
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-2);
+	background: var(--s2);
+	overflow: hidden;
+}
+
+.option {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	min-height: 30px;
+	padding: 4px 11px;
+	color: var(--mu);
+	font-size: 12.5px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.option + .option {
+	border-left: 1px solid var(--bd2);
+}
+
+.option input {
+	position: absolute;
+	inset: 0;
+	margin: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.option:hover {
+	color: var(--tx);
+}
+
+.option:has(input:checked) {
+	background: var(--s3);
+	color: var(--tx);
+	font-weight: 600;
+}
+
+.option[data-jugement='pertinente']:has(input:checked) {
+	background: color-mix(in srgb, var(--ac) 20%, var(--s2));
+}
+
+.option:has(input:focus-visible) {
+	outline: 2px solid var(--ac);
+	outline-offset: -2px;
+}
+
+.option:has(input:disabled) {
+	cursor: default;
+}
+
+/* la proposition du juge : une marque discrète sur son choix */
+.marque {
+	padding: 0 5px;
+	border: 1px solid color-mix(in srgb, var(--violet) 45%, transparent);
+	border-radius: var(--r-pastille);
+	color: var(--violet);
+	font-size: 10px;
+	font-weight: 500;
+	line-height: 15px;
+}
+
+/* ---------- barre de décision, collée en bas de la page ---------- */
+.barre {
+	position: sticky;
+	bottom: 0;
+	z-index: 1;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--esp-2) var(--esp-4);
+	margin-top: var(--esp-1);
+	padding: 10px 0 12px;
+	border-top: 1px solid var(--bd);
+	background: var(--bg);
+}
+
+.reste {
+	display: inline-flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 4px 6px;
+	cursor: pointer;
+}
+
+.reste input {
+	align-self: center;
+	margin: 0;
+}
+
+.compte {
+	color: var(--mu);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+
+.gestes {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--esp-2);
+	margin-left: auto;
+}
+
+.barre .aide,
+.barre .refus {
+	flex-basis: 100%;
+	text-align: right;
+}
+
+/* ---------- fin ---------- */
+.fin {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--esp-3);
+}
+
+.texteFin {
+	margin: 0;
+}
+
+/* ---------- squelette ---------- */
+.squeletteMessage,
+.squeletteFiche {
+	border-radius: var(--r-3);
+	background: var(--s1);
+}
+
+.squeletteMessage {
+	height: 56px;
+}
+
+.squeletteFiche {
+	height: 48px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.corps {
+		transition: none;
+	}
+}

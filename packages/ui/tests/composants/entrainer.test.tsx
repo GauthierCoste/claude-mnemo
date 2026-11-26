@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ErreurApi } from '../../src/client/api.ts';
 import { Entrainer } from '../../src/composants/memoire/entrainer/Entrainer.tsx';
 import { etapeUtile, lignesDeNote, suiteDuVerdict } from '../../src/memoire/entrainement.ts';
+import { FournisseurNavigation } from '../../src/navigation.tsx';
 import { creerFauxClient, rendreAvecClient } from '../aides/faux-client.tsx';
 
 afterEach(cleanup);
@@ -50,7 +51,12 @@ const RESULTAT: VueEntrainement['resultat'] = {
 
 function monter(v: VueEntrainement, envois: Record<string, unknown> = {}) {
 	const faux = creerFauxClient({ [ROUTES.entrainement]: v, [ROUTES.entrainementMessage]: { message: null }, ...envois });
-	rendreAvecClient(<Entrainer />, faux.client);
+	rendreAvecClient(
+		<FournisseurNavigation vueInitiale="memoire" ongletMemoireInitial="entrainer">
+			<Entrainer />
+		</FournisseurNavigation>,
+		faux.client,
+	);
 	return faux;
 }
 
@@ -266,7 +272,7 @@ describe('Mémoire › Entraîner', () => {
 		monter(vue({ banc: { messages: 1, aJuger: 1 } }));
 		const juger = within(await etape(/Juger/)).getByRole('button', { name: 'Juger' });
 		await act(async () => juger.click());
-		expect(await screen.findByText('Plus aucun message à juger.')).toBeTruthy();
+		expect(await screen.findByRole('heading', { name: 'Rien à juger' })).toBeTruthy();
 		act(() => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
 		expect(await screen.findByRole('heading', { name: 'Note de confiance' })).toBeTruthy();
 	});
