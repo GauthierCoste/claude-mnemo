@@ -56,20 +56,45 @@ ${entree('verifier-poste', `git, Claude Code, ${enumeration(FACULTATIFS.map((m) 
   arreter [dossier] arrête le service du dossier (comme Ctrl-C ; pour un service démarré par « ouvrir »)
   lanceur           crée ~/Applications/Mnemo.app (macOS), qui fait « mnemo ouvrir » pour ce dossier [--retirer]
   commande          installe la commande « mnemo » dans ~/.local/bin (macOS, Linux) [--retirer]
-${entree('declarer', `déclaration MCP existante (${FACULTATIFS.map((m) => m.nom).join(', ')} : et leurs hooks) : --remplacer (sur ce Node et ce Mnemo) | --retirer [--moteur ${IDS}] (claude-code par défaut) [--json]`)}
+${entree('declarer', `déclaration MCP de Mnemo à un moteur (${FACULTATIFS.map((m) => m.nom).join(', ')} : et leurs hooks) : --lier (déclare ce qui manque, refait ce qui est périmé, sans question) | --remplacer (une déclaration existante, sur ce Node et ce Mnemo) | --retirer [--moteur ${IDS}] (claude-code par défaut) [--json]`)}
 ${entree('mcp', `serveur MCP pour ${enumeration(NOMS)} (stdio)`)}
 ${entree('hook <événement>', `hook de session (debut, message, outil, apres_outil, arret, fin) [--moteur ${IDS}], entrée JSON sur stdin`)}
   ligne-etat        ligne d'état des sessions Mnemo : transmet les quotas du compte au service, entrée JSON sur stdin
   sessions          sessions en cours (service lancé)
   session <action>  lancer <dossier> [--profil p] [--objectif t] | terminer <id> [--sans-bilan] | voir <id>
 
-Option : --aide    affiche ce message`;
+Option : --aide, --help, -h   affiche ce message ; après une commande (mnemo init --help) : l'usage de cette commande`;
+
+/** Options qui demandent l'aide, seules ou après une commande. */
+const AIDE = new Set(['--aide', '--help', '-h']);
+
+/**
+ * L'usage d'une commande (`mnemo <commande> --help`) : le sien quand elle en a un (`init`, `declarer`), puis ses entrées de
+ * l'aide générale (lignes qui commencent par son nom et leurs suites en retrait).
+ */
+async function usageDe(commande: string): Promise<string> {
+	const entrees: string[] = [];
+	let dedans = false;
+	for (const ligne of USAGE.split('\n')) {
+		if (ligne.startsWith(`  ${commande} `) || ligne === `  ${commande}`) dedans = true;
+		else if (!ligne.startsWith(' '.repeat(20))) dedans = false;
+		if (dedans) entrees.push(ligne);
+	}
+	const aide = entrees.join('\n');
+	if (commande === 'declarer') return (await import('./declaration.ts')).USAGE_DECLARER;
+	if (commande === 'init') return `${(await import('./init-options.ts')).USAGE_INIT}\n\n${aide}`;
+	return `Usage :\n${aide}`;
+}
 
 const { ErreurCli } = await import('./erreurs.ts');
 const { COMMANDES_CLI } = await import('../../domaine/commandes.ts');
 
 async function executer(args: string[]): Promise<void> {
 	const [commande, ...reste] = args;
+	if (commande !== undefined && !AIDE.has(commande) && commande !== 'aide' && COMMANDES_CLI.includes(commande) && reste.some((a) => AIDE.has(a))) {
+		console.log(await usageDe(commande));
+		return;
+	}
 	switch (commande) {
 		case undefined: {
 			// sans argument : le service du dossier courant s'il est dans une mémoire, sinon l'aide
@@ -79,6 +104,7 @@ async function executer(args: string[]): Promise<void> {
 			return;
 		}
 		case '--aide':
+		case '--help':
 		case '-h':
 		case 'aide':
 			console.log(USAGE);

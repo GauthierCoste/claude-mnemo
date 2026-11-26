@@ -4,7 +4,7 @@ import { actionDuMoteur, etapesDuCircuit, statutDuMoteur } from '../../src/moteu
 
 const moteur = (poste: PointMoteurVue[]): MoteurVue => ({ id: 'codex', nom: 'Codex', indisponible: null, manuel: false, version: '1.0.0', modeles: [], poste });
 const commande: PointMoteurVue = { cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée', detail: '/bin/codex' };
-const lier = { texte: 'mnemo init --codex', dans: 'terminal' } as const;
+const lier = { texte: 'mnemo declarer --moteur codex --lier', dans: 'terminal' } as const;
 
 describe('circuit de liaison d’un moteur', () => {
 	it('serveur MCP désactivé (laissé) mais hooks à installer : « Lier à Mnemo » quand même, le motif du point bloquant', () => {
@@ -21,7 +21,7 @@ describe('circuit de liaison d’un moteur', () => {
 		const m = moteur([
 			commande,
 			{ cle: 'version', libelle: 'Version', ok: null, etat: 'illisible' },
-			{ cle: 'mcp', libelle: 'Serveur MCP mnemo', ok: false, etat: 'périmé', detail: 'Déclaré pour un autre Node.', remede: { texte: 'mnemo declarer --moteur codex --remplacer', dans: 'terminal' } },
+			{ cle: 'mcp', libelle: 'Serveur MCP mnemo', ok: false, etat: 'périmé', detail: 'Déclaré pour un autre Node.', remede: { texte: 'mnemo declarer --moteur codex --lier', dans: 'terminal' } },
 		]);
 		expect(etapesDuCircuit(m).map((e) => e.etat)).toEqual(['ok', 'inconnu', 'casse']);
 		expect(actionDuMoteur(m)?.titre).toBe('La liaison de Codex à Mnemo est périmée.');
@@ -71,7 +71,7 @@ describe('circuit de liaison d’un moteur', () => {
 	});
 
 	it('mémoire périmée et hooks absents : « Lier à Mnemo », liaison périmée, la commande de la mémoire en repli', () => {
-		const remplacer = { texte: 'mnemo declarer --moteur codex --remplacer', dans: 'terminal' } as const;
+		const remplacer = { texte: 'mnemo declarer --moteur codex --lier', dans: 'terminal' } as const;
 		const m = moteur([
 			commande,
 			{ cle: 'mcp', libelle: 'Serveur MCP mnemo', ok: false, etat: 'périmé', detail: 'Déclaré pour un autre Node.', remede: remplacer },

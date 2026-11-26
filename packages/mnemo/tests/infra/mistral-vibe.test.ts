@@ -170,11 +170,57 @@ describe('mnemo declarer --moteur mistral-vibe et verifier-poste', () => {
 		expect(JSON.parse(lignes[0]!)).toEqual({
 			resultat: 'remplace',
 			message: 'Mistral Vibe : Déclaration MCP refaite avec ce Node et ce Mnemo.',
-			hooks: { resultat: 'remplace', message: 'Mistral Vibe : Hooks de Mnemo refaits avec ce Node et ce Mnemo.' },
+			hooks: { resultat: 'remplace', message: 'Hooks de Mnemo refaits avec ce Node et ce Mnemo chez Mistral Vibe (hooks.toml).' },
 		});
 		await commandeDeclarer(['--moteur', 'mistral-vibe', '--retirer'], { trouver: { 'mistral-vibe': vibe }, main: MAIN, env: { VIBE_HOME: home } }, (l) => lignes.push(l));
 		expect(lignes.slice(1)).toEqual(['Mistral Vibe : Déclaration MCP retirée.', 'Mistral Vibe : Hooks de Mnemo retirés de hooks.toml.']);
 		expect((await readFile(join(home, 'config.toml'), 'utf8')).trim()).toBe('');
+	});
+
+	it('--lier : déclare et installe sans question, puis rien à refaire ; une ligne JSON SortieDeclarerLier', async () => {
+		const home = await dossierTemporaire();
+		const lignes: string[] = [];
+		const vibe = () => VIBE;
+		await commandeDeclarer(['--moteur', 'mistral-vibe', '--lier', '--json'], { trouver: { 'mistral-vibe': vibe }, main: MAIN, env: { VIBE_HOME: home } }, (l) => lignes.push(l));
+		expect(JSON.parse(lignes[0]!)).toEqual({
+			lie: true,
+			resultat: 'declare',
+			message: 'Serveur MCP déclaré pour toutes les sessions Mistral Vibe.',
+			hooks: { resultat: 'installe', message: `Hooks de Mnemo installés chez Mistral Vibe (${join(home, 'hooks.toml')}).` },
+		});
+		expect(await readFile(join(home, 'config.toml'), 'utf8')).toContain('name = "mnemo"');
+		expect(await HOOKS_DU_POSTE_MISTRAL_VIBE.lire({ node: NODE, main: MAIN, env: { VIBE_HOME: home } })).toMatchObject({ etat: 'a_jour' });
+		await commandeDeclarer(['--lier', '--moteur', 'mistral-vibe'], { trouver: { 'mistral-vibe': vibe }, main: MAIN, env: { VIBE_HOME: home } }, (l) => lignes.push(l));
+		expect(lignes.slice(1)).toEqual(['Serveur MCP déjà déclaré à Mistral Vibe.', `Hooks de Mnemo déjà installés chez Mistral Vibe (${join(home, 'hooks.toml')}).`, 'Mistral Vibe lié à Mnemo.']);
+		expect(process.exitCode).toBeUndefined();
+	});
+
+	it('--lier : périmés refaits ; déclaration de l’utilisateur laissée (pas « lié ») ; introuvable ou MNEMO_SANS_MCP=1 : rien touché, code 1', async () => {
+		const home = await dossierTemporaire();
+		await writeFile(join(home, 'config.toml'), `[[mcp_servers]]\nname = "mnemo"\ntransport = "stdio"\ncommand = "/vieux/node"\nargs = ["${MAIN}", "mcp"]\n`);
+		await writeFile(join(home, 'hooks.toml'), blocsAttendus('/vieux/node', MAIN, process.platform).join('\n'));
+		const lignes: string[] = [];
+		await commandeDeclarer(['--moteur', 'mistral-vibe', '--lier', '--json'], { trouver: { 'mistral-vibe': () => VIBE }, main: MAIN, env: { VIBE_HOME: home } }, (l) => lignes.push(l));
+		expect(JSON.parse(lignes[0]!)).toMatchObject({ lie: true, resultat: 'remplace', hooks: { resultat: 'remplace' } });
+		expect(await readFile(join(home, 'config.toml'), 'utf8')).not.toContain('/vieux/node');
+
+		const autre = await dossierTemporaire();
+		const etrangere = '[[mcp_servers]]\nname = "mnemo"\ntransport = "stdio"\ncommand = "/usr/bin/python3"\nargs = ["/opt/serveur.py"]\n';
+		await writeFile(join(autre, 'config.toml'), etrangere);
+		await commandeDeclarer(['--moteur', 'mistral-vibe', '--lier', '--json'], { trouver: { 'mistral-vibe': () => VIBE }, main: MAIN, env: { VIBE_HOME: autre } }, (l) => lignes.push(l));
+		expect(JSON.parse(lignes[1]!)).toMatchObject({ lie: false, resultat: 'laisse', hooks: { resultat: 'installe' } });
+		expect(await readFile(join(autre, 'config.toml'), 'utf8')).toBe(etrangere);
+		expect(process.exitCode).toBeUndefined();
+
+		const vide = await dossierTemporaire();
+		await commandeDeclarer(['--moteur', 'mistral-vibe', '--lier', '--json'], { trouver: { 'mistral-vibe': () => null }, main: MAIN, env: { VIBE_HOME: vide } }, (l) => lignes.push(l));
+		expect(JSON.parse(lignes[2]!)).toEqual({ lie: false, resultat: 'echec', message: expect.stringContaining('Mistral Vibe introuvable') });
+		await commandeDeclarer(['--moteur', 'mistral-vibe', '--lier'], { trouver: { 'mistral-vibe': () => VIBE }, main: MAIN, env: { VIBE_HOME: vide, MNEMO_SANS_MCP: '1' } }, (l) => lignes.push(l));
+		expect(lignes[3]).toContain('MNEMO_SANS_MCP=1');
+		await expect(readFile(join(vide, 'config.toml'), 'utf8')).rejects.toThrow();
+		await expect(readFile(join(vide, 'hooks.toml'), 'utf8')).rejects.toThrow();
+		expect(process.exitCode).toBe(1);
+		await expect(commandeDeclarer(['--lier', '--remplacer'], {})).rejects.toMatchObject({ code: 2 });
 	});
 
 	it('verifier-poste : chemin, version (faux vibe), déclaration et hooks', async () => {
@@ -193,7 +239,7 @@ describe('mnemo declarer --moteur mistral-vibe et verifier-poste', () => {
 		});
 		const lignes: string[] = [];
 		await commandeVerifierPoste([], { executer, trouver: { 'claude-code': () => VIBE, codex: () => null, 'mistral-vibe': () => ({ commande: process.execPath, avant: [faux] }) }, versionNode: '26.0.0', main: MAIN, env: { VIBE_HOME: home } }, (l) => lignes.push(l));
-		expect(lignes[3]).toBe(`Mistral Vibe : ${faux} (Mistral Vibe 3.1.4 trop ancien, 3.1.5 ou plus requis) ; serveur MCP non déclaré (mnemo init --mistral) ; hooks non installés (mnemo init --mistral)`);
+		expect(lignes[3]).toBe(`Mistral Vibe : ${faux} (Mistral Vibe 3.1.4 trop ancien, 3.1.5 ou plus requis) ; serveur MCP non déclaré (mnemo declarer --moteur mistral-vibe --lier) ; hooks non installés (mnemo declarer --moteur mistral-vibe --lier)`);
 		expect(poste.mistral).toEqual({ ok: true, chemin: faux, version: '3.1.4', mcp: { etat: 'absent' }, hooks: { etat: 'absent' } });
 	});
 });

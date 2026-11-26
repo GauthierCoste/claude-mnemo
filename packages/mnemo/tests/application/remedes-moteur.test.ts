@@ -9,14 +9,14 @@ import { MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 
 describe('remèdes des moteurs', () => {
 	it('commandes tirées de l’installation ; moteur par défaut sans --moteur', () => {
-		expect(remedesDuMoteur(MOTEURS_DU_POSTE['claude-code'])).toEqual({ declarer: 'mnemo init --mcp', remplacer: 'mnemo declarer --remplacer' });
-		expect(remedesDuMoteur(MOTEURS_DU_POSTE['mistral-vibe'])).toEqual({ declarer: 'mnemo init --mistral', remplacer: 'mnemo declarer --moteur mistral-vibe --remplacer' });
+		expect(remedesDuMoteur(MOTEURS_DU_POSTE['claude-code'])).toEqual({ declarer: 'mnemo declarer --lier', remplacer: 'mnemo declarer --lier' });
+		expect(remedesDuMoteur(MOTEURS_DU_POSTE['mistral-vibe'])).toEqual({ declarer: 'mnemo declarer --moteur mistral-vibe --lier', remplacer: 'mnemo declarer --moteur mistral-vibe --lier' });
 	});
 
-	it('avertissement de session : hooks absents, la vraie option d’init (acceptée par init)', () => {
+	it('avertissement de session : hooks absents ou périmés, la commande qui lie le moteur', () => {
 		const texte = avertissementDesHooks(MOTEURS_DU_POSTE['mistral-vibe'], { etat: 'absent', chemin: '/h/.vibe/hooks.toml' });
-		expect(texte).toContain('« mnemo init --mistral »');
-		expect(avertissementDesHooks(MOTEURS_DU_POSTE.codex, { etat: 'perime', chemin: '/h/.codex/hooks.json' })).toContain('« mnemo declarer --moteur codex --remplacer »');
+		expect(texte).toContain('« mnemo declarer --moteur mistral-vibe --lier »');
+		expect(avertissementDesHooks(MOTEURS_DU_POSTE.codex, { etat: 'perime', chemin: '/h/.codex/hooks.json' })).toContain('« mnemo declarer --moteur codex --lier »');
 		for (const m of MOTEURS_FACULTATIFS) expect(lireOptionsInit([m.optionInit]).moteurs).toEqual([m.id]);
 	});
 

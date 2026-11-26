@@ -635,7 +635,7 @@ describe('Pilote : sessions Codex', () => {
 		const s = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
 		c.terminaux.lances[0]!.emettre('codex> ');
 		const relecture = c.pilote.abonner(s.id, () => {})!.relecture;
-		expect(relecture).toMatch(/^\r\n\[Mnemo\] Hooks de Mnemo pour Codex non installés .*mnemo init --codex.*\r\n\r\ncodex> $/su);
+		expect(relecture).toMatch(/^\r\n\[Mnemo\] Hooks de Mnemo pour Codex non installés .*mnemo declarer --moteur codex --lier.*\r\n\r\ncodex> $/su);
 		await hooksCodex(maison, false);
 		const t = await lancee(c, { profil: 'redaction', dossier: 'alpha' });
 		expect(c.pilote.abonner(t.id, () => {})!.relecture).toMatch(/Hooks de Mnemo pour Codex non approuvés : .*\(\/hooks\)/su);

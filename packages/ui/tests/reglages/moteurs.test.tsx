@@ -225,7 +225,7 @@ describe('Réglages › Système › Moteurs', () => {
 		const section = await ouvrirMoteurs();
 		const vibe = carte(section, 'Mistral Vibe');
 		expect(within(vibe).getByText('Mistral Vibe n’est pas lié à Mnemo.')).toBeTruthy();
-		expect(within(vibe).getByText('mnemo init --mistral').tagName).toBe('CODE');
+		expect(within(vibe).getByText('mnemo declarer --moteur mistral-vibe --lier').tagName).toBe('CODE');
 		await act(async () => within(vibe).getByRole('button', { name: 'Lier à Mnemo' }).click());
 		const enCours = within(vibe).getByRole('button', { name: 'Liaison…' }) as HTMLButtonElement;
 		expect(enCours.disabled).toBe(true);

@@ -112,7 +112,7 @@ describe('verifier-poste : Codex', () => {
 	it('texte : une ligne Codex ; Codex absent n’est pas un manque (code 0)', async () => {
 		const lignes: string[] = [];
 		await commandeVerifierPoste([], deps(repond({ code: 1, sortie: '', erreur: "Error: No MCP server named 'mnemo' found." })), (l) => lignes.push(l));
-		expect(lignes[2]).toBe('Codex : /opt/outils/codex (0.171.0-alpha.13) ; serveur MCP non déclaré (mnemo init --codex) ; hooks non installés (mnemo init --codex)');
+		expect(lignes[2]).toBe('Codex : /opt/outils/codex (0.171.0-alpha.13) ; serveur MCP non déclaré (mnemo declarer --moteur codex --lier) ; hooks non installés (mnemo declarer --moteur codex --lier)');
 		// trop ancien : dit ; illisible : absente, sans autre conséquence
 		const ancien: string[] = [];
 		await commandeVerifierPoste([], deps(repond(declaration(process.execPath, [MAIN, 'mcp']), 'codex-cli 0.150.0')), (l) => ancien.push(l));

@@ -74,7 +74,7 @@ describe('route moteurs', () => {
 		expect(cx?.poste).toEqual([
 			{ cle: 'commande', libelle: 'Commande', ok: true, etat: 'trouvée', detail: '/opt/bin/codex' },
 			{ cle: 'version', libelle: 'Version', ok: true, etat: '0.171.0' },
-			{ cle: 'mcp', libelle: 'Serveur MCP mnemo', ok: false, etat: 'périmé', detail: expect.any(String), remede: { texte: 'mnemo declarer --moteur codex --remplacer', dans: 'terminal' } },
+			{ cle: 'mcp', libelle: 'Serveur MCP mnemo', ok: false, etat: 'périmé', detail: expect.any(String), remede: { texte: 'mnemo declarer --moteur codex --lier', dans: 'terminal' } },
 			{ cle: 'hooks', libelle: 'Hooks de Mnemo', ok: true, etat: 'installés' },
 			{ cle: 'approbation', libelle: 'Approbation des hooks', ok: false, etat: 'à approuver', detail: 'jamais approuvés', remede: { texte: '/hooks', dans: 'moteur' } },
 		]);
@@ -154,11 +154,11 @@ describe('route moteurs', () => {
 		expect(lectures).toBe(2);
 	});
 
-	it('poste : MCP et hooks absents → mnemo init --codex ; approbation inconnue → à vérifier par /hooks', async () => {
+	it('poste : MCP et hooks absents → mnemo declarer --moteur codex --lier ; approbation inconnue → à vérifier par /hooks', async () => {
 		const [absent] = await lire({ codex: { moteur: codex({ version: '0.171.0' }), commande: COMMANDE } }, true);
 		expect(absent?.poste?.filter((p) => p.remede !== undefined).map((p) => [p.cle, p.remede?.texte])).toEqual([
-			['mcp', 'mnemo init --codex'],
-			['hooks', 'mnemo init --codex'],
+			['mcp', 'mnemo declarer --moteur codex --lier'],
+			['hooks', 'mnemo declarer --moteur codex --lier'],
 		]);
 		const [inconnu] = await lire({ codex: { moteur: codex({ version: null, mcp: 'deja', hooks: { etat: 'a_jour', chemin: '/h', approbation: { etat: 'inconnu', motif: 'config.toml illisible' } } }), commande: COMMANDE } }, true);
 		expect(inconnu?.poste?.find((p) => p.cle === 'version')).toMatchObject({ ok: null, etat: 'illisible' });

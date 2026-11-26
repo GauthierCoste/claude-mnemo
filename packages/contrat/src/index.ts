@@ -500,7 +500,7 @@ export type MessageClient =
  *   trouvée au démarrage du service, sa version et ses modèles (en cache, quelques secondes au plus à la première lecture) ;
  * - `moteurLier` POST (sans corps ; `:id` : `IdMoteur`) → `ReponseLiaisonMoteur` : lie ce moteur à Mnemo comme `mnemo init
  *   --<option>` (serveur MCP absent : déclaré ; hooks du poste absents : installés) et `mnemo declarer --moteur <id>
- *   --remplacer` (périmés : refaits), rien d'autre ; une déclaration de l'utilisateur (désactivée, ou « mnemo » qui ne lance
+ *   --remplacer` (périmés : refaits), rien d'autre, comme `mnemo declarer --moteur <id> --lier` ; une déclaration de l'utilisateur (désactivée, ou « mnemo » qui ne lance
  *   pas Mnemo) n'est jamais touchée (étape `laisse`) ; rend la liaison et la vue relue de tous les moteurs, comme
  *   `moteurs?poste=1` ; 404 moteur inconnu du service ; 409 : commande du moteur introuvable, `MNEMO_SANS_MCP=1` dans
  *   l'environnement du service, ou une liaison de ce moteur déjà en cours ;
@@ -1049,3 +1049,11 @@ export type PosteVerifie = {
  */
 export type SortieDeclarer = { resultat: ResultatDeclarer; message: string; hooks?: { resultat: ResultatDeclarer; message: string } };
 export type ResultatDeclarer = 'absent' | 'deja' | 'remplace' | 'autre' | 'retire' | 'echec';
+/**
+ * `mnemo declarer --lier [--moteur claude-code | codex | mistral-vibe] --json` : une ligne, de même forme que `SortieDeclarer`.
+ * La liaison est celle de `moteurLier` (mêmes étapes, mêmes messages) : `resultat`, `message` : le serveur MCP ; `hooks`
+ * (Codex, Mistral Vibe) : les hooks de Mnemo du poste ; `lie` : tout est déclaré et installé par Mnemo (comme
+ * `LiaisonMoteurVue.lie`). Commande du moteur introuvable ou `MNEMO_SANS_MCP=1` : `resultat` `echec`, sans `hooks`. Une étape
+ * en échec donne le code de sortie 1.
+ */
+export type SortieDeclarerLier = { lie: boolean; resultat: EtapeLiaisonVue['resultat']; message: string; hooks?: EtapeLiaisonVue };

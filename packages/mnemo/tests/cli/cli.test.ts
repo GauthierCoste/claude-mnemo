@@ -123,6 +123,26 @@ describe('commande mnemo', () => {
 		expect((await mnemo(d, '--aide')).out).toContain('Usage');
 	});
 
+	it('--help et -h : l’usage, code 0, seul ou après une commande (init, declarer : le leur), sans rien lancer', async () => {
+		const d = await dossierTemporaire();
+		for (const aide of ['--help', '-h']) {
+			const general = await mnemo(d, aide);
+			expect(general.code).toBe(0);
+			expect(general.out).toContain('Usage : mnemo [dossier]');
+			const init = await mnemo(d, 'init', aide);
+			expect(init).toMatchObject({ code: 0, err: '' });
+			expect(init.out).toMatch(/^Usage : mnemo init \[dossier\]/u);
+			const declarer = await mnemo(d, 'declarer', '--moteur', 'codex', aide);
+			expect(declarer.code).toBe(0);
+			expect(declarer.out).toMatch(/^Usage : mnemo declarer \(--lier \| --remplacer \| --retirer\)/u);
+			const session = await mnemo(d, 'session', aide);
+			expect(session.code).toBe(0);
+			expect(session.out).toContain('session <action>');
+		}
+		// rien créé par « init --help »
+		await expect(access(join(d, '_mnemo'))).rejects.toThrow();
+	});
+
 	it('trouverRacine remonte depuis un sous-dossier profond', async () => {
 		const d = await dossierTemporaire();
 		await mnemo(d, 'init');

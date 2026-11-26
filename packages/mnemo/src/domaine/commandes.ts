@@ -5,6 +5,7 @@
  */
 export const COMMANDES_CLI: readonly string[] = [
 	'--aide',
+	'--help',
 	'-h',
 	'aide',
 	'init',

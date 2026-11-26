@@ -320,7 +320,7 @@ describe('mnemo init --codex', () => {
 			const echec = lignesJson(sortie.texte()).find((l) => 'etat' in l && l.etape === 'codex' && l.etat === 'echec');
 			expect(echec).toBeDefined();
 			if (motif === undefined) expect(echec).not.toHaveProperty('motif');
-			else expect(echec).toMatchObject({ motif, message: expect.stringContaining('mnemo declarer --moteur codex --remplacer') });
+			else expect(echec).toMatchObject({ motif, message: expect.stringContaining('mnemo declarer --moteur codex --lier') });
 		}
 	});
 
@@ -386,7 +386,7 @@ describe('mnemo init --mistral', () => {
 		const perime = { ...actions(), declarerAuMoteur: vi.fn(async (): Promise<ResultatDeclaration> => ({ perime: true, manuel: 'vibe mcp add …', remplacable: true })), installerHooks: vi.fn(async (): Promise<ResultatInstallationHooks> => 'deja'), cheminHooks: vi.fn(() => '/h/hooks.toml') };
 		const sortie = capture();
 		await expect(commandeInit([racine, '--json', '--sans-mcp', '--mistral'], { sortie: sortie.flux, plateforme: 'linux', actions: perime })).rejects.toMatchObject({ code: 1 });
-		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'mistral', etat: 'echec', motif: 'perime', message: expect.stringContaining('mnemo declarer --moteur mistral-vibe --remplacer') });
+		expect(lignesJson(sortie.texte())).toContainEqual({ etape: 'mistral', etat: 'echec', motif: 'perime', message: expect.stringContaining('mnemo declarer --moteur mistral-vibe --lier') });
 		const desactive = { ...perime, declarerAuMoteur: vi.fn(async (): Promise<ResultatDeclaration> => 'desactive') };
 		const texte = capture();
 		await commandeInit([racine, '--sans-mcp', '--mistral'], { sortie: texte.flux, interactif: false, plateforme: 'linux', actions: desactive });

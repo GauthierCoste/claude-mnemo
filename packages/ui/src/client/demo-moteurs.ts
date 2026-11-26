@@ -60,9 +60,9 @@ const MISTRAL_VIBE: MoteurVue = {
 			ok: false,
 			etat: 'non déclaré',
 			detail: 'Les sessions de Mistral Vibe lancées hors de Mnemo ne lisent pas la mémoire.',
-			remede: { texte: 'mnemo init --mistral', dans: 'terminal' },
+			remede: { texte: 'mnemo declarer --moteur mistral-vibe --lier', dans: 'terminal' },
 		},
-		{ cle: 'hooks', libelle: 'Hooks de Mnemo', ok: false, etat: 'non installés', detail: 'Sans eux, Mnemo ne suit pas les sessions lancées.', remede: { texte: 'mnemo init --mistral', dans: 'terminal' } },
+		{ cle: 'hooks', libelle: 'Hooks de Mnemo', ok: false, etat: 'non installés', detail: 'Sans eux, Mnemo ne suit pas les sessions lancées.', remede: { texte: 'mnemo declarer --moteur mistral-vibe --lier', dans: 'terminal' } },
 	],
 };
 
