@@ -91,3 +91,28 @@
 	letter-spacing: 0.08em;
 	color: var(--dim);
 }
+
+/* pastille d'un onglet (Entraîner : messages à relire), comme celles de la barre latérale */
+.pastille {
+	display: inline-block;
+	min-width: 15px;
+	height: 15px;
+	margin-left: 6px;
+	padding: 0 4px;
+	border-radius: 8px;
+	background: var(--amber);
+	color: var(--sur-badge);
+	font: 700 10px/15px var(--mono);
+	text-align: center;
+	vertical-align: 1px;
+}
+
+/* texte lu par les lecteurs d'écran seulement */
+.horsEcran {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}

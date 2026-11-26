@@ -45,6 +45,11 @@ import {
 	type SanteVue,
 	type SessionTermineeVue,
 	type TrouveVue,
+	type DemandePreparer,
+	type ReponseAccepterSures,
+	type ReponseAnnulation,
+	type ReponseMessageAJuger,
+	type VueEntrainement,
 } from '@mnemo/contrat';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { Niveau } from '../dossiers/arbre.ts';
@@ -591,6 +596,66 @@ export function useLots(): Ressource<LotVue[]> {
 	const { recharger } = base;
 	useEffect(() => connexion.surMessage((m) => m.type === 'lots' && recharger()), [connexion, recharger]);
 	return base;
+}
+
+/**
+ * État de l'entraînement de la note de confiance (Mémoire › Entraîner, et la pastille de son onglet) : lu une fois, puis
+ * remplacé par chaque message `entrainement` du service (progression d'une tâche, jugements, nouveau modèle).
+ */
+export function useEntrainement(): Ressource<VueEntrainement> {
+	const { api, connexion } = useClient();
+	const cache = useCacheRessources();
+	const base = useRessource(CLE_ENTRAINEMENT, () => api.lire<VueEntrainement>(ROUTES.entrainement));
+	useEffect(() => connexion.surMessage((m) => m.type === 'entrainement' && publierRessource(cache, CLE_ENTRAINEMENT, m.etat)), [connexion, cache]);
+	return base;
+}
+const CLE_ENTRAINEMENT = 'entrainement';
+
+/**
+ * Les gestes de la page Entraîner. Lancer une tâche (préparer, pré-juger, apprendre), l'arrêter ou revenir au modèle d'avant :
+ * la vue que rend le service remplace celle du cache. « Accepter les sûres » et « Annuler » rendent leur nombre ou leur indice ;
+ * l'état est relu (le service le diffuse aussi). Chacun rejette une `ErreurApi` (409 : occupé, sans juge, rien à annuler…).
+ */
+export type ActionsEntrainement = {
+	preparer(nombre: number): Promise<void>;
+	prejuger(): Promise<void>;
+	apprendre(): Promise<void>;
+	arreter(): Promise<void>;
+	revenir(): Promise<void>;
+	accepterSures(): Promise<number>;
+	annuler(): Promise<number>;
+};
+
+export function useActionsEntrainement(): ActionsEntrainement {
+	const { api } = useClient();
+	const cache = useCacheRessources();
+	const { recharger } = useRessource(CLE_ENTRAINEMENT, () => api.lire<VueEntrainement>(ROUTES.entrainement));
+	return useMemo(() => {
+		const vue = async (route: string, corps?: unknown) => publierRessource(cache, CLE_ENTRAINEMENT, await api.envoyer<VueEntrainement>(route, corps));
+		return {
+			preparer: (nombre) => vue(ROUTES.entrainementPreparer, { nombre } satisfies DemandePreparer),
+			prejuger: () => vue(ROUTES.entrainementPrejuger),
+			apprendre: () => vue(ROUTES.entrainementApprendre),
+			arreter: () => vue(ROUTES.entrainementArreter),
+			revenir: () => vue(ROUTES.entrainementRevenir),
+			async accepterSures() {
+				const r = await api.envoyer<ReponseAccepterSures>(ROUTES.entrainementAccepterSures);
+				recharger();
+				return r.acceptes;
+			},
+			async annuler() {
+				const r = await api.envoyer<ReponseAnnulation>(ROUTES.entrainementAnnuler);
+				recharger();
+				return r.indice;
+			},
+		};
+	}, [api, cache, recharger]);
+}
+
+/** Le prochain message à juger (ceux à relire d'abord) ; `actif` faux : rien à lire. Null : plus rien à juger. */
+export function useMessageAJuger(actif: boolean): Ressource<ReponseMessageAJuger> {
+	const { api } = useClient();
+	return useRessource(actif ? 'entrainement:message' : null, () => api.lire<ReponseMessageAJuger>(ROUTES.entrainementMessage));
 }
 
 /** `jour` au format AAAA-MM-JJ. */

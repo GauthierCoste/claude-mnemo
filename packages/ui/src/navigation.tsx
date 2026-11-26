@@ -11,8 +11,8 @@ import type { Action } from './raccourcis.ts';
 
 export type Vue = 'sessions' | 'memoire' | 'reglages';
 
-/** Onglets de la vue Mémoire, dans l'ordre de la barre : Archiviste (par défaut), Fichiers, Graph 3D. */
-export type OngletMemoire = 'archiviste' | 'fichiers' | 'graphe';
+/** Onglets de la vue Mémoire, dans l'ordre de la barre : Archiviste (par défaut), Fichiers, Graph 3D, Entraîner. */
+export type OngletMemoire = 'archiviste' | 'fichiers' | 'graphe' | 'entrainer';
 
 export type Navigation = {
 	vue: Vue;
