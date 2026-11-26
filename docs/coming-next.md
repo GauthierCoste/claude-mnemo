@@ -71,6 +71,12 @@
   (a refused model leaves the current one in place). To design from the start: exposure bias (only what was shown gets a
   gesture: keep the notes drawn outside the pile, weight each gesture by the chance that its note was shown) and the
   rarity of gestures (the bench judgements stay the base, the gestures adjust it).
+- **Each user trains their own score, from the interface.** The model is `.mnemo/coefficients-note.json` (one per memory,
+  per machine, never committed); training it takes three commands in a terminal (`mnemo banc contexte --extraire`,
+  `--juger`, `--apprendre`). Bring them into the interface: a page to judge real messages (a message and its notes:
+  relevant, not relevant, silence; a gauge of messages judged), a button to learn, the verdict in plain words. Optionally,
+  a Claude judge that pre-judges the messages, the user reviewing only where they disagree. And ship starting weights
+  learned on demo memories (`--apprendre --module`), so each user starts from a fair model and adjusts it on their data.
 - **Mistral Vibe with a real account.** Measured so far against a local fake model, without an account. To measure
   with a real Mistral account: the real list of models and the default model, the real context window, the screens
   after sign-in, and the points still marked "not measured": `process.start`, `question_asked` and `turn_failed`, the
