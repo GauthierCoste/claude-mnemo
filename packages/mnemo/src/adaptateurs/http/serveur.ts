@@ -46,6 +46,7 @@ import { dureeDuReranker } from '../../application/duree-reranker.ts';
 import { diffuserModeles, vueModeles } from './diffusion-modeles.ts';
 import { routesLots } from './lots.ts';
 import { calculsEnCours } from './calculs-en-cours.ts';
+import type { CalculsEnCours } from './calculs-en-cours.ts';
 import { diffusionLimitee, entrainementDuService, messageEntrainement, reapprentissageDuService, routesEntrainement } from './entrainement.ts';
 import type { RemplacementsEntrainement } from './entrainement.ts';
 import { versionMnemo } from '../../infra/version.ts';
@@ -85,6 +86,8 @@ export type ReglagesService = {
 	 * toutes les `intervalleMs` (`VERIFICATION_MS`) ; abaissées par les tests.
 	 */
 	reapprentissage?: { premiereMs?: number; intervalleMs?: number };
+	/** Compteur des calculs des sessions (hooks, affinages) : créé par le service ; donné par les tests qui l'observent. */
+	calculs?: CalculsEnCours;
 };
 
 export type Service = {
@@ -383,7 +386,7 @@ export async function demarrerService(options: {
 	const diffusionEntrainement = diffusionLimitee(async () => hub.diffuser(messageEntrainement(await entrainement.etat())));
 	const entrainement = entrainementDuService({ racine, dep, pil, modeles, dureeReranker, suivi, surChangement: diffusionEntrainement.signaler }, options.entrainement);
 	// hooks et affinages comptés : le réapprentissage en fond ne part ni pendant l'un d'eux, ni juste après
-	const calculs = calculsEnCours();
+	const calculs = reglages.calculs ?? calculsEnCours();
 	const portsReapprentissage = reapprentissageDuService({ racine, dep, pil, suivi }, entrainement, calculs);
 	/** Processus de session tenus ici : session → pid. */
 	const pids = new Map<string, number>();
