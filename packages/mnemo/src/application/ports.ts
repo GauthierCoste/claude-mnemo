@@ -36,6 +36,11 @@ export interface Coffre {
 	 * symbolique.
 	 */
 	deplacerDossier(de: string, vers: string): Promise<void>;
+	/**
+	 * Copie le dossier `de` entier (tous ses fichiers, `.md` ou non, octet pour octet) vers `vers`, dossiers parents créés ;
+	 * les liens symboliques ne sont ni suivis ni copiés. Mêmes refus que `deplacerDossier`.
+	 */
+	copierDossier(de: string, vers: string): Promise<void>;
 	/** Retire le dossier `dossier` et tout ce qu'il contient (liens symboliques retirés, jamais suivis). Absent : sans erreur. Lève pour la racine ou un chemin qui traverse un lien symbolique. */
 	retirerDossier(dossier: string): Promise<void>;
 	/**

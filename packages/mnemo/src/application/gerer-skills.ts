@@ -7,7 +7,7 @@ import { lireFiche } from '../domaine/fiche.ts';
 import { estNomDeProfil } from '../domaine/profil.ts';
 import { estNomDeSkill, lireSkill, motifsDeSkill, texteDeSkill } from '../domaine/skill.ts';
 import type { SkillEditee } from '../domaine/skill.ts';
-import { commiter, ecrireEtCommiter, sousVerrou, texteDeFiche } from './commun.ts';
+import { commiter, ecrireEtCommiter, ecrireOuDefaire, sousVerrou, texteDeFiche } from './commun.ts';
 import { nomsDesSkills, retenueParLeProfil } from './moteurs/skills-de-session.ts';
 import type { Dependances } from './ports.ts';
 import { ANCIENNES_SKILLS, chargerProfil, cheminDeProfil, dossierSkillsDuProfil, SKILLS_PAR_DEFAUT } from './profil.ts';
@@ -136,25 +136,6 @@ export async function detailSkill(dep: Dependances, nom: string, profil: PorteeS
 	};
 }
 
-/**
- * Écrit `aEcrire` puis lance `commiter` ; en cas d'échec, remet chaque fichier écrit dans son état d'avant, puis `defaire`
- * (au mieux : l'erreur d'origine est celle qui est levée).
- */
-async function avecRetour(dep: Dependances, aEcrire: { chemin: string; texte: string }[], commiterTout: () => Promise<string>, defaire: () => Promise<void>): Promise<string> {
-	const avant = new Map<string, string | null>();
-	try {
-		for (const f of aEcrire) {
-			if (!avant.has(f.chemin)) avant.set(f.chemin, await dep.coffre.lire(f.chemin));
-			await dep.coffre.ecrire(f.chemin, f.texte);
-		}
-		return await commiterTout();
-	} catch (erreur) {
-		for (const [chemin, texte] of avant) await (texte === null ? dep.coffre.supprimer(chemin) : dep.coffre.ecrire(chemin, texte)).catch(() => {});
-		await defaire().catch(() => {});
-		throw erreur;
-	}
-}
-
 /** Écrit, commite et réindexe ; la réindexation suit seulement un commit. */
 async function ecrire(dep: Dependances, action: () => Promise<ResultatSkill>): Promise<ResultatSkill> {
 	const resultat = await sousVerrou(dep, action);
@@ -236,7 +217,7 @@ export async function modifierSkill(dep: Dependances, nom: string, entree: Skill
 		const profils = lieu.profil === null ? await profilsASuivre(dep, nom, entree.nom) : [];
 		// le dossier entier suit (scripts, références… pas seulement les .md) ; en cas d'échec, tout revient en place
 		await dep.coffre.deplacerDossier(ancienDossier, nouveauDossier);
-		const commit = await avecRetour(
+		const commit = await ecrireOuDefaire(
 			dep,
 			[{ chemin: cheminDe(lieu, entree.nom), texte: nouveau }, ...profils],
 			() => commiter(dep, `mnemo: renomme ${ancienDossier} → ${nouveauDossier}`, [ancienDossier, nouveauDossier, ...profils.map((p) => p.chemin)]),
@@ -264,7 +245,7 @@ export async function supprimerSkill(dep: Dependances, nom: string, profil: Port
 		// le dossier entier part (pas seulement les .md) : mis de côté (caché, hors du commit) jusqu'au commit, rendu en cas d'échec
 		const deCote = `${lieu.dossier}/.mnemo-${dep.systeme.nouvelId()}.tmp`;
 		await dep.coffre.deplacerDossier(dossier, deCote);
-		const commit = await avecRetour(
+		const commit = await ecrireOuDefaire(
 			dep,
 			profils,
 			() => commiter(dep, `mnemo: supprime ${dossier}/`, [dossier, ...profils.map((p) => p.chemin)]),

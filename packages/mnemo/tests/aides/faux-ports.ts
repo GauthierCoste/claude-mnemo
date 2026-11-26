@@ -131,6 +131,16 @@ export function fauxPorts(): Dependances & {
 				mtimes.set(`${cible}${c.slice(source.length)}`, ++horloge);
 			}
 		},
+		copierDossier: async (de, vers) => {
+			const [source, cible] = [dansLaMemoire(de), dansLaMemoire(vers)];
+			const dedans = [...fichiers.keys()].filter((c) => c.startsWith(`${source}/`));
+			if (dedans.length === 0) throw new Error(`${de} n'est pas un dossier.`);
+			if (fichiers.has(cible) || [...fichiers.keys()].some((c) => c.startsWith(`${cible}/`))) throw new Error(`${vers} existe déjà.`);
+			for (const c of dedans) {
+				fichiers.set(`${cible}${c.slice(source.length)}`, fichiers.get(c)!);
+				mtimes.set(`${cible}${c.slice(source.length)}`, ++horloge);
+			}
+		},
 		retirerDossier: async (brut) => {
 			const dossier = dansLaMemoire(brut);
 			for (const c of [...fichiers.keys()]) if (c.startsWith(`${dossier}/`)) fichiers.delete(c);

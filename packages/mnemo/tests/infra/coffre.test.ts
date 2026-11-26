@@ -119,6 +119,19 @@ describe('coffreFichiers', () => {
 		await expect(coffre.deplacerDossier('skills/autre', '../evade')).rejects.toThrow();
 	});
 
+	it('copierDossier : copie octet pour octet, source gardée ; refuse une cible existante et la racine', async () => {
+		const racine = await dossierTemporaire();
+		const coffre = coffreFichiers(racine);
+		await coffre.ecrire('a/SKILL.md', 'a');
+		await mkdir(join(racine, 'a', 'scripts'));
+		await writeFile(join(racine, 'a', 'scripts', 'calc.py'), 'x\r\n');
+		await coffre.copierDossier('a', 'b/c');
+		expect(await readFile(join(racine, 'b', 'c', 'scripts', 'calc.py'), 'utf8')).toBe('x\r\n');
+		expect(await readFile(join(racine, 'a', 'scripts', 'calc.py'), 'utf8')).toBe('x\r\n');
+		await expect(coffre.copierDossier('a', 'b/c')).rejects.toThrow('existe déjà');
+		await expect(coffre.copierDossier('a', '')).rejects.toThrow('racine');
+	});
+
 	it('retirerDossier : tout le dossier part, un lien dedans est retiré sans être suivi ; refuse la racine et un lien ; absent sans erreur', async () => {
 		const racine = await dossierTemporaire();
 		const coffre = coffreFichiers(racine);

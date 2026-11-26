@@ -181,6 +181,25 @@ export async function ecrireEtCommiter(dep: Dependances, aEcrire: { chemin: stri
 	}
 }
 
+/**
+ * Écrit `aEcrire` puis lance `commiterTout` ; en cas d'échec, remet chaque fichier écrit dans son état d'avant, puis `defaire`
+ * (au mieux : l'erreur d'origine est celle qui est levée).
+ */
+export async function ecrireOuDefaire<T>(dep: Dependances, aEcrire: { chemin: string; texte: string }[], commiterTout: () => Promise<T>, defaire: () => Promise<void>): Promise<T> {
+	const avant = new Map<string, string | null>();
+	try {
+		for (const f of aEcrire) {
+			if (!avant.has(f.chemin)) avant.set(f.chemin, await dep.coffre.lire(f.chemin));
+			await dep.coffre.ecrire(f.chemin, f.texte);
+		}
+		return await commiterTout();
+	} catch (erreur) {
+		for (const [chemin, texte] of avant) await (texte === null ? dep.coffre.supprimer(chemin) : dep.coffre.ecrire(chemin, texte)).catch(() => {});
+		await defaire().catch(() => {});
+		throw erreur;
+	}
+}
+
 /** Commit d'une écriture de Mnemo (porte la session d'origine en trailer) : n'avoir rien à commiter juste après avoir écrit est une erreur interne. */
 export async function commiter(dep: Dependances, message: string, chemins: string[] | 'tout'): Promise<string> {
 	const commit = await dep.historique.commit(message, chemins, dep.origine?.session);
@@ -317,14 +336,6 @@ export async function ficheDeMention(dep: Pick<Dependances, 'coffre'>, mention: 
 /** Type de source d'un fait déjà écrit. */
 export async function typeDeSourceDe(dep: Dependances, fait: Fait): Promise<TypeSource> {
 	return typeDeMention(dep, fait.source ?? '');
-}
-
-/** Fichiers `.md` d'un dossier de la mémoire, récursivement. */
-export async function fichiersDuDossier(dep: Dependances, dossier: string): Promise<string[]> {
-	const { fiches, dossiers } = await dep.coffre.lister(dossier);
-	const resultat = [...fiches];
-	for (const sous of dossiers) resultat.push(...(await fichiersDuDossier(dep, sous)));
-	return resultat;
 }
 
 /** Sous verrou ; les retouches manuelles sont versionnées à part, avant toute écriture de Mnemo. */
