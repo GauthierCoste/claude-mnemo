@@ -75,8 +75,9 @@ it.
   waited for.
 - **Injection** follows the session. Each meaningful message ranks the notes around the project, the neutral ones and
   those a gesture or the message points to, by meaning, words, the notes you injected by hand and the history of your
-  gestures; the ranking is refined by the reranker in the background. A small model learned on your judgements
-  (`mnemo banc contexte --apprendre`) turns this into a calibrated score: it chooses the leads, and injects a note whole
+  gestures; the ranking is refined by the reranker in the background. A small model, shipped with starting weights and
+  trained on your judgements (Mémoire › Entraîner, where Claude can pre-judge the messages for you; then again in the
+  background from your gestures), turns this into a calibrated score: it chooses the leads, and injects a note whole
   only when it is accepted and sure enough; automatic injection stops by itself when you keep setting its notes aside.
   Mute messages ("ok, go") bring nothing. The [details](docs/usage.md#injected-context) are in the usage guide.
 - **Sessions** started from Mnemo get what their engine reads. Claude Code gets a plugin generated for the session
@@ -160,7 +161,7 @@ tokens, private keys) are masked before anything is written or indexed. What the
 
 ## Status
 
-Version 1.8.0. Mnemo runs on macOS (Apple silicon and Intel) and is being adapted to Windows, where it has not been
+Version 1.9.0. Mnemo runs on macOS (Apple silicon and Intel) and is being adapted to Windows, where it has not been
 tried in real use yet; Linux has not been used. The CI runs the type check and the tests at each push on Linux and
 Windows with Node.js 24, and on macOS with Node.js 26. The interface runs in the browser, or in its own window with the macOS app.
 
