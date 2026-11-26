@@ -12,7 +12,10 @@ export function BarreTitre(p: {
 	racine: string | null;
 	fictif: boolean;
 	tiroirOuvert: boolean;
-	/** Un dialogue de l'archiviste attend l'utilisateur (`SessionVue.dialogueOuvert`) : dit sur son bouton. */
+	/**
+	 * Un dialogue de l'archiviste attend l'utilisateur (`SessionVue.dialogueOuvert`) : son pouls passe en couleur
+	 * d'avertissement, sans texte visible (décision de Gauthier) ; le nom accessible du bouton le dit.
+	 */
 	archivisteAttend: boolean;
 	champPalette?: RefObject<HTMLButtonElement | null>;
 	surPalette(): void;
@@ -31,10 +34,17 @@ export function BarreTitre(p: {
 			<div className={s.droite}>
 				<Quotas />
 				<BoutonModeles />
-				<button type="button" className={s.archiviste} onClick={p.surArchiviste} aria-keyshortcuts="Alt+A" aria-expanded={p.tiroirOuvert}>
-					<span className={s.pouls} aria-hidden="true" />
+				<button
+					type="button"
+					className={s.archiviste}
+					onClick={p.surArchiviste}
+					aria-keyshortcuts="Alt+A"
+					aria-expanded={p.tiroirOuvert}
+					aria-label={p.archivisteAttend ? 'Archiviste, attend ta réponse' : undefined}
+					title={p.archivisteAttend ? 'L’archiviste attend ta réponse' : undefined}
+				>
+					<span className={s.pouls} data-attend={p.archivisteAttend ? 'true' : undefined} aria-hidden="true" />
 					Archiviste
-					{p.archivisteAttend && <span className={s.attend}>attend ta réponse</span>}
 					<kbd>⌥A</kbd>
 				</button>
 			</div>

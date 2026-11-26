@@ -100,9 +100,9 @@
 	animation: mnemo-pouls 2s infinite;
 }
 
-.attend {
-	color: var(--amber);
-	font-size: 11px;
+.pouls[data-attend='true'] {
+	background: var(--amber);
+	box-shadow: 0 0 0 0 color-mix(in srgb, var(--amber) 50%, transparent);
 }
 
 /*
