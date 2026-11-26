@@ -109,7 +109,8 @@ describe('options de mnemo banc contexte', () => {
 		expect(lireOptionsContexte(['--empreintes', 'garder'])).toMatchObject({ empreintes: 'garder' });
 		expect(lireOptionsContexte(['--gestes', '--json'])).toMatchObject({ gestes: true, json: true });
 		expect(lireOptionsContexte(['--apprendre', '--empreintes', 'garder', '--json'])).toMatchObject({ apprendre: true, empreintes: 'garder', json: true, module: null });
-		expect(lireOptionsContexte(['--apprendre', '--module', 'src/domaine/coefficients-note.ts'])).toMatchObject({ module: 'src/domaine/coefficients-note.ts' });
+		expect(lireOptionsContexte(['--apprendre', '--module', 'src/domaine/coefficients-note.ts'])).toMatchObject({ module: 'src/domaine/coefficients-note.ts', depart: false });
+		expect(lireOptionsContexte(['--apprendre', '--module', 'x.ts', '--depart'])).toMatchObject({ module: 'x.ts', depart: true });
 	});
 
 	it('combinaisons refusées', () => {
@@ -126,6 +127,9 @@ describe('options de mnemo banc contexte', () => {
 		expect(() => lireOptionsContexte(['--gestes', '--apprendre'])).toThrow('--gestes');
 		expect(() => lireOptionsContexte(['--module', 'x.ts'])).toThrow('--module');
 		expect(() => lireOptionsContexte(['--apprendre', '--module'])).toThrow('chemin');
+		// --depart : seulement avec --apprendre --module
+		expect(() => lireOptionsContexte(['--apprendre', '--depart'])).toThrow('--depart');
+		expect(() => lireOptionsContexte(['--depart'])).toThrow('--depart');
 	});
 });
 

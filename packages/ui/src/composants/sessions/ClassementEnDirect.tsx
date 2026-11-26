@@ -70,7 +70,7 @@ const chemin = (id: string) => id.split('#')[0]!;
 export function raisonOrdreSeul(coupes: boolean): string {
 	return coupes
 		? "Ordre seul : modèles coupés pour cette session, ni sens ni reranker. L'ordre suit les mots, puis l'historique de tes gestes ; sans %, ni injection par Mnemo."
-		: "Ordre seul : aucune note apprise et validée sur tes jugements pour les modèles installés (pas encore apprise, refusée, ou modèles changés depuis). L'ordre suit le sens et les mots ; sans %, ni injection par Mnemo.";
+		: "Ordre seul : aucune note apprise et validée sur tes jugements pour les modèles installés (note de départ à entraîner, pas encore apprise, refusée, ou modèles changés depuis). L'ordre suit le sens et les mots ; sans %, ni injection par Mnemo.";
 }
 
 /** Libellé à droite d'une fiche injectée et son info-bulle. */
@@ -88,18 +88,22 @@ function modeAffiche(m: ModeInjection | undefined, duDossier: boolean, seuil: nu
 	return { libelle: null, bulle: 'Injectée entière dans la session', auto: false };
 }
 
-/** Une note qui n'est pas un % calibré, montrée en gris en ordre seul : d'un modèle appris mais refusé, de la règle provisoire, ou d'une entrée ancienne. */
-type NoteNonCalibree = { valeur: number; origine: 'refusee' | 'provisoire' | 'ancienne' };
+/**
+ * Une note qui n'est pas un % calibré, montrée en gris en ordre seul : d'un modèle appris mais refusé, du modèle de départ livré
+ * avec Mnemo, de la règle provisoire, ou d'une entrée ancienne.
+ */
+type NoteNonCalibree = { valeur: number; origine: 'refusee' | 'depart' | 'provisoire' | 'ancienne' };
 
 const BULLES_NON_CALIBREES: Record<NoteNonCalibree['origine'], string> = {
 	refusee: "Note non calibrée : le modèle appris n'a pas passé les critères d'acceptation",
+	depart: 'Note non calibrée : note de départ, à entraîner (livrée avec Mnemo, pas encore apprise sur tes jugements)',
 	provisoire: 'Note non calibrée : la règle provisoire (sens et mots), aucun modèle de note appris',
 	ancienne: "Note non calibrée : celle d'une entrée d'avant le classement vivant",
 };
 
 /** La note non calibrée d'une ligne en ordre seul, si elle en a une (sinon ◇). */
 function noteNonCalibree(l: ClassementVue): { nonCalibree?: NoteNonCalibree } {
-	if (l.pNonCalibree !== undefined) return { nonCalibree: { valeur: l.pNonCalibree, origine: 'refusee' } };
+	if (l.pNonCalibree !== undefined) return { nonCalibree: { valeur: l.pNonCalibree, origine: l.depart === true ? 'depart' : 'refusee' } };
 	if (l.noteProvisoire !== undefined) return { nonCalibree: { valeur: l.noteProvisoire, origine: 'provisoire' } };
 	if (l.signaux === undefined && l.note !== null) return { nonCalibree: { valeur: l.note, origine: 'ancienne' } };
 	return {};

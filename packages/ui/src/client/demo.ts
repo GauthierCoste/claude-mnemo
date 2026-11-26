@@ -343,8 +343,8 @@ function entreeVivante(
 		servi: id === auto,
 		rang: i + 1,
 		p: o.calibre ? p : null,
-		// ordre seul : la note du modèle appris mais refusé, montrée en gris
-		...(o.calibre ? {} : { pNonCalibree: p }),
+		// ordre seul : la note du modèle de départ livré avec Mnemo (ce que voit une mémoire qui n'a pas encore entraîné la sienne), en gris
+		...(o.calibre ? {} : { pNonCalibree: p, depart: true as const }),
 		signaux: signauxDemo(p, raison, o.affinage === 'fait'),
 		...(id === auto ? { auto: true as const } : {}),
 		...(m.pistes.includes(id) ? { piste: true as const } : {}),

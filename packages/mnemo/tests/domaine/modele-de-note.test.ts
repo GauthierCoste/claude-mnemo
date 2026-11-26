@@ -27,8 +27,12 @@ describe('variablesDeNote', () => {
 });
 
 describe('coefficients-note.ts', () => {
-	it('est livré refusé partout', () => {
-		for (const n of NIVEAUX_DE_NOTE) expect(COEFFICIENTS_NOTE[n].accepte).toBe(false);
+	it('est livré refusé partout : des modèles de départ (ou jamais appris)', () => {
+		for (const n of NIVEAUX_DE_NOTE) {
+			expect(COEFFICIENTS_NOTE[n].accepte).toBe(false);
+			const appris = COEFFICIENTS_NOTE[n].apprisLe !== null;
+			expect(COEFFICIENTS_NOTE[n].origine).toBe(appris ? 'depart' : undefined);
+		}
 	});
 
 	it('est exactement ce qu’écrit moduleDeCoefficients', async () => {

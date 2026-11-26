@@ -1,6 +1,7 @@
 // Coefficients de la note de confiance, un modèle par niveau (spec classement vivant § 4.2). Données écrites par
 // `mnemo banc contexte --apprendre --module` : aucun texte de fiche ni de message. Valeur par défaut : les coefficients appris
-// d'une mémoire sont dans son `.mnemo/coefficients-note.json`. Un modèle non accepté ne note rien (ordre seul).
+// d'une mémoire sont dans son `.mnemo/coefficients-note.json`. Un modèle non accepté ordonne sans % ni injection (ordre seul) ;
+// un modèle de départ (`--depart`, `origine` `depart`) aussi, jusqu'à ce que la mémoire apprenne le sien.
 
 import type { CoefficientsNote } from './modele-de-note.ts';
 

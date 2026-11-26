@@ -31,7 +31,7 @@ const USAGE_CONTEXTE = [
 	'        mnemo banc contexte --completer [--json]',
 	'        mnemo banc contexte --juger',
 	'        mnemo banc contexte --gestes [--json]',
-	'        mnemo banc contexte --apprendre [--empreintes exclure|garder] [--module <chemin>] [--json]',
+	'        mnemo banc contexte --apprendre [--empreintes exclure|garder] [--module <chemin> [--depart]] [--json]',
 ].join('\n');
 /** Messages extraits par défaut, et au plus par session (variété : 20 sessions au moins pour 120 messages). */
 const NOMBRE_PAR_DEFAUT = 50;
@@ -225,11 +225,13 @@ type Options = {
 	gestes: boolean;
 	apprendre: boolean;
 	module: string | null;
+	/** Avec `--apprendre --module` : les poids de départ livrés avec Mnemo, seulement le module (rien dans `.mnemo/`). */
+	depart: boolean;
 	empreintes: 'exclure' | 'garder';
 };
 
 export function lireOptionsContexte(args: readonly string[]): Options {
-	const o: Options = { json: false, extraire: false, completer: false, session: null, nombre: null, parSession: null, juger: false, recalculer: false, gestes: false, apprendre: false, module: null, empreintes: 'exclure' };
+	const o: Options = { json: false, extraire: false, completer: false, session: null, nombre: null, parSession: null, juger: false, recalculer: false, gestes: false, apprendre: false, module: null, depart: false, empreintes: 'exclure' };
 	const refus = (motif: string) => new ErreurCli(`${motif}\n${USAGE_CONTEXTE}`, 2);
 	const entier = (option: string, valeur: string | undefined): number => {
 		const n = Number(valeur);
@@ -244,6 +246,7 @@ export function lireOptionsContexte(args: readonly string[]): Options {
 		else if (a === '--gestes') o.gestes = true;
 		else if (a === '--completer') o.completer = true;
 		else if (a === '--apprendre') o.apprendre = true;
+		else if (a === '--depart') o.depart = true;
 		else if (a === '--extraire') {
 			o.extraire = true;
 			const suivant = args[k + 1];
@@ -273,6 +276,7 @@ export function lireOptionsContexte(args: readonly string[]): Options {
 	if ((o.nombre !== null || o.parSession !== null) && !o.extraire) throw refus("--nombre et --par-session ne vont qu'avec --extraire.");
 	if (o.juger && o.json) throw refus('--juger ne va pas avec --json.');
 	if (o.module !== null && !o.apprendre) throw refus("--module ne va qu'avec --apprendre.");
+	if (o.depart && (!o.apprendre || o.module === null)) throw refus("--depart ne va qu'avec --apprendre --module <chemin>.");
 	if (o.gestes && (o.extraire || o.completer || o.juger || o.recalculer || o.apprendre || o.empreintes !== 'exclure')) throw refus("--gestes ne va qu'avec --json.");
 	return o;
 }
@@ -403,11 +407,12 @@ const instantDApprentissage = (): string => new Date().toISOString();
 
 /**
  * `--apprendre` : la note de confiance apprise sur les jugements (empreintes vérifiées sur l'index lu tel qu'il est), le module
- * de coefficients et le rapport écrits.
+ * de coefficients et le rapport écrits. `--depart` : seulement le module, rien dans `.mnemo/`, pas même le verrou (le banc est
+ * lu une fois, et ses écritures se font par renommage : la lecture voit un fichier entier).
  */
 async function apprendre(racine: string, fichier: string, o: Options): Promise<void> {
 	// sous le verrou du banc : aucun jugement ne change pendant l'apprentissage
-	const rendre = prendreVerrouBanc(fichier, '--apprendre');
+	const rendre = o.depart ? () => {} : prendreVerrouBanc(fichier, '--apprendre');
 	try {
 		const cas = (await lireCasDuFichier(fichier)).filter((c) => c.candidates !== undefined);
 		if (cas.length === 0) throw new ErreurCli(`Aucun message jugé dans ${fichier}. Ajoutez-en avec --extraire, puis --juger.`);
@@ -420,7 +425,7 @@ async function apprendre(racine: string, fichier: string, o: Options): Promise<v
 		}
 		// l'échelle des signaux : les réglages de la mémoire, ceux avec lesquels le banc a calculé le signal de session
 		const echelle = echelleDesSignaux(lireReglagesDuDossier(racine).reglages.contexte);
-		const options = { empreinteDe, empreintes: o.empreintes, date: instantDApprentissage(), installes: ggufInstalles(), echelle, ...(o.module === null ? {} : { module: o.module }) };
+		const options = { empreinteDe, empreintes: o.empreintes, date: instantDApprentissage(), installes: ggufInstalles(), echelle, ...(o.module === null ? {} : { module: o.module }), depart: o.depart };
 		const { rapport, texte } = await apprendreAuBanc(racine, cas, options).catch((e: unknown) => {
 			throw e instanceof ErreurCli ? e : enErreurCli(e);
 		});

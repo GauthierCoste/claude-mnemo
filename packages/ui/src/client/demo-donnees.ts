@@ -962,9 +962,9 @@ export const CLASSEMENT_VIVANT_DEMO: { avant: MessageClasseDemo; suivants: Messa
 };
 
 /**
- * Classement en ordre seul (modèle de note appris mais refusé : aucun % calibré, ni injection par Mnemo ; les premières de l'ordre
- * en pistes) : le dernier message de la session « Écrire les tests du module achats ». Les notes sont celles du modèle refusé,
- * montrées en gris.
+ * Classement en ordre seul (modèle de note de départ, pas encore entraîné : aucun % calibré, ni injection par Mnemo ; les premières
+ * de l'ordre en pistes) : le dernier message de la session « Écrire les tests du module achats ». Les notes sont celles du modèle
+ * de départ, montrées en gris.
  */
 export const ORDRE_SEUL_DEMO: MessageClasseDemo = {
 	texte: 'Ajoute les cas de commande partiellement livrée.',

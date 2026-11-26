@@ -237,8 +237,10 @@ export type ClassementVue = {
 	servi: boolean;
 	rang: number;
 	p?: number | null;
-	/** Classement non calibré : la note d'un modèle appris mais refusé (0 à 1), à montrer en gris ; jamais avec `p`. */
+	/** Classement non calibré : la note d'un modèle appris mais refusé, ou de départ (0 à 1), à montrer en gris ; jamais avec `p`. */
 	pNonCalibree?: number;
+	/** `pNonCalibree` vient d'un modèle de départ (livré avec Mnemo, pas encore entraîné sur la mémoire). */
+	depart?: true;
 	/** Classement non calibré, sans modèle appris qui note la ligne : la note de la règle provisoire (sens et mots, peut dépasser 1). */
 	noteProvisoire?: number;
 	signaux?: SignauxClassementVue;

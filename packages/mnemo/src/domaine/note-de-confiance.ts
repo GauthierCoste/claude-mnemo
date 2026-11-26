@@ -5,17 +5,19 @@
 //
 // Trois régimes (décisions du 25/11) : un modèle **accepté** donne `p` (un %, calibré) ; un modèle **appris mais refusé** (critères
 // manqués, ou appris pour d'autres fichiers GGUF que ceux installés) ordonne le classement et choisit les pistes par sa note, sans
-// % ni injection ; **aucun modèle appris** : la règle provisoire (ordre par le sens et les poids des signaux).
+// % ni injection ; **aucun modèle appris** : la règle provisoire (ordre par le sens et les poids des signaux). Un modèle **de
+// départ** (livré avec Mnemo, appris ailleurs : décision D2 du 26/11) est dans le régime du refusé, sous son propre état.
 
 import { memeEchelle, variablesDeNote, VARIABLES_DU_NIVEAU } from './modele-de-note.ts';
 import type { CoefficientsNote, EchelleDesSignaux, IdentiteDesModeles, ModeleDeNote, NiveauDeNote, SignauxDeNote } from './modele-de-note.ts';
 import { sigmoide } from './regression-logistique.ts';
 
 /**
- * Un modèle accepté et utilisable ; appris mais refusé (ou d'autres GGUF) ; accepté mais coupé par le suivi des injections
- * (`suivi-injection.ts` : trop d'écarts ; ses % et son ordre restent, seule l'injection automatique s'arrête) ; jamais appris.
+ * Un modèle accepté et utilisable ; appris mais refusé (ou d'autres GGUF) ; de départ (livré avec Mnemo, pas appris sur la
+ * mémoire : comme refusé, il ordonne sans % ni injection) ; accepté mais coupé par le suivi des injections (`suivi-injection.ts` :
+ * trop d'écarts ; ses % et son ordre restent, seule l'injection automatique s'arrête) ; jamais appris.
  */
-export type EtatDuModele = 'accepte' | 'refuse' | 'coupe' | 'non_appris';
+export type EtatDuModele = 'accepte' | 'refuse' | 'depart' | 'coupe' | 'non_appris';
 
 /**
  * Le modèle a-t-il été appris pour d'autres fichiers GGUF que ceux installés ? Le Sens seul ne compare que celui du sens, le
@@ -28,11 +30,12 @@ function autresGguf(m: ModeleDeNote, niveau: NiveauDeNote, installes: IdentiteDe
 
 /**
  * État d'un modèle pour les modèles installés et l'échelle actuelle des signaux : jamais appris (aucune date ou aucun poids) ;
- * refusé s'il n'a pas passé l'acceptation, s'il a été appris pour d'autres fichiers GGUF que ceux installés, ou avec une autre
+ * de départ (`origine` `depart`), quels que soient les GGUF et l'échelle (il n'en a pas) ; refusé s'il n'a pas passé l'acceptation, s'il a été appris pour d'autres fichiers GGUF que ceux installés, ou avec une autre
  * échelle des signaux (réglages du signal de session, constantes de l'a priori) ; accepté sinon.
  */
 export function etatDuModele(m: ModeleDeNote, niveau: NiveauDeNote, installes: IdentiteDesModeles, echelle: EchelleDesSignaux): EtatDuModele {
 	if (m.apprisLe === null || Object.keys(m.poids).length === 0) return 'non_appris';
+	if (m.origine === 'depart') return 'depart';
 	return m.accepte && !autresGguf(m, niveau, installes) && memeEchelle(m.echelle, echelle) ? 'accepte' : 'refuse';
 }
 
@@ -70,7 +73,7 @@ export function modelesDeNote(c: CoefficientsNote, installes: IdentiteDesModeles
 	return { complets: { modele: c.complets, etat: complets }, sens: { modele: c.sens, etat: sens } };
 }
 
-/** Vrai si au moins un niveau a un modèle appris (accepté ou refusé) : sa note ordonne ; sinon, la règle provisoire. */
+/** Vrai si au moins un niveau a un modèle appris (accepté, refusé ou de départ) : sa note ordonne ; sinon, la règle provisoire. */
 export function noteApprise(m: ModelesDeNote): boolean {
 	return m.complets.etat !== 'non_appris' || m.sens.etat !== 'non_appris';
 }
@@ -90,6 +93,8 @@ export type NoteDeLaCandidate = {
 	niveau: NiveauDeNote;
 	accepte: boolean;
 	coupee?: true;
+	/** Note d'un modèle de départ (jamais calibrée). */
+	depart?: true;
 	/**
 	 * Niveau coupé par le suivi : la note du niveau suivant (Sens seul) s'il est accepté et pas coupé ; c'est elle qui décide de
 	 * l'injection automatique (le % affiché et l'ordre restent ceux du niveau coupé).
@@ -109,7 +114,7 @@ export function noterLaCandidate(m: ModelesDeNote, s: SignauxDeNote, options: { 
 		const n = noteDeConfiance(modele, niveau, s);
 		if (n === null) return null;
 		const aprioriManquant = options.aprioriConnu === false && (modele.poids.apriori ?? 0) > 0;
-		return { ...n, niveau, accepte: calibre(etat) && !aprioriManquant, ...(etat === 'coupe' ? { coupee: true as const } : {}) };
+		return { ...n, niveau, accepte: calibre(etat) && !aprioriManquant, ...(etat === 'coupe' ? { coupee: true as const } : {}), ...(etat === 'depart' ? { depart: true as const } : {}) };
 	};
 	for (const [i, niveau] of niveaux.entries()) {
 		const n = noterAu(niveau);

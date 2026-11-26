@@ -194,6 +194,18 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(within(beta).getByRole('button', { name: 'Bêta' }).getAttribute('title')).not.toMatch(/Au-dessus du seuil/u);
 	});
 
+	it('ordre seul, modèle de départ : ses % en gris, info-bulle « note de départ, à entraîner » ; ni seuil ni injection', async () => {
+		monter({ entrees: [entree(1, [v('b.md', 'Bêta', 1, null, { pNonCalibree: 0.95, depart: true }), v('d.md', 'Delta', 2, null, { pNonCalibree: 0.4, depart: true })], { calibree: false })] });
+		expect(await screen.findByRole('button', { name: /– ordre seul$/u })).toBeTruthy();
+		const [beta, delta] = lignes() as [HTMLElement, HTMLElement];
+		expect([beta, delta].map(note)).toEqual(['≈\u00a095\u00a0%', '≈\u00a040\u00a0%']);
+		const pct = beta.firstElementChild!;
+		expect(pct.getAttribute('title')).toMatch(/^Note non calibrée : note de départ, à entraîner/u);
+		expect(pct.className).toMatch(/nonCalibree/u);
+		expect(pct.className).not.toMatch(/haute/u);
+		expect(screen.queryByText(/seuil d’injection/u)).toBeNull();
+	});
+
 	it('session terminée en ordre seul : le mot à droite du titre, sans bouton, sa raison au survol', async () => {
 		monter({ modifiable: false, entrees: [entree(1, [v('b.md', 'Bêta', 1, null)], { calibree: false })] });
 		await act(async () => {});

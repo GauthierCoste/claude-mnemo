@@ -1,9 +1,9 @@
-import { mkdir, readFile, stat } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { apprendreAuBanc, ggufInstalles, rapportEnTexte, verifierCheminDuModule } from '../../src/adaptateurs/cli/banc-apprendre.ts';
 import type { CasContexte } from '../../src/application/banc-contexte.ts';
-import { jsonDeCoefficients, moduleDeCoefficients } from '../../src/domaine/modele-de-note.ts';
+import { jsonDeCoefficients, lireCoefficients, moduleDeCoefficients, REFUS_DEPART } from '../../src/domaine/modele-de-note.ts';
 import { GGUF_DE_TEST } from '../aides/banc-synthetique.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
@@ -57,6 +57,30 @@ describe('mnemo banc contexte --apprendre', () => {
 			expect(contenu).not.toContain('Devis');
 			expect(contenu).not.toContain('vitrail');
 		}
+	});
+
+	it('--depart : écrit seulement le module, en modèles de départ ; rien dans .mnemo ; refusé sans module', async () => {
+		const racine = await dossierTemporaire();
+		await mkdir(join(racine, '.mnemo'));
+		const lot = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'].flatMap((s) => [cas(s, 1), cas(s, 2)]);
+		const module = join(racine, 'coefficients-note.ts');
+		const options = { empreinteDe: null, empreintes: 'exclure' as const, date: '2026-11-25T10:00:00.000Z', installes: GGUF_DE_TEST, graines: [1], depart: true };
+		await expect(apprendreAuBanc(racine, lot, options)).rejects.toThrow('--module');
+		const { rapport, texte } = await apprendreAuBanc(racine, lot, { ...options, module });
+		expect(await readdir(join(racine, '.mnemo'))).toEqual([]);
+		const ecrit = await readFile(module, 'utf8');
+		expect(ecrit).toBe(moduleDeCoefficients(rapport.coefficients));
+		expect(texte).toContain(`Écrits : ${module}`);
+		for (const niveau of ['complets', 'sens'] as const) {
+			const m = rapport.coefficients[niveau];
+			if (m.apprisLe === null) continue;
+			expect(m).toMatchObject({ origine: 'depart', accepte: false, apprisLe: '2026-11-25T10:00:00.000Z', gguf: { sens: null, reranker: null }, echelle: null, refus: [REFUS_DEPART] });
+		}
+		expect(rapport.coefficients.sens.origine).toBe('depart');
+		// le module se relit comme un fichier de coefficients
+		const json = ecrit.slice(ecrit.indexOf('= ') + 2, ecrit.lastIndexOf(';'));
+		expect(lireCoefficients(JSON.parse(json))?.sens).toMatchObject({ origine: 'depart', accepte: false });
+		for (const mot of ['Atelier', 'Devis', 'vitrail', 'Corvel']) expect(ecrit).not.toContain(mot);
 	});
 
 	it('refuse d’écrire le module sous node_modules', () => {
