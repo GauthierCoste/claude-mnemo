@@ -19,7 +19,7 @@ describe('paquet du dépôt traduit en JavaScript', () => {
 		expect(js).toContain('import("./e.js")');
 	});
 
-	it('syntaxe non effaçable ou invalide : refusée', () => {
+	it('syntaxe invalide : refusée', () => {
 		expect(() => traduireFichier('export const = ;', 'x.ts')).toThrow(ErreurConstruction);
 	});
 

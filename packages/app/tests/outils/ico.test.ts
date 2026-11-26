@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
@@ -35,13 +35,9 @@ describe('icône Windows (.ico)', () => {
 		expect(() => icoDepuisPng([])).toThrow();
 	});
 
-	it('le PNG 256 de l’interface, s’il est construit, est accepté', () => {
-		let icone: Buffer;
-		try {
-			icone = readFileSync(join(import.meta.dirname, '../../../ui/dist/icones/icone-256.png'));
-		} catch {
-			return;
-		}
+	const pngInterface = join(import.meta.dirname, '../../../ui/dist/icones/icone-256.png');
+	it.skipIf(!existsSync(pngInterface))('le PNG 256 de l’interface construite est accepté (sauté si l’interface n’est pas construite)', () => {
+		const icone = readFileSync(pngInterface);
 		expect(icoDepuisPng([{ taille: 256, png: icone }]).length).toBe(6 + 16 + icone.length);
 	});
 });
