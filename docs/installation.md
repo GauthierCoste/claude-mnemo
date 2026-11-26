@@ -21,11 +21,11 @@ The interface and the command line messages are in French; this guide is in Engl
 
 Operating systems: **macOS** (Apple silicon or Intel) is the platform used daily (Apple silicon). The continuous
 integration runs the type check and the tests at each push on Linux and Windows with Node.js 24, and on macOS with
-Node.js 26. **Windows is being adapted and has not been tried in real use yet; Linux has not been
-tried either (only the tests run there).** On Windows, keep the folder under your user profile (`C:\Users\<you>\…`):
-file permissions do not protect the local token there, the profile's access rights do. The macOS launcher
-(`mnemo lanceur`) is macOS only; on Windows, the `mnemo` command is installed with `pnpm link --global` from
-`packages/mnemo`.
+Node.js 26. **On Windows (x64), the desktop app is built, installed and run by the CI at each push, but has not been
+tried in real use yet; Linux has not been tried either (only the tests run there).** On Windows, keep the folder under
+your user profile (`C:\Users\<you>\…`): file permissions do not protect the local token there, the profile's access
+rights do. The macOS launcher (`mnemo lanceur`) is macOS only, and Mnemo does not install the `mnemo` command on
+Windows (a developer can still link it from `packages/mnemo` with `pnpm link --global`).
 
 ## How much disk and memory
 

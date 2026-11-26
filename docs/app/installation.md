@@ -174,6 +174,9 @@ configuration, if they are Mnemo's.
 
 ## Uninstall cleanly
 
+Close your Claude Code sessions and the Claude app first: their Mnemo MCP server runs the Node.js of the app, and a
+running copy keeps its files in use (on Windows, the uninstaller could then leave some of them behind).
+
 **With the app**, « Désinstaller Mnemo… » in its menu (menu bar, or notification area on Windows) says what it will remove, what will stay, and asks
 for confirmation (« Annuler » by default). It removes the opening at login; the `mnemo` command, the MCP declaration of
 Claude Code and the `mnemo` entry of the Claude app, each only if it runs this app (those of another Mnemo installation,
