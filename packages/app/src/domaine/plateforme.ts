@@ -1,6 +1,7 @@
 /**
  * Plateformes de l'app de bureau : macOS et Windows. Ce qui en dépend dans le domaine la reçoit en donnée (testé sous macOS
- * avec `'win32'` explicite) ; seuls `infra/` et `electron/` lisent `process.platform`.
+ * avec `'win32'` explicite) ; `process.platform` n'est lu que par `infra/`, `electron/` et le preload de l'assistant (qui la
+ * donne à la page).
  */
 
 export type PlateformeApp = 'darwin' | 'win32';
