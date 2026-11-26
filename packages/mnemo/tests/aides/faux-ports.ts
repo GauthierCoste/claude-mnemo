@@ -10,6 +10,7 @@ import { extracteursReels } from '../../src/infra/extracteurs/index.ts';
 import { ouvrirIndex } from '../../src/infra/index-sqlite.ts';
 import { ouvrirLots } from '../../src/infra/etat-sqlite.ts';
 import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
+import { modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
 import type { EtatIndicateur } from '../../src/domaine/refus-outil.ts';
 
 /** Dépôt git absent : aucun dossier n'est un dépôt. */
@@ -175,6 +176,9 @@ export function fauxPorts(): Dependances & {
 		reranker: { noter: async () => null },
 		// réglages par défaut ; un test les change en remplaçant `reglages`
 		reglages: () => REGLAGES_PAR_DEFAUT,
+		// aucun modèle de note appris (ni les poids de départ du module livré) : la règle provisoire ; un test en donne un en
+		// remplaçant `note` (ou l'efface pour le module livré)
+		note: () => ({ coefficients: { complets: modeleNonAppris(), sens: modeleNonAppris() }, installes: { sens: null, reranker: null } }),
 		// plugins Claude Code : un test remplit `plugins` (et `skills` pour les skills personnelles)
 		pluginsClaude: {
 			plugins: [],

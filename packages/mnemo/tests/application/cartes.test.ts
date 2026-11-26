@@ -968,6 +968,15 @@ describe('calculerCartes : note de confiance (modèle accepté, refusé, aucun)'
 		expect(classementDuJournal(refuse.classement).every((l) => l.p === undefined)).toBe(true);
 	});
 
+	it('sans coefficients de la mémoire : le module livré, des modèles de départ (ordre par leur note, sans % ni injection)', async () => {
+		const dep = await avecSens();
+		delete dep.note;
+		const c = await calculerCartes(dep, suite());
+		expect(c.calibree).toBe(false);
+		expect(c.classement.every((l) => l.p === null && l.auto !== true)).toBe(true);
+		expect(c.classement.some((l) => l.pNonCalibree !== undefined && l.depart === true)).toBe(true);
+	});
+
 	it('modèle de départ (livré avec Mnemo) : le régime du refusé (même ordre, mêmes pistes, sans % ni injection), sa note marquée de départ', async () => {
 		const dep = await avecSens();
 		avecModeles(dep, { sens: modele({ ...SENS, accepte: false, refus: ['trop peu d’injections'] }) });
