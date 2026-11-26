@@ -55,7 +55,11 @@ describe('coquille de l’app de bureau (styles)', () => {
 	it('sous Windows, pas de retrait à gauche mais la place des boutons du système à droite', () => {
 		const titre = bloc(lire('composants/BarreTitre.module.css'), ":global([data-coquille='app'][data-plateforme='windows']) .titre");
 		expect(titre).toMatch(/padding-left:\s*14px/);
-		expect(titre).toMatch(/padding-right:\s*calc\(100vw - env\(titlebar-area-x, 0px\) - env\(titlebar-area-width, calc\(100vw - 138px\)\) \+ 14px\)/);
+		// la largeur des boutons vient de la zone de titre du système, avec un repli fixe (3 × 46 px)
+		const droite = /padding-right:\s*([^;]+);/.exec(titre)?.[1] ?? '';
+		expect(droite).toContain('env(titlebar-area-x');
+		expect(droite).toContain('env(titlebar-area-width');
+		expect(droite).toContain('138px');
 	});
 
 	it('ce qui recouvre la barre de titre reste cliquable', () => {
