@@ -6,6 +6,14 @@
 
 ## Done
 
+- **Link an engine from the interface (26/11/2026, 1.8.0).** Settings › Système › Moteurs shows one card per engine,
+  with its provider (Anthropic, OpenAI, Mistral), a one-word status and the link circuit (installed, version, memory,
+  follow-up hooks, approval); « Lier à Mnemo » (`POST /api/moteurs/:id/lier`) declares the MCP server and installs or
+  rewrites the hooks of that engine, and `mnemo declarer --moteur <id> --lier` does the same in a terminal, without any
+  question. An engine installed after the service started is picked up by « Relire », without a restart. New session
+  picks the agent like a character (provider, engine and version, model, equipment) and does not start an engine that
+  is not linked, since Mnemo could not follow the session. `mnemo <command> --help` prints the usage of a command. See
+  [usage.md](usage.md#engines).
 - **Live ranking (25/11/2026).** Each meaningful message ranks every candidate note (the folder of the position, the
   neutral notes, the places named, the notes linked to a note injected by hand), refined by the reranker in the
   background. A confidence score, one small model per level of the models, is learned on your judgements (`mnemo banc
@@ -20,11 +28,11 @@
 - **Open Mnemo to other coding agents (Codex first).** Each profile chooses its engine (Claude Code or Codex) and its
   model (empty: the engine's default); a session keeps both, resume included. A `Moteur` port holds what differs between
   engines. Codex 0.171 or later: memory over MCP in every Codex session (`mnemo init --codex`, `mnemo declarer --moteur
-  codex`), Mnemo hooks installed once in `~/.codex/hooks.json` and approved in Codex (`/hooks`), inert outside a Mnemo
+  codex --lier`), Mnemo hooks installed once in `~/.codex/hooks.json` and approved in Codex (`/hooks`), inert outside a Mnemo
   session; context and reminders, checked instructions (`Bash` commands, `apply_patch` paths); sessions started, resumed
   (`codex resume`), wrapped up and stopped (`/quit`) from the interface, skills listed in the instruction and read with
   `lire`; context gauge and ChatGPT quotas read from the transcript, shown next to the Claude ones. `verifier-poste` and
-  Settings › Système › Moteurs show the state of each engine and the command that fixes it. See
+  Settings › Système › Moteurs show the state of each engine and what fixes it. See
   [installation.md](installation.md#codex) and [usage.md](usage.md#codex-sessions).
 - **Mistral Vibe as an engine.** One more implementation of the `Moteur` port, next to Claude Code and Codex. Mistral
   Vibe 3.1.5 or later (`mnemo init --mistral`): MCP block and `mnemo-…` hooks in `~/.vibe`, instruction and skills in an
