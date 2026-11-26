@@ -83,7 +83,10 @@ export type PortsEntrainement = {
 export type GenreTache = 'preparer' | 'prejuger' | 'apprendre';
 export type TacheEntrainement = { genre: GenreTache; fait: number; total: number; depuis: string };
 export type OrigineApprentissage = 'manuel' | 'automatique';
-export type LigneHistorique = { date: string; origine: OrigineApprentissage; verdicts: Record<NiveauDeNote, EtatDuModele>; remplace: boolean };
+/** `erreur` : l'essai a échoué (réapprentissage automatique) ; `verdicts` sont alors ceux des modèles gardés. */
+export type LigneHistorique = { date: string; origine: OrigineApprentissage; verdicts: Record<NiveauDeNote, EtatDuModele>; remplace: boolean; erreur?: string };
+/** Les paires implicites des gestes, données ou calculées au début de la tâche (sous son exclusion, arrêtables). */
+export type ImplicitesDApprentissage = readonly Implicite[] | ((signal: AbortSignal) => Promise<readonly Implicite[]>);
 export type NoteDuNiveau = { niveau: NiveauDeNote; etat: EtatDuModele; origine: 'appris' | 'depart' | 'non_appris'; date: string | null; verdict: string; criteres: string[]; refus: string[] };
 export type BancEntrainement = { messages: number; valides: number; aJuger: number; aRelire: number; aPrejuger: number; silences: number; sautes: number; paires: number };
 /** `remplace` : le modèle de cet essai a remplacé le modèle d'alors (faux : l'ancien est gardé). */
@@ -127,6 +130,8 @@ export const HISTORIQUE_MAX = 10;
 export const ANNULATIONS_MAX = 50;
 /** Synthèse montrée d'une candidate. */
 export const SYNTHESE_MAX = 300;
+/** Erreur gardée d'un essai dans l'historique. */
+export const ERREUR_MAX = 300;
 /** Seuil de confiance de « Accepter les sûres » (D5). */
 export const SEUIL_SUR = 0.9;
 
@@ -154,8 +159,11 @@ export type Entrainement = {
 	/** Lance la tâche ; rend sa fin (jamais rejetée : un échec va dans `derniereErreur`). */
 	preparer(o?: { nombre?: number }): Promise<{ fin: Promise<void> }>;
 	prejuger(): Promise<{ fin: Promise<void> }>;
-	/** `remplacer(nouveau, actuel)` : le nouveau modèle remplace-t-il l'actuel (vrai par défaut : geste de l'utilisateur) ; `implicites` : paires des gestes. */
-	apprendre(o: { origine: OrigineApprentissage; implicites?: readonly Implicite[]; remplacer?: (nouveau: RapportDApprentissage, actuel: ModelesDeNote) => boolean }): Promise<{ fin: Promise<void> }>;
+	/**
+	 * `remplacer(nouveau, actuel)` : le nouveau modèle remplace-t-il l'actuel (vrai par défaut : geste de l'utilisateur) ;
+	 * `implicites` : paires des gestes. Un essai automatique en échec (hors arrêt) laisse une ligne d'historique avec son erreur.
+	 */
+	apprendre(o: { origine: OrigineApprentissage; implicites?: ImplicitesDApprentissage; remplacer?: (nouveau: RapportDApprentissage, actuel: ModelesDeNote) => boolean }): Promise<{ fin: Promise<void> }>;
 	/** Arrête la tâche en cours ; faux : aucune. */
 	arreter(): boolean;
 	revenir(): Promise<void>;
@@ -281,6 +289,8 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 		return lancer(liberer, (signal) => travail(contexte, signal));
 	};
 
+	const ajouterAlHistorique = async (ligne: LigneHistorique): Promise<void> => p.historique.ecrire([ligne, ...(await p.historique.lire())].slice(0, HISTORIQUE_MAX));
+
 	const noteDuNiveau = (niveau: NiveauDeNote, m: ModelesDeNote): NoteDuNiveau => {
 		const { modele, etat } = m[niveau];
 		return { niveau, etat, origine: origineDu(modele, etat), date: modele.apprisLe, verdict: verdictEnClair(etat), criteres: criteresEnClair(modele, etat), refus: [...modele.refus] };
@@ -376,6 +386,37 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 		},
 
 		apprendre(o) {
+			const apprendreEtEcrire = async (cas: CasContexte[], date: string, signal: AbortSignal): Promise<void> => {
+				const implicites = typeof o.implicites === 'function' ? await o.implicites(signal) : o.implicites;
+				if (signal.aborted) return;
+				const jeu = jeuDApprentissage(cas, await p.note.empreintes(), { empreintes: 'exclure', installes: p.note.installes() });
+				const rapport = await p.apprenti.apprendre(jeu, { date, echelle: p.note.echelle(), ...(implicites === undefined ? {} : { implicites }) }, signal);
+				if (signal.aborted) return;
+				await enFileNote(async () => {
+					const actuel = await p.note.modeles();
+					// geste de l'utilisateur (manuel) : le nouveau modèle remplace toujours, même refusé ; « Revenir au modèle d'avant »
+					// rend l'ancien, et la ligne d'historique comme le résultat disent qu'il a été remplacé
+					const remplace = o.remplacer?.(rapport, actuel) ?? true;
+					if (remplace) await p.note.ecrire(rapport.coefficients);
+					await p.note.ecrireRapport(rapport, remplace);
+					const installes = p.note.installes();
+					const echelle = p.note.echelle();
+					const verdicts = Object.fromEntries(NIVEAUX_DE_NOTE.map((n) => [n, etatDuModele(rapport.coefficients[n], n, installes, echelle)])) as Record<NiveauDeNote, EtatDuModele>;
+					await ajouterAlHistorique({ date, origine: o.origine, verdicts, remplace });
+				});
+			};
+			/** L'échec d'un essai automatique dans l'historique (les modèles gardés) ; une panne ici ne masque pas l'erreur. */
+			const noterEchec = async (date: string, erreur: string): Promise<void> => {
+				try {
+					await enFileNote(async () => {
+						const actuel = await p.note.modeles();
+						const verdicts = Object.fromEntries(NIVEAUX_DE_NOTE.map((n) => [n, actuel[n].etat])) as Record<NiveauDeNote, EtatDuModele>;
+						await ajouterAlHistorique({ date, origine: o.origine, verdicts, remplace: false, erreur: couper(erreur, ERREUR_MAX) });
+					});
+				} catch {
+					// historique illisible ou non écrit : l'erreur reste dans `derniereErreur`
+				}
+			};
 			return tacheVerifiee(
 				'apprendre',
 				async () => {
@@ -384,23 +425,13 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 					return cas;
 				},
 				async (cas, signal) => {
-					const jeu = jeuDApprentissage(cas, await p.note.empreintes(), { empreintes: 'exclure', installes: p.note.installes() });
 					const date = p.maintenant().toISOString();
-					const rapport = await p.apprenti.apprendre(jeu, { date, echelle: p.note.echelle(), ...(o.implicites === undefined ? {} : { implicites: o.implicites }) }, signal);
-					if (signal.aborted) return;
-					await enFileNote(async () => {
-						const actuel = await p.note.modeles();
-						// geste de l'utilisateur (manuel) : le nouveau modèle remplace toujours, même refusé ; « Revenir au modèle d'avant »
-						// rend l'ancien, et la ligne d'historique comme le résultat disent qu'il a été remplacé
-						const remplace = o.remplacer?.(rapport, actuel) ?? true;
-						if (remplace) await p.note.ecrire(rapport.coefficients);
-						await p.note.ecrireRapport(rapport, remplace);
-						const installes = p.note.installes();
-						const echelle = p.note.echelle();
-						const verdicts = Object.fromEntries(NIVEAUX_DE_NOTE.map((n) => [n, etatDuModele(rapport.coefficients[n], n, installes, echelle)])) as Record<NiveauDeNote, EtatDuModele>;
-						const ligne: LigneHistorique = { date, origine: o.origine, verdicts, remplace };
-						await p.historique.ecrire([ligne, ...(await p.historique.lire())].slice(0, HISTORIQUE_MAX));
-					});
+					try {
+						await apprendreEtEcrire(cas, date, signal);
+					} catch (e) {
+						if (o.origine === 'automatique' && !signal.aborted && !estArret(e)) await noterEchec(date, motif(e));
+						throw e;
+					}
 				},
 			);
 		},

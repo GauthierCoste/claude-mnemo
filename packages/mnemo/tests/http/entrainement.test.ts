@@ -8,6 +8,7 @@ import type { MessageServeur, ReponseMessageAJuger, VueEntrainement } from '@mne
 import { apprendreNote } from '../../src/application/apprendre-note.ts';
 import type { CasContexte } from '../../src/application/banc-contexte.ts';
 import type { BilanExtraction } from '../../src/application/banc-extraire.ts';
+import type { GesteNote } from '../../src/application/ports.ts';
 import type { RemplacementsEntrainement } from '../../src/adaptateurs/http/entrainement.ts';
 import { appeler, jusqua, serviceFaux } from '../aides/service-faux.ts';
 import type { ContexteService } from '../aides/service-faux.ts';
@@ -235,5 +236,69 @@ describe('routes de l’entraînement de la note', () => {
 		}
 		expect(appels['sens']).toBe(0);
 		expect(appels['complets']).toBeGreaterThan(0);
+	});
+});
+
+describe('réapprentissage en fond dans le service', () => {
+	/** 20 ✗ d'une session (de quoi réapprendre), notés avec leur rang et leurs signaux. */
+	const gestes: GesteNote[] = Array.from({ length: 20 }, (_, i) => ({
+		rang: i + 1,
+		horodatageMs: 1_000 + i,
+		geste: 'ecartee_ici',
+		origine: 'utilisateur',
+		session: 'S',
+		dossier: '',
+		position: null,
+		fiche: `f${i}.md`,
+		empreinte: null,
+		message: null,
+		rangMessage: 1,
+		note: { rang: 2, signaux: { cosinusRelatif: 0.1, bm25Relatif: null } },
+		vecteur: null,
+		modeleVecteur: null,
+	}));
+	const banc = [unCas('v', ['a.md'], { jugements: { 'a.md': 'pertinente' }, valideLe: '2026-11-25T10:00:00.000Z' })];
+
+	async function service(reglage: boolean) {
+		const implicites: unknown[] = [];
+		const c = await serviceFaux(
+			{ reapprentissage: { premiereMs: 10, intervalleMs: 60_000 } },
+			{
+				pil: (p) => {
+					p.etat.gestes = async () => gestes;
+				},
+				avant: async (_etat, racine, dep) => {
+					await writeFile(fichierBanc(racine), JSON.stringify(banc));
+					const reglages = dep.reglages();
+					dep.reglages = () => ({ ...reglages, entrainement: { automatique: reglage } });
+				},
+				entrainement: {
+					apprenti: {
+						apprendre: async (jeu, o) => {
+							implicites.push(o.implicites);
+							return apprendreNote(jeu, { ...o, graines: [1] });
+						},
+					},
+				},
+			},
+		);
+		return { c, implicites };
+	}
+
+	it('peu après le démarrage, conditions réunies : un essai automatique avec les paires des gestes, une ligne d’historique', async () => {
+		const { c, implicites } = await service(true);
+		expect(await jusqua(async () => ((await api(c).get(ROUTES.entrainement)).corps as VueEntrainement).historique.length === 1, 5000)).toBe(true);
+		const etat = (await api(c).get(ROUTES.entrainement)).corps as VueEntrainement;
+		expect(etat.historique[0]!.origine).toBe('automatique');
+		expect(etat.historique[0]!.erreur).toBeUndefined();
+		expect((implicites[0] as unknown[]).length).toBe(20);
+		expect(c.journal.some((m) => m.includes('réapprentissage en fond sur les gestes lancé'))).toBe(true);
+	});
+
+	it('réglage coupé : aucun essai', async () => {
+		const { c, implicites } = await service(false);
+		await new Promise((r) => setTimeout(r, 200));
+		expect(((await api(c).get(ROUTES.entrainement)).corps as VueEntrainement).historique).toEqual([]);
+		expect(implicites).toEqual([]);
 	});
 });

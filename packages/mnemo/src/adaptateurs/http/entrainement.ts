@@ -14,6 +14,8 @@ import { syntheseDe } from '../../application/banc-signaux.ts';
 import type { GestesDuBanc } from '../../application/banc-signaux.ts';
 import { creerEntrainement, ErreurEntrainement, PREPARER_MAX } from '../../application/entrainement.ts';
 import type { Entrainement, PortsEntrainement } from '../../application/entrainement.ts';
+import { SERVIS_PAR_SESSION } from '../../application/reapprentissage.ts';
+import type { PortsReapprentissage } from '../../application/reapprentissage.ts';
 import type { DureeDuReranker } from '../../application/duree-reranker.ts';
 import { MORCEAU_AFFINAGE } from '../../application/affiner.ts';
 import { modelesActifs } from '../../application/note-du-classement.ts';
@@ -33,6 +35,7 @@ import { bancDuService, fichiersDeLaNote, historiqueDuDossier } from '../../infr
 import { ouvrirJournalEnLecture } from '../../infra/journal-en-lecture.ts';
 import { jugeClaude } from '../../infra/juge-claude.ts';
 import { trouverClaude } from '../../infra/moteurs/claude-code/trouver-claude.ts';
+import type { CalculsEnCours } from './calculs-en-cours.ts';
 import { ErreurHttp } from './routes.ts';
 import type { Reponse, Route } from './routes.ts';
 
@@ -135,6 +138,28 @@ export function entrainementDuService(s: ServicePourEntrainement, remplacements:
 		...remplaces,
 	};
 	return creerEntrainement(ports);
+}
+
+/**
+ * Les ports du réapprentissage en fond (`application/reapprentissage.ts`) dans le service : le réglage relu à chaque
+ * vérification, les calculs des sessions comptés par les routes, les gestes et les entrées servies de l'état des sessions.
+ */
+export function reapprentissageDuService(s: Pick<ServicePourEntrainement, 'racine' | 'dep' | 'pil' | 'suivi'>, e: Entrainement, calculs: CalculsEnCours): PortsReapprentissage {
+	const { racine, dep, pil } = s;
+	const banc = bancDuService(racine);
+	const historique = historiqueDuDossier(racine);
+	return {
+		actif: () => dep.reglages().entrainement.automatique,
+		entrainement: e,
+		calculs: () => ({ enCours: calculs.enCours(), dernierMs: calculs.dernierMs() }),
+		historique: () => historique.lire(),
+		modeles: () => modelesSuivis(pil.etat, modelesActifs(dep), s.suivi),
+		banc: () => banc.lire(),
+		gestes: (f) => pil.etat.gestes({ ...f, sansVecteur: true, limite: null }),
+		servis: (session) => pil.etat.servis(session, SERVIS_PAR_SESSION, 'message', { classement: 'tous' }),
+		sensInstalle: () => (dep.note?.().installes ?? ggufInstalles()).sens,
+		maintenantMs: () => dep.systeme.maintenant().getTime(),
+	};
 }
 
 /**

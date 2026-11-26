@@ -105,5 +105,9 @@ describe("fichiers de l'entraînement de la note", () => {
 		expect(await h.lire()).toEqual([ligne]);
 		await h.ecrire([ligne]);
 		expect(await h.lire()).toEqual([ligne]);
+		// l'échec d'un essai automatique : son erreur relue
+		const echec = { ...ligne, origine: 'automatique' as const, remplace: false, erreur: 'base occupée' };
+		await h.ecrire([echec, ligne]);
+		expect(await h.lire()).toEqual([echec, ligne]);
 	});
 });

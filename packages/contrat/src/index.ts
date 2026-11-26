@@ -1022,7 +1022,8 @@ export type BancEntrainementVue = { messages: number; valides: number; aJuger: n
 /** La tâche longue en cours (une seule à la fois) : `fait` sur `total` (0 : pas encore connu), `depuis` (ISO). */
 export type TacheEntrainementVue = { genre: 'preparer' | 'prejuger' | 'apprendre'; fait: number; total: number; depuis: string };
 /** Une ligne de l'historique des apprentissages (les 10 derniers) : `remplace` : le nouveau modèle a remplacé l'ancien. */
-export type LigneHistoriqueVue = { date: string; origine: 'manuel' | 'automatique'; verdicts: Record<NiveauNoteVue, EtatNoteVue>; remplace: boolean };
+/** `erreur` : l'essai (automatique) a échoué ; `verdicts` sont alors ceux des modèles gardés. */
+export type LigneHistoriqueVue = { date: string; origine: 'manuel' | 'automatique'; verdicts: Record<NiveauNoteVue, EtatNoteVue>; remplace: boolean; erreur?: string };
 /** Une tranche de la table de fiabilité : notes de `de` à `a`, `paires`, note moyenne `pMoyen`, part réellement utile `frequence`. */
 export type TrancheFiabiliteVue = { de: number; a: number; paires: number; pMoyen: number; frequence: number };
 /**

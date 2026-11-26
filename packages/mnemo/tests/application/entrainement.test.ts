@@ -391,6 +391,42 @@ describe('entraînement de la note : apprendre et revenir (D6)', () => {
 		expect((await e.etat()).resultat).toMatchObject({ remplace: false });
 	});
 
+	it('implicites calculées au début de la tâche (sous son exclusion) et données à l’apprenti', async () => {
+		const vues: unknown[] = [];
+		const { e } = faux([valide('v', ['a.md'])], { apprenti: { apprendre: async (_j, o) => (vues.push(o.implicites), rapportFactice()) } });
+		const paire = { session: 's', signaux: { cosinusRelatif: 0.1, bm25Relatif: null }, y: true, poids: 1 };
+		let tacheVue: unknown = null;
+		await (
+			await e.apprendre({
+				origine: 'automatique',
+				implicites: async () => {
+					tacheVue = e.tache()?.genre;
+					return [paire];
+				},
+			})
+		).fin;
+		expect(tacheVue).toBe('apprendre');
+		expect(vues).toEqual([[paire]]);
+	});
+
+	it('échec d’un essai automatique : une ligne d’historique avec l’erreur (modèles gardés, non remplacés) et derniereErreur ; à la main : pas de ligne', async () => {
+		const modeles: ModelesDeNote = { complets: { modele: appris({ accepte: true }), etat: 'accepte' }, sens: { modele: modeleNonAppris(), etat: 'non_appris' } };
+		const enPanne = { apprendre: async () => Promise.reject(new Error('fil d’apprentissage arrêté (code 1)')) };
+		const auto = faux([valide('v', ['a.md'])], { modeles, apprenti: enPanne });
+		await (await auto.e.apprendre({ origine: 'automatique' })).fin;
+		expect(auto.etat.coefficients).toEqual([]);
+		expect(auto.etat.historique).toEqual([{ date: MAINTENANT.toISOString(), origine: 'automatique', verdicts: { complets: 'accepte', sens: 'non_appris' }, remplace: false, erreur: 'fil d’apprentissage arrêté (code 1)' }]);
+		expect((await auto.e.etat()).derniereErreur).toBe('fil d’apprentissage arrêté (code 1)');
+		// les paires implicites en panne : même chose
+		const implicites = faux([valide('v', ['a.md'])]);
+		await (await implicites.e.apprendre({ origine: 'automatique', implicites: async () => Promise.reject(new Error('base occupée')) })).fin;
+		expect(implicites.etat.historique[0]).toMatchObject({ origine: 'automatique', remplace: false, erreur: 'base occupée' });
+		const main = faux([valide('v', ['a.md'])], { apprenti: enPanne });
+		await (await main.e.apprendre({ origine: 'manuel' })).fin;
+		expect(main.etat.historique).toEqual([]);
+		expect((await main.e.etat()).derniereErreur).toBe('fil d’apprentissage arrêté (code 1)');
+	});
+
 	it("à la main, un modèle refusé remplace un modèle accepté (« Revenir au modèle d'avant » le rend) : la ligne, le résultat et l'état le disent", async () => {
 		const modeles: ModelesDeNote = { complets: { modele: appris({ accepte: true }), etat: 'accepte' }, sens: { modele: appris({ accepte: true }), etat: 'accepte' } };
 		const { e, etat } = faux([valide('v', ['a.md'])], { modeles });
