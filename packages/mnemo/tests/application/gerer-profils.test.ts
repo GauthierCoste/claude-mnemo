@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detailProfil, dupliquerProfil, enregistrerProfil } from '../../src/application/gerer-profils.ts';
+import { detailProfil, dupliquerProfil, enregistrerProfil, supprimerProfil } from '../../src/application/gerer-profils.ts';
 import type { ProfilEditable } from '../../src/application/gerer-profils.ts';
 import { chargerProfil, cheminDeProfil } from '../../src/application/profil.ts';
 import { MOTIF_PLUGINS_HORS_CLAUDE_CODE } from '../../src/domaine/profil.ts';
@@ -95,3 +95,48 @@ describe('profil : moteur et modèle', () => {
 		expect((await enregistrerProfil(dep, 'redaction', { ...EDITABLE, plugins: ['superpowers@superpowers-marketplace'], modele: 'opus' }, null)).ok).toBe(true);
 	});
 });
+
+describe('profil : copie et suppression du dossier entier', () => {
+	/** `redaction`, avec une skill qui porte un script. */
+	async function avecSkill() {
+		const dep = fauxPorts();
+		await enregistrerProfil(dep, 'redaction', EDITABLE, null);
+		dep.fichiers.set('profils/redaction/skills/signature/SKILL.md', '---\nname: signature\ndescription: Signer.\n---\n');
+		dep.fichiers.set('profils/redaction/skills/signature/scripts/signer.py', 'print(1)\n');
+		return dep;
+	}
+
+	it('dupliquer : les skills copiées en entier (fichiers non .md compris), un commit sur le dossier de la copie', async () => {
+		const dep = await avecSkill();
+		expect((await dupliquerProfil(dep, 'redaction', 'courriers')).ok).toBe(true);
+		expect(dep.fichiers.get('profils/courriers/skills/signature/scripts/signer.py')).toBe('print(1)\n');
+		expect(dep.fichiers.get('profils/redaction/skills/signature/scripts/signer.py')).toBe('print(1)\n');
+		expect(dep.commits.at(-1)).toEqual({ message: 'mnemo: profil profils/courriers/courriers.md (copie de redaction)', chemins: ['profils/courriers'] });
+	});
+
+	it('dupliquer : un commit qui échoue retire la copie', async () => {
+		const dep = await avecSkill();
+		const avant = new Map(dep.fichiers);
+		dep.historique.commit = async () => {
+			throw new Error('git indisponible');
+		};
+		await expect(dupliquerProfil(dep, 'redaction', 'courriers')).rejects.toThrow('git indisponible');
+		expect(dep.fichiers).toEqual(avant);
+	});
+
+	it('supprimer : le dossier entier part, un commit sur le dossier ; un commit qui échoue le rend', async () => {
+		const dep = await avecSkill();
+		const avant = new Map(dep.fichiers);
+		const commit = dep.historique.commit;
+		dep.historique.commit = async () => {
+			throw new Error('git indisponible');
+		};
+		await expect(supprimerProfil(dep, 'redaction')).rejects.toThrow('git indisponible');
+		expect(dep.fichiers).toEqual(avant);
+		dep.historique.commit = commit;
+		expect(await supprimerProfil(dep, 'redaction')).toEqual({ ok: true, commit: expect.any(String) });
+		expect(dep.commits.at(-1)).toEqual({ message: 'mnemo: supprime profils/redaction/', chemins: ['profils/redaction'] });
+		expect([...dep.fichiers.keys()].filter((c) => c.startsWith('profils/'))).toEqual([]);
+	});
+});
+

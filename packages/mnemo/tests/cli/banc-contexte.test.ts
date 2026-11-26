@@ -74,6 +74,25 @@ describe('banc-contexte.json', () => {
 		expect(lireCasContexte(JSON.stringify([ancien]))).toEqual([ancien]);
 	});
 
+	it('relit les propositions du juge et la date de validation ; absentes : rien d’ajouté', () => {
+		const avec: CasContexte = {
+			...JUGE,
+			prejugements: { 'pratiques/cuisson-grisailles.md': { jugement: 'pertinente', confiance: 0.92, raison: 'répond à la question' } },
+			valideLe: '2026-11-26T10:00:00.000Z',
+		};
+		expect(lireCasContexte(JSON.stringify([avec]))).toEqual([avec]);
+		expect(lireCasContexte(JSON.stringify([JUGE]))[0]).not.toHaveProperty('prejugements');
+		expect(lireCasContexte(JSON.stringify([JUGE]))[0]).not.toHaveProperty('valideLe');
+	});
+
+	it('proposition du juge mal formée : erreur lisible', () => {
+		const chemin = 'pratiques/cuisson-grisailles.md';
+		for (const p of [{ jugement: 'peut-être', confiance: 0.5, raison: '' }, { jugement: 'pertinente', confiance: 1.5, raison: '' }, { jugement: 'pertinente', confiance: 0.5 }]) {
+			expect(() => lireCasContexte(JSON.stringify([{ ...JUGE, prejugements: { [chemin]: p } }]))).toThrow('proposition du juge');
+		}
+		expect(() => lireCasContexte(JSON.stringify([{ ...JUGE, prejugements: [] }]))).toThrow('prejugements');
+	});
+
 	it('jugement inconnu : erreur lisible', () => {
 		expect(() => lireCasContexte(JSON.stringify([{ ...JUGE, jugements: { 'a.md': 'peut-être' } }]))).toThrow('jugement inconnu');
 	});
@@ -90,7 +109,8 @@ describe('options de mnemo banc contexte', () => {
 		expect(lireOptionsContexte(['--empreintes', 'garder'])).toMatchObject({ empreintes: 'garder' });
 		expect(lireOptionsContexte(['--gestes', '--json'])).toMatchObject({ gestes: true, json: true });
 		expect(lireOptionsContexte(['--apprendre', '--empreintes', 'garder', '--json'])).toMatchObject({ apprendre: true, empreintes: 'garder', json: true, module: null });
-		expect(lireOptionsContexte(['--apprendre', '--module', 'src/domaine/coefficients-note.ts'])).toMatchObject({ module: 'src/domaine/coefficients-note.ts' });
+		expect(lireOptionsContexte(['--apprendre', '--module', 'src/domaine/coefficients-note.ts'])).toMatchObject({ module: 'src/domaine/coefficients-note.ts', depart: false });
+		expect(lireOptionsContexte(['--apprendre', '--module', 'x.ts', '--depart'])).toMatchObject({ module: 'x.ts', depart: true });
 	});
 
 	it('combinaisons refusées', () => {
@@ -107,6 +127,9 @@ describe('options de mnemo banc contexte', () => {
 		expect(() => lireOptionsContexte(['--gestes', '--apprendre'])).toThrow('--gestes');
 		expect(() => lireOptionsContexte(['--module', 'x.ts'])).toThrow('--module');
 		expect(() => lireOptionsContexte(['--apprendre', '--module'])).toThrow('chemin');
+		// --depart : seulement avec --apprendre --module
+		expect(() => lireOptionsContexte(['--apprendre', '--depart'])).toThrow('--depart');
+		expect(() => lireOptionsContexte(['--depart'])).toThrow('--depart');
 	});
 });
 

@@ -10,6 +10,7 @@ import { extracteursReels } from '../../src/infra/extracteurs/index.ts';
 import { ouvrirIndex } from '../../src/infra/index-sqlite.ts';
 import { ouvrirLots } from '../../src/infra/etat-sqlite.ts';
 import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
+import { modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
 import type { EtatIndicateur } from '../../src/domaine/refus-outil.ts';
 
 /** Dépôt git absent : aucun dossier n'est un dépôt. */
@@ -120,6 +121,31 @@ export function fauxPorts(): Dependances & {
 			for (const c of dedans) fichiers.delete(c);
 			return 'retire';
 		},
+		deplacerDossier: async (de, vers) => {
+			const [source, cible] = [dansLaMemoire(de), dansLaMemoire(vers)];
+			const dedans = [...fichiers.keys()].filter((c) => c.startsWith(`${source}/`));
+			if (dedans.length === 0) throw new Error(`${de} n'est pas un dossier.`);
+			if (fichiers.has(cible) || [...fichiers.keys()].some((c) => c.startsWith(`${cible}/`))) throw new Error(`${vers} existe déjà.`);
+			for (const c of dedans) {
+				fichiers.set(`${cible}${c.slice(source.length)}`, fichiers.get(c)!);
+				fichiers.delete(c);
+				mtimes.set(`${cible}${c.slice(source.length)}`, ++horloge);
+			}
+		},
+		copierDossier: async (de, vers) => {
+			const [source, cible] = [dansLaMemoire(de), dansLaMemoire(vers)];
+			const dedans = [...fichiers.keys()].filter((c) => c.startsWith(`${source}/`));
+			if (dedans.length === 0) throw new Error(`${de} n'est pas un dossier.`);
+			if (fichiers.has(cible) || [...fichiers.keys()].some((c) => c.startsWith(`${cible}/`))) throw new Error(`${vers} existe déjà.`);
+			for (const c of dedans) {
+				fichiers.set(`${cible}${c.slice(source.length)}`, fichiers.get(c)!);
+				mtimes.set(`${cible}${c.slice(source.length)}`, ++horloge);
+			}
+		},
+		retirerDossier: async (brut) => {
+			const dossier = dansLaMemoire(brut);
+			for (const c of [...fichiers.keys()]) if (c.startsWith(`${dossier}/`)) fichiers.delete(c);
+		},
 		supprimer: async (brut) => {
 			const chemin = dansLaMemoire(brut);
 			fichiers.delete(chemin);
@@ -175,6 +201,9 @@ export function fauxPorts(): Dependances & {
 		reranker: { noter: async () => null },
 		// réglages par défaut ; un test les change en remplaçant `reglages`
 		reglages: () => REGLAGES_PAR_DEFAUT,
+		// aucun modèle de note appris (ni les poids de départ du module livré) : la règle provisoire ; un test en donne un en
+		// remplaçant `note` (ou l'efface pour le module livré)
+		note: () => ({ coefficients: { complets: modeleNonAppris(), sens: modeleNonAppris() }, installes: { sens: null, reranker: null } }),
 		// plugins Claude Code : un test remplit `plugins` (et `skills` pour les skills personnelles)
 		pluginsClaude: {
 			plugins: [],

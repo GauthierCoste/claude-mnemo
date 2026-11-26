@@ -11,7 +11,7 @@ import { autreOutilQueLeDialogue, etatApres } from '../domaine/session.ts';
 import type { ArretAttendu, CauseArret, EtatSession, EvenementHook, Session } from '../domaine/session.ts';
 
 /** Version du schéma (`PRAGMA user_version`). L'état n'est pas jetable : une autre version est une erreur, jamais un effacement. */
-export const VERSION_ETAT = 15;
+export const VERSION_ETAT = 16;
 /** Migration 3 → 4 : les sessions terminées depuis plus longtemps n'entrent plus dans le rattrapage des épisodes. */
 const RATTRAPAGE_MAX_MS = 7 * 86_400_000;
 const ATTENTE_VERROU_MS = 2000;
@@ -96,8 +96,8 @@ CREATE TABLE IF NOT EXISTS injections_manuelles (
 `;
 
 /**
- * Lots d'informations proposés par l'archiviste (`lignes`, `decision` en JSON ; `decision` null : en attente) ; ajoutés en
- * version 11.
+ * Lots d'informations proposés par l'archiviste (`lignes`, `empreintes`, `decision` en JSON ; `decision` null : en
+ * attente) ; ajoutés en version 11, `empreintes` (de chaque information visée ; null : lot d'avant) en version 16.
  */
 const SCHEMA_LOTS = `
 CREATE TABLE IF NOT EXISTS lots (
@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS lots (
 	lignes TEXT NOT NULL,
 	motif TEXT NOT NULL,
 	empreinte TEXT NOT NULL,
+	empreintes TEXT,
 	propose_ms INTEGER NOT NULL,
 	session TEXT,
 	decision TEXT,
@@ -364,6 +365,7 @@ function ligneVersGeste(l: Ligne): GesteNote {
 		message: (l.message as string | null) ?? null,
 		rangMessage: Number(l.rang_message),
 		note: noteLue(l.note),
+		modeleVecteur: modele ?? null,
 		vecteur: octets === null || modele === null || octets.byteLength % 4 !== 0 ? null : ({ modele, valeurs: octetsEnVecteur(octets) } satisfies VecteurDuMessage),
 	};
 }
@@ -415,7 +417,8 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				// (5 → 6), les fiches servies, lues ou écrites par chaque session (6 → 7), les cartes proposées, le journal des actions et le journal servi enrichi (7 → 8), l'empreinte lue des fiches (8 → 9), les injections à la main et le
 				// compteur de messages porteurs (9 → 10), les lots d'informations (10 → 11), le niveau des modèles d'une session (11 → 12),
 				// le moteur et le modèle de chaque session (12 → 13), le journal durable des gestes et le classement vivant (13 → 14),
-				// l'outil d'un dialogue ouvert (14 → 15) s'ajoutent, rien n'est perdu
+				// l'outil d'un dialogue ouvert (14 → 15), les empreintes des informations visées par un lot (15 → 16) s'ajoutent,
+				// rien n'est perdu
 				if (version === 1) for (const colonne of ['demarrage_machine_ms', 'lance_ms', 'vu_vivant_ms']) base.exec(`ALTER TABLE sessions ADD COLUMN ${colonne} INTEGER`);
 				if (version <= 2) base.exec('ALTER TABLE sessions ADD COLUMN bilan_lu_ms INTEGER');
 				if (version <= 3) {
@@ -469,6 +472,10 @@ function preparer(chemin: string, attente: Attente): DatabaseSync {
 				}
 				// 14 → 15 : l'outil dont le dialogue est ouvert (null : inconnu)
 				if (!deSession.includes('dialogue_outil')) base.exec('ALTER TABLE sessions ADD COLUMN dialogue_outil TEXT');
+				// 15 → 16 : les empreintes des informations visées par un lot (null : lot d'avant, jugé sur la fiche entière) ; une
+				// table des lots créée à l'instant les a déjà
+				const colonnesLots = (base.prepare('PRAGMA table_info(lots)').all() as Ligne[]).map((c) => c.name);
+				if (!colonnesLots.includes('empreintes')) base.exec('ALTER TABLE lots ADD COLUMN empreintes TEXT');
 				base.exec(`PRAGMA user_version = ${VERSION_ETAT}`);
 			} else if (version !== VERSION_ETAT) {
 				throw new ErreurEtat(
@@ -498,6 +505,7 @@ function ligneVersLot(l: Ligne): Lot {
 		lignes: JSON.parse(l.lignes as string) as Lot['lignes'],
 		motif: l.motif as string,
 		empreinte: l.empreinte as string,
+		...(typeof l.empreintes === 'string' ? { empreintes: JSON.parse(l.empreintes) as Record<string, string> } : {}),
 		proposeMs: l.propose_ms as number,
 		session: (l.session as string | null) ?? null,
 	};
@@ -516,8 +524,8 @@ export function ouvrirLots(chemin: string): Lots {
 		async enregistrer(lot) {
 			ecrire(() => {
 				base
-					.prepare('INSERT INTO lots (id, genre, fiche, lignes, motif, empreinte, propose_ms, session) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-					.run(lot.id, lot.genre, lot.fiche, JSON.stringify(lot.lignes), lot.motif, lot.empreinte, lot.proposeMs, lot.session);
+					.prepare('INSERT INTO lots (id, genre, fiche, lignes, motif, empreinte, empreintes, propose_ms, session) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+					.run(lot.id, lot.genre, lot.fiche, JSON.stringify(lot.lignes), lot.motif, lot.empreinte, lot.empreintes === undefined ? null : JSON.stringify(lot.empreintes), lot.proposeMs, lot.session);
 			});
 		},
 		async enAttente() {
@@ -1083,6 +1091,22 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 			);
 		},
 
+		async nombreGestes(filtre) {
+			const conditions: string[] = [];
+			const parametres: (string | number)[] = [];
+			if (filtre.depuisMs !== undefined) {
+				conditions.push('horodatage_ms >= ?');
+				parametres.push(filtre.depuisMs);
+			}
+			if (filtre.sortes !== undefined) {
+				if (filtre.sortes.length === 0) return 0;
+				conditions.push(`geste IN (${filtre.sortes.map(() => '?').join(', ')})`);
+				parametres.push(...filtre.sortes);
+			}
+			const ou = conditions.length === 0 ? '' : `WHERE ${conditions.join(' AND ')}`;
+			return reessayer(() => Number((base.prepare(`SELECT COUNT(*) AS nombre FROM gestes ${ou}`).get(...parametres) as Ligne).nombre));
+		},
+
 		async gestes(filtre) {
 			const conditions: string[] = [];
 			const parametres: (string | number)[] = [];
@@ -1111,7 +1135,7 @@ export function ouvrirEtat(chemin: string, options: { attenteMaxMs?: number } = 
 				conditions.push(`geste IN (${filtre.sortes.map(() => '?').join(', ')})`);
 				parametres.push(...filtre.sortes);
 			}
-			const colonnes = filtre.sansVecteur === true ? 'rang, horodatage_ms, geste, origine, session, dossier, position, fiche, empreinte, message, rang_message, note' : '*';
+			const colonnes = filtre.sansVecteur === true ? 'rang, horodatage_ms, geste, origine, session, dossier, position, fiche, empreinte, message, rang_message, note, modele_vecteur' : '*';
 			const ou = conditions.length === 0 ? '' : `WHERE ${conditions.join(' AND ')}`;
 			// LIMIT -1 : sans limite (SQLite)
 			return reessayer(() =>

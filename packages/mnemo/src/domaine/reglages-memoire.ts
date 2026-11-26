@@ -1,6 +1,6 @@
 /**
  * Réglages du groupe « Mémoire » : les règles de l'en-tête de `SCHEMA.md` (versionnées avec la mémoire), montrées et modifiées
- * dans Réglages › Système comme les autres réglages. La modification réécrit seulement les lignes de ces clés dans l'en-tête ;
+ * dans Réglages › Mémoire comme les autres réglages. La modification réécrit seulement les lignes de ces clés dans l'en-tête ;
  * le reste du fichier (texte, autres clés, ordre) est gardé tel quel.
  */
 import type { Nature } from './fait.ts';

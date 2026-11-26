@@ -15,8 +15,10 @@ import { useNavigationMemoire } from '../memoire/navigation-memoire.tsx';
 import { useToast } from '../Toast.tsx';
 import s from './Propositions.module.css';
 
-/** Refus 409 de `lotValider` : la fiche a changé depuis la proposition, le service a écarté le lot. */
-export const FICHE_CHANGEE = 'La fiche a changé depuis la proposition : lot écarté, l’archiviste le reproposera.';
+/** Refus 409 de `lotValider` : une information visée a changé depuis la proposition, le service a écarté le lot. */
+export const FICHE_CHANGEE = 'Une information visée a changé depuis la proposition : lot écarté, demander à l’archiviste de le reproposer.';
+/** Note d'un lot périmé, encore en attente : rien ne le repropose seul. */
+export const LOT_PERIME = 'Une information visée a changé depuis la proposition : rejeter ce lot, puis demander à l’archiviste de le reproposer.';
 
 const pluriel = (n: number, un: string, plusieurs: string) => `${n} ${n === 1 ? un : plusieurs}`;
 
@@ -88,7 +90,7 @@ export function LotAValider(p: { lot: LotVue; surDecide(): void }): ReactNode {
 			<span className={s.detail}>{lot.motif}</span>
 			{lot.perime && (
 				<span className={s.detail} role="note">
-					La fiche a changé depuis la proposition : ce lot ne peut plus être validé.
+					{LOT_PERIME}
 				</span>
 			)}
 			<div className={s.actions}>

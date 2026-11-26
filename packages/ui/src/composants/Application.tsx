@@ -136,7 +136,6 @@ function Coquille(p: { depart: Depart | undefined; session: string | null }): Re
 	return (
 		<div className={s.app}>
 			<BarreTitre
-				racine={sante.donnees?.racine ?? null}
 				fictif={client.fictif}
 				tiroirOuvert={nav.tiroirOuvert}
 				archivisteAttend={archivisteAttend}

@@ -143,9 +143,12 @@ export type MesuresDuModele = Pick<
 /**
  * Un modèle de note pour un niveau : `p = σ(biais + Σ poids·variable)`. `gguf` : fichiers des modèles de sens et du reranker
  * (nom et début du SHA-256) avec lesquels il a été appris ; un modèle appris pour d'autres fichiers n'est pas utilisé.
- * `converge` : l'apprentissage final a atteint son minimum.
+ * `converge` : l'apprentissage final a atteint son minimum. `origine` `depart` : un modèle de départ livré avec Mnemo (appris
+ * ailleurs que sur la mémoire : jamais accepté, `gguf` et `echelle` inconnus), qui ordonne sans % ni injection ; absent : appris
+ * sur la mémoire.
  */
 export type ModeleDeNote = {
+	origine?: 'depart';
 	accepte: boolean;
 	biais: number;
 	poids: Partial<Record<VariableDeNote, number>>;
@@ -185,6 +188,22 @@ export const modeleNonAppris = (): ModeleDeNote => ({
 	refus: ['pas encore appris'],
 });
 
+/** Le refus d'un modèle de départ : il n'a pas été appris sur la mémoire. */
+export const REFUS_DEPART = 'note de départ, à entraîner';
+
+/**
+ * Les coefficients en modèles de départ (D2, `--apprendre --module --depart`) : chaque modèle appris marqué `depart`, jamais
+ * accepté, sans identité des fichiers GGUF ni échelle des signaux (pour n'être refusé ni pour « autres GGUF » ni pour « autre
+ * échelle »), sa date d'apprentissage gardée ; un niveau jamais appris reste tel quel.
+ */
+export function enModelesDeDepart(c: CoefficientsNote): CoefficientsNote {
+	const depart = (m: ModeleDeNote): ModeleDeNote =>
+		m.apprisLe === null || Object.keys(m.poids).length === 0
+			? m
+			: { origine: 'depart', ...m, accepte: false, gguf: { sens: null, reranker: null }, echelle: null, refus: [REFUS_DEPART] };
+	return { complets: depart(c.complets), sens: depart(c.sens) };
+}
+
 /** Arrondi à 6 chiffres significatifs (un module lisible, des diffs courts). */
 function arrondir(valeur: unknown): unknown {
 	if (typeof valeur === 'number') return Number.isFinite(valeur) ? Number(valeur.toPrecision(6)) : null;
@@ -203,7 +222,8 @@ export function moduleDeCoefficients(c: CoefficientsNote): string {
 	return [
 		'// Coefficients de la note de confiance, un modèle par niveau (spec classement vivant § 4.2). Données écrites par',
 		'// `mnemo banc contexte --apprendre --module` : aucun texte de fiche ni de message. Valeur par défaut : les coefficients appris',
-		"// d'une mémoire sont dans son `.mnemo/coefficients-note.json`. Un modèle non accepté ne note rien (ordre seul).",
+		"// d'une mémoire sont dans son `.mnemo/coefficients-note.json`. Un modèle non accepté ordonne sans % ni injection (ordre seul) ;",
+		"// un modèle de départ (`--depart`, `origine` `depart`) aussi, jusqu'à ce que la mémoire apprenne le sien.",
 		'',
 		"import type { CoefficientsNote } from './modele-de-note.ts';",
 		'',
@@ -228,7 +248,7 @@ const ARRONDI_DES_BORNES = 1e-5;
 /**
  * Un modèle lu du JSON ; null s'il est invalide : forme, poids négatifs, au-delà de leur maximum (`MAXIMUMS_DES_POIDS`) ou de
  * variables hors du niveau, `accepte` incohérent avec `refus` (accepté : aucun refus ; refusé : au moins un ; jamais appris :
- * jamais accepté).
+ * jamais accepté), `origine` autre que `depart` (absente : appris sur la mémoire) ou modèle de départ accepté.
  */
 function lireModele(niveau: NiveauDeNote, v: unknown): ModeleDeNote | null {
 	if (!estObjet(v) || typeof v['accepte'] !== 'boolean' || !nombreFini(v['biais']) || !estObjet(v['poids']) || !estObjet(v['gguf'])) return null;
@@ -243,12 +263,16 @@ function lireModele(niveau: NiveauDeNote, v: unknown): ModeleDeNote | null {
 	const refus = v['refus'] as string[];
 	if (v['accepte'] !== (refus.length === 0)) return null;
 	if (v['accepte'] && (v['apprisLe'] ?? null) === null) return null;
+	// un modèle de départ n'est jamais accepté
+	const origine = v['origine'];
+	if (origine !== undefined && (origine !== 'depart' || v['accepte'])) return null;
 	const methode = v['methodeCosinus'];
 	const requete = v['requete'] ?? 'seule';
 	const { sens, reranker } = v['gguf'];
 	if ((methode !== 'mediane' && methode !== 'zscore') || (requete !== 'seule' && requete !== 'jointe') || !texteOuNull(sens) || !texteOuNull(reranker) || !texteOuNull(v['apprisLe'] ?? null)) return null;
 	const entier = (x: unknown) => (nombreFini(x) ? x : 0);
 	return {
+		...(origine === 'depart' ? { origine } : {}),
 		accepte: v['accepte'],
 		biais: v['biais'],
 		poids,

@@ -76,14 +76,14 @@ export type ProfilVue = {
 };
 
 /**
- * Équipement d'un profil, compté comme l'aperçu de Réglages › Profils : `skills`, celles que ses sessions reçoivent (du
+ * Équipement d'un profil, compté comme l'aperçu de Réglages › Agents : `skills`, celles que ses sessions reçoivent (du
  * profil, puis de la mémoire qu'il retient, sans filtre par projet) ; `plugins`, les plugins Claude Code qu'il allume (0 avec
  * un autre moteur) ; `hooks`, ses événements de hook de Mnemo.
  */
 export type EquipementProfilVue = { skills: number; plugins: number; hooks: EvenementHookVue[] };
 
 /**
- * Ce qui se règle d'un profil dans Réglages › Profils ; `consigne` : `null` = la consigne par défaut du code ; `moteur` : l'agent
+ * Ce qui se règle d'un profil dans Réglages › Agents ; `consigne` : `null` = la consigne par défaut du code ; `moteur` : l'agent
  * de code de ses sessions ; `modele` : « » = le modèle par défaut du moteur ; `plugins` (Claude Code) : vide avec un autre moteur.
  */
 export type ProfilEditableVue = {
@@ -100,8 +100,43 @@ export type ProfilEditableVue = {
 /** Événement de hook de Mnemo qu'un profil peut déclarer. */
 export type EvenementHookVue = 'debut' | 'message' | 'outil' | 'apres_outil' | 'arret' | 'fin';
 
-/** Une skill (de la mémoire, d'un profil ou d'un plugin) : son nom et sa description. */
-export type SkillVue = { nom: string; description: string };
+/**
+ * Une skill (de la mémoire, d'un profil ou d'un plugin) : son nom, sa description et son icône (`metadata.icone` de son
+ * frontmatter ; absente : aucune). `origine` : présente pour une skill éditable par les routes `skill` (de la mémoire ou d'un
+ * profil), `mnemo` si Mnemo la fournit (skill par défaut d'un profil : elle a une version d'origine), `memoire` sinon ;
+ * absente pour une skill de plugin (lecture seule).
+ */
+export type SkillVue = { nom: string; description: string; icone?: string; origine?: 'mnemo' | 'memoire' };
+
+/** Ce qui se règle d'une skill de la mémoire : `icone` null = aucune ; `contenu` : le Markdown sous le frontmatter. */
+export type SkillEditableVue = { nom: string; description: string; icone: string | null; contenu: string };
+
+/**
+ * Réponse de `skill` GET : une skill de la mémoire (`skills/<nom>/SKILL.md`, `profil` null) ou du profil `profil`
+ * (`profils/<profil>/skills/<nom>/SKILL.md`). `origine` : `mnemo` si Mnemo la fournit (skill par défaut du profil : elle a une
+ * version d'origine, que `skillOrigine` rétablit ; la modifier arrête ses mises à jour automatiques), `memoire` sinon ;
+ * `modifiee` : elle diffère de la version fournie ; `agents` : les profils qui la reçoivent (le profil propriétaire pour une
+ * skill de profil) ; `empreinte` : à renvoyer au `PUT` ; `motifFixe` : pourquoi elle ne se renomme ni ne se supprime (une skill
+ * fournie par Mnemo serait redéposée au prochain lancement du profil), null si elle le peut ; `avertissements` : frontmatter illisible.
+ */
+export type SkillDetailVue = SkillEditableVue & {
+	profil: string | null;
+	origine: 'mnemo' | 'memoire';
+	modifiee: boolean;
+	agents: string[];
+	empreinte: string;
+	motifFixe: string | null;
+	avertissements: string[];
+};
+
+/** Corps de `skill` PUT : la skill réglée (`nom` différent : renommage) et l'empreinte du `SKILL.md` lu. */
+export type EnregistrementSkill = SkillEditableVue & { empreinte: string };
+
+/** Réponse d'une écriture de skill réussie : `nom`, celui de la skill après l'écriture ; `commit` null quand rien n'a changé. */
+export type ReponseEcritureSkill = { commit: string | null; nom: string };
+
+/** Refus d'une écriture de skill (400) : un motif par champ. */
+export type RefusSkill = { erreur: string; motifs: Record<string, string> };
 
 /** Un plugin Claude Code installé ; `hooks` : il déclare ses propres hooks. */
 export type PluginInstalleVue = { id: string; nom: string; version: string; portee: string; skills: SkillVue[]; hooks: boolean };
@@ -237,8 +272,10 @@ export type ClassementVue = {
 	servi: boolean;
 	rang: number;
 	p?: number | null;
-	/** Classement non calibré : la note d'un modèle appris mais refusé (0 à 1), à montrer en gris ; jamais avec `p`. */
+	/** Classement non calibré : la note d'un modèle appris mais refusé, ou de départ (0 à 1), à montrer en gris ; jamais avec `p`. */
 	pNonCalibree?: number;
+	/** `pNonCalibree` vient d'un modèle de départ (livré avec Mnemo, pas encore entraîné sur la mémoire). */
+	depart?: true;
 	/** Classement non calibré, sans modèle appris qui note la ligne : la note de la règle provisoire (sens et mots, peut dépasser 1). */
 	noteProvisoire?: number;
 	signaux?: SignauxClassementVue;
@@ -395,6 +432,8 @@ export type MessageServeur =
 	| { type: 'memoire'; modifieeMs: number }
 	/** Les lots d'informations ont changé (proposé par l'archiviste, validé, rejeté, écarté) : relire `GET lots`. */
 	| { type: 'lots'; version: string }
+	/** L'état de l'entraînement de la note a changé (tâche, progression, jugements, nouveau modèle) : la vue entière, comme `GET entrainement`. */
+	| { type: 'entrainement'; etat: VueEntrainement }
 	| { type: 'retard'; session: string }
 	/** L'étape en cours du calcul qui suit un message porteur de la session (hook, puis affinage en fond) ; null : fini. */
 	| { type: 'etape'; session: string; etape: EtapeCalcul | null };
@@ -418,6 +457,14 @@ export type MessageClient =
  * - `profils` GET → `ReponseProfils` : les profils du paquet et ceux de `profils/` ;
  * - `profil` GET → `ProfilDetailVue` (404 inconnu) ; PUT `EnregistrementProfil` → `ReponseEcritureProfil` (400 `RefusProfil`, 409 la fiche a changé) ; DELETE → `ReponseEcritureProfil` ;
  * - `profilDupliquer` POST `{ nom }` → `ReponseEcritureProfil` (201) ; `profilApercu` GET `?projet=` → `ApercuProfilVue` ;
+ * - routes des skills (`skills`, `skill`, `skillOrigine`) : sans paramètre, une skill de la mémoire (`skills/<nom>/`) ; avec
+ *   `?profil=<nom>`, une skill de ce profil (`profils/<nom>/skills/<nom>/`) ; 404 pour un profil inconnu ; jamais celles d'un plugin ;
+ * - `skills` POST `SkillEditableVue` → 201 `ReponseEcritureSkill` : crée son `SKILL.md` (400 `RefusSkill`, nom pris compris) ;
+ * - `skill` GET → `SkillDetailVue` (404 inconnue) ; PUT `EnregistrementSkill` → `ReponseEcritureSkill` (renomme si `nom` diffère :
+ *   dossier déplacé et, pour une skill de la mémoire, profils qui la listent mis à jour ; 400 `RefusSkill`, renommage d'une
+ *   skill fournie par Mnemo compris, 404, 409 le `SKILL.md` a changé) ; DELETE → `ReponseEcritureSkill` (une skill de la
+ *   mémoire est retirée aussi des profils qui la listent ; 400 pour une skill fournie par Mnemo, 404) ;
+ * - `skillOrigine` POST (sans corps) → `ReponseEcritureSkill` : réécrit la version fournie par Mnemo (400 si Mnemo ne la fournit pas, 404) ;
  * - `pause` POST → `{ session }` (409 : la session ne peut pas être reprise, `SessionVue.sansReprise`) ;
  * - `reprise` POST → `{ session }` (409 : de même) ;
  * - `bilan` POST → `{ session }` : l'agent de la session rédige l'épisode ;
@@ -464,8 +511,22 @@ export type MessageClient =
  * - `lots` GET → `ReponseLots` : les lots d'informations en attente de l'utilisateur, les plus anciens d'abord ;
  * - `lotValider` POST `{ lignes: number[] }` (indices des lignes cochées, de 0 à n − 1 ; au moins une, sans doublon) →
  *   `ReponseValidationLot` : les lignes s'appliquent en un commit (400 : corps ou choix invalide, ou lignes qui ne
- *   s'appliquent pas, le lot restant en attente ; 404 : lot inconnu ou déjà décidé ; 409 : la fiche a changé depuis la
- *   proposition, le lot est écarté et l'archiviste le reproposera) ; canal de l'utilisateur seulement ;
+ *   s'appliquent pas, le lot restant en attente ; 404 : lot inconnu ou déjà décidé ; 409 : une information visée a changé
+ *   depuis la proposition, le lot est écarté, à faire reproposer par l'archiviste) ; canal de l'utilisateur seulement ;
+ * - `entrainement` GET → `VueEntrainement` : l'état de l'entraînement de la note de confiance (page Mémoire › Entraîner) ;
+ * - `entrainementPreparer` POST `DemandePreparer`, `entrainementPrejuger` POST, `entrainementApprendre` POST → 202
+ *   `VueEntrainement` : lance la tâche (une seule à la fois ; 409 si une tâche tourne, si une commande `mnemo banc contexte`
+ *   tient le fichier des jugements, sans juge (pré-juger) ou sans jugement validé (apprendre)) ; sa progression est diffusée ;
+ * - `entrainementArreter` POST → `VueEntrainement` : arrête la tâche en cours (ce qui est enregistré le reste) ;
+ * - `entrainementRevenir` POST → `VueEntrainement` : échange le modèle de note et le modèle d'avant (409 : aucun, ou un
+ *   apprentissage en cours) ;
+ * - `entrainementMessage` GET `?indice=` facultatif → `ReponseMessageAJuger` (sans indice : le prochain à juger, ceux à
+ *   relire d'abord ; 404 : indice inconnu) ; POST `DemandeReponseMessage` → `ReponseReponseMessage` (409 : « Rien d'utile ici »
+ *   alors qu'une fiche est jugée utile ; 404 : indice inconnu) ;
+ * - `entrainementAnnuler` POST → `ReponseAnnulation` : annule la dernière réponse (ou « Accepter les sûres ») de ce service
+ *   (409 : rien à annuler) ;
+ * - `entrainementAccepterSures` POST → `ReponseAccepterSures` : valide les messages dont toutes les propositions du juge ont une
+ *   confiance de 0,9 ou plus ;
  * - `lotRejeter` POST (corps vide ou `{}`) → `ReponseRejetLot` : le lot disparaît, rien n'est écrit (404 : inconnu ou déjà décidé) ;
  * - `deplacer` POST `{ id, dossier, nom? }` → `ResultatEcriture` (`fiche` : le nouveau chemin ; la fiche d'un dossier emporte tout son dossier) ;
  * - `fil` GET `?jour=AAAA-MM-JJ` → `FilVue` ;
@@ -536,6 +597,9 @@ export const ROUTES = {
 	profil: '/api/profils/:id',
 	profilDupliquer: '/api/profils/:id/dupliquer',
 	profilApercu: '/api/profils/:id/apercu',
+	skills: '/api/skills',
+	skill: '/api/skills/:id',
+	skillOrigine: '/api/skills/:id/origine',
 	pause: '/api/sessions/:id/pause',
 	reprise: '/api/sessions/:id/reprise',
 	bilan: '/api/sessions/:id/bilan',
@@ -585,6 +649,15 @@ export const ROUTES = {
 	lots: '/api/lots',
 	lotValider: '/api/lots/:id/valider',
 	lotRejeter: '/api/lots/:id/rejeter',
+	entrainement: '/api/entrainement',
+	entrainementPreparer: '/api/entrainement/preparer',
+	entrainementPrejuger: '/api/entrainement/prejuger',
+	entrainementApprendre: '/api/entrainement/apprendre',
+	entrainementArreter: '/api/entrainement/arreter',
+	entrainementRevenir: '/api/entrainement/revenir',
+	entrainementMessage: '/api/entrainement/message',
+	entrainementAnnuler: '/api/entrainement/annuler',
+	entrainementAccepterSures: '/api/entrainement/accepter-sures',
 	ws: '/ws',
 } as const;
 
@@ -879,11 +952,11 @@ export type ResultatEcriture =
 
 /** Groupes de la vue Réglages, dans l'ordre de la page. */
 export type GroupeReglageVue = GroupeReglage;
-export type ValeurReglageVue = number | string | string[];
+export type ValeurReglageVue = number | string | string[] | boolean;
 
 /**
  * Un réglage de `.mnemo/reglages.json` : `cle` (`<groupe>.<nom>`), libellé et explication en une ligne, `genre` du champ
- * (`entier`, `decimal` : bornes `min`/`max` ; `liste` : noms libres ; `couleur` : `#rrggbb` ; `choix`, `choix-multiple` : parmi `choix`), `defaut`,
+ * (`entier`, `decimal` : bornes `min`/`max` ; `liste` : noms libres ; `couleur` : `#rrggbb` ; `booleen` : oui ou non ; `choix`, `choix-multiple` : parmi `choix`), `defaut`,
  * `valeur` en vigueur dans le fichier, `effet` d'une modification (`immediat`, `service` : au redémarrage du service,
  * `modeles` : au prochain démarrage des modèles).
  */
@@ -892,7 +965,7 @@ export type ChampReglageVue = {
 	groupe: GroupeReglageVue;
 	libelle: string;
 	explication: string;
-	genre: 'entier' | 'decimal' | 'liste' | 'choix' | 'choix-multiple' | 'couleur';
+	genre: 'entier' | 'decimal' | 'liste' | 'choix' | 'choix-multiple' | 'couleur' | 'booleen';
 	defaut: ValeurReglageVue;
 	valeur: ValeurReglageVue;
 	min?: number;
@@ -956,7 +1029,8 @@ export type LigneDeLotVue = { indice: number; ligne: LigneDeLotProposeeVue; avan
 /**
  * Un lot d'informations proposé par l'archiviste, en attente de l'utilisateur : `fiche` (chemin) et son `titre` (null si
  * absente ou illisible), `motif` de l'archiviste, `proposeMs`, `session` qui l'a proposé (null : hors session Mnemo),
- * `perime` (la fiche a changé depuis : la validation sera refusée, 409).
+ * `perime` (une information visée a changé depuis, ou la fiche est absente ou illisible : la validation sera refusée, 409 ;
+ * un ajout ailleurs dans la fiche ne périme pas le lot).
  */
 export type LotVue = {
 	id: string;
@@ -975,6 +1049,96 @@ export type DemandeValidationLot = { lignes: number[] };
 /** Lot validé : `lignes` appliquées (triées), `commit`, ce qui a changé ; `avertissements` : réindexation incomplète. */
 export type ReponseValidationLot = { id: string; fiche: string; commit: string; lignes: number[]; changements: string[] } & AvecAvertissements;
 export type ReponseRejetLot = { id: string };
+
+/** État d'un modèle de note : accepté (%, injection seule), coupé (accepté, injection automatique coupée), refusé ou de départ (ordre seul), jamais appris. */
+export type EtatNoteVue = 'accepte' | 'coupe' | 'refuse' | 'depart' | 'non_appris';
+/** Niveau d'un modèle de note : Complets (avec le reranker) ou Sens seul. */
+export type NiveauNoteVue = 'complets' | 'sens';
+/**
+ * La note de confiance d'un niveau (page Entraîner) : `etat` ; `origine` (`appris` sur cette mémoire, `depart` : poids livrés
+ * avec Mnemo, `non_appris`) ; `date` d'apprentissage (ISO ; null : jamais) ; `verdict` en une phrase ; `criteres` : les critères
+ * manqués en clair ; `refus` : les mêmes, bruts (rapport).
+ */
+export type NoteDuNiveauVue = { niveau: NiveauNoteVue; etat: EtatNoteVue; origine: 'appris' | 'depart' | 'non_appris'; date: string | null; verdict: string; criteres: string[]; refus: string[] };
+/**
+ * Le banc des messages à juger : `messages` préparés (sautés exclus), `valides` (jugés : validés, silence ou toutes leurs fiches
+ * jugées), `aJuger`, `aRelire` (propositions du juge en attente de relecture), `aPrejuger` (messages sans proposition : autant
+ * d'appels au juge), `silences`, `sautes`, `paires` validées (fiches jugées utiles ou pas utiles), `nouveauxDepuisApprentissage` :
+ * messages jugés depuis le dernier apprentissage (tous les jugés s'il n'y en a pas eu ; un message jugé au terminal, sans date de
+ * validation, compte s'il a été préparé après).
+ */
+export type BancEntrainementVue = { messages: number; valides: number; aJuger: number; aRelire: number; aPrejuger: number; silences: number; sautes: number; paires: number; nouveauxDepuisApprentissage: number };
+/** La tâche longue en cours (une seule à la fois) : `fait` sur `total` (0 : pas encore connu), `depuis` (ISO). */
+export type TacheEntrainementVue = { genre: 'preparer' | 'prejuger' | 'apprendre'; fait: number; total: number; depuis: string };
+/** Une ligne de l'historique des apprentissages (les 10 derniers) : `remplace` : le nouveau modèle a remplacé l'ancien. */
+/** `erreur` : l'essai (automatique) a échoué ; `verdicts` sont alors ceux des modèles gardés. */
+export type LigneHistoriqueVue = { date: string; origine: 'manuel' | 'automatique'; verdicts: Record<NiveauNoteVue, EtatNoteVue>; remplace: boolean; erreur?: string };
+/** Une tranche de la table de fiabilité : notes de `de` à `a`, `paires`, note moyenne `pMoyen`, part réellement utile `frequence`. */
+export type TrancheFiabiliteVue = { de: number; a: number; paires: number; pMoyen: number; frequence: number };
+/**
+ * Le dernier apprentissage (rapport) : `remplace` (son modèle a remplacé le modèle d'alors, même refusé quand l'apprentissage
+ * est demandé à la main ; faux : l'ancien est gardé), puis par niveau le verdict, les critères manqués en clair et la table de
+ * fiabilité.
+ */
+export type ResultatApprentissageVue = {
+	date: string;
+	remplace: boolean;
+	messages: number;
+	sessions: number;
+	niveaux: { niveau: NiveauNoteVue; accepte: boolean; verdict: string; criteres: string[]; refus: string[]; paires: number; fiabilite: TrancheFiabiliteVue[] }[];
+};
+/**
+ * État de l'entraînement de la note (`entrainement` GET, diffusé par `{ type: 'entrainement' }`) : `note` par niveau et `avant`
+ * (un modèle d'avant existe : « Revenir au modèle d'avant ») ; `banc` ; `tache` en cours (null : aucune) ; `historique` (les 10
+ * derniers, plus récents d'abord) ; `juge` (Claude Code trouvé, sinon la raison) ; `resultat` du dernier apprentissage ;
+ * `derniereErreur` de la dernière tâche (absente si elle a réussi ou a été arrêtée).
+ */
+export type VueEntrainement = {
+	note: { niveaux: NoteDuNiveauVue[]; avant: boolean };
+	banc: BancEntrainementVue;
+	tache: TacheEntrainementVue | null;
+	historique: LigneHistoriqueVue[];
+	juge: { disponible: boolean; raison?: string };
+	resultat: ResultatApprentissageVue | null;
+	derniereErreur?: string;
+};
+/** Jugement d'une fiche : utile (`pertinente`), pas utile (`non_pertinente`), je ne sais pas (`indecise`). */
+export type JugementVue = 'pertinente' | 'non_pertinente' | 'indecise';
+/** Proposition du juge Claude pour une fiche : jugement, confiance (0 à 1), raison (200 caractères au plus). */
+export type PropositionDuJugeVue = { jugement: JugementVue; confiance: number; raison: string };
+/** Une fiche candidate à juger : titre, première ligne, synthèse courte (300 caractères au plus), proposition du juge, jugement déjà donné. */
+export type CandidateAJugerVue = { chemin: string; titre: string; ligne: string; synthese: string; proposition: PropositionDuJugeVue | null; jugement: JugementVue | null };
+/**
+ * Un message à juger (`entrainementMessage` GET) : `indice` (à renvoyer), `message`, `precedent` (le message d'avant, s'il est
+ * joint ; null sinon), ses `candidates` dans l'ordre de présentation mêlé ; `valide` (déjà validé : le revoir), `silence`,
+ * `saute` ; `aRelire` : il attend la relecture de propositions du juge ; `restants` : messages encore à juger.
+ */
+export type VueMessageAJuger = {
+	indice: number;
+	message: string;
+	precedent: string | null;
+	candidates: CandidateAJugerVue[];
+	valide: boolean;
+	silence: boolean;
+	saute: boolean;
+	aRelire: boolean;
+	restants: number;
+};
+/** Réponse de `entrainementMessage` GET : le message (null : plus rien à juger). */
+export type ReponseMessageAJuger = { message: VueMessageAJuger | null };
+/** Corps de `entrainementPreparer` : `nombre` de messages à préparer (1 à 200 ; 30 par défaut). */
+export type DemandePreparer = { nombre?: number };
+/**
+ * Corps de `entrainementMessage` POST : la réponse au message `indice` ; `jugements` par chemin ; `resteNonUtile` : les fiches
+ * sans réponse deviennent « pas utile » ; `silence` : « Rien d'utile ici » ; `passer` : le message est sauté.
+ */
+export type DemandeReponseMessage = { indice: number; jugements: Record<string, JugementVue>; resteNonUtile: boolean; silence?: boolean; passer?: boolean };
+/** Réponse de `entrainementMessage` POST : l'indice du prochain message à juger (null : plus rien). */
+export type ReponseReponseMessage = { suivant: number | null };
+/** Réponse de `entrainementAnnuler` : l'indice du message rétabli (le rouvrir). */
+export type ReponseAnnulation = { indice: number };
+/** Réponse de `entrainementAccepterSures` : nombre de messages validés avec les propositions sûres du juge. */
+export type ReponseAccepterSures = { acceptes: number };
 
 /**
  * `mnemo init --json` (lu par un programme qui pilote l'installation) : une ligne JSON par événement sur la sortie

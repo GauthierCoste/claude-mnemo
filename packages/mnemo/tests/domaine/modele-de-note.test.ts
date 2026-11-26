@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { COEFFICIENTS_NOTE } from '../../src/domaine/coefficients-note.ts';
-import { moduleDeCoefficients, NIVEAUX_DE_NOTE, VARIABLES_DU_NIVEAU, VARIABLES_MAX, variablesDeNote } from '../../src/domaine/modele-de-note.ts';
+import { moduleDeCoefficients, NIVEAUX_DE_NOTE, REFUS_DEPART, VARIABLES_DU_NIVEAU, VARIABLES_MAX, variablesDeNote } from '../../src/domaine/modele-de-note.ts';
 
 describe('variablesDeNote', () => {
 	const s = { logit: 2.5, cosinusRelatif: 0.12, cosinusZ: 1.8, bm25Relatif: null, signalSession: 0.4, apriori: -0.3 };
@@ -27,8 +27,40 @@ describe('variablesDeNote', () => {
 });
 
 describe('coefficients-note.ts', () => {
-	it('est livré refusé partout', () => {
-		for (const n of NIVEAUX_DE_NOTE) expect(COEFFICIENTS_NOTE[n].accepte).toBe(false);
+	it('est livré refusé partout : des modèles de départ (ou jamais appris)', () => {
+		for (const n of NIVEAUX_DE_NOTE) {
+			expect(COEFFICIENTS_NOTE[n].accepte).toBe(false);
+			const appris = COEFFICIENTS_NOTE[n].apprisLe !== null;
+			expect(COEFFICIENTS_NOTE[n].origine).toBe(appris ? 'depart' : undefined);
+		}
+	});
+
+	it('livre au moins un modèle de départ : une mémoire sans coefficients appris est ordonnée par lui', () => {
+		expect(NIVEAUX_DE_NOTE.some((n) => COEFFICIENTS_NOTE[n].origine === 'depart' && COEFFICIENTS_NOTE[n].apprisLe !== null)).toBe(true);
+	});
+
+	it('publiable : des nombres, des booléens, et pour texte seulement des noms de configuration, une date ou un refus connu (dépôt public)', () => {
+		const textes: string[] = [];
+		const parcourir = (v: unknown): void => {
+			if (typeof v === 'string') textes.push(v);
+			else if (Array.isArray(v)) v.forEach(parcourir);
+			else if (typeof v === 'object' && v !== null) Object.values(v).forEach(parcourir);
+			else expect(v === null || typeof v === 'number' || typeof v === 'boolean').toBe(true);
+		};
+		parcourir(COEFFICIENTS_NOTE);
+		const permis = new Set(['depart', 'mediane', 'zscore', 'seule', 'jointe', REFUS_DEPART, 'pas encore appris']);
+		for (const t of textes) expect(permis.has(t) || /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{3})?Z)?$/u.test(t), t).toBe(true);
+		// les clés : des noms de variables et de configuration (identifiants ASCII), aucun chemin ni titre
+		const cles: string[] = [];
+		const lesCles = (v: unknown): void => {
+			if (typeof v !== 'object' || v === null || Array.isArray(v)) return;
+			for (const [k, x] of Object.entries(v)) {
+				cles.push(k);
+				lesCles(x);
+			}
+		};
+		lesCles(COEFFICIENTS_NOTE);
+		for (const k of cles) expect(k, k).toMatch(/^[a-zA-Z][a-zA-Z0-9]*$/u);
 	});
 
 	it('est exactement ce qu’écrit moduleDeCoefficients', async () => {

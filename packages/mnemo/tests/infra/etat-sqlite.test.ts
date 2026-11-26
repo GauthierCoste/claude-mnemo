@@ -548,7 +548,7 @@ describe('etat.sqlite', () => {
 		verif.close();
 	});
 
-	it('migre la version 14 (sans l’outil d’un dialogue ouvert) vers la 15 : la session est gardée, son dialogue sans outil', async () => {
+	it('migre la version 14 (sans l’outil d’un dialogue ouvert) vers la dernière : la session est gardée, son dialogue sans outil', async () => {
 		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('d1', { moteur: 'mistral-vibe', dernierArret: 'notification', fil: 'f' }));
 		etat.fermer();
@@ -561,7 +561,7 @@ describe('etat.sqlite', () => {
 		ouverts.push(rouvert);
 		expect(await rouvert.lire('d1')).toMatchObject({ moteur: 'mistral-vibe', dernierArret: 'notification', dialogueOutil: null, fil: 'f' });
 		const verif = new DatabaseSync(chemin);
-		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: 15 });
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
 		verif.close();
 	});
 
@@ -1056,7 +1056,7 @@ describe('etat.sqlite', () => {
 		expect(await rouvert.noterMessagePorteur('s1', 'la suite')).toBe(2);
 		const verif = new DatabaseSync(chemin);
 		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
-		expect(VERSION_ETAT).toBe(15);
+		expect(VERSION_ETAT).toBe(16);
 		verif.close();
 	});
 
@@ -1207,12 +1207,16 @@ describe('etat.sqlite', () => {
 			rangMessage: 2,
 			note: { note: 0.72 },
 			vecteur: null,
+			modeleVecteur: null,
 		});
 		// une carte sans note : note inconnue ; un vecteur d'un autre message que le porteur du geste n'est pas gardé
 		expect(gestes[2]).toMatchObject({ fiche: 'c.md', note: null, message: 'le porteur', origine: 'claude', vecteur: null });
 		expect(gestes[1]).toMatchObject({ message: 'le porteur', note: { note: 0.9 }, origine: 'utilisateur' });
 		expect(gestes[1]!.vecteur?.modele).toBe('bge-m3@abc');
 		expect([...gestes[1]!.vecteur!.valeurs]).toEqual([0.25, -0.5, 1]);
+		// le modèle du vecteur, lu aussi sans le vecteur
+		expect(gestes[1]!.modeleVecteur).toBe('bge-m3@abc');
+		expect((await etat.gestes({ sortes: ['injectee_main'], sansVecteur: true, limite: null }))[0]).toMatchObject({ vecteur: null, modeleVecteur: 'bge-m3@abc' });
 		expect(gestes[0]).toMatchObject({ origine: 'auto', message: 'explicite', rangMessage: 1, vecteur: null });
 		// note en JSON, vecteur en Float32 petit-boutiste, quelle que soit la machine
 		const base = new DatabaseSync(chemin);
@@ -1234,6 +1238,12 @@ describe('etat.sqlite', () => {
 			{ geste: 'injectee_main', fiche: 'd.md', nombre: 1 },
 			{ geste: 'injectee_auto', fiche: 'e.md', nombre: 1 },
 		]);
+		// nombre de gestes (sans lire une ligne) : mêmes filtres que la lecture
+		for (const f of [{}, { depuisMs: 22 }, { sortes: ['ecartee_ici', 'injectee_main'] as const }, { depuisMs: 21, sortes: ['ecartee_ici'] as const }]) {
+			expect(await etat.nombreGestes(f)).toBe((await etat.gestes({ ...f, limite: null })).length);
+		}
+		expect(await etat.nombreGestes({ sortes: ['ecartee_ici'] })).toBe(2);
+		expect(await etat.nombreGestes({ sortes: [] })).toBe(0);
 	});
 
 	it('lue après carte : seulement après une proposition, une fois par proposition, même après /clear ; une nouvelle proposition recompte', async () => {

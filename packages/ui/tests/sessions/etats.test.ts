@@ -8,7 +8,7 @@ const T = 1_800_000_000_000;
 
 describe('états des sessions', () => {
 	it('libellés des états', () => {
-		expect(LIBELLES_ETATS).toEqual({ attend: 'Attend ta réponse', travaille: 'Travaille', a_relire: 'Terminée, à relire', en_pause: 'En pause', terminee: 'Terminée' });
+		expect(LIBELLES_ETATS).toEqual({ attend: 'Attend une réponse', travaille: 'Travaille', a_relire: 'Terminée, à relire', en_pause: 'En pause', terminee: 'Terminée' });
 	});
 
 	it('dureeDepuis : minutes, heures, jours', () => {

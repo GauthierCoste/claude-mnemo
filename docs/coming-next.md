@@ -6,6 +6,23 @@
 
 ## Done
 
+- **Settings redesign (26/11/2026, 1.10.0).** Three tabs, Agents · Réglages · Documentation: an agent is edited like a
+  game character (appearance, class, equipment, powers, mission); Réglages holds Branchements (engines, Claude app),
+  Mémoire (Rappel, Confiance) and Système; Documentation is a one-page technical reference. The skills of the
+  memory and of an agent are created, edited, renamed and deleted from the interface (icon in `metadata.icone`); a
+  skill provided by Mnemo can be edited or reverted, not renamed or deleted. The screens named below are the ones of
+  their time: Settings › Système › Moteurs is now Settings › Réglages › Branchements. See
+  [usage.md](usage.md#settings).
+- **Train the confidence score from the interface (26/11/2026, 1.10.0).** Mémoire › Entraîner: prepare real messages
+  from your sessions, judge each one whole (« Utile », « Pas utile », « Je ne sais pas », « Rien d’utile ici »; keyboard
+  too), have Claude pre-judge them (one Claude Code call per message, on your subscription, without tools or MCP) and
+  validate them, « Accepter les sûres » at 90 % or more, then learn: the verdict in plain words, the missed criteria,
+  « Revenir au modèle d’avant », a history of 10 learnings. Mnemo ships starting weights (order only, without % or
+  injection) so a new installation ranks from the start. With `entrainement.automatique` (on by default), the service
+  learns again in the background, at most once a day, on the validated judgements plus your gestures taken as implicit
+  judgements, weighed against exposure bias; acceptance is measured on the validated judgements only, and an accepted
+  level is never lost. `mnemo banc contexte --prejuger` does the pre-judging in a terminal. See
+  [usage.md](usage.md#training-the-confidence-score).
 - **Link an engine from the interface (26/11/2026, 1.8.0).** Settings › Système › Moteurs shows one card per engine,
   with its provider (Anthropic, OpenAI, Mistral), a one-word status and the link circuit (installed, version, memory,
   follow-up hooks, approval); « Lier à Mnemo » (`POST /api/moteurs/:id/lier`) declares the MCP server and installs or
@@ -59,24 +76,18 @@
 
 ## Left to do
 
-- **Learn the confidence score on real judgements.** The defaults shipped with Mnemo have learned nothing, so the ranking
-  stays in « ordre seul » and nothing is injected automatically. Judge real messages (`mnemo banc contexte --extraire`,
-  then `--juger`) until `--apprendre` accepts a model for each level, then check on real sessions that the thresholds
-  (90 % to inject, 10 % for leads) and the watch of automatic injection hold; adjust them with the report if they do not.
-- **A confidence score that learns from use (later).** Today the weights of the score change only when `mnemo banc
-  contexte --apprendre` is run by hand, and the prior of the gestures enters the model only if it is non-zero on enough
-  pairs (30, from 5 sessions): the gestures of every day do not move the score. Relearn in the background (each night, or
-  every N sessions) on the bench judgements plus the gestures taken as implicit judgements (➤ or a note read by the agent:
-  relevant; ✗: not relevant; a note left at the top of the ranking: weakly not relevant), behind the same acceptance gate
-  (a refused model leaves the current one in place). To design from the start: exposure bias (only what was shown gets a
-  gesture: keep the notes drawn outside the pile, weight each gesture by the chance that its note was shown) and the
-  rarity of gestures (the bench judgements stay the base, the gestures adjust it).
-- **Each user trains their own score, from the interface.** The model is `.mnemo/coefficients-note.json` (one per memory,
-  per machine, never committed); training it takes three commands in a terminal (`mnemo banc contexte --extraire`,
-  `--juger`, `--apprendre`). Bring them into the interface: a page to judge real messages (a message and its notes:
-  relevant, not relevant, silence; a gauge of messages judged), a button to learn, the verdict in plain words. Optionally,
-  a Claude judge that pre-judges the messages, the user reviewing only where they disagree. And ship starting weights
-  learned on demo memories (`--apprendre --module`), so each user starts from a fair model and adjusts it on their data.
+- **Learn the confidence score on real judgements.** Mnemo now starts from shipped weights, still refused: the ranking
+  stays in « ordre seul » and nothing is injected automatically until a model is accepted on your own judgements. Judge
+  real messages from Mémoire › Entraîner (prepare, pre-judge with Claude, review, about 100 validated messages, with
+  enough « Rien d’utile ici ») until « Apprendre la note » accepts a model for each level, then check on real sessions
+  that the thresholds (90 % to inject, 10 % for leads), the watch of automatic injection and the relearning in the
+  background hold; adjust them with the report if they do not.
+- **The application overflows on the right at 500 px.** Below about 500 px of width, the common frame (title bar,
+  panel) is wider than the window and runs off its right edge without a margin. The Memory view no longer adds to it
+  (its tabs wrap), but the frame itself must fit.
+- **A gentler message when Claude Code cannot be found for the judge.** « Pré-juger avec Claude » is then unavailable
+  with a technical reason; say it simply, with what to do (install Claude Code, or « Relire » in Settings › Système ›
+  Moteurs).
 - **Mistral Vibe with a real account.** Measured so far against a local fake model, without an account. To measure
   with a real Mistral account: the real list of models and the default model, the real context window, the screens
   after sign-in, and the points still marked "not measured": `process.start`, `question_asked` and `turn_failed`, the

@@ -139,7 +139,7 @@ export async function commandeModeles(args: string[], partiel: Partial<ContexteM
 			// forme d'avant la mise à jour (`garde <racine>`, un gardien par dossier), lancée par un serveur MCP ou un service encore
 			// en marche : rien n'est lancé (le gardien de la machine s'en charge), une ligne de journal, sortie sans erreur
 			const contexte = contexteReel(partiel);
-			await journaliser(join(contexte.dossier, SOUS_DOSSIER_SERVEURS), 'ancienne forme « modeles garde <racine> » ignorée : relancez le service et les sessions ouvertes avant la mise à jour');
+			await journaliser(join(contexte.dossier, SOUS_DOSSIER_SERVEURS), 'ancienne forme « modeles garde <racine> » ignorée : relancer le service et les sessions ouvertes avant la mise à jour');
 			return;
 		}
 		const { garder } = await import('../../infra/modeles/gardien.ts');
@@ -152,7 +152,7 @@ export async function commandeModeles(args: string[], partiel: Partial<ContexteM
 		const ancien = contexte.racine === null ? null : await migrerAncienGardien(contexte.racine);
 		const resultat = combinerArrets(ancien, await arreterServeurs(join(contexte.dossier, SOUS_DOSSIER_SERVEURS)));
 		if (typeof resultat === 'object') {
-			console.log(`${resultat.enChargement} serveur(s) encore en chargement : relancez \`mnemo modeles arreter\` dans un instant.`);
+			console.log(`${resultat.enChargement} serveur(s) encore en chargement : relancer \`mnemo modeles arreter\` dans un instant.`);
 			return;
 		}
 		console.log(resultat === 'arrete' ? 'Serveurs arrêtés.' : resultat === 'perime' ? 'Aucun serveur en marche : état périmé retiré.' : 'Aucun serveur en marche.');

@@ -2,15 +2,17 @@
 import type { Avatar, IdMoteur } from '@mnemo/commun';
 import { COULEURS_AVATAR, DOSSIERS_FIXES, estIdMoteur, estModele, FORMES_AVATAR, IDS_MOTEURS, MODELE_MAX, MOTEUR_PAR_DEFAUT, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { empreinte } from '../domaine/empreinte.ts';
-import { lireFiche, separerFrontmatter } from '../domaine/fiche.ts';
+import { lireFiche } from '../domaine/fiche.ts';
 import type { Fiche } from '../domaine/fiche.ts';
 import { CLES_GEREES_DU_PROFIL, donneesDeProfil, estConsigneParDefaut, estIdentifiantDePlugin, estNomDeProfil, EVENEMENTS_HOOK, moteurOuModeleInvalides, MOTIF_NOM_DE_PROFIL, PROFILS_PAR_DEFAUT, refusDuMoteur } from '../domaine/profil.ts';
 import type { Profil } from '../domaine/profil.ts';
+import { lireSkill } from '../domaine/skill.ts';
 import type { EvenementHook } from '../domaine/session.ts';
-import { ecrireEtCommiter, ficheVide, sousVerrou, texteDeFiche } from './commun.ts';
+import { commiter, ecrireEtCommiter, ecrireOuDefaire, ficheVide, sousVerrou, texteDeFiche } from './commun.ts';
 import { anciennesConsignes } from './consignes-par-defaut.ts';
 import type { Dependances, PluginInstalle, SkillInstallee } from './ports.ts';
 import { chargerProfil, cheminDeProfil, dossierSkillsDuProfil, profilParDefaut } from './profil.ts';
+import { origineDeSkill, textePresente } from './gerer-skills.ts';
 import { reindexerApresEcriture } from './synchroniser.ts';
 
 /**
@@ -65,21 +67,20 @@ async function existe(dep: Dependances, nom: string): Promise<boolean> {
 	return (await dep.coffre.lister(DOSSIERS_FIXES.profils)).dossiers.includes(dossierDuProfil(nom));
 }
 
-/** Skills d'un dossier : chaque sous-dossier qui contient un `SKILL.md` (nom = dossier, description du frontmatter). */
-async function skillsDuDossier(dep: Dependances, dossier: string): Promise<SkillInstallee[]> {
+/**
+ * Skills d'un dossier, celui de la mémoire (`profil` null) ou celui du profil `profil` : chaque sous-dossier qui contient un
+ * `SKILL.md` (nom = dossier, description et icône du frontmatter ; frontmatter illisible : la skill reste listée par son nom),
+ * avec son `origine` (`origineDeSkill`) : toutes s'éditent depuis Réglages (`gerer-skills.ts`). Une skill restée une version
+ * fournie passée est lue dans sa version actuelle (`textePresente`).
+ */
+async function skillsDuDossier(dep: Dependances, dossier: string, profil: string | null): Promise<SkillInstallee[]> {
 	const resultat: SkillInstallee[] = [];
 	for (const sous of (await dep.coffre.lister(dossier)).dossiers) {
 		const texte = await dep.coffre.lire(`${sous}/SKILL.md`);
 		if (texte === null) continue;
 		const nom = sous.slice(sous.lastIndexOf('/') + 1);
-		let description = '';
-		try {
-			const valeur = separerFrontmatter(`${sous}/SKILL.md`, texte).entete.description;
-			if (typeof valeur === 'string') description = valeur;
-		} catch {
-			// frontmatter illisible : la skill reste listée par son nom
-		}
-		resultat.push({ nom, description });
+		const { description, icone } = lireSkill(textePresente(profil, nom, texte));
+		resultat.push({ nom, description, ...(icone === null ? {} : { icone }), origine: origineDeSkill(profil, nom) });
 	}
 	return resultat;
 }
@@ -115,8 +116,8 @@ export async function detailProfil(dep: Dependances, nom: string): Promise<Detai
 		supprimable: !PROFILS_DU_PAQUET.includes(nom),
 		lancementModifiable: nom !== PROFIL_ARCHIVISTE,
 		empreinte: texte === null ? null : empreinte(texte),
-		skillsMemoireDisponibles: await skillsDuDossier(dep, DOSSIERS_FIXES.skills),
-		skillsDuProfil: await skillsDuDossier(dep, dossierSkillsDuProfil(nom)),
+		skillsMemoireDisponibles: await skillsDuDossier(dep, DOSSIERS_FIXES.skills, null),
+		skillsDuProfil: await skillsDuDossier(dep, dossierSkillsDuProfil(nom), nom),
 		pluginsInstalles: plugins,
 		avertissements,
 	};
@@ -134,7 +135,7 @@ async function motifsDe(dep: Dependances, nom: string, editable: ProfilEditable)
 	else if (nom === PROFIL_ARCHIVISTE && editable.lancement !== PROFILS_PAR_DEFAUT[PROFIL_ARCHIVISTE].lancement) motifs.lancement = 'le lancement de l\'archiviste ne se modifie pas';
 	if (!Array.isArray(editable.hooks) || editable.hooks.length === 0 || !editable.hooks.every((h) => EVENEMENTS_HOOK.includes(h))) motifs.hooks = 'au moins un événement, parmi ceux de Mnemo';
 	if (editable.skillsMemoire !== 'tous') {
-		const disponibles = new Set((await skillsDuDossier(dep, DOSSIERS_FIXES.skills)).map((s) => s.nom));
+		const disponibles = new Set((await skillsDuDossier(dep, DOSSIERS_FIXES.skills, null)).map((s) => s.nom));
 		const inconnues = Array.isArray(editable.skillsMemoire) ? editable.skillsMemoire.filter((s) => !disponibles.has(s)) : ['?'];
 		if (inconnues.length > 0) motifs.skillsMemoire = `skills inconnues dans ${DOSSIERS_FIXES.skills}/ : ${inconnues.join(', ')}`;
 	}
@@ -207,17 +208,10 @@ export async function enregistrerProfil(dep: Dependances, nom: string, entree: P
 	return resultat;
 }
 
-/** Fichiers `.md` d'un dossier de la mémoire, récursivement. */
-async function fichiersDe(dep: Dependances, dossier: string): Promise<string[]> {
-	const { fiches, dossiers } = await dep.coffre.lister(dossier);
-	const resultat = [...fiches];
-	for (const sous of dossiers) resultat.push(...(await fichiersDe(dep, sous)));
-	return resultat;
-}
-
 /**
  * Copie le profil `source` sous le nom `nouveau` : ses valeurs effectives (sa consigne comprise, qui devient la consigne de la
- * copie) et ses skills propres. Refusé si `nouveau` est invalide ou existe déjà, ou si `source` n'existe pas. Un commit.
+ * copie) et son dossier de skills entier (tous ses fichiers, `.md` ou non). Refusé si `nouveau` est invalide ou existe déjà,
+ * ou si `source` n'existe pas. Un commit ; s'il échoue, la copie est retirée.
  */
 export async function dupliquerProfil(dep: Dependances, source: string, nouveau: string): Promise<ResultatProfil> {
 	if (!estNomDeProfil(nouveau)) return { ok: false, motifs: { nom: MOTIF_NOM_DE_PROFIL } };
@@ -227,30 +221,45 @@ export async function dupliquerProfil(dep: Dependances, source: string, nouveau:
 	const resultat = await sousVerrou(dep, async (): Promise<ResultatProfil> => {
 		if (await existe(dep, nouveau)) return { ok: false, motifs: { nom: `le profil « ${nouveau} » existe déjà` } };
 		const fiche = ficheAEcrire(dep, nouveau, null, editable);
-		const aEcrire = [{ chemin: cheminDeProfil(nouveau), texte: texteDeFiche(dep, fiche) }];
 		const dossierSource = dossierSkillsDuProfil(source);
-		for (const chemin of await fichiersDe(dep, dossierSource)) {
-			const texte = await dep.coffre.lire(chemin);
-			if (texte !== null) aEcrire.push({ chemin: `${dossierSkillsDuProfil(nouveau)}${chemin.slice(dossierSource.length)}`, texte });
-		}
-		return { ok: true, commit: await ecrireEtCommiter(dep, aEcrire, `mnemo: profil ${cheminDeProfil(nouveau)} (copie de ${source})`) };
+		const aCopier = (await dep.coffre.lister(dossierDuProfil(source))).dossiers.includes(dossierSource);
+		const copie = dossierDuProfil(nouveau);
+		const commit = await ecrireOuDefaire(
+			dep,
+			[],
+			async () => {
+				if (aCopier) await dep.coffre.copierDossier(dossierSource, dossierSkillsDuProfil(nouveau));
+				await dep.coffre.ecrire(cheminDeProfil(nouveau), texteDeFiche(dep, fiche));
+				return commiter(dep, `mnemo: profil ${cheminDeProfil(nouveau)} (copie de ${source})`, [copie]);
+			},
+			() => dep.coffre.retirerDossier(copie),
+		);
+		return { ok: true, commit };
 	});
 	if (resultat.ok) await reindexerApresEcriture(dep);
 	return resultat;
 }
 
 /**
- * Supprime le profil `nom` : sa fiche et ses skills (`profils/<nom>/`), un commit `mnemo: supprime profils/<nom>/`. Refusé pour
- * `travail` et `archiviste`. Les sessions de ce profil se reprennent ensuite avec les valeurs par défaut de `travail`.
+ * Supprime le profil `nom` : son dossier entier (`profils/<nom>/`, fiche, skills et tout autre fichier), un commit
+ * `mnemo: supprime profils/<nom>/` (aucun si rien n'y était suivi par git) ; le dossier est mis de côté (caché, hors du commit)
+ * jusqu'au commit, et rendu s'il échoue. Refusé pour `travail` et `archiviste`. Les sessions de ce profil se reprennent
+ * ensuite avec les valeurs par défaut de `travail`.
  */
 export async function supprimerProfil(dep: Dependances, nom: string): Promise<ResultatProfil> {
-	if (PROFILS_DU_PAQUET.includes(nom)) return { ok: false, motifs: { nom: `le profil « ${nom} » ne se supprime pas : rétablis ses valeurs par défaut` } };
+	if (PROFILS_DU_PAQUET.includes(nom)) return { ok: false, motifs: { nom: `le profil « ${nom} » ne se supprime pas : rétablir ses valeurs par défaut` } };
 	if (!estNomDeProfil(nom) || !(await existe(dep, nom))) return { ok: false, motifs: { nom: `profil inconnu : « ${nom} »` } };
 	const dossier = dossierDuProfil(nom);
 	const resultat = await sousVerrou(dep, async (): Promise<ResultatProfil> => {
-		const aSupprimer = await fichiersDe(dep, dossier);
-		const commit = aSupprimer.length === 0 ? null : await ecrireEtCommiter(dep, [], `mnemo: supprime ${dossier}/`, aSupprimer);
-		await dep.coffre.retirerDossierVide(dossier);
+		const deCote = `${DOSSIERS_FIXES.profils}/.mnemo-${dep.systeme.nouvelId()}.tmp`;
+		await dep.coffre.deplacerDossier(dossier, deCote);
+		const commit = await ecrireOuDefaire(
+			dep,
+			[],
+			() => dep.historique.commit(`mnemo: supprime ${dossier}/`, [dossier], dep.origine?.session),
+			() => dep.coffre.deplacerDossier(deCote, dossier),
+		);
+		await dep.coffre.retirerDossier(deCote);
 		return { ok: true, commit };
 	});
 	if (resultat.ok && resultat.commit !== null) await reindexerApresEcriture(dep);

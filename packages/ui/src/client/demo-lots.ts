@@ -1,7 +1,7 @@
 /**
  * Lots d'informations de la démonstration (`?demo`), comme les proposerait l'archiviste : quatre doublons dans Module
  * stocks (trois lignes, dont une qui en absorbe deux), une suppression dans Dépôt SFTP, une confirmation dans Architecture,
- * et un lot périmé (la fiche Export CSV a changé depuis la proposition).
+ * et un lot périmé (l'information visée dans Export CSV a changé depuis la proposition).
  */
 import type { InformationDuLotVue, LotVue } from '@mnemo/contrat';
 

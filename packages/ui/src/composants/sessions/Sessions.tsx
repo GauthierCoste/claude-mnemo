@@ -6,6 +6,7 @@
  * d'abord le tiroir des terminées), ⌥M ouvre la première fiche servie ; après un zoom, le terminal zoomé prend le focus
  * quand l'animation est finie, et ⌥n, ⌥0 comme Échap y vont alors à `claude` : ils n'agissent plus qu'hors du terminal.
  */
+import { PROFIL_ARCHIVISTE } from '@mnemo/commun';
 import { ROUTES, type SessionVue } from '@mnemo/contrat';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
@@ -247,6 +248,11 @@ export function Sessions(p: { visible: boolean; /** Mode démo : rang de la sess
 				surDossier={setDossierVisible}
 				surContexte={setContexteVisible}
 				surNouvelle={() => setNouvelle({ dossier: selection?.dossier ?? null })}
+				agents={sessions}
+				surAgent={(id, profil) => {
+					if (profil === PROFIL_ARCHIVISTE) nav.ouvrirTiroir(true);
+					else allerA(id);
+				}}
 			/>
 			<div className={s.corps}>
 				{dossierVisible && (

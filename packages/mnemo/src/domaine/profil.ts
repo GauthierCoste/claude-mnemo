@@ -63,13 +63,13 @@ export const PROFILS_PAR_DEFAUT: Record<typeof PROFIL_TRAVAIL | typeof PROFIL_AR
 export const CLES_GEREES_DU_PROFIL = ['avatar', 'plugins', 'skills_memoire', 'skills', 'hooks', 'lancement', 'lanceur', 'moteur', 'modele'] as const;
 
 /** Motif d'un profil qui déclare des plugins avec un autre moteur que Claude Code. */
-export const MOTIF_PLUGINS_HORS_CLAUDE_CODE = 'les plugins Claude Code ne valent qu\'avec le moteur Claude Code : retire-les ou choisis ce moteur';
+export const MOTIF_PLUGINS_HORS_CLAUDE_CODE = 'les plugins Claude Code ne valent qu\'avec le moteur Claude Code : les retirer, ou choisir ce moteur';
 
 /** Motif d'un archiviste réglé sur un autre moteur que Claude Code. */
 export const MOTIF_ARCHIVISTE_HORS_CLAUDE_CODE = 'l\'archiviste tourne sur Claude Code';
 
 /** Motif d'un profil réglé sur un moteur que ce Mnemo ne connaît pas. */
-export const motifMoteurInconnuDuProfil = (moteur: string): string => `moteur « ${moteur} » inconnu de ce Mnemo (${IDS_MOTEURS.join(' ou ')} attendu) : choisis-en un dans le profil`;
+export const motifMoteurInconnuDuProfil = (moteur: string): string => `moteur « ${moteur} » inconnu de ce Mnemo (${IDS_MOTEURS.join(' ou ')} attendu) : en choisir un dans le profil`;
 
 /**
  * Ce que le moteur du profil interdit : un moteur inconnu de ce Mnemo (`moteur`, fiche écrite à la main), un archiviste hors

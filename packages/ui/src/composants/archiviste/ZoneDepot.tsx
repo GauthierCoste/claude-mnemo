@@ -141,7 +141,7 @@ export function ZoneDepot({ surEnvoi }: { surEnvoi?: (enCours: boolean) => void 
 			}}
 			onDrop={surDepot}
 		>
-			<b>Dépose n'importe quoi</b>
+			<b>Déposer n'importe quoi</b>
 			<span>mails, PDF, Word, tableurs, images</span>
 			<div className={s.actions}>
 				<Bouton petit onClick={() => champ.current?.click()} disabled={envoi > 0}>

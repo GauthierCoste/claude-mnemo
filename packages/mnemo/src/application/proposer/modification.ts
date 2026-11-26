@@ -108,7 +108,7 @@ export async function proposerModification(dep: Dependances, demande: DemandeMod
 		if (motif !== null) return refuse(motif);
 		const proposee = { ...fiche, updated: date, donnees: avecModificationProposee(fiche.donnees, { cibles, date, source: mention.mention }) };
 		const relue = lireModificationProposee(lireFiche(chemin, ecrireFiche(proposee)).donnees);
-		if (relue === undefined || JSON.stringify(relue.cibles) !== JSON.stringify(cibles)) return refuse('Cette modification ne survivrait pas à sa relecture depuis la fiche : reformule-la.');
+		if (relue === undefined || JSON.stringify(relue.cibles) !== JSON.stringify(cibles)) return refuse('Cette modification ne survivrait pas à sa relecture depuis la fiche : la reformuler.');
 		const commit = await ecrireEtCommiter(dep, [{ chemin, texte: texteDeFiche(dep, proposee) }], `mnemo: propose fiche ${chemin} (${resume(nomsDesCibles(cibles))})`);
 		return { statut: 'ecrit', fiche: chemin, aConfirmer: true, commit, changements };
 	}
@@ -150,7 +150,7 @@ function motifDeLien(fiche: Fiche, cibles: Cibles): string | null {
 /** Motif de refus de la fiche une fois modifiée (texte de consigne vide, relecture infidèle), sinon null. */
 function motifFicheModifiee(nouvelle: Fiche): string | null {
 	if (nouvelle.type === 'consigne' && nouvelle.synthese.trim() === '') return 'Le texte d\'une consigne (sa synthèse) ne peut pas être vide.';
-	if (!survitALaRelecture(nouvelle)) return 'Cette modification ne survivrait pas à sa relecture depuis la fiche : reformule le texte ou le titre.';
+	if (!survitALaRelecture(nouvelle)) return 'Cette modification ne survivrait pas à sa relecture depuis la fiche : reformuler le texte ou le titre.';
 	return null;
 }
 

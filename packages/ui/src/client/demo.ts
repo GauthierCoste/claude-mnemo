@@ -4,10 +4,12 @@
  */
 import type { EtapeCalcul } from '@mnemo/commun';
 import { ErreurApi, type Api } from './api.ts';
+import { creerEntrainementDemo, type DepartEntrainementDemo } from './demo-entrainement.ts';
 import { lotsDemo } from './demo-lots.ts';
 import { creerModelesDemo } from './demo-modeles.ts';
 import { creerClaudeDesktopDemo } from './demo-claude-desktop.ts';
-import { creerProfilsDemo } from './demo-profils.ts';
+import { creerProfilsDemo, type SkillsPourProfils } from './demo-profils.ts';
+import { creerSkillsDemo } from './demo-skills.ts';
 import { creerMoteursDemo } from './demo-moteurs.ts';
 import type { Connexion, EtatConnexion, FluxTerminal } from './connexion.ts';
 import type { Client } from './contexte.tsx';
@@ -66,6 +68,7 @@ import {
 	type ReglagesVue,
 	type ReponseDocuments,
 	type ReponseLots,
+	type ReponseEcritureSkill,
 	type ReponseRejetLot,
 	type ReponseValidationLot,
 	type ReponseMarquerTraite,
@@ -77,7 +80,7 @@ import {
 	type ReponseFenetres,
 	type ReponseQuotas,
 } from '@mnemo/contrat';
-import { A_TRAITER_MAX, avecAvertissements, consigneATraiter, demandeTout, DOCUMENTS_MAX, estIdMoteur, estNiveauModeles, ECHANTILLON_NATURE, motifSiNonCherchable, plier, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL, TAILLE_MAX_DOCUMENT, tailleLisible } from '@mnemo/commun';
+import { A_TRAITER_MAX, avecAvertissements, consigneATraiter, demandeTout, DOCUMENTS_MAX, DOSSIERS_FIXES, estIdMoteur, estNiveauModeles, ECHANTILLON_NATURE, motifSiNonCherchable, plier, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL, TAILLE_MAX_DOCUMENT, tailleLisible } from '@mnemo/commun';
 
 const MINUTE = 60_000;
 const LATENCE_MS = 90;
@@ -343,8 +346,8 @@ function entreeVivante(
 		servi: id === auto,
 		rang: i + 1,
 		p: o.calibre ? p : null,
-		// ordre seul : la note du modèle appris mais refusé, montrée en gris
-		...(o.calibre ? {} : { pNonCalibree: p }),
+		// ordre seul : la note du modèle de départ livré avec Mnemo (ce que voit une mémoire qui n'a pas encore entraîné la sienne), en gris
+		...(o.calibre ? {} : { pNonCalibree: p, depart: true as const }),
 		signaux: signauxDemo(p, raison, o.affinage === 'fait'),
 		...(id === auto ? { auto: true as const } : {}),
 		...(m.pistes.includes(id) ? { piste: true as const } : {}),
@@ -608,7 +611,7 @@ function creerConnexionDemo(monde: Monde): FausseConnexion {
 		monde.servis.set(entree.session, [entree, ...(monde.servis.get(entree.session) ?? []).filter((e) => e.horodatageMs !== entree.horodatageMs)]);
 		diffuser({ type: 'servi', entree });
 	}
-	// Peu après l'ouverture, l'archiviste sert une session (message `servi`, tiroir « Ce qu'il a fait pour tes sessions »).
+	// Peu après l'ouverture, l'archiviste sert une session (message `servi`, tiroir « Ce qu'il a fait pour les sessions »).
 	const servie = SESSIONS_DEMO.find((s) => s.objectif === 'Faire passer les tests du dépôt SFTP');
 	if (servie)
 		setTimeout(() => {
@@ -708,6 +711,8 @@ export type OptionsDemo = {
 	coupure?: boolean;
 	/** Suggestion de la règle des 3 sessions sur la première session, sa fiche écartée ici (`&suggestion=1`). */
 	suggestion?: boolean;
+	/** Départ de Mémoire › Entraîner (`&entrainement=vide` ou `sansjuge`) ; absent : un banc entamé. */
+	entrainement?: DepartEntrainementDemo;
 };
 
 function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo): Api {
@@ -857,10 +862,10 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 	/** Validation de démonstration : les lignes choisies sont vérifiées, le commit est noté, les fiches ne changent pas. */
 	function validerLot(id: string, corps: Record<string, unknown>): ReponseValidationLot {
 		const lot = lotEnAttente(id);
-		// comme le service : la fiche a changé depuis la proposition, le lot est écarté
+		// comme le service : une information visée a changé depuis la proposition, le lot est écarté
 		if (lot.perime) {
 			retirerLot(lot);
-			throw new ErreurApi('La fiche a changé depuis la proposition du lot : il est écarté, l’archiviste le reproposera.', 409);
+			throw new ErreurApi('Une information visée par le lot a changé depuis sa proposition : lot écarté, demander à l’archiviste de le reproposer.', 409);
 		}
 		const choisies = Array.isArray(corps['lignes']) ? corps['lignes'] : [];
 		const lignes = [...new Set(choisies)].sort((a, b) => a - b);
@@ -926,6 +931,8 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 		if (apercu !== undefined) return profilsDemo.apercu(apercu);
 		const profil = profilDe(ROUTES.profil, chemin);
 		if (profil !== undefined) return profilsDemo.detail(profil);
+		const skill = skillDe(ROUTES.skill, chemin, params);
+		if (skill !== undefined) return skillsDemo.detail(skill.nom, skill.profil);
 		const servis = sessionDe(chemin, 'servis');
 		if (servis) return { servis: monde.servis.get(servis) ?? [], lues: luesDemo(servis), coupures: monde.coupures, injections: monde.injections.get(servis) ?? [] };
 		const ecartes = sessionDe(chemin, 'ecartes');
@@ -969,7 +976,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			case ROUTES.reglages:
 				return reglagesDemo();
 			case ROUTES.sante:
-				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.9.0' } satisfies SanteVue;
+				return { ok: true, pid: 0, racine: RACINE_DEMO, racineAbsolue: RACINE_ABSOLUE_DEMO, terminaux: { ok: true }, version: '1.11.0' } satisfies SanteVue;
 			case ROUTES.graphe:
 				return graphe(monde.memoire);
 			case ROUTES.fiche:
@@ -1075,6 +1082,10 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 		}
 		const copie = profilDe(ROUTES.profilDupliquer, chemin);
 		if (copie !== undefined) return ecritureProfil(profilsDemo.dupliquer(copie, corps), String(corps['nom']));
+		const aRetablir = skillDe(ROUTES.skillOrigine, chemin);
+		if (aRetablir !== undefined) return ecritureSkill(skillsDemo.revenir(aRetablir.nom, aRetablir.profil), 'retablit', aRetablir.profil);
+		const aCreer = skillDe(ROUTES.skills, chemin);
+		if (aCreer !== undefined) return ecritureSkill(skillsDemo.creer(corps, aCreer.profil), 'cree', aCreer.profil);
 		const demandeur = sessionDe(chemin, 'a-servir');
 		if (demandeur) {
 			const fiche = String(corps['chemin'] ?? '');
@@ -1101,7 +1112,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 			if (i < 0) throw introuvable('Session');
 			const avant = monde.sessions[i]!;
 			// comme le service : une session que son moteur ne peut pas reprendre n'a ni pause, ni reprise, ni bilan
-			if (action !== 'abandon' && avant.sansReprise !== undefined) throw new ErreurApi(`${action === 'bilan' ? 'Bilan' : action === 'pause' ? 'Pause' : 'Reprise'} impossible : ${avant.sansReprise} ; abandonne-la à la place.`, 409);
+			if (action !== 'abandon' && avant.sansReprise !== undefined) throw new ErreurApi(`${action === 'bilan' ? 'Bilan' : action === 'pause' ? 'Pause' : 'Reprise'} impossible : ${avant.sansReprise} ; l’abandonner à la place.`, 409);
 			const s = {
 				...avecEtat(avant, etat),
 				bilanDemandeMs: action === 'bilan' ? Date.now() : avant.bilanDemandeMs,
@@ -1237,7 +1248,22 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 	}
 
 	// Réglages de la démo : en mémoire ; comme le service, le port changé attend un redémarrage
-	const profilsDemo = creerProfilsDemo();
+	// les profils lisent les skills, qui font suivre aux profils le renommage ou la suppression d'une skill de la mémoire
+	const lienSkills: SkillsPourProfils = { memoire: () => [], duProfil: () => [], copierProfil: () => {}, retirerProfil: () => {} };
+	const profilsDemo = creerProfilsDemo(lienSkills);
+	const skillsDemo = creerSkillsDemo(profilsDemo);
+	lienSkills.memoire = skillsDemo.memoire;
+	lienSkills.duProfil = skillsDemo.duProfil;
+	lienSkills.copierProfil = skillsDemo.copierProfil;
+	lienSkills.retirerProfil = skillsDemo.retirerProfil;
+	/** Une route de skill : l'identifiant de `route` dans le chemin (requête ôtée), et la portée `?profil=` (du chemin ou de `params`). */
+	const skillDe = (route: string, chemin: string, params?: Record<string, string>): { nom: string; profil: string | null } | undefined => {
+		const [sansRequete, requete] = chemin.split('?') as [string, string | undefined];
+		const nom = route.includes(':id') ? profilDe(route, sansRequete) : sansRequete === route ? '' : undefined;
+		if (nom === undefined) return undefined;
+		const profil = params?.['profil'] ?? new URLSearchParams(requete ?? '').get('profil');
+		return { nom, profil: profil === null || profil === '' ? null : profil };
+	};
 	const modelesDemo = creerModelesDemo(connexion.diffuser, { depart: o.modeles ?? null, session: monde.sessions.find((x) => x.etat !== 'terminee')?.id ?? null });
 	/** Niveau des modèles propre à une session (null : comme partout), diffusé comme le fait le service. */
 	const niveauDeSession = (id: string, corps: unknown): { session: SessionVue } => {
@@ -1252,6 +1278,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 	};
 	const claudeDesktopDemo = creerClaudeDesktopDemo();
 	const moteursDemo = creerMoteursDemo();
+	const entrainementDemo = creerEntrainementDemo(connexion.diffuser, o.entrainement);
 	/** Route de profil (`:id`) du chemin, décodée ; undefined sinon. */
 	const profilDe = (route: string, chemin: string) => {
 		const id = idDans(route, chemin);
@@ -1259,6 +1286,16 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 	};
 	const ecritureProfil = (r: { commit: string | null }, nom: string) => {
 		if (r.commit !== null) memoireChangee(`mnemo: profil profils/${nom}/${nom}.md`, []);
+		return r;
+	};
+	/** Une écriture de skill réussie, annoncée comme le service la commite (`action` : cree, modifie, supprime, retablit). */
+	const ecritureSkill = (r: ReponseEcritureSkill, action: string, profil: string | null, ancien = r.nom) => {
+		const dossier = profil === null ? DOSSIERS_FIXES.skills : `${DOSSIERS_FIXES.profils}/${profil}/${DOSSIERS_FIXES.skills}`;
+		if (r.commit !== null) {
+			const message =
+				ancien !== r.nom ? `mnemo: renomme ${dossier}/${ancien} → ${dossier}/${r.nom}` : action === 'supprime' ? `mnemo: supprime ${dossier}/${r.nom}/` : `mnemo: ${action} ${dossier}/${r.nom}/SKILL.md`;
+			memoireChangee(message, []);
+		}
 		return r;
 	};
 	let reglages = structuredClone(REGLAGES_DEMO);
@@ -1297,16 +1334,21 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 		lire: <T>(chemin: string, params?: Record<string, string>, options?: { signal?: AbortSignal }) =>
 			attendre(() => {
 				options?.signal?.throwIfAborted();
-				return (claudeDesktopDemo.traiter('GET', chemin) ?? lire(chemin, params)) as T;
+				return (claudeDesktopDemo.traiter('GET', chemin) ?? entrainementDemo.lire(chemin, params) ?? lire(chemin, params)) as T;
 			}),
 		envoyer: <T>(chemin: string, corps?: unknown) =>
-			attendre(() => (claudeDesktopDemo.traiter('POST', chemin, corps) ?? envoyer(chemin, (corps ?? {}) as Record<string, unknown>)) as T),
+			attendre(() => {
+				const objet = (corps ?? {}) as Record<string, unknown>;
+				return (claudeDesktopDemo.traiter('POST', chemin, corps) ?? entrainementDemo.envoyer(chemin, objet) ?? envoyer(chemin, objet)) as T;
+			}),
 		remplacer: <T>(chemin: string, corps: unknown) =>
 			attendre(() => {
 				const app = claudeDesktopDemo.traiter('PUT', chemin, corps);
 				if (app !== undefined) return app as T;
 				const profil = profilDe(ROUTES.profil, chemin);
 				if (profil !== undefined) return ecritureProfil(profilsDemo.enregistrer(profil, corps), profil) as T;
+				const skill = skillDe(ROUTES.skill, chemin);
+				if (skill !== undefined) return ecritureSkill(skillsDemo.modifier(skill.nom, corps, skill.profil), 'modifie', skill.profil, skill.nom) as T;
 				if (chemin === ROUTES.modelesNiveau) return modelesDemo.niveau(corps) as T;
 				const reglee = sessionDe(chemin, 'modeles');
 				if (reglee) return niveauDeSession(reglee, corps) as T;
@@ -1319,6 +1361,8 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 				if (app !== undefined) return app as T;
 				const profil = profilDe(ROUTES.profil, chemin);
 				if (profil !== undefined) return ecritureProfil(profilsDemo.supprimer(profil), profil) as T;
+				const skill = skillDe(ROUTES.skill, chemin, params);
+				if (skill !== undefined) return ecritureSkill(skillsDemo.supprimer(skill.nom, skill.profil), 'supprime', skill.profil) as T;
 				// comme le service : seule une session terminée est retirée de l'historique
 				const retiree = /^\/api\/sessions\/([^/]+)$/.exec(chemin)?.[1];
 				if (retiree) {

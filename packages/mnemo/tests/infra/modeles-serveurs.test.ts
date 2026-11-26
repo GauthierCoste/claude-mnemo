@@ -697,7 +697,7 @@ describe('registre des serveurs lancés', () => {
 			lignes.push(a.join(' '));
 		});
 		await commandeModeles(['arreter'], { dossier: b.modeles, racine: b.racine });
-		expect(lignes.join('\n')).toContain('2 serveur(s) encore en chargement : relancez `mnemo modeles arreter` dans un instant');
+		expect(lignes.join('\n')).toContain('2 serveur(s) encore en chargement : relancer `mnemo modeles arreter` dans un instant');
 		expect(lignes.join('\n')).not.toContain('périmé');
 	}, 30_000);
 

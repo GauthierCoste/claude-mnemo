@@ -2,8 +2,6 @@
 import { estIdMoteur, MOTEUR_PAR_DEFAUT, NOMS_MOTEURS } from '@mnemo/commun';
 import type { SessionVue } from '@mnemo/contrat';
 
-export { NOMS_MOTEURS };
-
 /** Nom d'un moteur ; absent : Claude Code (session ou profil d'avant les moteurs) ; inconnu de l'interface : son identifiant. */
 export const nomDuMoteur = (id: string | undefined): string => (id === undefined ? NOMS_MOTEURS[MOTEUR_PAR_DEFAUT] : estIdMoteur(id) ? NOMS_MOTEURS[id] : id);
 

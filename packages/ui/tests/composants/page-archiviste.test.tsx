@@ -174,10 +174,10 @@ describe('Mémoire › Archiviste : onglets et navigation', () => {
 		await waitFor(() => expect(within(nav()).getByRole('button', { name: /Mémoire/ }).textContent).toContain('4'));
 	});
 
-	it('onglets dans l’ordre Archiviste (N) | Fichiers | Graph 3D ; Archiviste ouvert par défaut', async () => {
+	it('onglets dans l’ordre Archiviste (N) | Fichiers | Graph 3D | Entraîner ; Archiviste ouvert par défaut', async () => {
 		monter();
 		const onglets = () => within(screen.getByRole('tablist', { name: 'Mémoire' })).getAllByRole('tab');
-		await waitFor(() => expect(onglets().map((o) => o.textContent)).toEqual(['Archiviste (4)', 'Fichiers', 'Graph 3D']));
+		await waitFor(() => expect(onglets().map((o) => o.textContent)).toEqual(['Archiviste (4)', 'Fichiers', 'Graph 3D', 'Entraîner']));
 		expect(onglets()[0]!.getAttribute('aria-selected')).toBe('true');
 		expect(screen.queryByRole('tab', { name: /Documents/ })).toBeNull();
 	});
@@ -188,7 +188,7 @@ describe('Mémoire › Archiviste : onglets et navigation', () => {
 		const centre = screen.getByRole('region', { name: 'Terminal de l’archiviste' });
 		expect(await within(centre).findByLabelText('terminal arch')).toBeTruthy();
 		expect(within(centre).getByRole('button', { name: 'Range les documents déposés' })).toBeTruthy();
-		expect(within(enrichir()).getByText('Dépose n\'importe quoi')).toBeTruthy();
+		expect(within(enrichir()).getByText('Déposer n\'importe quoi')).toBeTruthy();
 		expect(within(enrichir()).getByRole('group', { name: 'Destination' })).toBeTruthy();
 		expect(within(enrichir()).getByRole('button', { name: 'Importer la mémoire de Claude Code' })).toBeTruthy();
 	});
@@ -633,7 +633,7 @@ describe('Mémoire › Archiviste : le terminal, un seul affichage', () => {
 });
 
 describe('Mémoire › Archiviste : appris aujourd’hui', () => {
-	it('commits du jour : heure, message, nombre de fiches, puce de la session ; le plus récent choisi et détaillé ; ce qu’il a fait pour tes sessions', async () => {
+	it('commits du jour : heure, message, nombre de fiches, puce de la session ; le plus récent choisi et détaillé ; ce qu’il a fait pour les sessions', async () => {
 		const { jours } = monter();
 		const liste = await within(enrichir()).findByRole('list', { name: 'Commits du jour' });
 		const lignes = within(liste).getAllByRole('button');
@@ -647,12 +647,12 @@ describe('Mémoire › Archiviste : appris aujourd’hui', () => {
 		const detail = screen.getByRole('region', { name: 'Commit choisi' });
 		expect(within(detail).getByText('mnemo: fiche personnes/Inès Roux.md')).toBeTruthy();
 		expect(within(detail).getByText('bbb2222')).toBeTruthy();
-		expect(within(enrichir()).getByRole('list', { name: 'Ce qu\'il a fait pour tes sessions' })).toBeTruthy();
+		expect(within(enrichir()).getByRole('list', { name: 'Ce qu\'il a fait pour les sessions' })).toBeTruthy();
 	});
 
-	it('« Ce qu’il a fait pour tes sessions » : les `servi` reçus, plus récents d’abord ; un reclassement met la ligne à jour', async () => {
+	it('« Ce qu’il a fait pour les sessions » : les `servi` reçus, plus récents d’abord ; un reclassement met la ligne à jour', async () => {
 		const { faux } = monter();
-		const activite = within(enrichir()).getByRole('list', { name: 'Ce qu\'il a fait pour tes sessions' });
+		const activite = within(enrichir()).getByRole('list', { name: 'Ce qu\'il a fait pour les sessions' });
 		expect(within(enrichir()).getByText('Rien encore aujourd\'hui.')).toBeTruthy();
 		const servi: EntreeServieVue = {
 			session: 's-stocks',

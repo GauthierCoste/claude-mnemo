@@ -57,9 +57,9 @@ export function ouvrirNavigateur(adresse: string): void {
 function messagePortPris(port: number): string {
 	return (
 		`Le port ${port} est déjà pris par un autre programme (peut-être Mnemo pour un autre dossier). ` +
-		`Libérez-le, ou choisissez un autre port : « service.port » dans .mnemo/reglages.json (par exemple { "service": { "port": 4748 } }), ` +
+		`Le libérer, ou choisir un autre port : « service.port » dans .mnemo/reglages.json (par exemple { "service": { "port": 4748 } }), ` +
 		`ou pour ce lancement seulement MNEMO_PORT=<port> mnemo — l'adresse de Mnemo change alors ` +
-		`(l'application installée et le lanceur suivent l'adresse : recréez-les).`
+		`(l'application installée et le lanceur suivent l'adresse : les recréer).`
 	);
 }
 
@@ -88,7 +88,7 @@ function tuerRestants(service: Service): void {
  */
 export async function commandeService(dossier: string): Promise<void> {
 	const racine = trouverRacine(dossier);
-	if (racine === null) throw new ErreurCli(`Aucune mémoire Mnemo trouvée depuis « ${dossier} » ni dans ses dossiers parents. Lancez « mnemo init » pour en créer une.`);
+	if (racine === null) throw new ErreurCli(`Aucune mémoire Mnemo trouvée depuis « ${dossier} » ni dans ses dossiers parents. Lancer « mnemo init » pour en créer une.`);
 	const { reglages, avertissements } = lireReglagesDuDossier(racine);
 	for (const a of avertissements) ecrireErreur(`mnemo : ${a}\n`);
 	const port = portDemande(process.env, reglages.service.port);
@@ -127,7 +127,7 @@ export async function commandeService(dossier: string): Promise<void> {
 			await new Promise((r) => setTimeout(r, 200));
 		}
 		throw new ErreurCli(
-			`${erreur.message} Il ne répond pas : s'il n'existe plus, retirez « .mnemo/service.verrou ».`,
+			`${erreur.message} Il ne répond pas : s'il n'existe plus, retirer « .mnemo/service.verrou ».`,
 		);
 	}
 

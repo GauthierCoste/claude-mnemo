@@ -150,7 +150,7 @@ describe('mnemo init interactif (entrées simulées)', () => {
 		expect(a.installerModeles).not.toHaveBeenCalled();
 		expect(a.installerCommande).toHaveBeenCalledOnce();
 		expect(a.creerLanceur).toHaveBeenCalledWith(racine);
-		expect(sortie.texte()).toContain('ouvrez l’application Mnemo');
+		expect(sortie.texte()).toContain('ouvrir l’application Mnemo');
 	});
 
 	it('commande déjà à jour : pas reproposée ; fin de l’entrée : ni commande ni application', async () => {
@@ -237,7 +237,7 @@ describe('mnemo init : déclaration MCP', () => {
 			const a = actions();
 			await commandeInit([racine, '--sans-lanceur'], { entree, sortie: sortie.flux, interactif, plateforme: 'win32', actions: a });
 			expect(a.declarerMcp).not.toHaveBeenCalled();
-			expect(sortie.texte()).toContain('Serveur MCP non déclaré : lancez vous-même : claude mcp add --scope user mnemo -- ');
+			expect(sortie.texte()).toContain('Serveur MCP non déclaré : lancer à la main : claude mcp add --scope user mnemo -- ');
 			expect(sortie.texte()).not.toMatch(/mnemo init/u);
 		}
 	});

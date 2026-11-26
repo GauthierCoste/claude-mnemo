@@ -32,7 +32,7 @@ export async function commandeJeton(args: string[]): Promise<void> {
 		console.log(
 			vivant === null
 				? 'Il vaudra au prochain démarrage du service ; l’ancien jeton sera alors refusé partout.'
-				: `Le service en cours (pid ${vivant.pid}) refuse encore ce nouveau jeton et accepte l’ancien : redémarrez Mnemo ` +
+				: `Le service en cours (pid ${vivant.pid}) refuse encore ce nouveau jeton et accepte l’ancien : redémarrer Mnemo ` +
 						'(« mnemo arreter » puis « mnemo ouvrir », ou Ctrl-C puis « mnemo ») avant d’ouvrir l’adresse ci-dessous.',
 		);
 		console.log(`Puis, une fois dans chaque navigateur : ${adresse(jeton)}`);

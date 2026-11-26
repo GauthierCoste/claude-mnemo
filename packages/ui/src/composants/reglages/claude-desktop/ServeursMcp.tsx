@@ -1,7 +1,8 @@
 /**
- * Section « Autres serveurs MCP » de Réglages › App Claude : la liste (nom, commande et arguments en une ligne, noms des
- * variables), Modifier et Retirer (retrait confirmé dans la page), et le formulaire d'ajout ou de modification. Un serveur
- * décrit autrement que par une commande (`modifiable` faux) est en lecture seule : il peut seulement être retiré.
+ * Les autres serveurs MCP de l'app Claude (Réglages › Branchements › App Claude) : une ligne chacun (initiale, nom, commande
+ * et arguments en une ligne, noms des variables), Modifier et Retirer (retrait confirmé sous la ligne), puis le formulaire
+ * d'ajout ou de modification. Un serveur décrit autrement que par une commande (`modifiable` faux) est en lecture seule :
+ * il peut seulement être retiré.
  */
 import { ROUTES, type ClaudeDesktopVue, type ServeurMcpEcriture, type ServeurMcpVue } from '@mnemo/contrat';
 import { useState, type ReactNode } from 'react';
@@ -9,7 +10,7 @@ import { useClient } from '../../../client/contexte.tsx';
 import { avecId } from '../../../client/hooks.ts';
 import { ligneDeCommande } from '../../../reglages/serveur-mcp.ts';
 import { Bouton } from '../../commun/Bouton.tsx';
-import d from '../profils/Profils.module.css';
+import c from '../Cartes.module.css';
 import type { Ecrire } from './AppClaude.tsx';
 import { FormulaireServeur } from './FormulaireServeur.tsx';
 import s from './AppClaude.module.css';
@@ -17,7 +18,13 @@ import s from './AppClaude.module.css';
 /** Formulaire ouvert : ajout, ou modification du serveur nommé. */
 type Edition = { genre: 'ajout' } | { genre: 'modification'; serveur: ServeurMcpVue };
 
-export function ServeursMcp(p: { serveurs: ServeurMcpVue[]; envoi: boolean; ecrire: Ecrire; surModifie?(modifie: boolean): void }): ReactNode {
+/** Ce que la ligne dit d'un serveur, sous son nom ; `complet` : l'infobulle, qui dit aussi pourquoi un serveur est en lecture seule. */
+function detailDe(x: ServeurMcpVue, complet = false): string {
+	if (!x.modifiable) return `${x.commande === '' ? '' : `${x.commande} · `}lecture seule${complet ? ' : décrit autrement que par une commande, Mnemo ne le modifie pas, il peut seulement le retirer' : ''}`;
+	return `${ligneDeCommande(x)}${x.env.length > 0 ? ` · variables : ${x.env.join(', ')}` : ''}`;
+}
+
+export function ServeursMcp(p: { serveurs: ServeurMcpVue[]; envoi: boolean; ecrire: Ecrire; surModifie?(modifie: boolean): void; autreBrouillon?: boolean }): ReactNode {
 	const { api } = useClient();
 	const [edition, setEdition] = useState<Edition | null>(null);
 	const [aRetirer, setARetirer] = useState<string | null>(null);
@@ -52,39 +59,36 @@ export function ServeursMcp(p: { serveurs: ServeurMcpVue[]; envoi: boolean; ecri
 	};
 
 	return (
-		<section className={d.section} aria-labelledby="app-claude-serveurs">
-			<h2 id="app-claude-serveurs" className={d.titreSection}>
-				Autres serveurs MCP
-			</h2>
-			{p.serveurs.length === 0 ? (
-				<p className={d.discret}>Aucun autre serveur MCP dans l’app Claude.</p>
-			) : (
-				<ul className={s.serveurs} aria-label="Serveurs MCP">
+		<>
+			{p.serveurs.length > 0 && (
+				<ul className={`${c.lignes} ${s.serveurs}`} aria-label="Serveurs MCP">
 					{p.serveurs.map((x) => (
-						<li key={x.nom} className={s.serveur} aria-label={x.nom}>
-							<div className={s.enteteServeur}>
-								<span className={s.nomServeur}>{x.nom}</span>
-								{!x.modifiable && <span className={s.lectureSeule}>lecture seule</span>}
-								<span className={d.actions}>
-									{x.modifiable && (
-										<Bouton petit disabled={p.envoi || edition !== null} onClick={() => ouvrir({ genre: 'modification', serveur: x })}>
-											Modifier
-										</Bouton>
-									)}
-									{aRetirer !== x.nom && (
-										<Bouton petit disabled={p.envoi || edition !== null} onClick={() => demanderRetrait(x.nom)}>
-											Retirer…
-										</Bouton>
-									)}
-								</span>
-							</div>
-							{x.commande !== '' && <code className={s.commande}>{ligneDeCommande(x)}</code>}
-							{x.env.length > 0 && <p className={d.discret}>Variables : {x.env.join(', ')}</p>}
-							{!x.modifiable && <p className={d.discret}>Décrit autrement que par une commande : Mnemo ne le modifie pas, il peut seulement le retirer.</p>}
+						<li key={x.nom} className={c.prise} aria-label={x.nom}>
+							<span className={c.logo} aria-hidden="true">
+								{x.nom.charAt(0).toLocaleUpperCase('fr')}
+							</span>
+							<span className={c.ident}>
+								<span className={c.nom}>{x.nom}</span>
+								<code className={s.commande} title={detailDe(x, true)}>
+									{detailDe(x)}
+								</code>
+							</span>
+							<span className={c.droite}>
+								{x.modifiable && (
+									<Bouton petit disabled={p.envoi || edition !== null} onClick={() => ouvrir({ genre: 'modification', serveur: x })}>
+										Modifier
+									</Bouton>
+								)}
+								{aRetirer !== x.nom && (
+									<Bouton petit disabled={p.envoi || edition !== null} onClick={() => demanderRetrait(x.nom)}>
+										Retirer…
+									</Bouton>
+								)}
+							</span>
 							{aRetirer === x.nom && (
-								<div className={d.avis} role="alert">
+								<div className={`${c.sousLigne} ${c.avis}`} role="alert">
 									<p>Retirer le serveur « {x.nom} » de l’app Claude ? Sa configuration (variables comprises) est effacée du fichier.</p>
-									<div className={d.actions}>
+									<div className={c.actions}>
 										<Bouton petit disabled={p.envoi} onClick={() => void retirer(x.nom)}>
 											Retirer
 										</Bouton>
@@ -99,16 +103,16 @@ export function ServeursMcp(p: { serveurs: ServeurMcpVue[]; envoi: boolean; ecri
 				</ul>
 			)}
 			{erreur !== null && (
-				<p className={d.erreur} role="alert">
+				<p className={c.erreur} role="alert">
 					{erreur}
 				</p>
 			)}
 			{edition === null ? (
-				<div className={d.actions}>
+				<p className={s.ajouter}>
 					<Bouton petit disabled={p.envoi} onClick={() => ouvrir({ genre: 'ajout' })}>
-						Ajouter un serveur…
+						+ Ajouter un serveur
 					</Bouton>
-				</div>
+				</p>
 			) : (
 				<FormulaireServeur
 					key={edition.genre === 'modification' ? `modifier:${edition.serveur.nom}` : 'ajout'}
@@ -117,8 +121,9 @@ export function ServeursMcp(p: { serveurs: ServeurMcpVue[]; envoi: boolean; ecri
 					enregistrer={enregistrer}
 					annuler={fermer}
 					{...(p.surModifie ? { surModifie: p.surModifie } : {})}
+					autreBrouillon={p.autreBrouillon ?? false}
 				/>
 			)}
-		</section>
+		</>
 	);
 }

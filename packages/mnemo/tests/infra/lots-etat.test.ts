@@ -52,6 +52,38 @@ describe('lots d\'informations dans etat.sqlite', () => {
 		expect(await lots.enAttente()).toHaveLength(1);
 	});
 
+	it('les empreintes des informations visées font l\'aller-retour ; un lot sans elles est relu sans elles', async () => {
+		const { lots, chemin } = await ouvrir();
+		const avec: Lot = { ...lot('L1', 10), empreintes: { 'f-0001': '0123456789abcdef', 'f-0002': 'fedcba9876543210' } };
+		await lots.enregistrer(avec);
+		await lots.enregistrer(lot('L2', 20));
+		lots.fermer();
+		ouverts.pop();
+		const { lots: rouverts } = await ouvrir(chemin);
+		expect(await rouverts.enAttente()).toEqual([avec, lot('L2', 20)]);
+		expect((await rouverts.lire('L2'))).not.toHaveProperty('empreintes');
+		expect(await rouverts.decider('L1', { sort: 'perime' }, 30)).toBe(true);
+		expect((await rouverts.decides(-1, 10))[0]).toMatchObject({ id: 'L1', empreintes: avec.empreintes, decision: { sort: 'perime' } });
+	});
+
+	it('migration d\'un état en version 15 (lots sans empreintes par information) : la colonne s\'ajoute, les lots d\'avant sont relus sans elles', async () => {
+		const chemin = join(await dossierTemporaire(), 'etat.sqlite');
+		ouvrirEtat(chemin).fermer();
+		const base = new DatabaseSync(chemin);
+		base.exec('ALTER TABLE lots DROP COLUMN empreintes');
+		base.prepare('INSERT INTO lots (id, genre, fiche, lignes, motif, empreinte, propose_ms, session) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run('L1', 'fusionner', 'clients/acme.md', JSON.stringify([{ garder: 'f-0001', absorber: ['f-0002'] }]), 'Doublons', 'abcd', 10, null);
+		base.exec('PRAGMA user_version = 15');
+		base.close();
+		const { lots } = await ouvrir(chemin);
+		expect(await lots.enAttente()).toEqual([lot('L1', 10)]);
+		const avec: Lot = { ...lot('L2', 20), empreintes: { 'f-0003': '0123456789abcdef' } };
+		await lots.enregistrer(avec);
+		expect(await lots.lire('L2')).toEqual(avec);
+		const verif = new DatabaseSync(chemin);
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
+		verif.close();
+	});
+
 	it('migration d\'un état en version 10 (sans table des lots) : la table s\'ajoute, rien n\'est perdu', async () => {
 		const chemin = join(await dossierTemporaire(), 'etat.sqlite');
 		const etat = ouvrirEtat(chemin);

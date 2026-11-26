@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { echelleDesSignaux, jsonDeCoefficients, lireCoefficients, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
+import { echelleDesSignaux, enModelesDeDepart, jsonDeCoefficients, lireCoefficients, modeleNonAppris, REFUS_DEPART } from '../../src/domaine/modele-de-note.ts';
 import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
 import type { ModeleDeNote, SignauxDeNote } from '../../src/domaine/modele-de-note.ts';
 import { COEFFICIENTS_NOTE } from '../../src/domaine/coefficients-note.ts';
-import { classementCalibre, etatDuModele, modelesDeNote, noteApprise, noteDeConfiance, noterLaCandidate, ordonnerParNote, pCalibre } from '../../src/domaine/note-de-confiance.ts';
+import { classementCalibre, etatDuModele, garderLesNiveauxSansPaire, modelesDeNote, noteApprise, noteDeConfiance, noterLaCandidate, ordonnerParNote, pCalibre } from '../../src/domaine/note-de-confiance.ts';
 import { sigmoide } from '../../src/domaine/regression-logistique.ts';
 
 const INSTALLES = { sens: 'sens.gguf@aaaaaaaaaaaa', reranker: 'reranker.gguf@bbbbbbbbbbbb' };
@@ -90,8 +90,47 @@ describe('état des modèles et note d’une candidate', () => {
 		expect(modelesDeNote({ complets: COMPLETS, sens: SENS }, INSTALLES, ECHELLE).complets.etat).toBe('accepte');
 	});
 
-	it('module livré : aucun modèle appris', () => {
-		expect(noteApprise(modelesDeNote(COEFFICIENTS_NOTE, INSTALLES, ECHELLE))).toBe(false);
+	it('modèle de départ : son propre état, quels que soient les GGUF installés et l’échelle ; jamais appris s’il n’a pas de poids', () => {
+		const depart = enModelesDeDepart({ complets: COMPLETS, sens: SENS });
+		expect(depart.sens).toMatchObject({ origine: 'depart', accepte: false, apprisLe: '2026-11-25', gguf: { sens: null, reranker: null }, echelle: null, refus: [REFUS_DEPART] });
+		expect(depart.sens.poids).toEqual(SENS.poids);
+		expect(etatDuModele(depart.sens, 'sens', INSTALLES, ECHELLE)).toBe('depart');
+		expect(etatDuModele(depart.complets, 'complets', { sens: 'sens.gguf@cccccccccccc', reranker: 'reranker.gguf@dddddddddddd' }, ECHELLE)).toBe('depart');
+		expect(etatDuModele(depart.sens, 'sens', INSTALLES, echelleDesSignaux({ ...REGLAGES_PAR_DEFAUT.contexte, demiVieInjection: 99 }))).toBe('depart');
+		// un niveau jamais appris le reste
+		expect(enModelesDeDepart({ complets: modeleNonAppris(), sens: SENS }).complets).toEqual(modeleNonAppris());
+		expect(etatDuModele({ ...modeleNonAppris(), origine: 'depart' }, 'sens', INSTALLES, ECHELLE)).toBe('non_appris');
+		// le garde-fou des variantes de requête ne le touche pas : il n'est pas accepté
+		const m = modelesDeNote({ complets: { ...depart.complets, requete: 'jointe' }, sens: depart.sens }, INSTALLES, ECHELLE);
+		expect([m.complets.etat, m.sens.etat]).toEqual(['depart', 'depart']);
+		expect(noteApprise(m)).toBe(true);
+	});
+
+	it('régime de départ = régime refusé : sa note ordonne, sans % (jamais calibrée), marquée de départ', () => {
+		const depart = modelesDeNote(enModelesDeDepart({ complets: COMPLETS, sens: SENS }), INSTALLES, ECHELLE);
+		const refuses = modelesDeNote({ complets: modele({ ...COMPLETS, accepte: false, refus: ['x'] }), sens: modele({ ...SENS, accepte: false, refus: ['x'] }) }, INSTALLES, ECHELLE);
+		for (const signaux of [s(), s({ logit: 2 })]) {
+			const n = noterLaCandidate(depart, signaux)!;
+			const r = noterLaCandidate(refuses, signaux)!;
+			expect(n).toEqual({ ...r, depart: true });
+			expect(n.accepte).toBe(false);
+			expect(pCalibre(n)).toBeNull();
+			expect(classementCalibre([n])).toBe(false);
+		}
+		// un Sens seul accepté garde la main sur un Complets de départ
+		const mixte = modelesDeNote({ complets: enModelesDeDepart({ complets: COMPLETS, sens: SENS }).complets, sens: SENS }, INSTALLES, ECHELLE);
+		expect(noterLaCandidate(mixte, s({ logit: 2 }))).toMatchObject({ niveau: 'sens', accepte: true });
+		expect(noterLaCandidate(mixte, s({ logit: 2 }))!.depart).toBeUndefined();
+	});
+
+	it('module livré : chaque niveau de départ ou jamais appris, jamais accepté, sans GGUF ni échelle', () => {
+		const m = modelesDeNote(COEFFICIENTS_NOTE, INSTALLES, ECHELLE);
+		for (const n of ['complets', 'sens'] as const) {
+			expect(['depart', 'non_appris']).toContain(m[n].etat);
+			expect(COEFFICIENTS_NOTE[n].accepte).toBe(false);
+			expect(COEFFICIENTS_NOTE[n].gguf).toEqual({ sens: null, reranker: null });
+			expect(COEFFICIENTS_NOTE[n].echelle).toBeNull();
+		}
 	});
 
 	it('Complets pour une candidate notée par le reranker, Sens seul sinon ; accepté ou non ; null sans modèle qui la note', () => {
@@ -141,6 +180,30 @@ describe('état des modèles et note d’une candidate', () => {
 	});
 });
 
+describe('garderLesNiveauxSansPaire', () => {
+	const actuels = modelesDeNote({ complets: enModelesDeDepart({ complets: COMPLETS, sens: SENS }).complets, sens: SENS }, INSTALLES, ECHELLE);
+	const vide = { ...modeleNonAppris(), apprisLe: '2026-11-26', refus: ['aucune paire jugée pour ce niveau'] };
+	const nouveauSens = modele({ biais: -3, apprisLe: '2026-11-26' });
+
+	it('un niveau sans paire garde le modèle actuel (de départ ici) ; un niveau appris prend le nouveau', () => {
+		const c = garderLesNiveauxSansPaire({ complets: vide, sens: nouveauSens }, actuels);
+		expect(c.complets).toBe(actuels.complets.modele);
+		expect(c.complets.origine).toBe('depart');
+		expect(c.sens).toBe(nouveauSens);
+	});
+
+	it('un niveau sans paire, et rien d’appris avant : le nouveau (vide) est écrit', () => {
+		const rien = modelesDeNote({ complets: modeleNonAppris(), sens: modeleNonAppris() }, INSTALLES, ECHELLE);
+		expect(garderLesNiveauxSansPaire({ complets: vide, sens: nouveauSens }, rien).complets).toBe(vide);
+	});
+
+	it('un nouveau modèle appris remplace même un accepté (la règle de remplacement en décide ailleurs)', () => {
+		const accepte = modelesDeNote({ complets: COMPLETS, sens: SENS }, INSTALLES, ECHELLE);
+		const nouveauComplets = modele({ biais: -5, apprisLe: '2026-11-26', poids: { logit: 1, cosinusRelatif: 1 } });
+		expect(garderLesNiveauxSansPaire({ complets: nouveauComplets, sens: nouveauSens }, accepte)).toEqual({ complets: nouveauComplets, sens: nouveauSens });
+	});
+});
+
 describe('lireCoefficients', () => {
 	it('relit ce que l’apprentissage écrit ; refuse une forme invalide', () => {
 		const c = { complets: COMPLETS, sens: SENS };
@@ -160,6 +223,12 @@ describe('lireCoefficients', () => {
 		expect(lireCoefficients({ complets: COMPLETS, sens: { ...SENS, refus: ['trop peu d’injections'] } })).toBeNull();
 		expect(lireCoefficients({ complets: COMPLETS, sens: { ...SENS, accepte: false } })).toBeNull();
 		expect(lireCoefficients({ complets: COMPLETS, sens: { ...SENS, apprisLe: null } })).toBeNull();
+		// origine : absente ou `depart` (jamais accepté)
+		const depart = enModelesDeDepart(c);
+		expect(lireCoefficients(JSON.parse(jsonDeCoefficients(depart)))).toEqual(depart);
+		expect(lireCoefficients(JSON.parse(jsonDeCoefficients(c)))!.sens.origine).toBeUndefined();
+		expect(lireCoefficients({ complets: COMPLETS, sens: { ...depart.sens, origine: 'ailleurs' } })).toBeNull();
+		expect(lireCoefficients({ complets: COMPLETS, sens: { ...SENS, origine: 'depart' } })).toBeNull();
 		// l'échelle relue
 		expect(lireCoefficients(JSON.parse(jsonDeCoefficients({ complets: COMPLETS, sens: SENS })))!.sens.echelle).toEqual(ECHELLE);
 	});

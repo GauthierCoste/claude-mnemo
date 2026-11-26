@@ -27,8 +27,14 @@ function ouvrirLien(e: MouseEvent, uri: string): void {
  * Un terminal caché (session repliée dans le rail, ou derrière une session agrandie) voit le navigateur remettre son
  * défilement à zéro : réaffiché, xterm repartirait du haut du tampon. La position est donc retenue tant qu'il est visible
  * (en bas, ou telle ligne) et rendue quand il réapparaît ; ce qui s'est écrit pendant qu'il était caché suit le bas.
+ *
+ * Piège : xterm garde en cache la position qu'il croit avoir donnée à sa zone de défilement (`.xterm-viewport`). Quand le
+ * navigateur l'a remise à zéro, ou qu'un redimensionnement (session ouverte en grand, autre police) change la hauteur du
+ * tampon, `scrollToBottom()` ne fait rien (xterm se croit déjà en bas) et l'écran montre le haut : il fallait « Fin » au
+ * clavier. Un terminal qui était en bas y est donc ramené en réglant aussi la zone de défilement elle-même, à l'image
+ * suivante (sa hauteur n'est recalculée qu'au rendu).
  */
-function garderLeDefilement(terminal: XTerm, element: HTMLElement): () => void {
+function garderLeDefilement(terminal: XTerm, element: HTMLElement): { recaler(): void; arreter(): void } {
 	const estVisible = () => element.offsetParent !== null && element.clientHeight > 0;
 	let visible = estVisible();
 	let enBas = true;
@@ -42,6 +48,22 @@ function garderLeDefilement(terminal: XTerm, element: HTMLElement): () => void {
 	};
 	const defile = terminal.onScroll(noter);
 	const ecrit = terminal.onWriteParsed(noter);
+	let image: number | null = null;
+	const allerEnBas = () => {
+		terminal.scrollToBottom();
+		if (image !== null || typeof requestAnimationFrame === 'undefined') return;
+		image = requestAnimationFrame(() => {
+			image = null;
+			if (!enBas || !estVisible()) return;
+			terminal.scrollToBottom();
+			const zone = element.querySelector<HTMLElement>('.xterm-viewport');
+			if (zone && zone.scrollTop + zone.clientHeight < zone.scrollHeight) zone.scrollTop = zone.scrollHeight;
+		});
+	};
+	/** Après un changement de taille ou de police : en bas, il y reste. */
+	const recaler = () => {
+		if (visible && enBas) allerEnBas();
+	};
 	const observateur =
 		typeof ResizeObserver === 'undefined'
 			? null
@@ -49,15 +71,20 @@ function garderLeDefilement(terminal: XTerm, element: HTMLElement): () => void {
 					const maintenant = estVisible();
 					if (maintenant && !visible) {
 						visible = true;
-						if (enBas) terminal.scrollToBottom();
+						if (enBas) allerEnBas();
 						else terminal.scrollToLine(ligne);
 					} else if (!maintenant) visible = false;
+					else recaler();
 				});
 	observateur?.observe(element);
-	return () => {
-		observateur?.disconnect();
-		defile.dispose();
-		ecrit.dispose();
+	return {
+		recaler,
+		arreter() {
+			if (image !== null) cancelAnimationFrame(image);
+			observateur?.disconnect();
+			defile.dispose();
+			ecrit.dispose();
+		},
 	};
 }
 
@@ -99,10 +126,15 @@ function creerEcranXterm(element: HTMLElement, taillePolice: number): EcranXterm
 			if (!p || !Number.isFinite(p.cols) || !Number.isFinite(p.rows) || p.cols <= 0 || p.rows <= 0) return null;
 			return { colonnes: p.cols, lignes: p.rows };
 		},
-		redimensionner: (c, l) => terminal.resize(c, l),
+		redimensionner(c, l) {
+			terminal.resize(c, l);
+			defilement.recaler();
+		},
 		focus: () => terminal.focus(),
 		changerPolice(px) {
-			if (terminal.options.fontSize !== px) terminal.options.fontSize = px;
+			if (terminal.options.fontSize === px) return;
+			terminal.options.fontSize = px;
+			defilement.recaler();
 		},
 		changerTheme() {
 			if (!detruit) terminal.options.theme = themeDepuisJetons(lire);
@@ -110,7 +142,7 @@ function creerEcranXterm(element: HTMLElement, taillePolice: number): EcranXterm
 		detruire() {
 			if (detruit) return;
 			detruit = true;
-			defilement();
+			defilement.arreter();
 			terminal.dispose();
 		},
 	};

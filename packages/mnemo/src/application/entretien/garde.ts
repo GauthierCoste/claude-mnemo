@@ -14,7 +14,7 @@ export function motifIntouchable(chemin: string, type: string, toutes: Iterable<
 	if (fixe !== undefined) return `${chemin} est sous ${fixe}/, au chemin fixe : l'entretien n'y touche pas.`;
 	const dossier = positionDeFiche(chemin);
 	if (disparait && dossier !== chemin && [...toutes].some((c) => c !== chemin && cleDeCasse(c).startsWith(`${cleDeCasse(dossier)}/`))) {
-		return `${chemin} est la fiche du dossier ${dossier}, qui contient d'autres fiches : range-les ailleurs (\`deplacer\`) ou retire-les d'abord.`;
+		return `${chemin} est la fiche du dossier ${dossier}, qui contient d'autres fiches : les ranger ailleurs (\`deplacer\`) ou les retirer d'abord.`;
 	}
 	return null;
 }

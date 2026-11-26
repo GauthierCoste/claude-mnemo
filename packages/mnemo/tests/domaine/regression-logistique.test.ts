@@ -89,4 +89,27 @@ describe('apprendreRegression', () => {
 		expect(apprendreRegression(separables, { lambda: 0, iterationsMax: 30 }).converge).toBe(false);
 		expect(apprendreRegression(separables, { lambda: 0.01 }).converge).toBe(true);
 	});
+	it('un poids de 2 vaut l’exemple dupliqué (apprentissage et perte moyenne) ; poids 1 par défaut', () => {
+		const exemples = tirer(400, -0.5, [1.2, 3]);
+		const doubles = exemples.map((e, i) => (i % 3 === 0 ? { ...e, poids: 2 } : e));
+		const dupliques = exemples.flatMap((e, i) => (i % 3 === 0 ? [e, e] : [e]));
+		const a = apprendreRegression(doubles, { lambda: 0.003 });
+		const b = apprendreRegression(dupliques, { lambda: 0.003 });
+		expect(a.biais).toBeCloseTo(b.biais, 6);
+		a.poids.forEach((w, j) => expect(w).toBeCloseTo(b.poids[j]!, 6));
+		expect(perteMoyenne(a, doubles)).toBeCloseTo(perteMoyenne(a, dupliques), 12);
+		const unites = exemples.map((e) => ({ ...e, poids: 1 }));
+		expect(apprendreRegression(unites, { lambda: 0.003 })).toEqual(apprendreRegression(exemples, { lambda: 0.003 }));
+	});
+
+	it('un poids nul retire l’exemple ; un poids négatif ou non fini est refusé', () => {
+		const exemples = tirer(300, 0, [1.5]);
+		const avecIntrus = [...exemples, { x: [50], y: false, poids: 0 }];
+		const a = apprendreRegression(avecIntrus, { lambda: 0.01 });
+		const b = apprendreRegression(exemples, { lambda: 0.01 });
+		expect(a.biais).toBeCloseTo(b.biais, 6);
+		expect(a.poids[0]).toBeCloseTo(b.poids[0]!, 6);
+		expect(() => apprendreRegression([{ x: [1], y: true, poids: -1 }], { lambda: 0.01 })).toThrow();
+		expect(() => apprendreRegression([{ x: [1], y: true, poids: Number.NaN }], { lambda: 0.01 })).toThrow();
+	});
 });

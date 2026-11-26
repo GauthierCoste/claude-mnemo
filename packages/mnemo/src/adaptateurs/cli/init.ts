@@ -188,7 +188,7 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 		let racine: string;
 		if (choix.dossier !== undefined) {
 			const donne = cheminSaisi(choix.dossier);
-			if (donne === null) throw new ErreurCli(`Forme « ${choix.dossier} » non prise en charge : donnez un chemin absolu, relatif ou ~/…`, 2);
+			if (donne === null) throw new ErreurCli(`Forme « ${choix.dossier} » non prise en charge : un chemin absolu, relatif ou ~/… attendu`, 2);
 			racine = donne;
 		} else if (q === null || avecMemoire(ici)) racine = ici;
 		else racine = await choisirDossier(q, ici, avecMemoire, ecrire, ouiNon);
@@ -231,11 +231,11 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 		} else {
 			// sous Windows, pas de commande « mnemo » à relancer : seule la commande de Claude Code est donnée
 			const manuel = commandeManuelle(nodeDurable(plateforme), MAIN, plateforme);
-			if (plateforme === 'win32') sansDeclaration = `Serveur MCP non déclaré : lancez vous-même : ${manuel}`;
+			if (plateforme === 'win32') sansDeclaration = `Serveur MCP non déclaré : lancer à la main : ${manuel}`;
 			else
 				sansDeclaration =
 					q === null
-						? `Serveur MCP non déclaré (ni terminal ni --oui) : relancez « mnemo init --oui », ou lancez vous-même : ${manuel}`
+						? `Serveur MCP non déclaré (ni terminal ni --oui) : relancer « mnemo init --oui », ou lancer à la main : ${manuel}`
 						: 'Serveur MCP non déclaré ; plus tard : mnemo init (dans ce dossier).';
 			j.evenement('mcp', 'saute', sansDeclaration);
 		}
@@ -349,7 +349,7 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 			j.evenement('lanceur', 'saute', message);
 		}
 
-		const demarrer = lanceur ? 'ouvrez l’application Mnemo (Launchpad, Spotlight ou Dock)' : commande ? `mnemo ${racine}` : commandeDemarrage(nodeDurable(plateforme), MAIN, racine, plateforme);
+		const demarrer = lanceur ? 'ouvrir l’application Mnemo (Launchpad, Spotlight ou Dock)' : commande ? `mnemo ${racine}` : commandeDemarrage(nodeDurable(plateforme), MAIN, racine, plateforme);
 		ecrire(`Pour démarrer : ${demarrer}.`);
 		if (!existante) ecrire('Première ouverture dans un navigateur : mnemo jeton.');
 		j.fin(racine, echecs.length === 0);
@@ -385,7 +385,7 @@ async function choisirDossier(
 		const r = await q.demander(`Dossier Mnemo (la mémoire ira dans <dossier>/${DOSSIER_MEMOIRE}) [${ici}] : `);
 		const chemin = r === null || r === '' ? ici : cheminSaisi(r);
 		if (chemin === null) {
-			ecrire(`Forme « ${r} » non prise en charge : donnez un chemin absolu, relatif ou ~/…`);
+			ecrire(`Forme « ${r} » non prise en charge : un chemin absolu, relatif ou ~/… attendu`);
 			continue;
 		}
 		if (avecMemoire(chemin)) return chemin;
@@ -407,9 +407,9 @@ export function messagesInit(racine: string, resultat: ResultatInitialisation, d
 	if (declaration === 'declare') lignes.push('Serveur MCP déclaré pour toutes les sessions Claude Code.');
 	else if (declaration === 'deja') lignes.push('Serveur MCP déjà déclaré.');
 	else if (declaration === 'desactive') lignes.push('Serveur MCP : déclaration désactivée, laissée telle quelle.');
-	else if ('perime' in declaration) lignes.push(`Serveur MCP déclaré avec un autre chemin${declaration.portee === undefined ? '' : ` (portée : ${declaration.portee})`} : lancez \`claude mcp remove mnemo --scope ${declaration.scope ?? 'user'}\` puis : ${declaration.manuel}`);
-	else if (declaration.introuvable) lignes.push(`Claude Code introuvable : lancez vous-même : ${declaration.manuel}`);
-	else lignes.push(`Déclaration automatique impossible (${declaration.raison}) : lancez vous-même : ${declaration.manuel}`);
+	else if ('perime' in declaration) lignes.push(`Serveur MCP déclaré avec un autre chemin${declaration.portee === undefined ? '' : ` (portée : ${declaration.portee})`} : lancer \`claude mcp remove mnemo --scope ${declaration.scope ?? 'user'}\` puis : ${declaration.manuel}`);
+	else if (declaration.introuvable) lignes.push(`Claude Code introuvable : à lancer à la main : ${declaration.manuel}`);
+	else lignes.push(`Déclaration automatique impossible (${declaration.raison}) : à lancer à la main : ${declaration.manuel}`);
 	return lignes;
 }
 

@@ -141,7 +141,7 @@ export function ArbreFiches(p: {
 				)}
 				{contenu}
 				{lignes.length > debut + LIGNES_MAX && (
-					<p className={s.vide}>{(lignes.length - debut - LIGNES_MAX).toLocaleString('fr-FR')} lignes de plus : filtre, ou replie des dossiers.</p>
+					<p className={s.vide}>{(lignes.length - debut - LIGNES_MAX).toLocaleString('fr-FR')} lignes de plus : filtrer, ou replier des dossiers.</p>
 				)}
 			</nav>
 		</div>

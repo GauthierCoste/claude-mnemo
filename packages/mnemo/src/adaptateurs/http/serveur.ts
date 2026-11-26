@@ -8,6 +8,7 @@ import { ROUTES } from '@mnemo/contrat';
 import { TAILLE_MAX_DOCUMENT, tailleLisible } from '@mnemo/commun';
 import { extractionDifferee } from '../../application/extraction-differee.ts';
 import { creerPilote } from '../../application/pilote.ts';
+import { PREMIERE_VERIFICATION_MS, reapprendreSiPret, VERIFICATION_MS } from '../../application/reapprentissage.ts';
 import type { Dependances, Modeles, Pilotage } from '../../application/ports.ts';
 import { noteAvecJournal } from '../../infra/coefficients-note-fichier.ts';
 import { identiteDuReranker, modelesLocaux } from '../../infra/modeles/client-llama.ts';
@@ -23,6 +24,7 @@ import { dossiersRacine } from '../../infra/dossiers.ts';
 import { dossiersAAmorcer } from '../../application/dossiers.ts';
 import { lireReglagesMemoire, modifierReglagesMemoire } from '../../application/reglages-memoire.ts';
 import { routesProfils } from './profils.ts';
+import { routesSkills } from './skills.ts';
 import { routesReglages } from './reglages.ts';
 import { routesClaudeDesktop } from './claude-desktop.ts';
 import { routesMoteurs } from './moteurs.ts';
@@ -44,6 +46,10 @@ import { aprioriDesGestes } from '../../application/apriori.ts';
 import { dureeDuReranker } from '../../application/duree-reranker.ts';
 import { diffuserModeles, vueModeles } from './diffusion-modeles.ts';
 import { routesLots } from './lots.ts';
+import { calculsEnCours } from './calculs-en-cours.ts';
+import type { CalculsEnCours } from './calculs-en-cours.ts';
+import { diffusionLimitee, entrainementDuService, messageEntrainement, reapprentissageDuService, routesEntrainement } from './entrainement.ts';
+import type { RemplacementsEntrainement } from './entrainement.ts';
 import { versionMnemo } from '../../infra/version.ts';
 
 /** `main.ts` de Mnemo : l'entrée `mnemo` de l'app Claude le lance (`mnemo mcp`), comme la déclaration à Claude Code. */
@@ -76,6 +82,13 @@ export type ReglagesService = {
 	delaiCorpsMs?: number;
 	/** Inactivité tolérée pendant la réception d'un dépôt (`INACTIVITE_DEPOT_MS` par défaut ; abaissée par les tests). */
 	inactiviteDepotMs?: number;
+	/**
+	 * Vérifications du réapprentissage en fond de la note : la première après `premiereMs` (`PREMIERE_VERIFICATION_MS`), puis
+	 * toutes les `intervalleMs` (`VERIFICATION_MS`) ; abaissées par les tests.
+	 */
+	reapprentissage?: { premiereMs?: number; intervalleMs?: number };
+	/** Compteur des calculs des sessions (hooks, affinages) : créé par le service ; donné par les tests qui l'observent. */
+	calculs?: CalculsEnCours;
 };
 
 export type Service = {
@@ -262,6 +275,8 @@ export async function demarrerService(options: {
 	appClaude?: Partial<Omit<AppClaude, 'racine'>>;
 	/** Moteurs vus par `GET moteurs` : par défaut ceux du pilotage, l'exécuteur réel, le Node durable, ce `main.ts`, ce processus. */
 	moteurs?: Partial<PosteDesMoteurs>;
+	/** Entraînement de la note : ports remplacés (tests : juge, apprenti, extraction factices). */
+	entrainement?: RemplacementsEntrainement;
 }): Promise<Service> {
 	const { racine, dep, pil } = options;
 	const dossierUi = options.interface ?? dossierInterface();
@@ -368,6 +383,12 @@ export async function demarrerService(options: {
 		apresLecture: relireIdentiteReranker,
 		...(reglages.sondageModelesMs === undefined ? {} : { sondageMs: reglages.sondageModelesMs }),
 	});
+	// entraînement de la note (page Entraîner) : son état est diffusé à chaque changement, au plus quatre fois par seconde
+	const diffusionEntrainement = diffusionLimitee(async () => hub.diffuser(messageEntrainement(await entrainement.etat())));
+	const entrainement = entrainementDuService({ racine, dep, pil, modeles, dureeReranker, suivi, surChangement: diffusionEntrainement.signaler }, options.entrainement);
+	// hooks et affinages comptés : le réapprentissage en fond ne part ni pendant l'un d'eux, ni juste après
+	const calculs = reglages.calculs ?? calculsEnCours();
+	const portsReapprentissage = reapprentissageDuService({ racine, dep, pil, suivi }, entrainement, calculs);
 	/** Processus de session tenus ici : session → pid. */
 	const pids = new Map<string, number>();
 	pilote.surChangement((s) => {
@@ -403,9 +424,12 @@ export async function demarrerService(options: {
 			apriori,
 			suivi,
 			dureeReranker,
+			calculs,
 		}),
 		...routesProfils(dep, () => hub.diffuser({ type: 'memoire', modifieeMs: Date.now() })),
+		...routesSkills(dep, () => hub.diffuser({ type: 'memoire', modifieeMs: Date.now() })),
 		...routesLots(dep, hub.diffuser),
+		...routesEntrainement(entrainement, { enFond }),
 		...routesClaudeDesktop({
 			fichier: options.appClaude?.fichier ?? fichierConfigClaudeDesktop(process.platform, homedir(), process.env),
 			maison: options.appClaude?.maison ?? homedir(),
@@ -584,6 +608,11 @@ export async function demarrerService(options: {
 		arret ??= (async () => {
 			arrete = true;
 			clearInterval(surveillance);
+			clearTimeout(premiereVerification);
+			clearInterval(verificationsReapprentissage);
+			// la tâche de l'entraînement arrêtée (ce qui est enregistré le reste) : attendue avec les autres tâches de fond
+			await entrainement.fermer();
+			diffusionEntrainement.fermer();
 			// le serveur reste ouvert pendant l'arrêt des sessions : leur hook `fin` passe encore par lui
 			await pilote.arreterTout();
 			while (taches.size > 0) await Promise.allSettled([...taches]);
@@ -623,6 +652,30 @@ export async function demarrerService(options: {
 		suivi.coupures(modelesActifs(dep));
 	}, reglages.sondageMs ?? SURVEILLANCE_VERROU_MS);
 	surveillance.unref();
+
+	// réapprentissage en fond de la note sur les gestes (D8) : conditions vérifiées à intervalle ; une vérification à la fois,
+	// jamais d'exception (une panne va au journal, l'échec d'un essai à l'historique de la page)
+	let verificationEnCours = false;
+	const verifierReapprentissage = (): void => {
+		if (arrete || verificationEnCours) return;
+		verificationEnCours = true;
+		enFond(
+			reapprendreSiPret(portsReapprentissage)
+				.then((r) => {
+					if (r.lance) {
+						journal('note de confiance : réapprentissage en fond sur les gestes lancé.');
+						enFond(r.fin);
+					} else if (r.erreur === true) journal(`note de confiance : réapprentissage en fond impossible (${r.motif}).`);
+				})
+				.finally(() => {
+					verificationEnCours = false;
+				}),
+		);
+	};
+	const premiereVerification = setTimeout(verifierReapprentissage, reglages.reapprentissage?.premiereMs ?? PREMIERE_VERIFICATION_MS);
+	premiereVerification.unref();
+	const verificationsReapprentissage = setInterval(verifierReapprentissage, reglages.reapprentissage?.intervalleMs ?? VERIFICATION_MS);
+	verificationsReapprentissage.unref();
 
 	// relance des sessions du service précédent, puis préchauffage du cache de vecteurs (les hooks servis ici en profitent)
 	const relance = (async () => {

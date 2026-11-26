@@ -7,4 +7,4 @@ export class ErreurCli extends Error {
 	}
 }
 
-export const AUCUNE_MEMOIRE = 'Aucune mémoire Mnemo trouvée ici ni dans les dossiers parents. Lancez « mnemo init » pour en créer une.';
+export const AUCUNE_MEMOIRE = 'Aucune mémoire Mnemo trouvée ici ni dans les dossiers parents. Lancer « mnemo init » pour en créer une.';

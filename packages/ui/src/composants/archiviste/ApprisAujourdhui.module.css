@@ -1,4 +1,4 @@
-/* « Appris aujourd'hui » : jour, commits (`.fq`), commit choisi, puis ce qu'il a fait pour tes sessions. */
+/* « Appris aujourd'hui » : jour, commits (`.fq`), commit choisi, puis ce qu'il a fait pour les sessions. */
 .appris {
 	display: flex;
 	flex-direction: column;

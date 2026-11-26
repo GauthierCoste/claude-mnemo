@@ -51,6 +51,8 @@ import { estCauseNonVerifiee } from '../../domaine/refus-outil.ts';
 import { estSourceDeDebut, estUuid } from '../../domaine/session.ts';
 import type { EvenementHook, Session } from '../../domaine/session.ts';
 import { deposerFichier, ErreurEspaceInsuffisant, ErreurTropVolumineux, tropVolumineux, verifierDepot } from '../../infra/fichiers-dossier.ts';
+import { compte } from './calculs-en-cours.ts';
+import type { CalculsEnCours } from './calculs-en-cours.ts';
 import { vueModeles } from './diffusion-modeles.ts';
 import { cheminDeVue, vueFiche, vueGraphe } from './memoire-vues.ts';
 import { estTraceDeDebut, titreDeFiche, titresDeLIndex as titresIndex, vueCoupures, vueEcarte, vueEcarteeToujours, vueInjection, vueServie, vueSession, vueSessionTerminee } from './vues.ts';
@@ -168,6 +170,8 @@ export type ContexteRoutes = {
 	 * Absente : pas de reranker au hook.
 	 */
 	dureeReranker?: DureeDuReranker;
+	/** Hooks et affinages comptés tant qu'ils tournent (le réapprentissage en fond les attend) ; absent : rien n'est compté. */
+	calculs?: CalculsEnCours;
 };
 
 type Route = { methode: 'GET' | 'POST' | 'PUT' | 'DELETE'; chemin: string; corps?: 'json' | 'flux'; action(r: Requete): Promise<Reponse> };
@@ -442,6 +446,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 	 * affiné si c'est encore le dernier message porteur.
 	 */
 	const affinerLeMessage = async (s: Session, d: DemandeAffinage, controle: AbortController): Promise<void> => {
+		const finCalcul = ctx.calculs?.commencer();
 		try {
 			const permis = modelesPermis(s.niveauModeles ?? 'complets');
 			const etatModeles = permis.reranker || (permis.sens && !d.sens) ? await ctx.modeles.etat() : null;
@@ -469,6 +474,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				porteurs.noter(s.id, { ...porteur, classement: notesDuClassement(fait.classement), vecteur: fait.vecteur ?? porteur.vecteur });
 			}
 		} finally {
+			finCalcul?.();
 			if (affinages.get(s.id) === controle) {
 				affinages.delete(s.id);
 				// fini (ou rien à affiner) : plus d'étape en cours
@@ -571,7 +577,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 		return ok(r satisfies ResultatEcriture);
 	};
 
-	return [
+	const table: Route[] = [
 		{
 			methode: 'GET',
 			chemin: ROUTES.sante,
@@ -754,7 +760,7 @@ export function routes(ctx: ContexteRoutes): Route[] {
 				const s = d.session === undefined ? null : await session(d.session);
 				const reactives = await reactiverInjection(pil.etat, modelesActifs(dep), { session: s?.id ?? '', horodatageMs: Date.now(), ...(d.niveau === undefined ? {} : { niveau: d.niveau }) }).catch((e: unknown) => {
 					// état de coupure inconnu : aucun geste, l'utilisateur réessaie
-					if (e instanceof SuiviIllisible) throw new ErreurHttp(503, 'Suivi des injections illisible : réessayez.');
+					if (e instanceof SuiviIllisible) throw new ErreurHttp(503, 'Suivi des injections illisible : réessayer.');
 					throw e;
 				});
 				if (reactives.length > 0) {
@@ -1239,6 +1245,8 @@ export function routes(ctx: ContexteRoutes): Route[] {
 			},
 		},
 	];
+	// un hook est un calcul tant qu'il tourne (sa réponse comprise)
+	return table.map((r) => (r.methode === 'POST' && r.chemin === ROUTES.hook ? { ...r, action: compte(ctx.calculs, r.action) } : r));
 }
 
 /** Route d'une méthode et d'un chemin (motif `:id` : un segment, décodé) : la route et l'id, ou null. */

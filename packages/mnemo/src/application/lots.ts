@@ -4,7 +4,7 @@ import type { Fait } from '../domaine/fait.ts';
 import { lireFiche } from '../domaine/fiche.ts';
 import type { Fiche } from '../domaine/fiche.ts';
 import { reecrireLiens } from '../domaine/liens-ecrits.ts';
-import { ancresDeLigne, appliquerLot, MOTIF_MAX_LOT } from '../domaine/lot.ts';
+import { ancresDeLigne, appliquerLot, empreintesDesInformations, lotPerime, MOTIF_MAX_LOT } from '../domaine/lot.ts';
 import type { ContexteLot, GenreLot, LigneDeLot, Lot, LotDecide, SourceConnue } from '../domaine/lot.ts';
 import { ancreDeSuite, lienRenumerote } from '../domaine/renumerotation.ts';
 import type { TypeSource } from '../domaine/regles.ts';
@@ -35,14 +35,14 @@ export type InformationDuLot = { ancre: string; lignes: string[] };
  * la confirmée ; null pour une suppression) ; `motif` : pourquoi elle ne s'appliquerait pas seule (null sinon).
  */
 export type LigneDeLotDetaillee = { indice: number; ligne: LigneDeLot; avant: InformationDuLot[]; apres: InformationDuLot | null; motif: string | null };
-/** Un lot en attente : `titre` de la fiche (null si illisible ou absente) ; `perime` : la fiche a changé depuis la proposition. */
-export type LotDetaille = Omit<Lot, 'lignes' | 'empreinte'> & { titre: string | null; perime: boolean; lignes: LigneDeLotDetaillee[] };
+/** Un lot en attente : `titre` de la fiche (null si illisible ou absente) ; `perime` : une information visée a changé depuis la proposition (`lotPerime`). */
+export type LotDetaille = Omit<Lot, 'lignes' | 'empreinte' | 'empreintes'> & { titre: string | null; perime: boolean; lignes: LigneDeLotDetaillee[] };
 
 export type ResultatValidationLot =
 	| ({ statut: 'valide'; lot: string; fiche: string; commit: string; lignes: number[]; changements: string[] } & AvecAvertissements)
 	/** Lot inconnu ou déjà décidé. */
 	| { statut: 'inconnu'; motif: string }
-	/** La fiche a changé depuis la proposition : le lot est écarté (sort `perime`), rien n'est écrit. */
+	/** Une information visée a changé depuis la proposition (`lotPerime`) : le lot est écarté (sort `perime`), rien n'est écrit. */
 	| { statut: 'perime'; motif: string }
 	/** Choix de lignes invalide, ou lignes qui ne s'appliquent pas : le lot reste en attente, rien n'est écrit. */
 	| { statut: 'refuse'; motif: string };
@@ -52,7 +52,7 @@ const VERBES: Record<GenreLot, string> = { fusionner: 'fusionne', supprimer: 'su
 const DECIDES_RENDUS = 20;
 /** Lots en attente de l'utilisateur, au plus : au-delà, une proposition est refusée (qu'il décide d'abord). */
 export const LOTS_EN_ATTENTE_MAX = 50;
-const PERIME = (chemin: string) => `La fiche ${chemin} a changé depuis la proposition du lot : il est écarté, l'archiviste le reproposera.`;
+const PERIME = (chemin: string) => `Une information visée par le lot a changé dans ${chemin} depuis sa proposition : lot écarté, demander à l'archiviste de le reproposer.`;
 
 const refus = (motif: string) => ({ statut: 'refuse' as const, motif });
 
@@ -98,8 +98,9 @@ const motifFiche = (chemin: string, fiche: Fiche): string | null => motifIntouch
  * Enregistre un lot proposé par l'archiviste, sans rien écrire dans la mémoire : ancres validées et lot essayé sur la fiche
  * telle qu'elle est (il doit s'appliquer en entier), empreinte de la fiche notée. Refusé : fiche absente, illisible, consigne,
  * profil, chemin fixe ; motif vide ou de plusieurs lignes ; ligne invalide ; information déjà visée par un lot en attente ;
- * `LOTS_EN_ATTENTE_MAX` lots déjà en attente. Un lot en attente sur la même fiche, proposé sur un autre texte (la fiche a
- * changé depuis), est écarté (`perime`) : il ne bloque plus rien. Rend l'identifiant du lot et le sort des lots décidés depuis la proposition précédente.
+ * `LOTS_EN_ATTENTE_MAX` lots déjà en attente. Un lot en attente sur la même fiche dont une information visée a changé depuis
+ * sa proposition (`lotPerime`) est écarté (`perime`) : il ne bloque plus rien ; un lot dont les informations sont intactes
+ * reste en attente (il garde ses ancres). Rend l'identifiant du lot et le sort des lots décidés depuis la proposition précédente.
  */
 export async function proposerLot(dep: Dependances, demande: DemandeLot): Promise<ResultatLotPropose | { statut: 'refuse'; motif: string }> {
 	const chemin = cheminDeFiche(demande.id);
@@ -119,25 +120,29 @@ export async function proposerLot(dep: Dependances, demande: DemandeLot): Promis
 	if (typeof fiche === 'string') return refus(fiche);
 	const intouchable = motifFiche(chemin, fiche);
 	if (intouchable !== null) return refus(intouchable);
+	// avant l'essai, qui change la fiche (et ses informations) en place
+	const empreintes = empreintesDesInformations(lignes, fiche.faits);
 	const essai = appliquerLot(fiche, demande.genre, lignes, await contexteDe(dep, fiche, memoire.designee));
 	if ('motif' in essai) return refus(essai.motif);
 
 	const empreinteFiche = empreinte(texte);
+	// relue : l'essai a changé `fiche` en place
+	const faitsActuels = lireFiche(chemin, texte).faits;
 	const enAttente: Lot[] = [];
 	for (const autre of await dep.lots.enAttente()) {
-		if (autre.fiche === chemin && autre.empreinte !== empreinteFiche) await dep.lots.decider(autre.id, { sort: 'perime' }, dep.systeme.maintenant().getTime());
+		if (autre.fiche === chemin && lotPerime(autre, texte, faitsActuels)) await dep.lots.decider(autre.id, { sort: 'perime' }, dep.systeme.maintenant().getTime());
 		else enAttente.push(autre);
 	}
-	if (enAttente.length >= LOTS_EN_ATTENTE_MAX) return refus(`${enAttente.length} lots attendent déjà l'utilisateur (${LOTS_EN_ATTENTE_MAX} au plus) : signale-les-lui, et propose la suite après ses décisions.`);
+	if (enAttente.length >= LOTS_EN_ATTENTE_MAX) return refus(`${enAttente.length} lots attendent déjà l'utilisateur (${LOTS_EN_ATTENTE_MAX} au plus) : les lui signaler, et proposer la suite après ses décisions.`);
 	const visees = new Set(lignes.flatMap(ancresDeLigne));
 	for (const autre of enAttente) {
 		if (autre.fiche !== chemin) continue;
 		const commune = autre.lignes.flatMap(ancresDeLigne).find((a) => visees.has(a));
-		if (commune !== undefined) return refus(`Le lot ${autre.id}, en attente de l'utilisateur, vise déjà ^${commune} de ${chemin} : attends sa décision.`);
+		if (commune !== undefined) return refus(`Le lot ${autre.id}, en attente de l'utilisateur, vise déjà ^${commune} de ${chemin} : attendre sa décision.`);
 	}
 	const decidesTous = await dep.lots.decides(-1, 200);
 	const precedente = Math.max(-1, ...enAttente.map((l) => l.proposeMs), ...decidesTous.map((l) => l.proposeMs));
-	const lot: Lot = { id: dep.systeme.nouvelId(), genre: demande.genre, fiche: chemin, lignes, motif, empreinte: empreinteFiche, proposeMs: dep.systeme.maintenant().getTime(), session: dep.origine?.session ?? null };
+	const lot: Lot = { id: dep.systeme.nouvelId(), genre: demande.genre, fiche: chemin, lignes, motif, empreinte: empreinteFiche, empreintes, proposeMs: dep.systeme.maintenant().getTime(), session: dep.origine?.session ?? null };
 	await dep.lots.enregistrer(lot);
 	const decides = decidesTous.filter((l) => l.decideMs >= precedente).slice(0, DECIDES_RENDUS);
 	return { statut: 'lot_propose', lot: lot.id, fiche: chemin, genre: lot.genre, lignes: lignes.length, decides };
@@ -158,7 +163,7 @@ export async function lotsEnAttente(dep: Dependances): Promise<LotDetaille[]> {
 	const memoire = lots.some((l) => l.genre === 'fusionner') ? await lireLaMemoire(dep) : null;
 	const detailles: LotDetaille[] = [];
 	for (const lot of lots) {
-		const { lignes, empreinte: empreinteLot, ...reste } = lot;
+		const { lignes, empreinte: _empreinte, empreintes: _empreintes, ...reste } = lot;
 		const texte = memoire?.textes.get(lot.fiche) ?? (await dep.coffre.lire(lot.fiche));
 		const fiche = texte === null || texte === undefined ? null : lire(lot.fiche, texte);
 		const lue = typeof fiche === 'string' ? null : fiche;
@@ -166,7 +171,7 @@ export async function lotsEnAttente(dep: Dependances): Promise<LotDetaille[]> {
 		detailles.push({
 			...reste,
 			titre: lue?.titre ?? null,
-			perime: texte === null || texte === undefined || empreinte(texte) !== empreinteLot,
+			perime: lotPerime(lot, texte ?? null, lue?.faits ?? null),
 			lignes: lignes.map((ligne, indice) => {
 				if (lue === null || contexte === null) return { indice, ligne, avant: ancresDeLigne(ligne).map((ancre) => ({ ancre, lignes: [] })), apres: null, motif: `La fiche ${lot.fiche} est absente ou illisible.` };
 				const avant = ancresDeLigne(ligne).map((ancre) => informationDe(lue, ancre));
@@ -182,7 +187,7 @@ export async function lotsEnAttente(dep: Dependances): Promise<LotDetaille[]> {
 
 /** Motif d'un choix de lignes invalide (vide, en double, hors du lot, non entier), sinon null. */
 function motifDuChoix(indices: readonly number[], nombre: number): string | null {
-	if (indices.length === 0) return 'Aucune ligne choisie : coche au moins une ligne, ou rejette le lot.';
+	if (indices.length === 0) return 'Aucune ligne choisie : cocher au moins une ligne, ou rejeter le lot.';
 	if (new Set(indices).size !== indices.length) return 'Une ligne est choisie deux fois.';
 	const hors = indices.find((i) => !Number.isInteger(i) || i < 0 || i >= nombre);
 	return hors === undefined ? null : `Ligne ${String(hors)} : hors du lot (indices de 0 à ${nombre - 1}).`;
@@ -191,8 +196,9 @@ function motifDuChoix(indices: readonly number[], nombre: number): string | null
 /**
  * Valide un lot (utilisateur seulement, par le service) : applique les lignes `indices` (toutes ou une partie) en un commit
  * `mnemo: <verbe> <n> information(s) <fiche>`, sous verrou, puis réindexe. Refusé (lot gardé) : choix invalide, lignes qui
- * ne s'appliquent pas. La fiche a changé depuis la proposition : le lot est écarté (`perime`), à reproposer. Les liens
- * `[[fiche#^f-X]]` de toute la mémoire vers une absorbée visent la gardée ; vers une supprimée, ils perdent leur ancre ; une
+ * ne s'appliquent pas. Fiche absente ou illisible, ou information visée changée depuis la proposition (`lotPerime`) : le
+ * lot est écarté (`perime`), à reproposer ; un ajout ou un changement ailleurs dans la fiche ne l'écarte pas (les lignes
+ * s'appliquent à la fiche actuelle, avec ses contrôles). Les liens `[[fiche#^f-X]]` de toute la mémoire vers une absorbée visent la gardée ; vers une supprimée, ils perdent leur ancre ; une
  * relation devenue doublon d'une autre, ou relation de la fiche vers elle-même, est retirée (`relationsAssainies`).
  */
 export async function validerLot(dep: Dependances, id: string, indices: readonly number[]): Promise<ResultatValidationLot> {
@@ -208,9 +214,10 @@ export async function validerLot(dep: Dependances, id: string, indices: readonly
 			await dep.lots.decider(lot.id, { sort: 'perime' }, dep.systeme.maintenant().getTime());
 			return { statut: 'perime', motif };
 		};
-		if (texte === undefined || empreinte(texte) !== lot.empreinte) return perime(PERIME(chemin));
+		if (texte === undefined) return perime(`La fiche ${chemin} n'existe plus : lot écarté.`);
 		const fiche = lire(chemin, texte);
 		if (typeof fiche === 'string') return perime(`${fiche} Le lot est écarté.`);
+		if (lotPerime(lot, texte, fiche.faits)) return perime(PERIME(chemin));
 		// la fiche est devenue consigne ou profil, ou a été rangée sous un chemin fixe : le lot n'a plus d'objet
 		const intouchable = motifFiche(chemin, fiche);
 		if (intouchable !== null) return perime(`${intouchable} Le lot est écarté.`);

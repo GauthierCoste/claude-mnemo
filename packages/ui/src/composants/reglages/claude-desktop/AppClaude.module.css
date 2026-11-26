@@ -1,35 +1,28 @@
-/* Onglet App Claude : état de la mémoire, liste des serveurs MCP, formulaire (la disposition vient de profils/Profils.module.css). */
+/* Réglages › Branchements › App Claude : ce que les lignes partagées (Cartes.module.css) n'ont pas ; le formulaire d'un serveur. */
 
-.etat {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: var(--esp-3);
+.mnemo {
+	color: var(--ac);
 }
 
-.texteEtat {
-	margin: 0;
-	flex: 1;
-	min-width: 240px;
-	display: flex;
-	align-items: baseline;
-	gap: var(--esp-2);
+/* les autres serveurs, sous la ligne de la mémoire : un filet entre les deux listes */
+.serveurs > li:first-child {
+	border-top: 1px solid var(--bd);
 }
 
-.pastille {
-	flex: none;
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background: var(--dim);
+.commande {
+	color: var(--mu);
+	font: 11.5px var(--mono);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
-.pastille[data-etat='branche'] {
-	background: var(--vert);
+.fichier {
+	overflow-wrap: anywhere;
 }
 
-.pastille[data-etat='perime'] {
-	background: var(--amber);
+.ajouter {
+	margin: 8px 0;
 }
 
 .illisible {
@@ -47,59 +40,8 @@
 	overflow-wrap: anywhere;
 }
 
-.serveurs {
-	list-style: none;
-	margin: 0;
-	padding: 0;
-	display: flex;
-	flex-direction: column;
-}
-
-.serveur {
-	padding: var(--esp-3) 0;
-	border-top: 1px solid var(--bd);
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	min-width: 0;
-}
-
-.serveur:first-child {
-	border-top: none;
-	padding-top: 0;
-}
-
-.enteteServeur {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: var(--esp-2);
-}
-
-.nomServeur {
-	font-weight: 600;
-	margin-right: auto;
-}
-
-.lectureSeule {
-	padding: 1px 8px;
-	border-radius: var(--r-pastille);
-	background: color-mix(in srgb, var(--mu) 14%, transparent);
-	color: var(--mu);
-	font-size: 11px;
-}
-
-.commande {
-	display: block;
-	padding: 4px 8px;
-	border-radius: var(--r-1);
-	background: var(--s1);
-	font-family: var(--mono);
-	font-size: 12px;
-	overflow-wrap: anywhere;
-}
-
 .formulaire {
+	margin: 8px 0;
 	padding-top: var(--esp-3);
 	border-top: 1px solid var(--bd);
 	display: flex;

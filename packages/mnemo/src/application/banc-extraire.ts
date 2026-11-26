@@ -269,7 +269,8 @@ export function messagesDesCas(cas: readonly CasContexte[]): MessageAExtraire[] 
  * Ajoute les cas extraits aux cas existants. Un cas déjà connu (même position, même message) garde ses jugements et reçoit
  * les candidates qui lui manquent (pas de nouvelles fiches hors pile s'il en a déjà), et sa session, son rang, son horodatage
  * s'il ne les avait pas ; s'il était étiqueté à la main, ses `attendues` deviennent pertinentes, ses `interdites` non
- * pertinentes, et tout est non pertinent dans un cas `silence`. Un extrait qui porte une identité des modèles (GGUF) autre
+ * pertinentes, et tout est non pertinent dans un cas `silence`. Un message validé entier (`valideLe`, hors silence) qui reçoit
+ * des candidates est rouvert (sa date de validation tombe) : sinon ses nouvelles fiches ne seraient jamais jugées. Un extrait qui porte une identité des modèles (GGUF) autre
  * que celle du cas connu, ou la même avec des signaux autres (code du hook changé) sans modèle perdu, lui donne ses signaux
  * recalculés (par chemin), son identité et ses modèles : ses jugements restent.
  */
@@ -320,6 +321,7 @@ export function fusionnerCas(existants: readonly CasContexte[], extraits: readon
 			if (connu.silence || connu.interdites.some((n) => designe(n, chemin))) jugements[chemin] = 'non_pertinente';
 			else if (connu.attendues.some((n) => designe(n, chemin))) jugements[chemin] = 'pertinente';
 		}
+		if (connu.valideLe !== undefined && !connu.silence && manquantes.length > 0) delete connu.valideLe;
 		Object.assign(connu, {
 			candidates: [...(connu.candidates ?? []), ...manquantes],
 			jugements,

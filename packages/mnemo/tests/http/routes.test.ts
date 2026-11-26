@@ -426,14 +426,14 @@ describe('routes : injection automatique (suivi et réactivation)', () => {
 		expect((await api(c).get(ROUTES.injectionAutomatique)).corps).toEqual({ coupures: [COUPURE] });
 	});
 
-	it('suivi illisible : 503 « réessayez », aucun geste noté', async () => {
+	it('suivi illisible : 503 « réessayer », aucun geste noté', async () => {
 		const c = await coupee();
 		const noter = vi.spyOn(c.etat, 'noterGeste');
 		const lire = vi.spyOn(c.etat, 'gestes').mockRejectedValue(new Error('base occupée'));
 		const r = await api(c).post(ROUTES.injectionAutomatique, { session: UUID });
 		lire.mockRestore();
 		expect(r.statut).toBe(503);
-		expect(JSON.stringify(r.corps)).toContain('réessayez');
+		expect(JSON.stringify(r.corps)).toContain('réessayer');
 		expect(noter).not.toHaveBeenCalled();
 		noter.mockRestore();
 	});

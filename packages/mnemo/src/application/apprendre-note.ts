@@ -17,6 +17,13 @@
  * et le découpage des sessions est répété 3 fois (graines fixes) : on accepte si la médiane des mesures passe les critères et
  * qu'aucun découpage n'a une précision pessimiste sous 0,85.
  *
+ * Paires implicites des gestes (`domaine/paires-des-gestes.ts`, spec « entraîner la note » D8) : elles s'ajoutent, pondérées,
+ * aux exemples d'apprentissage de chaque pli (intérieur et extérieur) dont leur session n'est pas le pli de test (une session
+ * absente du banc est toujours du côté de l'apprentissage), et au modèle final ; jamais aux notes hors pli, aux pertes de la
+ * validation intérieure ni aux mesures d'acceptation. Leurs signaux sont ceux d'une seule requête (celle du hook), pris pour
+ * toutes les variantes essayées ; une paire sans une variable de la configuration (logit au niveau Complets, z-score) est
+ * laissée.
+ *
  * Niveau Complets comme au hook : chaque message est d'abord noté par le modèle Sens seul ; seules ses 8 premières reçoivent la
  * note Complets (logit du reranker) et peuvent être injectées ; les autres gardent la note Sens seul (panneau, pistes).
  */
@@ -29,6 +36,7 @@ import { REGLAGES_PAR_DEFAUT } from '../domaine/reglages.ts';
 import type { CoefficientsNote, EchelleDesSignaux, IdentiteDesModeles, MesuresDuModele, MethodeCosinus, ModeleDeNote, NiveauDeNote, RequeteDeNote, SignauxDeNote, VariableDeNote } from '../domaine/modele-de-note.ts';
 import { apprendreRegression, marge, perteMoyenne, sigmoide } from '../domaine/regression-logistique.ts';
 import type { Exemple, Regression } from '../domaine/regression-logistique.ts';
+import type { PaireImplicite } from '../domaine/paires-des-gestes.ts';
 import type { CasContexte } from './banc-contexte.ts';
 import { estSilence, rejouable } from './banc-rejeu.ts';
 
@@ -156,13 +164,33 @@ function exemplesDe(messages: readonly MessageDuJeu[], niveau: NiveauDeNote, con
 	);
 }
 
+/** Une paire implicite des gestes, telle que l'apprentissage la lit. */
+export type Implicite = Pick<PaireImplicite, 'session' | 'signaux' | 'y' | 'poids'>;
+
+/** Exemples des paires implicites pour un niveau et une configuration ; celles qui n'ont pas toutes les variables, laissées. */
+function exemplesImplicites(implicites: readonly Implicite[], niveau: NiveauDeNote, conf: Configuration): Exemple[] {
+	return implicites.flatMap((p) => {
+		const x = variablesDeNote(niveau, p.signaux, conf.methode, conf.avecApriori);
+		return x === null ? [] : [{ x, y: p.y, poids: p.poids }];
+	});
+}
+
+/** Les paires implicites hors des sessions de `test` : celles qu'un pli peut apprendre. */
+function implicitesHors(implicites: readonly Implicite[], test: readonly MessageDuJeu[]): readonly Implicite[] {
+	if (implicites.length === 0) return implicites;
+	const sessions = new Set(test.map((m) => m.session));
+	return implicites.filter((p) => !sessions.has(p.session));
+}
+
 const maximumsDu = (niveau: NiveauDeNote) => VARIABLES_DU_NIVEAU[niveau].map((v) => MAXIMUMS_DES_POIDS[v] ?? null);
 
 /** Un modèle appris pour un niveau, avec sa configuration. */
 export type ModeleAppris = { niveau: NiveauDeNote; conf: Configuration; r: Regression };
 
-export function apprendreModele(messages: readonly MessageDuJeu[], niveau: NiveauDeNote, conf: Configuration): ModeleAppris {
-	return { niveau, conf, r: apprendreRegression(exemplesDe(messages, niveau, conf), { lambda: conf.lambda, maximums: maximumsDu(niveau) }) };
+/** Apprend un niveau sur les paires du banc de `messages`, plus les paires implicites données (déjà choisies pour ce pli). */
+export function apprendreModele(messages: readonly MessageDuJeu[], niveau: NiveauDeNote, conf: Configuration, implicites: readonly Implicite[] = []): ModeleAppris {
+	const exemples = [...exemplesDe(messages, niveau, conf), ...exemplesImplicites(implicites, niveau, conf)];
+	return { niveau, conf, r: apprendreRegression(exemples, { lambda: conf.lambda, maximums: maximumsDu(niveau) }) };
 }
 
 /** Assez de paires d'apprentissage où l'a priori est non nul, venues d'assez de sessions, pour l'essayer. */
@@ -184,13 +212,14 @@ export type LigneDePerte = Configuration & { perte: number | null; paires: numbe
 /**
  * Choix de la configuration et de λ sur `messages`, en `k` plis groupés par session (graine fixe) : pour chaque configuration,
  * le λ le plus fort à `TOLERANCE` de la plus faible perte ; puis la plus simple (requête seule, médiane, sans a priori) tant
- * qu'une autre ne perd pas plus de `TOLERANCE` en moins. Null : aucune paire pour ce niveau.
+ * qu'une autre ne perd pas plus de `TOLERANCE` en moins. Null : aucune paire pour ce niveau. `implicites` : apprises dans
+ * chaque pli dont leur session n'est pas le pli de test ; la perte se mesure sur le banc seul.
  */
 export function choisirConfiguration(
 	jeu: Pick<JeuDApprentissage, 'zApproche' | 'jointe'>,
 	messages: readonly MessageDuJeu[],
 	niveau: NiveauDeNote,
-	options: { k?: number; graine?: number; lambdas?: readonly number[]; requete?: RequeteDeNote } = {},
+	options: { k?: number; graine?: number; lambdas?: readonly number[]; requete?: RequeteDeNote; implicites?: readonly Implicite[] } = {},
 ): { retenue: Configuration | null; lignes: LigneDePerte[] } {
 	const k = options.k ?? PLIS_INTERIEURS;
 	const plis = plisParSessionMelanges(messages, k, options.graine ?? 0);
@@ -198,6 +227,12 @@ export function choisirConfiguration(
 	const lignes: LigneDePerte[] = [];
 	const retenues: LigneDePerte[] = [];
 	const apriori = aprioriEssayable(messages);
+	const implicitesDuPli = Array.from({ length: k }, (_, f) =>
+		implicitesHors(
+			options.implicites ?? [],
+			messages.filter((_, i) => plis[i] === f),
+		),
+	);
 	// `options.requete` : la variante imposée (le Complets prend celle du Sens seul, qui ordonne les candidates qu'il note)
 	const requetes: readonly RequeteDeNote[] = options.requete !== undefined ? [options.requete] : jeu.jointe ? ['seule', 'jointe'] : ['seule'];
 	for (const requete of requetes) {
@@ -218,6 +253,7 @@ export function choisirConfiguration(
 							messages.filter((_, i) => plis[i] !== f),
 							niveau,
 							conf,
+							implicitesDuPli[f],
 						);
 						perte += perteMoyenne(r, test) * test.length;
 						paires += test.length;
@@ -285,6 +321,8 @@ export type RapportDeNiveau = {
 	/** Configurations choisies aux plis extérieurs, sur tous les tirages, et combien de fois. */
 	stabilite: { configuration: string; fois: number }[];
 	fiabilite: TrancheFiabilite[];
+	/** Paires implicites des gestes apprises par le modèle final, et laissées faute d'une variable de sa configuration. */
+	implicites: { utilisees: number; ecartees: number };
 	modele: ModeleDeNote;
 };
 
@@ -308,7 +346,14 @@ export type RapportDApprentissage = {
  * `echelle` : l'échelle des signaux des cas jugés (réglages du signal de session de la mémoire, constantes de l'a priori),
  * enregistrée avec le modèle ; défaut : celle des réglages par défaut.
  */
-export type OptionsApprentissage = { date: string; graines?: readonly number[]; lambdas?: readonly number[]; echelle?: EchelleDesSignaux };
+export type OptionsApprentissage = {
+	date: string;
+	graines?: readonly number[];
+	lambdas?: readonly number[];
+	echelle?: EchelleDesSignaux;
+	/** Paires implicites des gestes : apprises, jamais mesurées. */
+	implicites?: readonly Implicite[];
+};
 
 const mediane = (valeurs: readonly (number | null)[]): number | null => {
 	const v = valeurs.filter((x): x is number => x !== null).sort((a, b) => a - b);
@@ -348,7 +393,13 @@ function resumer(m: MesuresDAcceptation, pirePrecision: number | null): MesuresD
 }
 
 /** Validation emboîtée d'un niveau sur un découpage des sessions (`graine`) : les notes hors pli et leurs mesures. */
-export function validationEmboitee(jeu: JeuDApprentissage, niveau: NiveauDeNote, graine: number, lambdas: readonly number[]): Tirage & { notes: MessageNote[] } {
+export function validationEmboitee(
+	jeu: JeuDApprentissage,
+	niveau: NiveauDeNote,
+	graine: number,
+	lambdas: readonly number[],
+	toutesImplicites: readonly Implicite[] = [],
+): Tirage & { notes: MessageNote[] } {
 	const plis = plisParSessionMelanges(jeu.messages, PLIS_EXTERIEURS, graine);
 	const notes: MessageNote[] = [];
 	const configurations: string[] = [];
@@ -358,16 +409,17 @@ export function validationEmboitee(jeu: JeuDApprentissage, niveau: NiveauDeNote,
 		const apprentissage = jeu.messages.filter((_, i) => plis[i] !== f);
 		const test = jeu.messages.filter((_, i) => plis[i] === f);
 		if (test.length === 0) continue;
-		const choixSens = choisirConfiguration(jeu, apprentissage, 'sens', { graine: graine * 100 + f, lambdas }).retenue;
+		const implicites = implicitesHors(toutesImplicites, test);
+		const choixSens = choisirConfiguration(jeu, apprentissage, 'sens', { graine: graine * 100 + f, lambdas, implicites }).retenue;
 		if (choixSens === null) continue;
-		const sens = apprendreModele(apprentissage, 'sens', choixSens);
+		const sens = apprendreModele(apprentissage, 'sens', choixSens, implicites);
 		apprentissages += 1;
 		if (!sens.r.converge) nonConverges += 1;
 		let complets: ModeleAppris | undefined;
 		if (niveau === 'complets') {
-			const choix = choisirConfiguration(jeu, apprentissage, 'complets', { graine: graine * 100 + f, lambdas, requete: choixSens.requete }).retenue;
+			const choix = choisirConfiguration(jeu, apprentissage, 'complets', { graine: graine * 100 + f, lambdas, requete: choixSens.requete, implicites }).retenue;
 			if (choix === null) continue;
-			complets = apprendreModele(apprentissage, 'complets', choix);
+			complets = apprendreModele(apprentissage, 'complets', choix, implicites);
 			apprentissages += 1;
 			if (!complets.r.converge) nonConverges += 1;
 			configurations.push(nomDeConfiguration(choix));
@@ -390,13 +442,15 @@ function apprendreNiveau(
 	const { retenue, lignes } = choisirConfiguration(jeu, jeu.messages, niveau, {
 		graine: 0,
 		lambdas: o.lambdas,
+		implicites: o.implicites,
 		...(niveau === 'complets' && sensFinal !== null ? { requete: sensFinal.conf.requete } : {}),
 	});
 	if (retenue === null || (niveau === 'complets' && sensFinal === null)) {
 		const modele = { ...modeleNonAppris(), apprisLe: o.date, gguf: jeu.installes, refus: ['aucune paire jugée pour ce niveau'] };
-		return { rapport: { niveau, retenue: null, pertes: lignes, tirages: [], mediane: null, pirePrecision: null, grille: [], stabilite: [], fiabilite: [], modele }, final: null };
+		const implicites = { utilisees: 0, ecartees: o.implicites.length };
+		return { rapport: { niveau, retenue: null, pertes: lignes, tirages: [], mediane: null, pirePrecision: null, grille: [], stabilite: [], fiabilite: [], implicites, modele }, final: null };
 	}
-	const tirages = o.graines.map((graine) => validationEmboitee(jeu, niveau, graine, o.lambdas));
+	const tirages = o.graines.map((graine) => validationEmboitee(jeu, niveau, graine, o.lambdas, o.implicites));
 	const medianes = medianeDes(tirages.map((t) => t.mesures))!;
 	const pirePrecision = Math.min(...tirages.map((t) => t.mesures.precisionPessimiste ?? 0));
 	const grille = tirages[0]!.grille.map((c, i) => ({ ...medianeDes(tirages.map((t) => t.grille[i]!))!, seuil: c.seuil, seuilPiste: c.seuilPiste }));
@@ -408,7 +462,8 @@ function apprendreNiveau(
 	}
 	if (jeu.installes.sens === null || (niveau === 'complets' && jeu.installes.reranker === null)) refus.push('modèles installés inconnus');
 	if (jeu.identite.manquante > 0) refus.push(`identité des modèles absente sur ${jeu.identite.manquante} cas (--completer la recalcule)`);
-	const final = apprendreModele(jeu.messages, niveau, retenue);
+	const final = apprendreModele(jeu.messages, niveau, retenue, o.implicites);
+	const utilisees = exemplesImplicites(o.implicites, niveau, retenue).length;
 	const notesFinales = jeu.messages.flatMap((m) => {
 		const n = niveau === 'complets' ? noterMessage(m, sensFinal!, final) : noterMessage(m, final);
 		return n === null ? [] : [n];
@@ -441,6 +496,7 @@ function apprendreNiveau(
 			grille,
 			stabilite: [...compte].sort((a, b) => b[1] - a[1]).map(([configuration, fois]) => ({ configuration, fois })),
 			fiabilite: calibration(tirages[0]!.notes).fiabilite,
+			implicites: { utilisees, ecartees: o.implicites.length - utilisees },
 			modele,
 		},
 		final,
@@ -449,7 +505,13 @@ function apprendreNiveau(
 
 /** Apprend et valide un modèle par niveau ; rend le rapport et les coefficients à écrire. */
 export function apprendreNote(jeu: JeuDApprentissage, options: OptionsApprentissage): RapportDApprentissage {
-	const o = { date: options.date, graines: options.graines ?? GRAINES, lambdas: options.lambdas ?? LAMBDAS, echelle: options.echelle ?? echelleDesSignaux(REGLAGES_PAR_DEFAUT.contexte) };
+	const o = {
+		date: options.date,
+		graines: options.graines ?? GRAINES,
+		lambdas: options.lambdas ?? LAMBDAS,
+		echelle: options.echelle ?? echelleDesSignaux(REGLAGES_PAR_DEFAUT.contexte),
+		implicites: options.implicites ?? [],
+	};
 	const sens = apprendreNiveau(jeu, 'sens', o, null);
 	const complets = apprendreNiveau(jeu, 'complets', o, sens.final);
 	const niveaux = NIVEAUX_DE_NOTE.map((n) => (n === 'sens' ? sens.rapport : complets.rapport));

@@ -5,6 +5,7 @@ import type { EntreeDiagnostic, Rubrique } from '../../src/domaine/diagnostic.ts
 import { normaliserCible } from '../../src/domaine/elements.ts';
 import { analyserFiche } from '../../src/domaine/fiche.ts';
 import { empreinte } from '../../src/domaine/empreinte.ts';
+import { empreinteDInformation } from '../../src/domaine/lot.ts';
 import type { Lot } from '../../src/domaine/lot.ts';
 import { rapportDeDiagnostic } from '../../src/domaine/rapport-diagnostic.ts';
 
@@ -203,14 +204,20 @@ describe('diagnostic de la mémoire', () => {
 });
 
 describe('lots en attente', () => {
-	it('par fiche puis par date ; périmé si la fiche a changé ou n\'existe plus', () => {
+	it('par fiche puis par date ; périmé si une information visée a changé ou si la fiche n\'existe plus ; lot sans empreintes par information : si la fiche a changé', () => {
 		const texte = fiche('sujet', 'A', avecInformations('A.', ['- Une | declare ^f-0001', '- Une aussi | declare ^f-0002']));
-		const lot = (id: string, fiche: string, proposeMs: number, empreinteLot = empreinte(texte)): Lot => ({ id, genre: 'fusionner', fiche, lignes: [{ garder: 'f-0001', absorber: ['f-0002'] }], motif: 'Doublons', empreinte: empreinteLot, proposeMs, session: null });
-		const e = entree({ 'a.md': texte }, { lots: [lot('L2', 'a.md', 20, 'autre'), lot('L3', 'disparue.md', 5), lot('L1', 'a.md', 10)] });
+		const faits = analyserFiche('a.md', texte).fiche.faits;
+		const lot = (id: string, fiche: string, proposeMs: number, empreinteLot = empreinte(texte), empreintes?: Record<string, string>): Lot => ({ id, genre: 'fusionner', fiche, lignes: [{ garder: 'f-0001', absorber: ['f-0002'] }], motif: 'Doublons', empreinte: empreinteLot, ...(empreintes === undefined ? {} : { empreintes }), proposeMs, session: null });
+		const intactes = { 'f-0001': empreinteDInformation(faits, 'f-0001')!, 'f-0002': empreinteDInformation(faits, 'f-0002')! };
+		const e = entree({ 'a.md': texte }, {
+			lots: [lot('L2', 'a.md', 20, 'autre'), lot('L3', 'disparue.md', 5), lot('L1', 'a.md', 10), lot('L4', 'a.md', 40, 'autre', intactes), lot('L5', 'a.md', 50, empreinte(texte), { ...intactes, 'f-0002': 'changee' })],
+		});
 		expect(rubrique(e, 'lots_en_attente')).toEqual([
 			'a.md : lot L1 (fusionner, 1 ligne(s)) « Doublons »',
-			'a.md : lot L2 (fusionner, 1 ligne(s)) « Doublons » — périmé : la fiche a changé, à reproposer',
-			'disparue.md : lot L3 (fusionner, 1 ligne(s)) « Doublons » — périmé : la fiche a changé, à reproposer',
+			'a.md : lot L2 (fusionner, 1 ligne(s)) « Doublons » — périmé : une information visée a changé, à reproposer',
+			'a.md : lot L4 (fusionner, 1 ligne(s)) « Doublons »',
+			'a.md : lot L5 (fusionner, 1 ligne(s)) « Doublons » — périmé : une information visée a changé, à reproposer',
+			'disparue.md : lot L3 (fusionner, 1 ligne(s)) « Doublons » — périmé : une information visée a changé, à reproposer',
 		]);
 		expect(rubrique(entree({ 'a.md': texte }), 'lots_en_attente')).toEqual([]);
 	});

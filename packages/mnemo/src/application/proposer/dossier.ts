@@ -89,7 +89,7 @@ export async function proposerRetraitDossier(dep: Dependances, demande: DemandeR
 		case 'pas_un_dossier':
 			return refuse(`${dossier} n'est pas un dossier.`);
 		case 'non_vide':
-			return refuse(`Le dossier ${dossier} n'est pas vide (${await contenu(dep, dossier)}) : range ou supprime d'abord son contenu.`);
+			return refuse(`Le dossier ${dossier} n'est pas vide (${await contenu(dep, dossier)}) : ranger ou supprimer d'abord son contenu.`);
 		case 'retire': {
 			// Le retrait et son commit forment une seule écriture : toute disparition suivie sous ce dossier (casse comprise) est commitée.
 			const prefixe = cleDeCasse(`${dossier}/`);

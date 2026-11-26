@@ -35,7 +35,7 @@ export async function corrigerLien(dep: Dependances, demande: DemandeCorrectionL
 	const intouchable = motifIntouchable(chemin, analyserFiche(chemin, texte).fiche.type, memoire.textes.keys(), false);
 	if (intouchable !== null) return refuse(intouchable);
 	if (nouveau !== '') {
-		if (memoire.designee(nouveau.split(/[#|]/u)[0]!) === null) return refuse(`[[${nouveau}]] ne désigne aucune fiche (ou plusieurs) : donne le chemin d'une fiche existante.`);
+		if (memoire.designee(nouveau.split(/[#|]/u)[0]!) === null) return refuse(`[[${nouveau}]] ne désigne aucune fiche (ou plusieurs) : donner le chemin d'une fiche existante.`);
 	}
 
 	const memeCible = (a: string, b: string) => sansMd(a.trim()) === sansMd(b.trim());

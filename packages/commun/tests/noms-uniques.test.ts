@@ -19,6 +19,9 @@ const EXCEPTIONS: readonly { fichier: string; symbole: string; texte: string; no
 	{ fichier: 'packages/contrat/src/index.ts', symbole: 'profil', texte: '/api/profils/:id', nombre: 1, raison: 'chemin d’une route HTTP (ROUTES)' },
 	{ fichier: 'packages/contrat/src/index.ts', symbole: 'profilDupliquer', texte: '/api/profils/:id/dupliquer', nombre: 1, raison: 'chemin d’une route HTTP (ROUTES)' },
 	{ fichier: 'packages/contrat/src/index.ts', symbole: 'profilApercu', texte: '/api/profils/:id/apercu', nombre: 1, raison: 'chemin d’une route HTTP (ROUTES)' },
+	{ fichier: 'packages/contrat/src/index.ts', symbole: 'skills', texte: '/api/skills', nombre: 1, raison: 'chemin d’une route HTTP (ROUTES)' },
+	{ fichier: 'packages/contrat/src/index.ts', symbole: 'skill', texte: '/api/skills/:id', nombre: 1, raison: 'chemin d’une route HTTP (ROUTES)' },
+	{ fichier: 'packages/contrat/src/index.ts', symbole: 'skillOrigine', texte: '/api/skills/:id/origine', nombre: 1, raison: 'chemin d’une route HTTP (ROUTES)' },
 	{ fichier: 'packages/ui/src/main.tsx', symbole: 'archiviste', texte: 'archiviste', nombre: 1, raison: 'paramètre d’adresse du mode démo' },
 	{ fichier: 'packages/ui/src/main.tsx', symbole: 'departDemo', texte: 'archiviste', nombre: 1, raison: 'onglet demandé par l’adresse du mode démo' },
 	{ fichier: 'packages/mnemo/src/adaptateurs/cli/banc.ts', symbole: 'commandeBanc', texte: 'consignes', nombre: 1, raison: 'nom du banc des consignes (commande `mnemo banc consignes`)' },
@@ -29,7 +32,7 @@ const EXCEPTIONS: readonly { fichier: string; symbole: string; texte: string; no
 	{ fichier: 'packages/mnemo/src/infra/plugins-claude.ts', symbole: 'DOSSIER_SKILLS_CLAUDE', texte: 'skills', nombre: 1, raison: 'dossier des skills dans l’arborescence de Claude Code (plugin ou ~/.claude), pas le dossier fixe de la mémoire' },
 ];
 /** Fichiers de données d'exemple : chemins de fiches d'une mémoire fictive (mode démo), pas des noms de code. */
-const DONNEES: readonly string[] = ['packages/ui/src/client/demo-donnees.ts'];
+const DONNEES: readonly string[] = ['packages/ui/src/client/demo-donnees.ts', 'packages/ui/src/client/demo-entrainement.ts'];
 
 type Trouve = { fichier: string; symbole: string; ligne: number; texte: string };
 

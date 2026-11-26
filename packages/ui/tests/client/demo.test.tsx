@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { avertissementNonCherchable, consigneATraiter, estIdMoteur, IDS_MOTEURS, NOMS_MOTEURS } from '@mnemo/commun';
-import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EtatModelesVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseEcarteesToujours, type ReponseServis, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseMoteurs, type ReponseProfils, type ReponseQuotas, type ReponseValidationLot, type SessionTermineeVue, type SessionVue } from '@mnemo/contrat';
+import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EtatModelesVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseEcarteesToujours, type ReponseServis, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseMoteurs, type ProfilDetailVue, type ReponseEcritureSkill, type ReponseProfils, type SkillDetailVue, type ReponseQuotas, type ReponseValidationLot, type SessionTermineeVue, type SessionVue, type ReponseAccepterSures, type ReponseAnnulation, type ReponseMessageAJuger, type ReponseReponseMessage, type VueEntrainement } from '@mnemo/contrat';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ErreurApi } from '../../src/client/api.ts';
@@ -15,11 +15,16 @@ afterEach(() => {
 	vi.useRealTimers();
 });
 
+/** Corps d'un `PUT` de skill, comme l'écran l'envoie : les champs réglables et l'empreinte, rien d'autre. */
+const corpsDe = (d: SkillDetailVue) => ({ nom: d.nom, description: d.description, icone: d.icone, contenu: d.contenu, empreinte: d.empreinte });
+
 describe('mode démo', () => {
-	it('nourrit la coquille sans jeton : racine, pastilles, connexion ouverte', async () => {
+	it('alimente la coquille sans jeton : racine, pastilles, connexion ouverte', async () => {
 		const client = creerClientDemo();
 		render(<Application client={client} />);
-		expect(await within(screen.getByRole('banner')).findByText('~/Developer')).toBeTruthy();
+		// le dossier Mnemo est dans la barre d'état, plus dans la barre de titre
+		expect(await screen.findByText('coffre ~/Developer')).toBeTruthy();
+		expect(within(screen.getByRole('banner')).queryByText('~/Developer')).toBeNull();
 		const nav = screen.getByRole('navigation');
 		await screen.findByText('service connecté');
 		expect(within(nav).getByRole('button', { name: /Sessions/ }).textContent).toContain('4');
@@ -90,7 +95,7 @@ describe('mode démo', () => {
 		await vi.advanceTimersByTimeAsync(200);
 		const [ordre] = (await promesse).servis;
 		expect(ordre).toMatchObject({ calibree: false, mesure: 'ordre' });
-		expect(ordre!.classement.every((c) => c.p === null && typeof c.pNonCalibree === 'number')).toBe(true);
+		expect(ordre!.classement.every((c) => c.p === null && typeof c.pNonCalibree === 'number' && c.depart === true)).toBe(true);
 	});
 
 	it('données du classement vivant cohérentes avec les règles du hook : ≥ 90 % ⇔ injectée (2 au plus), pistes nouvelles ≥ 30 % (3 au plus)', () => {
@@ -148,6 +153,77 @@ describe('mode démo', () => {
 		expect(fil.commits.length).toBeGreaterThan(0);
 		expect(fil.aConfirmer.length).toBeGreaterThan(0);
 		expect(fil.montees.length).toBe(2);
+	});
+
+	it('skills de la mémoire : détail avec icône et agents, créer, renommer (profils suivis), supprimer', async () => {
+		const { api } = creerClientDemo();
+		const chemin = (route: string, nom: string) => route.replace(':id', encodeURIComponent(nom));
+		const detailProfil = await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'redaction'));
+		expect(detailProfil.skillsMemoireDisponibles.every((x) => x.icone !== undefined)).toBe(true);
+		const relecture = await api.lire<SkillDetailVue>(chemin(ROUTES.skill, 'relecture'));
+		expect(relecture).toMatchObject({ nom: 'relecture', origine: 'memoire', modifiee: false });
+		expect(relecture.agents).toContain('redaction');
+		expect(relecture.motifFixe).toBeNull();
+		await expect(api.envoyer(chemin(ROUTES.skillOrigine, 'relecture'))).rejects.toMatchObject({ statut: 400 });
+
+		const cree = await api.envoyer<ReponseEcritureSkill>(ROUTES.skills, { nom: 'courrier', description: 'Écrire un courrier.', icone: '✉️', contenu: '# Courrier' });
+		expect(cree.nom).toBe('courrier');
+		await expect(api.envoyer(ROUTES.skills, { nom: 'courrier', description: 'x', icone: null, contenu: '' })).rejects.toMatchObject({ statut: 400 });
+		await expect(api.envoyer(ROUTES.skills, { nom: 'autre', description: ' ', icone: null, contenu: '' })).rejects.toMatchObject({ statut: 400 });
+
+		const renommee = await api.remplacer<ReponseEcritureSkill>(chemin(ROUTES.skill, 'relecture'), { ...corpsDe(relecture), nom: 'relecture-finale' });
+		expect(renommee.nom).toBe('relecture-finale');
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'redaction'))).editable.skillsMemoire).toEqual(['relecture-finale']);
+		await expect(api.lire(chemin(ROUTES.skill, 'relecture'))).rejects.toMatchObject({ statut: 404 });
+		await expect(api.remplacer(chemin(ROUTES.skill, 'relecture-finale'), corpsDe(relecture))).rejects.toMatchObject({ statut: 409 });
+
+		await api.supprimer<ReponseEcritureSkill>(chemin(ROUTES.skill, 'relecture-finale'));
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'redaction'))).editable.skillsMemoire).toEqual([]);
+		await expect(api.supprimer(chemin(ROUTES.skill, 'relecture-finale'))).rejects.toMatchObject({ statut: 404 });
+	});
+
+	it('skills d’un profil (?profil=) : celles de l’archiviste fournies par Mnemo, modifiées puis rétablies, ni supprimées ni renommées ; une skill propre créée et supprimée', async () => {
+		const { api } = creerClientDemo();
+		const chemin = (route: string, nom: string) => route.replace(':id', encodeURIComponent(nom));
+		const archiviste = await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'archiviste'));
+		expect(archiviste.skillsDuProfil.length).toBeGreaterThan(0);
+		expect(archiviste.skillsDuProfil.every((x) => x.origine === 'mnemo')).toBe(true);
+		const menage = await api.lire<SkillDetailVue>(chemin(ROUTES.skill, 'menage'), { profil: 'archiviste' });
+		expect(menage).toMatchObject({ profil: 'archiviste', origine: 'mnemo', modifiee: false, agents: ['archiviste'] });
+		expect(menage.motifFixe).toMatch(/fournie par Mnemo/u);
+		await expect(api.lire(chemin(ROUTES.skill, 'menage'))).rejects.toMatchObject({ statut: 404 });
+		const ici = `${chemin(ROUTES.skill, 'menage')}?profil=archiviste`;
+		await api.remplacer(ici, { ...corpsDe(menage), contenu: 'À ma façon.' });
+		expect((await api.lire<SkillDetailVue>(ici)).modifiee).toBe(true);
+		await expect(api.remplacer(ici, { ...corpsDe(await api.lire<SkillDetailVue>(ici)), nom: 'menage-perso' })).rejects.toMatchObject({ statut: 400 });
+		await expect(api.supprimer(chemin(ROUTES.skill, 'menage'), { profil: 'archiviste' })).rejects.toMatchObject({ statut: 400 });
+		await api.envoyer(`${chemin(ROUTES.skillOrigine, 'menage')}?profil=archiviste`);
+		expect((await api.lire<SkillDetailVue>(ici)).modifiee).toBe(false);
+
+		await api.envoyer(`${ROUTES.skills}?profil=archiviste`, { nom: 'factures', description: 'Ranger une facture.', icone: '🧾', contenu: '' });
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'archiviste'))).skillsDuProfil.find((x) => x.nom === 'factures')).toMatchObject({ icone: '🧾', origine: 'memoire' });
+		await api.supprimer(chemin(ROUTES.skill, 'factures'), { profil: 'archiviste' });
+		await expect(api.envoyer(`${ROUTES.skills}?profil=inconnu`, { nom: 'x', description: 'x', icone: null, contenu: '' })).rejects.toMatchObject({ statut: 404 });
+	});
+
+	it('skills (démo) : mêmes refus que le service (clés inconnues, bornes), 400 avant 409 ; un profil dupliqué emporte ses skills, supprimé les retire', async () => {
+		const { api } = creerClientDemo();
+		const chemin = (route: string, nom: string) => route.replace(':id', encodeURIComponent(nom));
+		const devis = await api.lire<SkillDetailVue>(chemin(ROUTES.skill, 'devis'));
+		await expect(api.remplacer(chemin(ROUTES.skill, 'devis'), devis)).rejects.toMatchObject({ statut: 400 });
+		await expect(api.envoyer(ROUTES.skills, { nom: 'x', description: 'x', icone: null, contenu: '', pirate: 1 })).rejects.toMatchObject({ statut: 400 });
+		for (const refuse of [{ description: 'deux\nlignes' }, { description: 'x'.repeat(1025) }, { icone: 'x'.repeat(17) }, { icone: '\u0007' }, { contenu: 'x'.repeat(100_001) }]) {
+			await expect(api.envoyer(ROUTES.skills, { nom: 'neuve', description: 'Neuve.', icone: null, contenu: '', ...refuse })).rejects.toMatchObject({ statut: 400 });
+		}
+		// empreinte périmée et champ refusé : le refus du champ (400) passe avant le conflit (409)
+		await expect(api.remplacer(chemin(ROUTES.skill, 'devis'), { ...corpsDe(devis), empreinte: 'perimee', description: '' })).rejects.toMatchObject({ statut: 400 });
+		await expect(api.remplacer(chemin(ROUTES.skill, 'devis'), { ...corpsDe(devis), empreinte: 'perimee' })).rejects.toMatchObject({ statut: 409 });
+
+		await api.envoyer(chemin(ROUTES.profilDupliquer, 'redaction'), { nom: 'courriers' });
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'courriers'))).skillsDuProfil.map((x) => x.nom)).toEqual(['signature']);
+		await api.supprimer(chemin(ROUTES.profil, 'courriers'));
+		await api.envoyer(chemin(ROUTES.profilDupliquer, 'travail'), { nom: 'courriers' });
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'courriers'))).skillsDuProfil).toEqual([]);
 	});
 
 	it('moteurs : les trois du catalogue dans /api/moteurs, chaque profil et chaque session sur un moteur connu, avec un modèle proposé ; sans quotas pour Vibe', async () => {
@@ -223,6 +299,114 @@ describe('mode démo', () => {
 		const r = await api.remplacer<{ session: SessionVue }>(ROUTES.sessionModeles.replace(':id', id), { niveau: 'coupes' });
 		expect(r.session).toMatchObject({ id, niveauModeles: 'coupes' });
 		expect(sessions.at(-1)).toMatchObject({ id, niveauModeles: 'coupes' });
+	});
+
+	it('entraînement : banc de 6 messages fictifs ; préparer, pré-juger, apprendre progressent (diffusés) puis un verdict refusé ; revenir, message, accepter les sûres, annuler', async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		const { api, connexion } = creerClientDemo();
+		const recus: VueEntrainement[] = [];
+		connexion.surMessage((m) => m.type === 'entrainement' && void recus.push(m.etat));
+		const depart = await api.lire<VueEntrainement>(ROUTES.entrainement);
+		// les 2 validés l'ont été avant le dernier apprentissage : rien de nouveau
+		expect(depart.banc).toMatchObject({ messages: 6, valides: 2, aJuger: 4, aRelire: 2, aPrejuger: 2, nouveauxDepuisApprentissage: 0 });
+		expect(depart.note).toMatchObject({ avant: true });
+		expect(depart.historique.map((l) => l.origine)).toEqual(['automatique', 'manuel']);
+		expect(depart.historique[0]!.erreur).toBeTruthy();
+		// le prochain : un message à relire, avec les propositions du juge
+		const { message } = await api.lire<ReponseMessageAJuger>(ROUTES.entrainementMessage);
+		expect(message!.aRelire).toBe(true);
+		expect(message!.candidates.every((c) => c.proposition !== null)).toBe(true);
+		// accepter les sûres : le message sûr seulement ; annuler le rend
+		expect(await api.envoyer<ReponseAccepterSures>(ROUTES.entrainementAccepterSures)).toEqual({ acceptes: 1 });
+		expect((await api.lire<VueEntrainement>(ROUTES.entrainement)).banc.aRelire).toBe(1);
+		expect(await api.envoyer<ReponseAnnulation>(ROUTES.entrainementAnnuler)).toEqual({ indice: 2 });
+		await expect(api.envoyer(ROUTES.entrainementAnnuler)).rejects.toMatchObject({ statut: 409 });
+		// une réponse : « Rien d'utile ici » refusé si une fiche est utile ; sinon validé, le suivant rendu
+		const premier = message!;
+		await expect(api.envoyer(ROUTES.entrainementMessage, { indice: premier.indice, jugements: { [premier.candidates[0]!.chemin]: 'pertinente' }, resteNonUtile: true, silence: true })).rejects.toMatchObject({ statut: 409 });
+		const r = await api.envoyer<ReponseReponseMessage>(ROUTES.entrainementMessage, { indice: premier.indice, jugements: { [premier.candidates[0]!.chemin]: 'pertinente' }, resteNonUtile: true });
+		expect(r.suivant).not.toBe(premier.indice);
+		expect((await api.lire<VueEntrainement>(ROUTES.entrainement)).banc.nouveauxDepuisApprentissage).toBe(1);
+		// pré-juger : une tâche qui progresse, une deuxième refusée (409)
+		expect((await api.envoyer<VueEntrainement>(ROUTES.entrainementPrejuger)).tache).toMatchObject({ genre: 'prejuger', total: 2 });
+		await expect(api.envoyer(ROUTES.entrainementApprendre)).rejects.toMatchObject({ statut: 409 });
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(recus.at(-1)).toMatchObject({ tache: null, banc: { aPrejuger: 0 } });
+		// arrêter sans tâche : 409, comme le service
+		await expect(api.envoyer(ROUTES.entrainementArreter)).rejects.toMatchObject({ statut: 409 });
+		// apprendre : un verdict refusé crédible, le modèle remplacé, une ligne d'historique manuelle
+		await api.envoyer(ROUTES.entrainementApprendre);
+		await vi.advanceTimersByTimeAsync(3000);
+		const appris = recus.at(-1)!;
+		expect(appris.tache).toBeNull();
+		expect(appris.resultat).toMatchObject({ remplace: true, niveaux: [{ niveau: 'complets', accepte: false }, { niveau: 'sens', accepte: false }] });
+		expect(appris.resultat!.niveaux[0]!.criteres.join(' ')).toContain('il en faut 25');
+		expect(appris.historique).toHaveLength(3);
+		expect(appris.historique[0]).toMatchObject({ origine: 'manuel', remplace: true });
+		expect(appris.banc.nouveauxDepuisApprentissage).toBe(0);
+		// revenir : les modèles s'échangent
+		const avant = appris.note.niveaux[0]!.date;
+		const revenu = await api.envoyer<VueEntrainement>(ROUTES.entrainementRevenir);
+		expect(revenu.note.niveaux[0]!.date).not.toBe(avant);
+		// préparer : les messages du faux journal, puis plus rien (erreur dite comme le service)
+		await api.envoyer(ROUTES.entrainementPreparer, { nombre: 200 });
+		await vi.advanceTimersByTimeAsync(4000);
+		expect(recus.at(-1)!.banc.messages).toBe(14);
+		await api.envoyer(ROUTES.entrainementPreparer, { nombre: 5 });
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(recus.at(-1)!.derniereErreur).toContain('Aucun message nouveau');
+		await expect(api.envoyer(ROUTES.entrainementPreparer, { nombre: 0 })).rejects.toMatchObject({ statut: 400 });
+	});
+
+	it('entraînement : `&entrainement=vide` (rien de préparé, note de départ, sans modèle d’avant) et `sansjuge` (pré-juger refusé)', async () => {
+		const vide = await creerClientDemo({ entrainement: 'vide' }).api.lire<VueEntrainement>(ROUTES.entrainement);
+		expect(vide).toMatchObject({ banc: { messages: 0 }, note: { avant: false }, resultat: null, historique: [] });
+		expect(vide.note.niveaux.map((n) => n.etat)).toEqual(['depart', 'depart']);
+		const { api } = creerClientDemo({ entrainement: 'sansjuge' });
+		expect((await api.lire<VueEntrainement>(ROUTES.entrainement)).juge.disponible).toBe(false);
+		await expect(api.envoyer(ROUTES.entrainementPrejuger)).rejects.toMatchObject({ statut: 409 });
+	});
+
+	it('entraînement : les réponses à un message comme le service (relire les plus incertains d’abord, valider, rien d’utile ici, passer, annuler)', async () => {
+		const { api } = creerClientDemo();
+		const lire = async (indice?: number) => (await api.lire<ReponseMessageAJuger>(ROUTES.entrainementMessage, indice === undefined ? undefined : { indice: String(indice) })).message!;
+		const banc = async () => (await api.lire<VueEntrainement>(ROUTES.entrainement)).banc;
+		const repondre = (corps: Record<string, unknown>) => api.envoyer<ReponseReponseMessage>(ROUTES.entrainementMessage, corps);
+		// à relire d'abord, le moins sûr en tête (confiance moyenne 0,84 avant 0,94)
+		const premier = await lire();
+		expect(premier).toMatchObject({ indice: 3, aRelire: true, restants: 4 });
+		// une réponse partielle sans « le reste » valide quand même le message
+		const [a] = premier.candidates;
+		expect(await repondre({ indice: 3, jugements: { [a!.chemin]: 'indecise', 'ailleurs.md': 'pertinente' }, resteNonUtile: false })).toEqual({ suivant: 2 });
+		expect(await lire(3)).toMatchObject({ valide: true, candidates: expect.arrayContaining([expect.objectContaining({ chemin: a!.chemin, jugement: 'indecise' })]) });
+		expect((await lire(3)).candidates.filter((c) => c.jugement !== null)).toHaveLength(1);
+		expect(await banc()).toMatchObject({ valides: 3, aJuger: 3 });
+		// « Rien d'utile ici » : les « Je ne sais pas » gardés, le reste pas utile ; refusé si une fiche est déjà jugée utile
+		const autre = await lire(4);
+		expect(await repondre({ indice: 4, jugements: { [autre.candidates[0]!.chemin]: 'indecise' }, resteNonUtile: true, silence: true })).toEqual({ suivant: 2 });
+		expect((await lire(4)).candidates.map((c) => c.jugement).sort()).toEqual(['indecise', 'non_pertinente']);
+		await expect(repondre({ indice: 0, jugements: {}, resteNonUtile: true, silence: true })).rejects.toMatchObject({ statut: 409 });
+		// passer : mis de côté ; le message passé reste lisible par son indice
+		expect(await repondre({ indice: 2, jugements: {}, resteNonUtile: false, passer: true })).toEqual({ suivant: 5 });
+		expect(await lire(2)).toMatchObject({ saute: true });
+		expect(await banc()).toMatchObject({ sautes: 1, aJuger: 1 });
+		// annuler : la dernière réponse d'abord, son message rétabli
+		expect(await api.envoyer<ReponseAnnulation>(ROUTES.entrainementAnnuler)).toEqual({ indice: 2 });
+		expect(await lire(2)).toMatchObject({ saute: false, aRelire: true });
+		// corps invalides : 400, comme le service
+		await expect(repondre({ indice: -1, jugements: {}, resteNonUtile: true })).rejects.toMatchObject({ statut: 400 });
+		await expect(repondre({ indice: 5, jugements: {}, resteNonUtile: true, silence: true, passer: true })).rejects.toMatchObject({ statut: 400 });
+		await expect(repondre({ indice: 99, jugements: {}, resteNonUtile: true })).rejects.toMatchObject({ statut: 404 });
+	});
+
+	it('entraînement : messages et fiches fictifs, des fiches de la démo', async () => {
+		const { api } = creerClientDemo();
+		const { fiches } = await api.lire<DonneesGraphe>(ROUTES.graphe);
+		const chemins = new Set(fiches.map((f) => f.chemin));
+		for (let i = 0; i < 6; i++) {
+			const { message } = await api.lire<ReponseMessageAJuger>(ROUTES.entrainementMessage, { indice: String(i) });
+			for (const c of message!.candidates) expect(chemins.has(c.chemin), c.chemin).toBe(true);
+		}
 	});
 
 	it('modèles : `&modeles=` fixe chaque état de départ ; `anime` fait défiler le scénario, arrêté par le premier geste', async () => {

@@ -31,6 +31,19 @@ export interface Coffre {
 	 */
 	retirerDossierVide(dossier: string): Promise<RetraitDossier>;
 	/**
+	 * Déplace le dossier `de` entier (tous ses fichiers, `.md` ou non) vers `vers` (relatifs à `_mnemo/`), dossiers parents
+	 * créés. Lève si `de` n'est pas un dossier, si `vers` existe déjà, si l'un des deux est la racine ou traverse un lien
+	 * symbolique.
+	 */
+	deplacerDossier(de: string, vers: string): Promise<void>;
+	/**
+	 * Copie le dossier `de` entier (tous ses fichiers, `.md` ou non, octet pour octet) vers `vers`, dossiers parents créés ;
+	 * les liens symboliques ne sont ni suivis ni copiés. Mêmes refus que `deplacerDossier`.
+	 */
+	copierDossier(de: string, vers: string): Promise<void>;
+	/** Retire le dossier `dossier` et tout ce qu'il contient (liens symboliques retirés, jamais suivis). Absent : sans erreur. Lève pour la racine ou un chemin qui traverse un lien symbolique. */
+	retirerDossier(dossier: string): Promise<void>;
+	/**
 	 * Fiches `.md` et sous-dossiers directs de `dossier` (« » = racine), sans les entrées cachées (« . »).
 	 * Chemins RELATIFS à `_mnemo/` (pas à `dossier`), séparés par « / », triés. Dossier absent : listes vides.
 	 * Liens symboliques jamais suivis : ni listés, ni parcourus (`dossier` atteint par un lien : listes vides).
@@ -317,7 +330,11 @@ export interface Lots {
 	fermer(): void;
 }
 
-export type SkillInstallee = { nom: string; description: string };
+/**
+ * Une skill installée ; `icone` : celle de `metadata.icone` de son frontmatter, s'il y en a une ; `origine` : présente pour
+ * une skill éditable (de la mémoire ou d'un profil), `mnemo` si Mnemo la fournit ; absente pour une skill de plugin.
+ */
+export type SkillInstallee = { nom: string; description: string; icone?: string; origine?: 'mnemo' | 'memoire' };
 
 /** Un plugin Claude Code installé : `id` (`nom@place`), `portee` (`scope` de l'installation, vide si absente). */
 export type PluginInstalle = { id: string; nom: string; version: string; portee: string; skills: SkillInstallee[]; hooks: boolean };
@@ -584,6 +601,8 @@ export type Classe = {
 	pSansApriori?: number;
 	/** Note d'un modèle appris mais refusé (`p` absent ou null) : affichée en gris, jamais pour injecter ni apprendre. */
 	pNonCalibree?: number;
+	/** `pNonCalibree` vient d'un modèle de départ (livré avec Mnemo). */
+	depart?: true;
 	/**
 	 * `apriori` : absent des entrées écrites avant l'a priori des gestes (lu comme 0) ; `cosinusZ` : absent des entrées écrites
 	 * avant lui ; `logit` (brut, du reranker au hook) : présent seulement pour une candidate qu'il a notée.
@@ -716,6 +735,8 @@ export type GesteNote = {
 	rangMessage: number;
 	note: NoteDuGeste | null;
 	vecteur: VecteurDuMessage | null;
+	/** Identité du modèle du vecteur (`bge-m3@…`), lue même sans le vecteur (`sansVecteur`) ; null : pas de vecteur ; absente : non lue. */
+	modeleVecteur?: string | null;
 };
 
 /**
@@ -836,6 +857,8 @@ export interface EtatSessions {
 	noterGeste(geste: GesteANoter): Promise<void>;
 	/** Nombre de gestes par sorte et par fiche, sans lire messages ni vecteurs. */
 	comptesGestes(): Promise<GesteCompte[]>;
+	/** Nombre de gestes du journal depuis `depuisMs` (inclus), de ces `sortes` seulement, sans lire une ligne. */
+	nombreGestes(filtre: { depuisMs?: number; sortes?: readonly Geste[] }): Promise<number>;
 	/**
 	 * Gestes du journal durable, les plus récents d'abord : ceux de `fiche`, de `session`, depuis `depuisMs` (inclus), de rang `depuisRang` ou
 	 * plus (ordre d'écriture), de ces `sortes` seulement, dont la note porte ce `niveau` (`note.niveau` : injections
@@ -924,9 +947,10 @@ export type CommandeMoteur = { commande: string; avant: string[] };
 
 /**
  * Réglages d'une exécution : dossier courant, environnement complet (remplace celui du processus), délai avant de tuer,
- * signal d'abandon (levé : le processus est tué, la promesse rejette).
+ * signal d'abandon (levé : le processus est tué, la promesse rejette), texte écrit sur l'entrée du programme (`entree`, puis
+ * l'entrée est fermée ; sans lui, elle est fermée aussitôt).
  */
-export type OptionsExecution = { cwd?: string; env?: Record<string, string>; delaiMs?: number; signal?: AbortSignal };
+export type OptionsExecution = { cwd?: string; env?: Record<string, string>; delaiMs?: number; signal?: AbortSignal; entree?: string };
 /** Lance un programme sans shell : rend son code de sortie ; rejette s'il ne se lance pas, ne répond pas à temps ou est abandonné. */
 export type Executer = (commande: string, args: string[], options?: OptionsExecution) => Promise<{ code: number; sortie: string; erreur: string }>;
 
@@ -1111,7 +1135,7 @@ export type TelemetrieDuMoteur = {
 };
 
 /**
- * Ce que Mnemo dit d'un moteur sur le poste (`mnemo init`, `verifier-poste`, `declarer`, Réglages › Système, avertissements de
+ * Ce que Mnemo dit d'un moteur sur le poste (`mnemo init`, `verifier-poste`, `declarer`, Réglages › Branchements, avertissements de
  * session) ; les commandes `mnemo` qui y remédient sont celles de `remedesDuMoteur`.
  * `recherche` : où sa commande est cherchée (dit quand elle est introuvable) ; `desactivation` : le réglage qui éteint sa
  * déclaration MCP ; `retraitManuel` : comment retirer une déclaration « mnemo » qui ne lance pas Mnemo ; `approbation` : ce
@@ -1175,7 +1199,7 @@ export type Moteur = MoteurDuPoste & {
 
 /**
  * Un moteur connu du service, et sa commande : trouvée au démarrage, ou adoptée depuis à la lecture du poste (Réglages ›
- * Système › Moteurs, « Relire ») ; null : introuvable, mode dégradé.
+ * Branchements, « Relire ») ; null : introuvable, mode dégradé.
  */
 export type MoteurDuService = { moteur: Moteur; commande: CommandeMoteur | null };
 

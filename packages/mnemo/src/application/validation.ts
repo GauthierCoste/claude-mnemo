@@ -306,7 +306,7 @@ export function validerArguments<O extends OutilSimple>(outil: O, brut: unknown)
 		valeur.dossier = dossier;
 	}
 	if (outil === 'deplacer' && valeur.id!.includes('#')) {
-		return { ok: false, motif: `deplacer range une fiche entière : « ${valeur.id!} » désigne un élément (retire « #… »).` };
+		return { ok: false, motif: `deplacer range une fiche entière : « ${valeur.id!} » désigne un élément (sans « #… » attendu).` };
 	}
 	return r;
 }
@@ -322,7 +322,7 @@ export function demandeDEntretien(a: ArgumentsDesOutils['entretenir']): Valide<D
 	}
 	if (a.id.includes('#')) {
 		const champ = a.action === 'deplacer_informations' ? 'ancres' : a.action === 'proposer_lot' ? 'lignes' : a.action === 'corroborer' || a.action === 'retoucher_information' ? 'ancre' : null;
-		return { ok: false, motif: champ !== null ? `« ${a.id} » : donne la fiche dans \`id\` et ${champ === 'ancre' ? 'l\'information' : 'les informations'} dans \`${champ}\` (retire « #… » de \`id\`).` : `entretenir vise une fiche entière : « ${a.id} » désigne un élément (retire « #… »).` };
+		return { ok: false, motif: champ !== null ? `« ${a.id} » : la fiche attendue dans \`id\` et ${champ === 'ancre' ? 'l\'information' : 'les informations'} dans \`${champ}\` (sans « #… » dans \`id\`).` : `entretenir vise une fiche entière : « ${a.id} » désigne un élément (sans « #… » attendu).` };
 	}
 	switch (a.action) {
 		case 'supprimer':

@@ -1,7 +1,7 @@
 /**
  * Moteurs du mode démo (`GET moteurs`, `POST moteurLier`) : les trois trouvés ; Claude Code prêt ; Codex avec des hooks
  * encore à approuver (la commande à taper dans Codex) ; Mistral Vibe pas encore lié (ni serveur MCP, ni hooks), que
- * « Lier à Mnemo » lie comme le service, pour voir Réglages › Système › Moteurs sans service.
+ * « Lier à Mnemo » lie comme le service, pour voir Réglages › Branchements sans service.
  */
 import type { IdMoteur } from '@mnemo/commun';
 import type { EtapeLiaisonVue, LiaisonMoteurVue, MoteurVue, PointMoteurVue, ReponseLiaisonMoteur, ReponseMoteurs } from '@mnemo/contrat';

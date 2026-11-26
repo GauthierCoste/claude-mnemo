@@ -13,7 +13,7 @@ export function EcranJeton(): ReactNode {
 					mnemo<b>_</b>
 				</div>
 				<p>
-					Jeton absent ou périmé. Ouvre une fois l'adresse avec jeton affichée par <code>mnemo</code> (ou par <code>mnemo jeton</code>) dans ton
+					Jeton absent ou périmé. Ouvrir une fois l'adresse avec jeton affichée par <code>mnemo</code> (ou par <code>mnemo jeton</code>) dans le
 					terminal : ce navigateur sera reconnu, l'adresse sans jeton suffira ensuite.
 				</p>
 			</div>

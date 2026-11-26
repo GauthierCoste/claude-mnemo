@@ -49,7 +49,7 @@ export async function supprimerFiche(dep: Dependances, demande: DemandeSuppressi
 
 	const citeePar = memoire.citeePar(chemin);
 	if (citeePar.length > 0 && redirection === null) {
-		return { statut: 'refuse', motif: `${chemin} est encore citée par : ${liste(citeePar)}. Donne une \`redirection\` (la fiche vers laquelle réécrire leurs liens), ou corrige ces liens d'abord.`, citeePar };
+		return { statut: 'refuse', motif: `${chemin} est encore citée par : ${liste(citeePar)}. Donner une \`redirection\` (la fiche vers laquelle réécrire leurs liens), ou corriger ces liens d'abord.`, citeePar };
 	}
 
 	const aEcrire: { chemin: string; texte: string }[] = [];
@@ -70,7 +70,7 @@ export async function supprimerFiche(dep: Dependances, demande: DemandeSuppressi
 				return refuse(`La fiche de redirection ne peut pas recevoir les origines d'import de ${chemin} : ${erreur instanceof Error ? erreur.message : String(erreur)}`);
 			}
 			const motif = motifIntouchable(redirection, cible.type, [], false);
-			if (motif !== null) return refuse(`${motif} Elle ne peut pas recevoir les origines d'import de ${chemin} : choisis une autre redirection.`);
+			if (motif !== null) return refuse(`${motif} Elle ne peut pas recevoir les origines d'import de ${chemin} : choisir une autre redirection.`);
 			origines = verserOrigines(cible, aVerser);
 			if (origines.length > 0) {
 				cible.updated = aujourdhui(dep);

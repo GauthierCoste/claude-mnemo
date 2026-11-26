@@ -47,7 +47,7 @@ export async function proposerNiveau(dep: Dependances, demande: DemandeNiveau, r
 	// l'utilisateur seul applique ou rejette : sa source déclarée ne compte que sur un canal de confiance
 	const parUtilisateur = demande.source.type === 'utilisateur' && reglages.appliquerDirectement;
 	if (retirer && !parUtilisateur) return refuse('Seul l\'utilisateur rejette une proposition de niveau (depuis l\'interface ou la ligne de commande, pas par un agent).');
-	if (!retirer && demande.niveau === undefined && demande.regle === undefined) return refuse('Rien à changer : donne « niveau », « regle », ou « retirerProposition ».');
+	if (!retirer && demande.niveau === undefined && demande.regle === undefined) return refuse('Rien à changer : donner « niveau », « regle », ou « retirerProposition ».');
 	if (demande.regle !== undefined) {
 		const motif = motifRegleInvalide(demande.regle);
 		if (motif !== null) return refuse(`Règle invalide : ${motif}`);

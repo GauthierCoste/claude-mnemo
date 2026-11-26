@@ -1,21 +1,20 @@
-import { copyFile, mkdir, readFile } from 'node:fs/promises';
+import { copyFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { JUGEMENTS, rejouerCas } from '../../application/banc-contexte.ts';
-import type { CandidateAJuger, CasContexte, EchecContexte, Jugement, MesureContexte, VarianteRequete } from '../../application/banc-contexte.ts';
+import { rejouerCas } from '../../application/banc-contexte.ts';
+import type { CasContexte, EchecContexte, MesureContexte } from '../../application/banc-contexte.ts';
 import { extraireJugements, fusionnerCas, messagesAExtraire, messagesDesCas, messagesDuJournal } from '../../application/banc-extraire.ts';
 import type { MessageAExtraire } from '../../application/banc-extraire.ts';
 import { progression } from '../../application/banc-juger.ts';
 import { rejouerJugements } from '../../application/banc-rejeu.ts';
 import type { MesuresNiveau, RejeuJugements } from '../../application/banc-rejeu.ts';
-import { LISTES_DU_BANC } from '../../application/banc-signaux.ts';
-import type { GestesDuBanc, Signaux } from '../../application/banc-signaux.ts';
+import { syntheseDe } from '../../application/banc-signaux.ts';
+import type { GestesDuBanc } from '../../application/banc-signaux.ts';
 import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
 import { compterGestes, GESTES } from '../../domaine/gestes.ts';
 import type { ComptesDesGestes } from '../../domaine/gestes.ts';
 import { echelleDesSignaux } from '../../domaine/modele-de-note.ts';
 import { requeteJointe } from '../../domaine/requete-du-message.ts';
-import type { InjectionManuelle } from '../../domaine/signal-injection.ts';
-import { estObjet } from '../../domaine/valeurs.ts';
+import { ErreurBancContexte, fichierBancContexte, lireCasContexte as lireCasDuTexte, lireCasDuFichier as lireCasDuFichierBrut } from '../../infra/banc-contexte-fichier.ts';
 import { ouvrirJournalEnLecture } from '../../infra/journal-en-lecture.ts';
 import { lireReglagesDuDossier } from '../../infra/reglages-fichier.ts';
 import { dependancesReelles, etatParesseux } from '../../infra/systeme.ts';
@@ -30,8 +29,9 @@ const USAGE_CONTEXTE = [
 	'        mnemo banc contexte --extraire [<session>] [--nombre <n>] [--par-session <n>] [--json]',
 	'        mnemo banc contexte --completer [--json]',
 	'        mnemo banc contexte --juger',
+	'        mnemo banc contexte --prejuger [--nombre <n>] [--json]',
 	'        mnemo banc contexte --gestes [--json]',
-	'        mnemo banc contexte --apprendre [--empreintes exclure|garder] [--module <chemin>] [--json]',
+	'        mnemo banc contexte --apprendre [--empreintes exclure|garder] [--module <chemin> [--depart]] [--json]',
 ].join('\n');
 /** Messages extraits par défaut, et au plus par session (variété : 20 sessions au moins pour 120 messages). */
 const NOMBRE_PAR_DEFAUT = 50;
@@ -39,122 +39,25 @@ const PAR_SESSION = 6;
 /** Règle de la requête jointe, celle du hook (`domaine/requete-du-message.ts`). */
 const REQUETE_JOINTE = requeteJointe;
 
-/** Cas du banc `contexte` : `.mnemo/banc-contexte.json` (état local, ignoré par git, jamais commité). */
-export function fichierBancContexte(racine: string): string {
-	return join(racine, DOSSIER_LOCAL, 'banc-contexte.json');
-}
+export { fichierBancContexte };
 
-const textes = (v: unknown, nom: string, i: number): string[] => {
-	if (!Array.isArray(v) || v.some((x) => typeof x !== 'string')) throw new ErreurCli(`banc-contexte.json, cas ${i + 1} : « ${nom} » doit être une liste de textes.`);
-	return v as string[];
-};
-const texteOuNull = (v: unknown): string | null => (typeof v === 'string' ? v : null);
-const nombreOuNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-
-/** Signaux d'une candidate ; `signalSession`, `apriori` et `cosinusZ`, venus après les premières extractions, sont facultatifs. */
-function lireSignaux(v: unknown): Signaux | undefined {
-	if (!estObjet(v)) return undefined;
-	const signalSession = nombreOuNull(v['signalSession']);
-	const apriori = nombreOuNull(v['apriori']);
-	// absent des cas extraits avant lui
-	const cosinusZ = v['cosinusZ'] === null ? null : nombreOuNull(v['cosinusZ']);
-	return {
-		logit: nombreOuNull(v['logit']),
-		cosinus: nombreOuNull(v['cosinus']),
-		cosinusRelatif: nombreOuNull(v['cosinusRelatif']),
-		// null : le message n'a pas de mots cherchables ; absent (ou illisible) : 0, comme aux premières extractions
-		bm25Relatif: v['bm25Relatif'] === null ? null : (nombreOuNull(v['bm25Relatif']) ?? 0),
-		...(signalSession === null ? {} : { signalSession }),
-		...(apriori === null ? {} : { apriori }),
-		...(v['cosinusZ'] === undefined ? {} : { cosinusZ }),
-	};
-}
-
-function lireCandidates(v: unknown, i: number): CandidateAJuger[] {
-	if (!Array.isArray(v)) throw new ErreurCli(`banc-contexte.json, cas ${i + 1} : « candidates » doit être une liste.`);
-	return v.map((x: unknown): CandidateAJuger => {
-		if (!estObjet(x) || typeof x['chemin'] !== 'string') throw new ErreurCli(`banc-contexte.json, cas ${i + 1} : chaque candidate doit avoir un « chemin ».`);
-		const signaux: Partial<Record<VarianteRequete, Signaux>> = {};
-		const brut = estObjet(x['signaux']) ? x['signaux'] : {};
-		for (const variante of ['seule', 'jointe'] as const) {
-			const s = lireSignaux(brut[variante]);
-			if (s !== undefined) signaux[variante] = s;
-		}
-		const listes: unknown[] = Array.isArray(x['listes']) ? x['listes'] : [];
-		return {
-			chemin: x['chemin'],
-			titre: typeof x['titre'] === 'string' ? x['titre'] : x['chemin'],
-			ligne: typeof x['ligne'] === 'string' ? x['ligne'] : '',
-			listes: LISTES_DU_BANC.filter((l) => listes.includes(l)),
-			signaux,
-			...(typeof x['empreinte'] === 'string' ? { empreinte: x['empreinte'] } : {}),
-			...(x['horsPile'] === true ? { horsPile: true } : {}),
-		};
-	});
-}
-
-function lireInjections(v: unknown[]): InjectionManuelle[] {
-	return v.flatMap((x) => (estObjet(x) && typeof x['chemin'] === 'string' && typeof x['messages'] === 'number' ? [{ chemin: x['chemin'], messages: x['messages'] }] : []));
-}
-
-function lireJugements(v: unknown, i: number): Record<string, Jugement> {
-	if (!estObjet(v)) throw new ErreurCli(`banc-contexte.json, cas ${i + 1} : « jugements » doit être un objet (chemin → jugement).`);
-	const jugements: Record<string, Jugement> = {};
-	for (const [chemin, j] of Object.entries(v)) {
-		if (!JUGEMENTS.includes(j as Jugement)) throw new ErreurCli(`banc-contexte.json, cas ${i + 1} : jugement inconnu pour ${chemin} (${JUGEMENTS.join(', ')}).`);
-		jugements[chemin] = j as Jugement;
-	}
-	return jugements;
-}
+/** Une erreur du fichier des jugements en erreur attendue du CLI (message seul, sans trace). */
+const enErreurDuBanc = (e: unknown): unknown => (e instanceof ErreurBancContexte ? new ErreurCli(e.message) : e);
 
 /** Cas d'un fichier `banc-contexte.json` (liste de cas) ; erreur lisible sur un cas mal formé. */
 export function lireCasContexte(texte: string): CasContexte[] {
-	let brut: unknown;
 	try {
-		brut = JSON.parse(texte);
-	} catch {
-		throw new ErreurCli('banc-contexte.json : JSON invalide.');
+		return lireCasDuTexte(texte);
+	} catch (e) {
+		throw enErreurDuBanc(e);
 	}
-	if (!Array.isArray(brut)) throw new ErreurCli('banc-contexte.json : une liste de cas est attendue.');
-	return brut.map((c: unknown, i): CasContexte => {
-		if (!estObjet(c) || typeof c['nom'] !== 'string' || typeof c['position'] !== 'string' || typeof c['message'] !== 'string') {
-			throw new ErreurCli(`banc-contexte.json, cas ${i + 1} : « nom », « position » et « message » (textes) sont attendus.`);
-		}
-		const precedent = c['precedent'];
-		return {
-			nom: c['nom'],
-			position: c['position'],
-			message: c['message'],
-			premier: c['premier'] === true,
-			attendues: textes(c['attendues'] ?? [], 'attendues', i),
-			interdites: textes(c['interdites'] ?? [], 'interdites', i),
-			silence: c['silence'] === true,
-			...(c['injectees'] === undefined ? {} : { injectees: textes(c['injectees'], 'injectees', i) }),
-			...(typeof c['session'] === 'string' ? { session: c['session'] } : {}),
-			...(typeof c['rang'] === 'number' ? { rang: c['rang'] } : {}),
-			...(typeof precedent === 'string' || precedent === null ? { precedent } : {}),
-			...(c['candidates'] === undefined ? {} : { candidates: lireCandidates(c['candidates'], i) }),
-			...(c['jugements'] === undefined ? {} : { jugements: lireJugements(c['jugements'], i) }),
-			...(c['saute'] === true ? { saute: true } : {}),
-			...(typeof c['horodatageMs'] === 'number' ? { horodatageMs: c['horodatageMs'] } : {}),
-			...(typeof c['extraitLe'] === 'string' ? { extraitLe: c['extraitLe'] } : {}),
-			...(estObjet(c['modeles']) ? { modeles: { sens: c['modeles']['sens'] === true, reranker: c['modeles']['reranker'] === true } } : {}),
-			...(estObjet(c['gguf']) ? { gguf: { sens: texteOuNull(c['gguf']['sens']), reranker: texteOuNull(c['gguf']['reranker']) } } : {}),
-			...(Array.isArray(c['injectionsManuelles']) ? { injectionsManuelles: lireInjections(c['injectionsManuelles']) } : {}),
-		};
-	});
 }
 
 /** Cas du fichier ; aucun cas s'il n'existe pas encore. */
 export async function lireCasDuFichier(fichier: string): Promise<CasContexte[]> {
-	let texte: string;
-	try {
-		texte = await readFile(fichier, 'utf8');
-	} catch (e) {
-		if ((e as NodeJS.ErrnoException).code === 'ENOENT') return [];
-		throw e;
-	}
-	return lireCasContexte(texte);
+	return lireCasDuFichierBrut(fichier).catch((e: unknown) => {
+		throw enErreurDuBanc(e);
+	});
 }
 
 export function contexteEnTexte(mesure: MesureContexte, echecs: EchecContexte[]): string {
@@ -206,15 +109,19 @@ type Options = {
 	nombre: number | null;
 	parSession: number | null;
 	juger: boolean;
+	/** Pré-jugement par le juge Claude des messages à juger sans proposition (`--nombre` : au plus tant de messages). */
+	prejuger: boolean;
 	recalculer: boolean;
 	gestes: boolean;
 	apprendre: boolean;
 	module: string | null;
+	/** Avec `--apprendre --module` : les poids de départ livrés avec Mnemo, seulement le module (rien dans `.mnemo/`). */
+	depart: boolean;
 	empreintes: 'exclure' | 'garder';
 };
 
 export function lireOptionsContexte(args: readonly string[]): Options {
-	const o: Options = { json: false, extraire: false, completer: false, session: null, nombre: null, parSession: null, juger: false, recalculer: false, gestes: false, apprendre: false, module: null, empreintes: 'exclure' };
+	const o: Options = { json: false, extraire: false, completer: false, session: null, nombre: null, parSession: null, juger: false, prejuger: false, recalculer: false, gestes: false, apprendre: false, module: null, depart: false, empreintes: 'exclure' };
 	const refus = (motif: string) => new ErreurCli(`${motif}\n${USAGE_CONTEXTE}`, 2);
 	const entier = (option: string, valeur: string | undefined): number => {
 		const n = Number(valeur);
@@ -225,10 +132,12 @@ export function lireOptionsContexte(args: readonly string[]): Options {
 		const a = args[k]!;
 		if (a === '--json') o.json = true;
 		else if (a === '--juger') o.juger = true;
+		else if (a === '--prejuger') o.prejuger = true;
 		else if (a === '--recalculer') o.recalculer = true;
 		else if (a === '--gestes') o.gestes = true;
 		else if (a === '--completer') o.completer = true;
 		else if (a === '--apprendre') o.apprendre = true;
+		else if (a === '--depart') o.depart = true;
 		else if (a === '--extraire') {
 			o.extraire = true;
 			const suivant = args[k + 1];
@@ -254,11 +163,14 @@ export function lireOptionsContexte(args: readonly string[]): Options {
 			k += 1;
 		} else throw refus(a.startsWith('--') ? `Option inconnue : « ${a} ».` : `Argument inattendu : « ${a} ».`);
 	}
-	if ([o.extraire, o.completer, o.juger, o.recalculer, o.apprendre].filter(Boolean).length > 1) throw refus('--extraire, --completer, --juger, --recalculer et --apprendre ne vont pas ensemble.');
-	if ((o.nombre !== null || o.parSession !== null) && !o.extraire) throw refus("--nombre et --par-session ne vont qu'avec --extraire.");
+	if ([o.extraire, o.completer, o.juger, o.prejuger, o.recalculer, o.apprendre].filter(Boolean).length > 1) throw refus('--extraire, --completer, --juger, --prejuger, --recalculer et --apprendre ne vont pas ensemble.');
+	if (o.nombre !== null && !o.extraire && !o.prejuger) throw refus("--nombre ne va qu'avec --extraire ou --prejuger.");
+	if (o.parSession !== null && !o.extraire) throw refus("--par-session ne va qu'avec --extraire.");
+	if (o.prejuger && o.empreintes !== 'exclure') throw refus('--empreintes ne va pas avec --prejuger.');
 	if (o.juger && o.json) throw refus('--juger ne va pas avec --json.');
 	if (o.module !== null && !o.apprendre) throw refus("--module ne va qu'avec --apprendre.");
-	if (o.gestes && (o.extraire || o.completer || o.juger || o.recalculer || o.apprendre || o.empreintes !== 'exclure')) throw refus("--gestes ne va qu'avec --json.");
+	if (o.depart && (!o.apprendre || o.module === null)) throw refus("--depart ne va qu'avec --apprendre --module <chemin>.");
+	if (o.gestes && (o.extraire || o.completer || o.juger || o.prejuger || o.recalculer || o.apprendre || o.empreintes !== 'exclure')) throw refus("--gestes ne va qu'avec --json.");
 	return o;
 }
 
@@ -387,15 +299,17 @@ async function extraire(racine: string, fichier: string, o: Options): Promise<vo
 const instantDApprentissage = (): string => new Date().toISOString();
 
 /**
- * `--apprendre` : la note de confiance apprise sur les jugements (empreintes vérifiées sur l'index lu tel qu'il est), le module
- * de coefficients et le rapport écrits.
+ * `--apprendre` : la note de confiance apprise sur les jugements (empreintes vérifiées sur l'index lu tel qu'il est), enregistrée
+ * comme depuis le service (modèle d'avant gardé, rapport, ligne d'historique), le module de coefficients écrit s'il est demandé.
+ * `--depart` : seulement le module, rien dans `.mnemo/`, pas même le verrou (le banc est
+ * lu une fois, et ses écritures se font par renommage : la lecture voit un fichier entier).
  */
 async function apprendre(racine: string, fichier: string, o: Options): Promise<void> {
 	// sous le verrou du banc : aucun jugement ne change pendant l'apprentissage
-	const rendre = prendreVerrouBanc(fichier, '--apprendre');
+	const rendre = o.depart ? () => {} : prendreVerrouBanc(fichier, '--apprendre');
 	try {
 		const cas = (await lireCasDuFichier(fichier)).filter((c) => c.candidates !== undefined);
-		if (cas.length === 0) throw new ErreurCli(`Aucun message jugé dans ${fichier}. Ajoutez-en avec --extraire, puis --juger.`);
+		if (cas.length === 0) throw new ErreurCli(`Aucun message jugé dans ${fichier}. En ajouter avec --extraire, puis --juger.`);
 		const dep = dependancesEnLecture(racine);
 		let empreinteDe: Map<string, string>;
 		try {
@@ -405,7 +319,7 @@ async function apprendre(racine: string, fichier: string, o: Options): Promise<v
 		}
 		// l'échelle des signaux : les réglages de la mémoire, ceux avec lesquels le banc a calculé le signal de session
 		const echelle = echelleDesSignaux(lireReglagesDuDossier(racine).reglages.contexte);
-		const options = { empreinteDe, empreintes: o.empreintes, date: instantDApprentissage(), installes: ggufInstalles(), echelle, ...(o.module === null ? {} : { module: o.module }) };
+		const options = { empreinteDe, empreintes: o.empreintes, date: instantDApprentissage(), installes: ggufInstalles(), echelle, ...(o.module === null ? {} : { module: o.module }), depart: o.depart };
 		const { rapport, texte } = await apprendreAuBanc(racine, cas, options).catch((e: unknown) => {
 			throw e instanceof ErreurCli ? e : enErreurCli(e);
 		});
@@ -420,6 +334,7 @@ async function apprendre(racine: string, fichier: string, o: Options): Promise<v
  * (sans `claude`, sans rien écrire dans `.mnemo`) ; `--recalculer` recalcule les signaux avec les modèles. `--extraire
  * [<session>]` ajoute des messages réels à juger, avec leurs fiches figées ; `--completer` relance l'extraction sur les cas
  * existants ; `--juger` les fait juger une fiche à la fois ; `--json` rend aussi les paires jugées et leurs signaux bruts.
+ * `--prejuger` : le juge Claude propose un jugement pour les messages à juger qui n'en ont pas.
  * `--gestes` : comptes du journal durable des gestes, par geste et par fiche (sans texte de message). `--apprendre` : apprend la
  * note de confiance et écrit son module de coefficients et le rapport.
  */
@@ -441,17 +356,28 @@ export async function commandeContexte(args: string[]): Promise<void> {
 
 	if (o.extraire || o.completer) return extraire(racine, fichier, o);
 	if (o.apprendre) return apprendre(racine, fichier, o);
+	if (o.prejuger) {
+		// les synthèses des fiches, lues une fois sur l'index tel qu'il est : le juge ne voit jamais une fiche entière
+		const dep = dependancesEnLecture(racine);
+		let syntheses: Map<string, string>;
+		try {
+			syntheses = new Map((await dep.index.elements({ genres: ['fiche'] })).map((e) => [e.chemin, syntheseDe(e)]));
+		} finally {
+			dep.index.fermer();
+		}
+		return (await import('./banc-prejuger.ts')).commandePrejuger(fichier, { nombre: o.nombre, json: o.json, synthese: (chemin) => syntheses.get(chemin) ?? '' });
+	}
 	if (o.juger) {
 		const rendre = prendreVerrouBanc(fichier, '--juger');
 		try {
 			const existants = await lireCasDuFichier(fichier);
-			if (progression(existants).messages === 0) throw new ErreurCli(`Aucun message à juger dans ${fichier}. Ajoutez-en avec --extraire.`);
+			if (progression(existants).messages === 0) throw new ErreurCli(`Aucun message à juger dans ${fichier}. En ajouter avec --extraire.`);
 			// copie de sûreté du fichier tel qu'il était au lancement
 			await copyFile(fichier, `${fichier}.bak`);
 			const fin = await jugerAuTerminal(fichier, existants, { entree: process.stdin, sortie: process.stdout }).catch((e: unknown) => {
 				throw enErreurCli(e);
 			});
-			const suite = fin.messagesJuges === fin.messages ? ' Tout est jugé : --extraire pour en ajouter.' : ' Relancez --juger pour reprendre.';
+			const suite = fin.messagesJuges === fin.messages ? ' Tout est jugé : --extraire pour en ajouter.' : ' Relancer --juger pour reprendre.';
 			console.log(`${fin.messagesJuges} / ${fin.messages} messages jugés (${fin.silences} silence, ${fin.sautes} sautés), enregistrés dans ${fichier} (copie d'avant la séance : ${fichier}.bak).${suite}`);
 		} finally {
 			rendre();
@@ -461,7 +387,7 @@ export async function commandeContexte(args: string[]): Promise<void> {
 	const existants = await lireCasDuFichier(fichier);
 	const etiquetes = existants.filter((c) => c.candidates === undefined);
 	const avecCandidates = existants.filter((c) => c.candidates !== undefined);
-	if (existants.length === 0) throw new ErreurCli(`Aucun cas dans ${fichier}. Ajoutez-en avec --extraire.`);
+	if (existants.length === 0) throw new ErreurCli(`Aucun cas dans ${fichier}. En ajouter avec --extraire.`);
 	// index en lecture seule et jamais synchronisé : le rejeu n'écrit rien dans `.mnemo`
 	const gestes = o.recalculer && avecCandidates.length > 0 ? await gestesEnLecture(racine) : undefined;
 	const dep = dependancesEnLecture(racine);

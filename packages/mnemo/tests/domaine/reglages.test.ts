@@ -15,6 +15,7 @@ describe('réglages : valeurs par défaut', () => {
 				poidsInjection: 0.25,
 				demiVieInjection: 3,
 			},
+			entrainement: { automatique: true },
 			// les réglages de la mémoire sont les règles de SCHEMA.md, jamais dans ce fichier : groupe vide
 			memoire: {},
 			recherche: { resultats: 10, chronologie: 30, graphe: 5, reranker: 40, poidsPosition: 0.1, poidsConfiance: 0.05, poidsMemoire: 0.05, poidsFraicheur: 0.05 },
@@ -32,7 +33,7 @@ describe('réglages : valeurs par défaut', () => {
 			expect(champ.explication.length).toBeGreaterThan(10);
 			expect(valeurDuReglage(REGLAGES_PAR_DEFAUT, champ.cle)).toEqual(champ.defaut);
 		}
-		expect(new Set(CHAMPS_REGLAGES.map((c) => c.groupe))).toEqual(new Set(['projets', 'contexte', 'recherche', 'modeles', 'archiviste', 'service', 'interface']));
+		expect(new Set(CHAMPS_REGLAGES.map((c) => c.groupe))).toEqual(new Set(['projets', 'contexte', 'entrainement', 'recherche', 'modeles', 'archiviste', 'service', 'interface']));
 		expect(CHAMPS_REGLAGES.filter((c) => c.effet === 'service').map((c) => c.cle)).toEqual(['service.port']);
 	});
 });
@@ -243,5 +244,23 @@ describe('fusionnerFichier', () => {
 		expect(fusionnerFichier(brut, REGLAGES_PAR_DEFAUT, ['contexte.cartesNommees'])).toMatchObject({ contexte: { futur: true } });
 		expect(brut.contexte.cartesNommees).toBe(42);
 		expect(fusionnerFichier('pas un objet', r, ['modeles.inactiviteMinutes'])).toEqual({ modeles: { inactiviteMinutes: 30 } });
+	});
+});
+
+describe('réglage oui ou non : entrainement.automatique', () => {
+	it('oui par défaut ; lu, modifié et rétabli ; autre chose qu’un booléen refusé (lecture : le défaut et un avertissement)', () => {
+		const champ = CHAMPS_REGLAGES.find((c) => c.cle === 'entrainement.automatique')!;
+		expect(champ).toMatchObject({ genre: 'booleen', defaut: true, groupe: 'entrainement', effet: 'immediat' });
+		expect(champ.explication).toContain('au plus une fois par jour');
+		expect(lireReglages({ entrainement: { automatique: false } }).reglages.entrainement.automatique).toBe(false);
+		const lu = lireReglages({ entrainement: { automatique: 'non' } });
+		expect(lu.reglages.entrainement.automatique).toBe(true);
+		expect(lu.avertissements).toEqual(['Réglage « entrainement.automatique » (Réapprentissage automatique de la note) invalide : vrai ou faux attendu ; défaut : oui.']);
+		const coupe = modifierReglages(REGLAGES_PAR_DEFAUT, { 'entrainement.automatique': false });
+		expect(coupe.ok && coupe.reglages.entrainement.automatique).toBe(false);
+		expect(coupe.ok && reglagesEnFichier(coupe.reglages)).toEqual({ entrainement: { automatique: false } });
+		expect(modifierReglages(REGLAGES_PAR_DEFAUT, { 'entrainement.automatique': 1 }).ok).toBe(false);
+		const retabli = coupe.ok ? modifierReglages(coupe.reglages, { 'entrainement.automatique': null }) : null;
+		expect(retabli?.ok && retabli.reglages.entrainement.automatique).toBe(true);
 	});
 });

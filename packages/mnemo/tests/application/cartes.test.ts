@@ -5,7 +5,7 @@ import { dureeDuReranker } from '../../src/application/duree-reranker.ts';
 import type { Dependances, Reranker, Sens } from '../../src/application/ports.ts';
 import { classementDuJournal } from '../../src/application/classement-du-message.ts';
 import type { LigneDeClassement } from '../../src/application/classement-du-message.ts';
-import { echelleDesSignaux, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
+import { echelleDesSignaux, enModelesDeDepart, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
 import type { CoefficientsNote, ModeleDeNote } from '../../src/domaine/modele-de-note.ts';
 import { sigmoide } from '../../src/domaine/regression-logistique.ts';
 import { SANS_EXTRACTION, synchroniser } from '../../src/application/synchroniser.ts';
@@ -966,6 +966,48 @@ describe('calculerCartes : note de confiance (modèle accepté, refusé, aucun)'
 		expect(chemins(refuse).length).toBeGreaterThan(0);
 		expect(refuse.cartes.every((x) => x.note === null)).toBe(true);
 		expect(classementDuJournal(refuse.classement).every((l) => l.p === undefined)).toBe(true);
+	});
+
+	it('sans coefficients de la mémoire : le module livré, des modèles de départ (ordre par leur note, sans % ni injection)', async () => {
+		const dep = await avecSens();
+		delete dep.note;
+		const c = await calculerCartes(dep, suite());
+		expect(c.calibree).toBe(false);
+		expect(c.classement.every((l) => l.p === null && l.auto !== true)).toBe(true);
+		expect(c.classement.some((l) => l.pNonCalibree !== undefined && l.depart === true)).toBe(true);
+	});
+
+	it('lecture des coefficients en panne : aucun modèle appris (règle provisoire), jamais les modèles de départ du module livré', async () => {
+		const dep = await avecSens();
+		dep.note = () => {
+			throw new Error('lecture impossible');
+		};
+		const c = await calculerCartes(dep, suite());
+		expect(c.calibree).toBe(false);
+		expect(c.classement.every((l) => l.p === null && l.pNonCalibree === undefined && l.depart === undefined)).toBe(true);
+	});
+
+	it('modèle de départ (livré avec Mnemo) : le régime du refusé (même ordre, mêmes pistes, sans % ni injection), sa note marquée de départ', async () => {
+		const dep = await avecSens();
+		avecModeles(dep, { sens: modele({ ...SENS, accepte: false, refus: ['trop peu d’injections'] }) });
+		const refuse = await calculerCartes(dep, suite());
+		// d'autres GGUF installés : un modèle de départ n'en a pas, il n'est pas refusé pour eux
+		avecModeles(dep, enModelesDeDepart({ complets: modeleNonAppris(), sens: modele(SENS) }), { ...INSTALLES, sens: 'sens.gguf@cccccccccccc' });
+		const depart = await calculerCartes(dep, suite());
+		expect(depart.calibree).toBe(false);
+		expect(depart.classement.map((l) => l.chemin)).toEqual(refuse.classement.map((l) => l.chemin));
+		expect(chemins(depart)).toEqual(chemins(refuse));
+		expect(chemins(depart).length).toBeGreaterThan(0);
+		expect(depart.cartes.every((x) => x.note === null)).toBe(true);
+		expect(depart.classement.every((l) => l.p === null && l.auto !== true)).toBe(true);
+		const notees = depart.classement.filter((l) => l.pNonCalibree !== undefined);
+		expect(notees.length).toBeGreaterThan(0);
+		expect(notees.every((l) => l.depart === true)).toBe(true);
+		expect(refuse.classement.every((l) => l.depart === undefined)).toBe(true);
+		// au journal : la note non calibrée et sa marque, jamais de `p`
+		const journal = classementDuJournal(depart.classement);
+		expect(journal.every((l) => l.p === undefined)).toBe(true);
+		expect(journal.filter((l) => l.pNonCalibree !== undefined).every((l) => l.depart === true)).toBe(true);
 	});
 
 	it('modèle refusé pour d’autres fichiers GGUF que ceux installés : ordre et pistes par sa note, p null', async () => {

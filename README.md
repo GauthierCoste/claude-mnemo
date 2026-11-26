@@ -28,14 +28,16 @@ it.
   session, or for good.
 - **Profiles.** A profile sets what a session receives: its engine (Claude Code, Codex or Mistral Vibe) and model, its
   instruction, the memory skills, the Claude Code plugins switched on (every other installed plugin is switched off),
-  the hooks, where it starts, and an avatar shown on its sessions. A read-only preview shows everything a session of
-  the profile receives, and where each part comes from.
+  the hooks, where it starts, and an avatar shown on its sessions. **Settings › Agents** edits it like a game character
+  (appearance, class, equipment, capabilities, mission); the skills of the memory and of an agent are edited there too. A
+  read-only preview shows everything a session of the profile receives, and where each part comes from. **Settings ›
+  Documentation** is a one-page technical reference of how Mnemo works.
 - **Three engines.** Each profile chooses its engine and model; a session keeps the ones it was started with. Codex
   and Mistral Vibe get the memory through MCP, the context and reminders through their hooks, the checked instructions,
   and sessions started, resumed and wrapped up from the interface. Codex also shows its ChatGPT quotas next to the
   Claude ones in the title bar; Mistral Vibe does not report readable quotas. Claude Code plugins, the archivist and the
-  import of Claude Code's own memory stay with Claude Code. **Settings › Système › Moteurs** shows one card per engine
-  with its provider (Anthropic, OpenAI, Mistral) and how far it is linked to Mnemo; « Lier à Mnemo » links it in one
+  import of Claude Code's own memory stay with Claude Code. **Settings › Réglages › Branchements** shows one line per engine
+  with its provider's logo (Anthropic, OpenAI, Mistral) and whether it is linked to Mnemo; « Lier à Mnemo » links it in one
   click (or `mnemo declarer --moteur <engine> --lier` in a terminal), and an engine installed while Mnemo runs is
   picked up by « Relire », without a restart. New session lets you pick the agent like a character, with its provider,
   engine, model and equipment, and does not start an engine that is not linked. See
@@ -75,8 +77,9 @@ it.
   waited for.
 - **Injection** follows the session. Each meaningful message ranks the notes around the project, the neutral ones and
   those a gesture or the message points to, by meaning, words, the notes you injected by hand and the history of your
-  gestures; the ranking is refined by the reranker in the background. A small model learned on your judgements
-  (`mnemo banc contexte --apprendre`) turns this into a calibrated score: it chooses the leads, and injects a note whole
+  gestures; the ranking is refined by the reranker in the background. A small model, shipped with starting weights and
+  trained on your judgements (Mémoire › Entraîner, where Claude can pre-judge the messages for you; then again in the
+  background from your gestures), turns this into a calibrated score: it chooses the leads, and injects a note whole
   only when it is accepted and sure enough; automatic injection stops by itself when you keep setting its notes aside.
   Mute messages ("ok, go") bring nothing. The [details](docs/usage.md#injected-context) are in the usage guide.
 - **Sessions** started from Mnemo get what their engine reads. Claude Code gets a plugin generated for the session
@@ -168,7 +171,7 @@ tokens, private keys) are masked before anything is written or indexed. What the
 
 ## Status
 
-Version 1.9.0. Mnemo runs on macOS (Apple silicon and Intel) and on Windows (x64), where the desktop app is checked by
+Version 1.11.0. Mnemo runs on macOS (Apple silicon and Intel) and on Windows (x64), where the desktop app is checked by
 the CI but has not been tried in real use yet; Linux has not been used. The CI runs the type check and the tests at each push on Linux and
 Windows with Node.js 24, and on macOS with Node.js 26. The interface runs in the browser, or in its own window with the desktop app (macOS and Windows).
 

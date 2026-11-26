@@ -6,10 +6,10 @@
 import { DOSSIERS_FIXES, EXTENSIONS_EXTRAITES, extensionDe, plier } from '@mnemo/commun';
 import { cleDeCasse, ficheDeDossier, nomDeLaFiche, positionDeFiche } from './chemin.ts';
 import { estExpire, perimeLeDe } from './elements.ts';
-import { empreinte } from './empreinte.ts';
 import type { Fait } from './fait.ts';
 import type { Fiche } from './fiche.ts';
 import { liensEcrits } from './liens-ecrits.ts';
+import { lotPerime } from './lot.ts';
 import type { Lot } from './lot.ts';
 import { CLE_A_TRAITER, descripteurDeSource } from './source.ts';
 import { tronquerTexte } from './texte.ts';
@@ -403,15 +403,16 @@ function nomTitre(c: Contexte): string[] {
 
 /**
  * Lots proposés en attente de l'utilisateur, par fiche puis par date de proposition : identifiant, genre, nombre de
- * lignes, motif ; « périmé » si la fiche a changé depuis (ou n'existe plus) : il sera refusé, à reproposer.
+ * lignes, motif ; « périmé » si une information visée a changé depuis (ou la fiche n'existe plus, `lotPerime`) : il sera
+ * refusé, à reproposer.
  */
 function lotsEnAttente(c: Contexte): string[] {
 	return [...(c.lots ?? [])]
 		.sort((a, b) => parPointsDeCode(a.fiche, b.fiche) || a.proposeMs - b.proposeMs)
 		.map((l) => {
 			const f = c.parChemin.get(l.fiche);
-			const perime = f === undefined || empreinte(f.texte) !== l.empreinte;
-			return `${l.fiche} : lot ${l.id} (${l.genre}, ${l.lignes.length} ligne(s)) « ${extrait(l.motif)} »${perime ? ' — périmé : la fiche a changé, à reproposer' : ''}`;
+			const perime = lotPerime(l, f?.texte ?? null, f?.fiche.faits ?? null);
+			return `${l.fiche} : lot ${l.id} (${l.genre}, ${l.lignes.length} ligne(s)) « ${extrait(l.motif)} »${perime ? ' — périmé : une information visée a changé, à reproposer' : ''}`;
 		});
 }
 

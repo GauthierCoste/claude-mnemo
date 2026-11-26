@@ -349,6 +349,18 @@ describe('fusionnerCas', () => {
 		expect(tous[0]).toMatchObject({ session: 's', rang: 1 });
 		expect(tous[1]!.jugements).toEqual({ [GIT]: 'non_pertinente' });
 	});
+
+	it('un message validé entier qui reçoit des candidates est rouvert ; validé en silence, il le reste', () => {
+		const valide = { ...extrait('m1', [OUTIL]), jugements: { [OUTIL]: 'pertinente' as const }, valideLe: '2026-11-26T10:00:00.000Z' };
+		const silence = { ...extrait('m2', [GIT]), silence: true, jugements: { [GIT]: 'non_pertinente' as const }, valideLe: '2026-11-26T10:00:00.000Z' };
+		const inchange = { ...extrait('m3', [SOUS]), jugements: { [SOUS]: 'non_pertinente' as const }, valideLe: '2026-11-26T10:00:00.000Z' };
+		const { cas: tous } = fusionnerCas([valide, silence, inchange], [extrait('m1', [OUTIL, SOUS]), extrait('m2', [GIT, OUTIL]), extrait('m3', [SOUS])]);
+		expect(tous[0]).not.toHaveProperty('valideLe');
+		expect(tous[0]!.jugements).toEqual({ [OUTIL]: 'pertinente' });
+		expect(tous[1]).toMatchObject({ valideLe: '2026-11-26T10:00:00.000Z', jugements: { [GIT]: 'non_pertinente', [OUTIL]: 'non_pertinente' } });
+		expect(tous[2]!.valideLe).toBe('2026-11-26T10:00:00.000Z');
+		expect(valide.valideLe).toBe('2026-11-26T10:00:00.000Z');
+	});
 });
 
 describe('--completer : messagesDesCas et fusion', () => {

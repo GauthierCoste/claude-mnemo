@@ -110,7 +110,7 @@ export function CentreArchiviste(p: {
 			</Bouton>
 			{manuel !== null && (
 				<div className={s.manuel}>
-					<span>Terminaux indisponibles : lance-le toi-même.</span>
+					<span>Terminaux indisponibles : à lancer à la main.</span>
 					<code>{manuel}</code>
 					<Bouton petit onClick={() => copierTexte(manuel, toast, 'Commande copiée')}>
 						Copier

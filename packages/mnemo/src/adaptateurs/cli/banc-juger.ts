@@ -2,10 +2,10 @@
  * `mnemo banc contexte --juger` : le jugement au terminal, une fiche à la fois, une touche par réponse. Chaque réponse est
  * enregistrée aussitôt dans `.mnemo/banc-contexte.json` ; on reprend là où l'on s'est arrêté.
  */
-import { rename, writeFile } from 'node:fs/promises';
 import type { CasContexte } from '../../application/banc-contexte.ts';
 import { annuler, prochaine, progression, repondre } from '../../application/banc-juger.ts';
 import type { AJuger, Annulation, Reponse } from '../../application/banc-juger.ts';
+import { enregistrerCas } from '../../infra/banc-contexte-fichier.ts';
 
 /** Au-delà, le message est coupé à l'écran (il reste entier dans le fichier). */
 const MESSAGE_MAX = 1500;
@@ -20,12 +20,8 @@ const TOUCHES: Record<string, Reponse> = {
 	s: { genre: 'sauter' },
 };
 
-/** Enregistre les cas sans jamais laisser un fichier à moitié écrit (fichier voisin, puis renommage). */
-export async function enregistrerCas(fichier: string, cas: readonly CasContexte[]): Promise<void> {
-	const provisoire = `${fichier}.${process.pid}.tmp`;
-	await writeFile(provisoire, `${JSON.stringify(cas, null, 2)}\n`);
-	await rename(provisoire, fichier);
-}
+/** Écriture entière du fichier des jugements (fichier voisin puis renommage). */
+export { enregistrerCas };
 
 function couper(texte: string, maxCaracteres: number, maxLignes: number): string {
 	const lignes = texte.trim().split('\n');

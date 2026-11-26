@@ -33,15 +33,15 @@ export async function proposerBrut(dep: Dependances, d: DemandeBrut): Promise<Re
 	if (variante !== null) return refuse(variante);
 	const actuel = await dep.coffre.lire(chemin);
 	if (actuel === null) return refuse(`La fiche ${chemin} n'existe pas.`);
-	if (empreinte(actuel) !== d.empreinte) return { statut: 'conflit', motif: `La fiche ${chemin} a changé depuis sa lecture : recharge-la avant d'enregistrer.` };
+	if (empreinte(actuel) !== d.empreinte) return { statut: 'conflit', motif: `La fiche ${chemin} a changé depuis sa lecture : la recharger avant d'enregistrer.` };
 	if (d.texte === actuel) return { statut: 'doublon', fiche: chemin };
 
 	const nouvelle = lisible(chemin, d.texte);
 	if (typeof nouvelle === 'string') return refuse(`Texte illisible : ${nouvelle}`);
 	const ancienne = lisible(chemin, actuel);
 	if (typeof ancienne !== 'string') {
-		if (nouvelle.id !== ancienne.id) return refuse(`L'identifiant de la fiche (« id ») ne se change pas : garde « ${ancienne.id} ».`);
-		if (nouvelle.type !== ancienne.type) return refuse(`Le type de la fiche ne se change pas ici : garde « ${ancienne.type} ».`);
+		if (nouvelle.id !== ancienne.id) return refuse(`L'identifiant de la fiche (« id ») ne se change pas : garder « ${ancienne.id} ».`);
+		if (nouvelle.type !== ancienne.type) return refuse(`Le type de la fiche ne se change pas ici : garder « ${ancienne.type} ».`);
 	}
 
 	await dep.coffre.ecrire(chemin, d.texte);

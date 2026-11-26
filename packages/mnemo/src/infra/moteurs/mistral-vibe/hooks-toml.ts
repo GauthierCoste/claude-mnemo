@@ -11,7 +11,7 @@ async function lireFichier(chemin: string): Promise<{ lu: ConfigurationLue; elem
 	const lu = await lireConfiguration(chemin);
 	if ('echec' in lu) return lu;
 	const hooks = hooksDeMnemo(lu.texte);
-	if ('echec' in hooks) return { echec: `${chemin} : ${hooks.echec} ; corrigez-le, Mnemo ne le réécrit pas.` };
+	if ('echec' in hooks) return { echec: `${chemin} : ${hooks.echec} ; le corriger, Mnemo ne le réécrit pas.` };
 	return { lu, elements: hooks.elements };
 }
 

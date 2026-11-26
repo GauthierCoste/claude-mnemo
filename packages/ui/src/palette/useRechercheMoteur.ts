@@ -3,6 +3,7 @@
  * modèle) ; puis, quand la frappe s'est posée (`ATTENTE_COMPLETE_MS` sans frappe), l'appel complet (sens, graphe,
  * reranker s'ils tournent), qui la remplace. Rien sous deux caractères. Toute requête en cours est abandonnée quand le
  * texte, le dossier ou le genre change (AbortController : le service, qui voit la connexion se fermer, s'arrête aussi).
+ * Partagée avec la recherche de fiche du panneau Contexte (`RechercheFiche`), sous sa propre clé de remplacement.
  */
 import { ROUTES, type ReponseRecherche, type TrouveRechercheVue } from '@mnemo/contrat';
 import { useEffect, useState } from 'react';
@@ -29,10 +30,11 @@ export type RechercheMoteur = {
 
 type Etat = { cle: string | null; trouves: TrouveRechercheVue[] | null; complet: boolean; erreur: string | null };
 
-export function useRechercheMoteur(q: string, o: { dossier: string | null; genre: GenreMoteur | null; actif: boolean }): RechercheMoteur {
+export function useRechercheMoteur(q: string, o: { dossier: string | null; genre: GenreMoteur | null; actif: boolean; remplacement?: string }): RechercheMoteur {
 	const { api } = useClient();
 	const texte = q.trim();
 	const cle = o.actif && texte.length >= LONGUEUR_MIN_RECHERCHE ? JSON.stringify([texte, o.dossier, o.genre]) : null;
+	const remplacement = o.remplacement ?? 'palette';
 	const [etat, setEtat] = useState<Etat>({ cle: null, trouves: null, complet: false, erreur: null });
 
 	useEffect(() => {
@@ -40,10 +42,10 @@ export function useRechercheMoteur(q: string, o: { dossier: string | null; genre
 		const [texteCle, dossier, genre] = JSON.parse(cle) as [string, string | null, GenreMoteur | null];
 		const controleur = new AbortController();
 		const params: Record<string, string> = { q: texteCle, limite: String(LIMITE_MOTEUR), ...(dossier ? { dossier } : {}), ...(genre ? { genre } : {}) };
-		// clé de remplacement `palette` (la recherche complète seule) : sa recherche complète précédente est abandonnée par le
-		// service, jamais celle d'un autre consommateur (graphe 3D : `graphe`)
+		// clé de remplacement `palette` par défaut (la recherche complète seule) : sa recherche complète précédente est abandonnée
+		// par le service, jamais celle d'un autre consommateur (graphe 3D : `graphe` ; panneau Contexte : `fiche`)
 		const appeler = (extra: Record<string, string>) =>
-			api.lire<ReponseRecherche>(ROUTES.recherche, { ...params, ...extra }, { signal: controleur.signal, ...(extra['rapide'] ? {} : { remplacement: 'palette' }) });
+			api.lire<ReponseRecherche>(ROUTES.recherche, { ...params, ...extra }, { signal: controleur.signal, ...(extra['rapide'] ? {} : { remplacement }) });
 		let complet = false;
 		const echec = (e: unknown) => {
 			// abandonnée ou remplacée : rien à afficher ; un échec des mots seuls après la réponse complète ne l'efface pas
@@ -70,7 +72,7 @@ export function useRechercheMoteur(q: string, o: { dossier: string | null; genre
 			clearTimeout(entier);
 			controleur.abort();
 		};
-	}, [cle, api]);
+	}, [cle, api, remplacement]);
 
 	const courant = cle !== null && etat.cle === cle ? etat : null;
 	return {

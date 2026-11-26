@@ -10,9 +10,14 @@
 // résout le système de Newton sur les autres, puis on recule (Armijo) tant que le pas projeté ne fait pas assez baisser
 // l'objectif. L'objectif est convexe ; sans pénalité et sur des données séparables, il n'a pas de minimum fini : l'arrêt au
 // nombre maximal d'itérations est alors signalé (`converge` faux).
+//
+// Pondération : un exemple de poids w compte comme w exemples (perte, gradient, hessien, moyennes et écarts types de la
+// réduction, taux de base de départ) ; la perte moyenne est rapportée à la somme des poids. Un poids nul retire l'exemple.
 
-/** Un exemple : les variables et le jugement (vrai : pertinente). */
-export type Exemple = { x: readonly number[]; y: boolean };
+/** Un exemple : les variables, le jugement (vrai : pertinente) et son poids (fini, ≥ 0 ; 1 par défaut). */
+export type Exemple = { x: readonly number[]; y: boolean; poids?: number };
+
+const poidsDe = (e: Exemple): number => e.poids ?? 1;
 
 /** Coefficients appris, dans les unités d'origine des variables ; `converge` : l'optimisation a atteint son minimum. */
 export type Regression = { biais: number; poids: number[]; converge: boolean };
@@ -56,10 +61,11 @@ export function marge(r: Coefficients, x: readonly number[]): number {
 
 export const probabilite = (r: Coefficients, x: readonly number[]): number => sigmoide(marge(r, x));
 
-/** Perte logistique moyenne (log loss) des exemples ; 0 sans exemple. */
+/** Perte logistique moyenne (log loss) des exemples, pondérée ; 0 sans exemple (ou sans poids). */
 export function perteMoyenne(r: Coefficients, exemples: readonly Exemple[]): number {
-	if (exemples.length === 0) return 0;
-	return exemples.reduce((s, e) => s + perte(marge(r, e.x), e.y), 0) / exemples.length;
+	const total = exemples.reduce((s, e) => s + poidsDe(e), 0);
+	if (total === 0) return 0;
+	return exemples.reduce((s, e) => s + poidsDe(e) * perte(marge(r, e.x), e.y), 0) / total;
 }
 
 /** Résout `A·x = b` (petit système) par élimination de Gauss avec pivot partiel. */
@@ -87,12 +93,18 @@ function resoudre(a: readonly (readonly number[])[], b: readonly number[]): numb
 	return x;
 }
 
-/** Apprend `b` et `w` (poids ≥ 0 par défaut, bornés par `maximums`) en minimisant la perte moyenne plus (λ/2)·Σ vⱼ². */
-export function apprendreRegression(exemples: readonly Exemple[], options: OptionsRegression): Regression {
-	const n = exemples.length;
-	const d = exemples[0]?.x.length ?? 0;
-	if (exemples.some((e) => e.x.length !== d)) throw new Error('Exemples de dimensions différentes.');
+/**
+ * Apprend `b` et `w` (poids ≥ 0 par défaut, bornés par `maximums`) en minimisant la perte moyenne pondérée plus (λ/2)·Σ vⱼ².
+ */
+export function apprendreRegression(tous: readonly Exemple[], options: OptionsRegression): Regression {
+	const d = tous[0]?.x.length ?? 0;
+	if (tous.some((e) => e.x.length !== d)) throw new Error('Exemples de dimensions différentes.');
 	if (!(options.lambda >= 0)) throw new Error(`λ invalide : ${options.lambda}`);
+	if (tous.some((e) => !(Number.isFinite(poidsDe(e)) && poidsDe(e) >= 0))) throw new Error('Poids d’exemple invalide (fini et ≥ 0).');
+	const exemples = tous.filter((e) => poidsDe(e) > 0);
+	const n = exemples.length;
+	const w = exemples.map(poidsDe);
+	const total = w.reduce((s, x) => s + x, 0);
 	if (n === 0) return { biais: 0, poids: Array.from({ length: d }, () => 0), converge: true };
 	const positifs = options.positifs ?? true;
 	const iterationsMax = options.iterationsMax ?? 100;
@@ -100,8 +112,8 @@ export function apprendreRegression(exemples: readonly Exemple[], options: Optio
 	const lambda = options.lambda;
 
 	// variables centrées réduites ; une variable constante reste hors du jeu
-	const moyenne = Array.from({ length: d }, (_, j) => exemples.reduce((s, e) => s + e.x[j]!, 0) / n);
-	const ecart = Array.from({ length: d }, (_, j) => Math.sqrt(exemples.reduce((s, e) => s + (e.x[j]! - moyenne[j]!) ** 2, 0) / n));
+	const moyenne = Array.from({ length: d }, (_, j) => exemples.reduce((s, e, i) => s + w[i]! * e.x[j]!, 0) / total);
+	const ecart = Array.from({ length: d }, (_, j) => Math.sqrt(exemples.reduce((s, e, i) => s + w[i]! * (e.x[j]! - moyenne[j]!) ** 2, 0) / total));
 	const actives = Array.from({ length: d }, (_, j) => j).filter((j) => ecart[j]! > ECART_NUL);
 	const k = actives.length;
 	const q = k + 1; // coordonnées : 0 à k − 1 les poids réduits, k le biais
@@ -130,12 +142,12 @@ export function apprendreRegression(exemples: readonly Exemple[], options: Optio
 	const objectif = (v: readonly number[]): number => {
 		const m = marges(v);
 		let s = 0;
-		for (let i = 0; i < n; i++) s += perte(m[i]!, y[i]!);
-		return s / n + v.reduce((r, x, c) => r + (penalite[c]! / 2) * x * x, 0);
+		for (let i = 0; i < n; i++) s += w[i]! * perte(m[i]!, y[i]!);
+		return s / total + v.reduce((r, x, c) => r + (penalite[c]! / 2) * x * x, 0);
 	};
 
-	const base = y.filter(Boolean).length / n;
-	let v = Array.from({ length: q }, (_, c) => (c === k ? Math.log((base * n + 0.5) / ((1 - base) * n + 0.5)) : 0));
+	const base = y.reduce((s, yi, i) => s + (yi ? w[i]! : 0), 0) / total;
+	let v = Array.from({ length: q }, (_, c) => (c === k ? Math.log((base * total + 0.5) / ((1 - base) * total + 0.5)) : 0));
 	let valeur = objectif(v);
 	let converge = false;
 	for (let iteration = 0; iteration < iterationsMax; iteration++) {
@@ -144,19 +156,19 @@ export function apprendreRegression(exemples: readonly Exemple[], options: Optio
 		const h = Array.from({ length: q }, () => Array.from({ length: q }, () => 0));
 		for (let i = 0; i < n; i++) {
 			const p = sigmoide(m[i]!);
-			const r = p - (y[i]! ? 1 : 0);
-			const w = p * (1 - p);
+			const r = w[i]! * (p - (y[i]! ? 1 : 0));
+			const courbure = w[i]! * p * (1 - p);
 			for (let a = 0; a < q; a++) {
 				const za = z[i * q + a]!;
 				g[a] = g[a]! + r * za;
 				const ha = h[a]!;
-				for (let b = a; b < q; b++) ha[b] = ha[b]! + w * za * z[i * q + b]!;
+				for (let b = a; b < q; b++) ha[b] = ha[b]! + courbure * za * z[i * q + b]!;
 			}
 		}
 		for (let a = 0; a < q; a++) {
-			g[a] = g[a]! / n + penalite[a]! * v[a]!;
+			g[a] = g[a]! / total + penalite[a]! * v[a]!;
 			for (let b = a; b < q; b++) {
-				h[a]![b] = h[a]![b]! / n + (a === b ? penalite[a]! + 1e-12 : 0);
+				h[a]![b] = h[a]![b]! / total + (a === b ? penalite[a]! + 1e-12 : 0);
 				h[b]![a] = h[a]![b]!;
 			}
 		}

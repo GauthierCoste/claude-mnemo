@@ -33,7 +33,7 @@ export type DependancesPoste = {
 const DELAI_DECLARATION_MS = 10_000;
 
 const motifDesactive = (moteur: MoteurDuPoste): string =>
-	`désactivée dans ${NOMS_MOTEURS[moteur.id]} (${moteur.installation.desactivation}) : Mnemo ne la réactive pas ; réactivez-la dans ${NOMS_MOTEURS[moteur.id]} pour que ses sessions lisent la mémoire.`;
+	`désactivée dans ${NOMS_MOTEURS[moteur.id]} (${moteur.installation.desactivation}) : Mnemo ne la réactive pas ; la réactiver dans ${NOMS_MOTEURS[moteur.id]} pour que ses sessions lisent la mémoire.`;
 
 function etatMcp(moteur: MoteurDuPoste, etat: Exclude<EtatMcpVerifie['etat'], 'echec' | 'desactive'>): string {
 	const r = remedesDuMoteur(moteur);
@@ -143,5 +143,5 @@ export async function commandeVerifierPoste(args: string[], partiel: Partial<Dep
 	ecrire(poste.claude.ok ? `Claude Code : ${poste.claude.chemin}` : `Claude Code : absent ; ${poste.claude.motif}`);
 	for (const m of MOTEURS_FACULTATIFS) ecrire(ligneMoteur(m.moteur, blocDuPoste(poste, m)));
 	ecrire(`Node : ${poste.node.version}`);
-	if (!poste.git.ok || !poste.claude.ok) throw new ErreurCli('Poste incomplet : installez ce qui manque, puis relancez « mnemo verifier-poste ».', 1);
+	if (!poste.git.ok || !poste.claude.ok) throw new ErreurCli('Poste incomplet : installer ce qui manque, puis relancer « mnemo verifier-poste ».', 1);
 }

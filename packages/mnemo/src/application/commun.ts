@@ -128,7 +128,7 @@ export async function lireFicheExistante(dep: Dependances, chemin: string): Prom
 export async function cheminExistant(dep: Dependances, chemin: string): Promise<string | null> {
 	const cle = cleDeCasse(chemin);
 	const existant = (await dep.coffre.toutesLesFiches()).find((e) => e !== chemin && cleDeCasse(e) === cle);
-	return existant === undefined ? null : `La fiche ${chemin} existe déjà sous le nom ${existant} : utilise ce chemin.`;
+	return existant === undefined ? null : `La fiche ${chemin} existe déjà sous le nom ${existant} : utiliser ce chemin.`;
 }
 
 /** Refuse (texte) si une fiche existante a le même chemin à la casse près. */
@@ -149,7 +149,7 @@ export async function dossiersManquants(dep: Dependances, chemin: string): Promi
 		if (cheminDossier === chemin || existantes.includes(cheminDossier)) continue;
 		const cle = cleDeCasse(cheminDossier);
 		const voisin = existantes.find((e) => cleDeCasse(e) === cle);
-		if (voisin !== undefined) return `La fiche de dossier ${voisin} existe déjà, à la casse près de ${cheminDossier} : utilise ce chemin.`;
+		if (voisin !== undefined) return `La fiche de dossier ${voisin} existe déjà, à la casse près de ${cheminDossier} : utiliser ce chemin.`;
 		fiches.push(ficheVide(dep, cheminDossier, 'dossier', dossier.slice(dossier.lastIndexOf('/') + 1)));
 	}
 	return fiches;
@@ -177,6 +177,25 @@ export async function ecrireEtCommiter(dep: Dependances, aEcrire: { chemin: stri
 				// au mieux : l'erreur d'origine est celle qui compte
 			}
 		}
+		throw erreur;
+	}
+}
+
+/**
+ * Écrit `aEcrire` puis lance `commiterTout` ; en cas d'échec, remet chaque fichier écrit dans son état d'avant, puis `defaire`
+ * (au mieux : l'erreur d'origine est celle qui est levée).
+ */
+export async function ecrireOuDefaire<T>(dep: Dependances, aEcrire: { chemin: string; texte: string }[], commiterTout: () => Promise<T>, defaire: () => Promise<void>): Promise<T> {
+	const avant = new Map<string, string | null>();
+	try {
+		for (const f of aEcrire) {
+			if (!avant.has(f.chemin)) avant.set(f.chemin, await dep.coffre.lire(f.chemin));
+			await dep.coffre.ecrire(f.chemin, f.texte);
+		}
+		return await commiterTout();
+	} catch (erreur) {
+		for (const [chemin, texte] of avant) await (texte === null ? dep.coffre.supprimer(chemin) : dep.coffre.ecrire(chemin, texte)).catch(() => {});
+		await defaire().catch(() => {});
 		throw erreur;
 	}
 }
