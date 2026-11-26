@@ -20,9 +20,15 @@ const TOUCHES: Record<string, Reponse> = {
 	s: { genre: 'sauter' },
 };
 
-/** Enregistre les cas sans jamais laisser un fichier à moitié écrit (fichier voisin, puis renommage). */
+/** Numéro du fichier provisoire suivant : deux écritures du même processus n'ont jamais le même. */
+let ecritures = 0;
+
+/**
+ * Enregistre les cas sans jamais laisser un fichier à moitié écrit (fichier voisin propre à cette écriture, puis renommage ;
+ * deux écritures du même processus, le service par exemple, ne se marchent pas dessus).
+ */
 export async function enregistrerCas(fichier: string, cas: readonly CasContexte[]): Promise<void> {
-	const provisoire = `${fichier}.${process.pid}.tmp`;
+	const provisoire = `${fichier}.${process.pid}.${++ecritures}.tmp`;
 	await writeFile(provisoire, `${JSON.stringify(cas, null, 2)}\n`);
 	await rename(provisoire, fichier);
 }

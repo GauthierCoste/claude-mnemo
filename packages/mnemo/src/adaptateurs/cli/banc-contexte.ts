@@ -7,7 +7,7 @@ import type { MessageAExtraire } from '../../application/banc-extraire.ts';
 import { progression } from '../../application/banc-juger.ts';
 import { rejouerJugements } from '../../application/banc-rejeu.ts';
 import type { MesuresNiveau, RejeuJugements } from '../../application/banc-rejeu.ts';
-import { LISTES_DU_BANC } from '../../application/banc-signaux.ts';
+import { LISTES_DU_BANC, syntheseDe } from '../../application/banc-signaux.ts';
 import type { GestesDuBanc, Signaux } from '../../application/banc-signaux.ts';
 import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
 import { compterGestes, GESTES } from '../../domaine/gestes.ts';
@@ -30,6 +30,7 @@ const USAGE_CONTEXTE = [
 	'        mnemo banc contexte --extraire [<session>] [--nombre <n>] [--par-session <n>] [--json]',
 	'        mnemo banc contexte --completer [--json]',
 	'        mnemo banc contexte --juger',
+	'        mnemo banc contexte --prejuger [--nombre <n>] [--json]',
 	'        mnemo banc contexte --gestes [--json]',
 	'        mnemo banc contexte --apprendre [--empreintes exclure|garder] [--module <chemin> [--depart]] [--json]',
 ].join('\n');
@@ -221,6 +222,8 @@ type Options = {
 	nombre: number | null;
 	parSession: number | null;
 	juger: boolean;
+	/** Pré-jugement par le juge Claude des messages à juger sans proposition (`--nombre` : au plus tant de messages). */
+	prejuger: boolean;
 	recalculer: boolean;
 	gestes: boolean;
 	apprendre: boolean;
@@ -231,7 +234,7 @@ type Options = {
 };
 
 export function lireOptionsContexte(args: readonly string[]): Options {
-	const o: Options = { json: false, extraire: false, completer: false, session: null, nombre: null, parSession: null, juger: false, recalculer: false, gestes: false, apprendre: false, module: null, depart: false, empreintes: 'exclure' };
+	const o: Options = { json: false, extraire: false, completer: false, session: null, nombre: null, parSession: null, juger: false, prejuger: false, recalculer: false, gestes: false, apprendre: false, module: null, depart: false, empreintes: 'exclure' };
 	const refus = (motif: string) => new ErreurCli(`${motif}\n${USAGE_CONTEXTE}`, 2);
 	const entier = (option: string, valeur: string | undefined): number => {
 		const n = Number(valeur);
@@ -242,6 +245,7 @@ export function lireOptionsContexte(args: readonly string[]): Options {
 		const a = args[k]!;
 		if (a === '--json') o.json = true;
 		else if (a === '--juger') o.juger = true;
+		else if (a === '--prejuger') o.prejuger = true;
 		else if (a === '--recalculer') o.recalculer = true;
 		else if (a === '--gestes') o.gestes = true;
 		else if (a === '--completer') o.completer = true;
@@ -272,12 +276,14 @@ export function lireOptionsContexte(args: readonly string[]): Options {
 			k += 1;
 		} else throw refus(a.startsWith('--') ? `Option inconnue : « ${a} ».` : `Argument inattendu : « ${a} ».`);
 	}
-	if ([o.extraire, o.completer, o.juger, o.recalculer, o.apprendre].filter(Boolean).length > 1) throw refus('--extraire, --completer, --juger, --recalculer et --apprendre ne vont pas ensemble.');
-	if ((o.nombre !== null || o.parSession !== null) && !o.extraire) throw refus("--nombre et --par-session ne vont qu'avec --extraire.");
+	if ([o.extraire, o.completer, o.juger, o.prejuger, o.recalculer, o.apprendre].filter(Boolean).length > 1) throw refus('--extraire, --completer, --juger, --prejuger, --recalculer et --apprendre ne vont pas ensemble.');
+	if (o.nombre !== null && !o.extraire && !o.prejuger) throw refus("--nombre ne va qu'avec --extraire ou --prejuger.");
+	if (o.parSession !== null && !o.extraire) throw refus("--par-session ne va qu'avec --extraire.");
+	if (o.prejuger && o.empreintes !== 'exclure') throw refus('--empreintes ne va pas avec --prejuger.');
 	if (o.juger && o.json) throw refus('--juger ne va pas avec --json.');
 	if (o.module !== null && !o.apprendre) throw refus("--module ne va qu'avec --apprendre.");
 	if (o.depart && (!o.apprendre || o.module === null)) throw refus("--depart ne va qu'avec --apprendre --module <chemin>.");
-	if (o.gestes && (o.extraire || o.completer || o.juger || o.recalculer || o.apprendre || o.empreintes !== 'exclure')) throw refus("--gestes ne va qu'avec --json.");
+	if (o.gestes && (o.extraire || o.completer || o.juger || o.prejuger || o.recalculer || o.apprendre || o.empreintes !== 'exclure')) throw refus("--gestes ne va qu'avec --json.");
 	return o;
 }
 
@@ -440,6 +446,7 @@ async function apprendre(racine: string, fichier: string, o: Options): Promise<v
  * (sans `claude`, sans rien écrire dans `.mnemo`) ; `--recalculer` recalcule les signaux avec les modèles. `--extraire
  * [<session>]` ajoute des messages réels à juger, avec leurs fiches figées ; `--completer` relance l'extraction sur les cas
  * existants ; `--juger` les fait juger une fiche à la fois ; `--json` rend aussi les paires jugées et leurs signaux bruts.
+ * `--prejuger` : le juge Claude propose un jugement pour les messages à juger qui n'en ont pas.
  * `--gestes` : comptes du journal durable des gestes, par geste et par fiche (sans texte de message). `--apprendre` : apprend la
  * note de confiance et écrit son module de coefficients et le rapport.
  */
@@ -461,6 +468,17 @@ export async function commandeContexte(args: string[]): Promise<void> {
 
 	if (o.extraire || o.completer) return extraire(racine, fichier, o);
 	if (o.apprendre) return apprendre(racine, fichier, o);
+	if (o.prejuger) {
+		// les synthèses des fiches, lues une fois sur l'index tel qu'il est : le juge ne voit jamais une fiche entière
+		const dep = dependancesEnLecture(racine);
+		let syntheses: Map<string, string>;
+		try {
+			syntheses = new Map((await dep.index.elements({ genres: ['fiche'] })).map((e) => [e.chemin, syntheseDe(e)]));
+		} finally {
+			dep.index.fermer();
+		}
+		return (await import('./banc-prejuger.ts')).commandePrejuger(fichier, { nombre: o.nombre, json: o.json, synthese: (chemin) => syntheses.get(chemin) ?? '' });
+	}
 	if (o.juger) {
 		const rendre = prendreVerrouBanc(fichier, '--juger');
 		try {
