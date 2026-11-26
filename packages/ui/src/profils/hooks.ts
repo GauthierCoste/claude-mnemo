@@ -16,6 +16,6 @@ export const HOOKS_PROFIL: readonly { cle: EvenementHookVue; libelle: string; de
 	},
 	{ cle: 'outil', libelle: 'Outil', detail: 'refuse une action contraire à une consigne vérifiée', pouvoir: 'Bouclier', rune: '⛨', effet: 'avant une action : la bloque si elle viole une consigne vérifiée' },
 	{ cle: 'apres_outil', libelle: 'Après outil', detail: 'note les fiches lues ou écrites (rien n’est injecté)', pouvoir: 'Carnet', rune: '✎', effet: 'après une action : retient les fiches lues ou écrites' },
-	{ cle: 'arret', libelle: 'Arrêt', detail: 'tient l’état de la session (attend, à relire)', pouvoir: 'Veille', rune: '◷', effet: 'quand l’agent s’arrête : passe la session « à relire »' },
+	{ cle: 'arret', libelle: 'Arrêt', detail: 'tient l’état de la session (attend, à relire)', pouvoir: 'Veille', rune: '◷', effet: 'quand l’agent s’arrête : la session attend ta réponse' },
 	{ cle: 'fin', libelle: 'Fin', detail: 'termine la session ; épisode minimal sans bilan', pouvoir: 'Récit', rune: '❖', effet: 'à la fermeture : termine la session, épisode minimal sans bilan' },
 ];

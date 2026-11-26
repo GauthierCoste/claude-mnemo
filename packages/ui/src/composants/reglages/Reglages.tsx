@@ -2,7 +2,7 @@
  * Vue Réglages (roue dentée en bas du rail, ⌥,) : trois onglets, chacun avec son panneau à gauche. « Agents » (les profils de
  * session : consigne, skills, plugins, hooks, lancement, avatar, et l'aperçu de ce que reçoit une session), « Réglages »
  * (Branchements : moteurs et app Claude ; Mémoire : rappel et confiance ; Système : service, modèles, couleur) et
- * « Documentation ». Une pastille ambre sur « Réglages » quand un moteur attend un geste. Le dernier onglet ouvert est retenu
+ * « Documentation » (comment Mnemo fonctionne, en six chapitres). Une pastille ambre sur « Réglages » quand un moteur attend un geste. Le dernier onglet ouvert est retenu
  * dans ce navigateur. Changer d'onglet avec des modifications non enregistrées est retenu : un avertissement propose de les
  * abandonner ou de rester.
  */
@@ -13,6 +13,7 @@ import { ONGLETS_REGLAGES, ongletRetenu, retenirOnglet, type OngletReglages as O
 import { Bouton } from '../commun/Bouton.tsx';
 import { OngletReglages } from './OngletReglages.tsx';
 import { Agents } from './agents/Agents.tsx';
+import { Documentation } from './documentation/Documentation.tsx';
 import s from './Reglages.module.css';
 
 const TITRES_ONGLETS: Readonly<Record<Onglet, string>> = { agents: 'Agents', reglages: 'Réglages', documentation: 'Documentation' };
@@ -94,10 +95,7 @@ export function Reglages(): ReactNode {
 				) : onglet === 'reglages' ? (
 					<OngletReglages surModifie={surModifie} />
 				) : (
-					<section className={s.documentation} aria-label="Documentation">
-						<h2>Comment Mnemo fonctionne</h2>
-						<p>À venir : le principe, une session, les agents, le rappel, la confiance et l’archiviste, expliqués ici.</p>
-					</section>
+					<Documentation />
 				)}
 			</div>
 		</section>

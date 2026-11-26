@@ -1,0 +1,295 @@
+/*
+ * Onglet Documentation : le chapitre choisi à droite du panneau, en colonne de lecture (760px au plus). Schémas en cases
+ * fléchées, frise des pouvoirs, glossaire, sorts d'une fiche, formule. Tout se règle sur la largeur de la colonne
+ * (container queries) : une colonne en petite largeur, jamais de défilement horizontal.
+ */
+
+.contenu {
+	overflow: auto;
+	overscroll-behavior: contain;
+	padding: 20px 22px 40px;
+	min-width: 0;
+	container-type: inline-size;
+}
+
+.chapitre {
+	max-width: 760px;
+	min-width: 0;
+}
+
+.titre {
+	margin: 0 0 6px;
+	font-size: 22px;
+	font-weight: 600;
+}
+
+.intertitre {
+	margin: 26px 0 10px;
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.chapo,
+.paragraphe,
+.note {
+	margin: 0 0 10px;
+	line-height: 1.6;
+	overflow-wrap: anywhere;
+}
+
+.chapo {
+	font-size: 15px;
+	color: var(--tx);
+	margin-bottom: 20px;
+}
+
+.paragraphe,
+.note,
+.points,
+.etape,
+.glossaire dd,
+.texteCase {
+	color: var(--mu);
+}
+
+.chapitre b {
+	color: var(--tx);
+	font-weight: 600;
+}
+
+.chapitre code {
+	font: 12px var(--mono);
+	color: var(--tx);
+}
+
+.note {
+	border-left: 2px solid var(--ac);
+	padding: 4px 0 4px 12px;
+	font-size: 13px;
+	margin-top: 16px;
+}
+
+.points {
+	margin: 0;
+	padding-left: 18px;
+	line-height: 1.6;
+}
+
+.points li {
+	margin: 6px 0;
+}
+
+/* schéma : trois cases reliées par des flèches, en colonne quand la place manque */
+.schema {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+	gap: 10px;
+	align-items: stretch;
+}
+
+.case {
+	border: 1px solid var(--bd);
+	border-radius: 14px;
+	background: var(--s1);
+	padding: 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.case.accent {
+	border-color: color-mix(in srgb, var(--ac) 45%, transparent);
+	background: color-mix(in srgb, var(--ac) 6%, var(--s1));
+}
+
+.icone {
+	font-size: 20px;
+}
+
+.texteCase {
+	font-size: 12.5px;
+	overflow-wrap: anywhere;
+}
+
+.fleche {
+	align-self: center;
+	justify-self: center;
+	color: var(--dim);
+	font-size: 18px;
+}
+
+@container (max-width: 640px) {
+	.schema {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.fleche {
+		transform: rotate(90deg);
+	}
+}
+
+/* frise des pouvoirs : une rune sur un fil vertical, le nom, l'effet */
+.frise {
+	list-style: none;
+	margin: 0;
+	padding: 0 0 0 4px;
+	position: relative;
+}
+
+.frise::before {
+	content: '';
+	position: absolute;
+	left: 17px;
+	top: 14px;
+	bottom: 14px;
+	width: 2px;
+	background: var(--bd2);
+}
+
+.frise li {
+	display: grid;
+	grid-template-columns: 30px 90px minmax(0, 1fr);
+	gap: 12px;
+	align-items: baseline;
+	padding: 8px 0;
+	position: relative;
+}
+
+.rune {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	display: grid;
+	place-items: center;
+	background: var(--ac);
+	color: var(--sur-accent);
+	font-size: 13px;
+	align-self: center;
+}
+
+.etape {
+	line-height: 1.55;
+	overflow-wrap: anywhere;
+}
+
+@container (max-width: 520px) {
+	.frise li {
+		grid-template-columns: 30px minmax(0, 1fr);
+	}
+
+	.frise li .etape {
+		grid-column: 2;
+	}
+}
+
+/* glossaire : le terme à gauche, sa définition à droite ; l'un sous l'autre en petite largeur */
+.glossaire {
+	margin: 0;
+	display: grid;
+	grid-template-columns: 120px minmax(0, 1fr);
+	gap: 12px 18px;
+}
+
+.glossaire dt {
+	font-weight: 600;
+}
+
+.glossaire dd {
+	margin: 0;
+	line-height: 1.55;
+	overflow-wrap: anywhere;
+}
+
+@container (max-width: 520px) {
+	.glossaire {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 2px;
+	}
+
+	.glossaire dd {
+		margin-bottom: 10px;
+	}
+}
+
+/* sorts d'une fiche : pastille, nom, explication */
+.sorts {
+	list-style: none;
+	margin: 0 0 16px;
+	padding: 0;
+	display: grid;
+	gap: 10px;
+}
+
+.sorts li {
+	display: grid;
+	grid-template-columns: 14px 120px minmax(0, 1fr);
+	gap: 10px;
+	align-items: baseline;
+}
+
+@container (max-width: 520px) {
+	.sorts li {
+		grid-template-columns: 14px minmax(0, 1fr);
+	}
+
+	.sorts li .etape {
+		grid-column: 2;
+	}
+}
+
+.pastille {
+	width: 12px;
+	height: 12px;
+	border-radius: 3px;
+	background: var(--s3);
+	border: 1px solid var(--bd2);
+}
+
+.pastille.injectee {
+	background: var(--ac);
+}
+
+.pastille.piste {
+	background: color-mix(in srgb, var(--ac) 40%, var(--s3));
+}
+
+/* formule : facteurs en cases, opérateurs entre eux, à la ligne quand la place manque */
+.formule {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin: 4px 0 12px;
+}
+
+.facteur {
+	border: 1px solid var(--bd);
+	border-radius: 12px;
+	background: var(--s1);
+	padding: 10px 14px;
+	font-weight: 600;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	max-width: 100%;
+}
+
+.facteur small {
+	font-weight: 400;
+	color: var(--mu);
+	font-size: 12px;
+	margin-top: 2px;
+}
+
+.facteur.resultat {
+	border-color: color-mix(in srgb, var(--violet) 50%, transparent);
+}
+
+.operateur {
+	font-size: 20px;
+	color: var(--dim);
+}
