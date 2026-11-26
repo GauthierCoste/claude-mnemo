@@ -4,7 +4,7 @@ import { createElement, type ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ErreurApi } from '../../src/client/api.ts';
 import { FournisseurClient, useCacheRessources } from '../../src/client/contexte.tsx';
-import { etatPartage, useRessource } from '../../src/client/ressources.ts';
+import { etatPartage, publierRessource, useRessource } from '../../src/client/ressources.ts';
 import { creerFauxClient } from '../aides/faux-client.tsx';
 
 afterEach(cleanup);
@@ -48,6 +48,25 @@ describe('useRessource', () => {
 		act(() => faux.connexion.passerA('reconnexion'));
 		act(() => faux.connexion.passerA('ouverte'));
 		await waitFor(() => expect(attentes).toHaveLength(2));
+	});
+
+	it('publierRessource : les données rendues par une écriture remplacent celles des lecteurs, sans nouvelle lecture', async () => {
+		const faux = creerFauxClient();
+		const attentes: { resoudre(v: string): void }[] = [];
+		const charger = () => {
+			const d = differe<string>();
+			attentes.push(d);
+			return d.promesse;
+		};
+		const wrapper = ({ children }: { children: ReactNode }) => createElement(FournisseurClient, { client: faux.client, children });
+		const rendu = renderHook(() => ({ a: useRessource('moteurs', charger), b: useRessource('moteurs', charger), cache: useCacheRessources() }), { wrapper });
+		await act(async () => attentes[0]!.resoudre('v1'));
+		expect(rendu.result.current.b.donnees).toBe('v1');
+		act(() => publierRessource(rendu.result.current.cache, 'moteurs', 'publiee'));
+		expect(rendu.result.current.a).toMatchObject({ donnees: 'publiee', chargement: false, erreur: null });
+		expect(rendu.result.current.b.donnees).toBe('publiee');
+		expect(rendu.result.current.cache.get('moteurs')).toBe('publiee');
+		expect(attentes).toHaveLength(1);
 	});
 
 	it('sans memoire : pas de rechargement ; recharger() recharge', async () => {

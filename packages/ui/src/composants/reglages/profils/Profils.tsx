@@ -6,7 +6,8 @@
  */
 import { ROUTES } from '@mnemo/contrat';
 import type { ProfilEditableVue, ReponseEcritureProfil } from '@mnemo/contrat';
-import { DOSSIERS_FIXES, PROFIL_TRAVAIL } from '@mnemo/commun';
+import { DOSSIERS_FIXES, NOMS_MOTEURS, PROFIL_TRAVAIL } from '@mnemo/commun';
+import type { IdMoteur } from '@mnemo/commun';
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { ErreurApi } from '../../../client/api.ts';
 import { useClient } from '../../../client/contexte.tsx';
@@ -31,11 +32,13 @@ const NOUVEAU_PROFIL: ProfilEditableVue = {
 /** Où aller une fois les modifications en cours abandonnées : un autre profil, ou la création d'un profil. */
 type Demande = { vers: 'profil'; nom: string } | { vers: 'nouveau' };
 
-export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
+/** `nouveauAvecMoteur` : ouvert sur la création d'un profil qui tournera sur ce moteur (« Nouveau profil » de Système › Moteurs). */
+export function Profils(p: { surModifie(modifie: boolean): void; nouveauAvecMoteur?: IdMoteur }): ReactNode {
 	const { api } = useClient();
 	const profils = useProfils();
 	const [choisi, setChoisi] = useState<string>(PROFIL_TRAVAIL);
-	const [creation, setCreation] = useState(false);
+	const [creation, setCreation] = useState(p.nouveauAvecMoteur !== undefined);
+	const [moteurNouveau, setMoteurNouveau] = useState<IdMoteur>(p.nouveauAvecMoteur ?? NOUVEAU_PROFIL.moteur);
 	const [demande, setDemande] = useState<Demande | null>(null);
 	const detail = useProfil(choisi);
 	const modifie = useRef(false);
@@ -60,6 +63,7 @@ export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
 	};
 	const nouveau = () => {
 		abandonner();
+		setMoteurNouveau(NOUVEAU_PROFIL.moteur);
 		setCreation(true);
 	};
 	const choisir = (nom: string) => {
@@ -75,7 +79,7 @@ export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
 	const creer = async (nom: string): Promise<string | null> => {
 		if (profils.donnees?.profils.some((x) => x.nom === nom)) return `Le profil « ${nom} » existe déjà.`;
 		try {
-			await api.remplacer<ReponseEcritureProfil>(avecId(ROUTES.profil, nom), { editable: NOUVEAU_PROFIL, empreinte: null });
+			await api.remplacer<ReponseEcritureProfil>(avecId(ROUTES.profil, nom), { editable: { ...NOUVEAU_PROFIL, moteur: moteurNouveau }, empreinte: null });
 			profils.recharger();
 			ouvrir(nom);
 			return null;
@@ -121,7 +125,7 @@ export function Profils(p: { surModifie(modifie: boolean): void }): ReactNode {
 					</div>
 				)}
 				{creation ? (
-					<p className={s.discret}>Nouveau profil : choisis son nom à gauche, puis Créer. Son avatar, son moteur et le reste se règlent ici une fois le profil créé.</p>
+					<p className={s.discret}>Nouveau profil : choisis son nom à gauche, puis Créer. Il tournera sur {NOMS_MOTEURS[moteurNouveau]} ; son avatar, son moteur et le reste se règlent ici une fois le profil créé.</p>
 				) : detail.donnees === undefined || detail.donnees.nom !== choisi ? (
 					<p className={s.discret}>{detail.erreur ?? 'Chargement du profil…'}</p>
 				) : (

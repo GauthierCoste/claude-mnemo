@@ -33,7 +33,7 @@ describe('Réglages › Profils : nouveau profil', () => {
 		fireEvent.change(within(liste).getByLabelText('Nom du nouveau profil'), { target: { value: 'codex-essai' } });
 		await act(async () => within(liste).getByRole('button', { name: 'Créer' }).click());
 		const editeur = await screen.findByRole('form', { name: 'Profil codex-essai' });
-		await act(async () => within(within(editeur).getByRole('radiogroup', { name: 'Moteur' })).getByRole('radio', { name: 'Codex' }).click());
+		await act(async () => within(within(editeur).getByRole('radiogroup', { name: 'Moteur' })).getByRole('radio', { name: 'Codex · OpenAI' }).click());
 		await act(async () => within(within(editeur).getByRole('radiogroup', { name: 'Couleur de l’avatar' })).getByRole('radio', { name: 'Ambre' }).click());
 		await act(async () => within(editeur).getByRole('button', { name: 'Enregistrer' }).click());
 		await within(editeur).findByText('Enregistré.');

@@ -16,6 +16,7 @@ import { useToast } from '../Toast.tsx';
 import { IconeModeles } from './IconeModeles.tsx';
 import { DETAILS_NIVEAUX, NOMS_NIVEAUX, libelleActivite, lignesPieces, resume } from './libelles.ts';
 import { GroupeMenu, ItemMenu, MenuModeles } from './MenuModeles.tsx';
+import r from '../commun/Reflet.module.css';
 import s from './Modeles.module.css';
 
 export const ENCORE_EN_CHARGEMENT = 'Des modèles chargent encore : réessayez dans un instant.';
@@ -48,7 +49,7 @@ export function BoutonModeles(): ReactNode {
 						{point !== null && <span className={cx(s.point, s[point])} aria-hidden="true" />}
 					</span>
 					{/* une activité ou un chargement en cours : le même reflet que le bouton des modèles d'une session */}
-					<span className={cx(s.texte, point === 'actif' && s.reflet)}>{texte}</span>
+					<span className={cx(s.texte, point === 'actif' && r.reflet)}>{texte}</span>
 				</>
 			}
 			entete={<EtatPieces e={e} sessionAffichee={sessionPremierPlan} />}

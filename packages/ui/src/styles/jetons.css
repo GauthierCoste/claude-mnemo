@@ -60,6 +60,11 @@
 	--etat-en-pause: var(--dim);
 	--etat-terminee: var(--dim);
 
+	/* --- Fournisseurs des moteurs (Réglages › Système › Moteurs) : seul endroit où chacun reçoit sa couleur --- */
+	--fournisseur-anthropic: var(--amber);
+	--fournisseur-openai: var(--blue);
+	--fournisseur-mistral: var(--pink);
+
 	/* --- Branches de l'arbre (premier niveau, dans l'ordre de l'arbre) --- */
 	--branche-1: #a394ff;
 	--branche-2: #7df0c6;

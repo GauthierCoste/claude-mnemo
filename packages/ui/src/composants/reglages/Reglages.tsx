@@ -5,6 +5,7 @@
  * Le dernier onglet ouvert est retenu dans ce navigateur. Changer d'onglet avec des modifications non enregistrées est
  * retenu : un avertissement propose de les abandonner ou de rester.
  */
+import type { IdMoteur } from '@mnemo/commun';
 import { useCallback, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Bouton } from '../commun/Bouton.tsx';
 import { AppClaude } from './claude-desktop/AppClaude.tsx';
@@ -40,6 +41,8 @@ function retenirOnglet(o: Onglet): void {
 export function Reglages(): ReactNode {
 	const [onglet, setOnglet] = useState<Onglet>(ongletRetenu);
 	const [demande, setDemande] = useState<Onglet | null>(null);
+	// « Nouveau profil » d'un moteur (Système › Moteurs) : l'onglet Profils s'ouvre sur la création d'un profil de ce moteur
+	const [nouveauProfil, setNouveauProfil] = useState<IdMoteur | null>(null);
 	const modifie = useRef(false);
 	const surModifie = useCallback((m: boolean) => {
 		modifie.current = m;
@@ -51,7 +54,8 @@ export function Reglages(): ReactNode {
 		setOnglet(o);
 		retenirOnglet(o);
 	};
-	const choisir = (o: Onglet) => {
+	const choisir = (o: Onglet, moteur: IdMoteur | null = null) => {
+		setNouveauProfil(moteur);
 		if (o === onglet) return;
 		if (modifie.current) setDemande(o);
 		else ouvrir(o);
@@ -100,9 +104,9 @@ export function Reglages(): ReactNode {
 			)}
 			<div id={`panneau-${onglet}`} role="tabpanel" aria-labelledby={`onglet-${onglet}`} className={s.panneau}>
 				{onglet === 'profils' ? (
-					<Profils surModifie={surModifie} />
+					<Profils surModifie={surModifie} {...(nouveauProfil === null ? {} : { nouveauAvecMoteur: nouveauProfil })} />
 				) : onglet === 'systeme' ? (
-					<ReglagesSysteme surModifie={surModifie} />
+					<ReglagesSysteme surModifie={surModifie} surNouveauProfil={(m) => choisir('profils', m)} />
 				) : (
 					<AppClaude surModifie={surModifie} />
 				)}
