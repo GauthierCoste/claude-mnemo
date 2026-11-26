@@ -10,7 +10,7 @@
  * - Aucun modèle appris, ou aucune ligne notée (le sens n'a pas répondu) : l'ordre donné (règle provisoire), inchangé.
  */
 import { COEFFICIENTS_NOTE } from '../domaine/coefficients-note.ts';
-import { echelleDesSignaux } from '../domaine/modele-de-note.ts';
+import { echelleDesSignaux, modeleNonAppris } from '../domaine/modele-de-note.ts';
 import type { RequeteDeNote } from '../domaine/modele-de-note.ts';
 import { REGLAGES_PAR_DEFAUT } from '../domaine/reglages.ts';
 import type { Reglages } from '../domaine/reglages.ts';
@@ -21,14 +21,16 @@ import type { Dependances } from './ports.ts';
 
 /**
  * Les modèles de note de la mémoire, avec leur état pour les modèles installés et l'échelle actuelle des signaux (réglages) ;
- * une lecture en panne vaut le module du dépôt. Lus une fois par message (`DemandeServir.modeles`).
+ * sans lecteur (`dep.note` absent), le module du dépôt (les modèles de départ) ; une lecture en panne vaut aucun modèle appris,
+ * comme un fichier abîmé (`coefficients-note-fichier.ts`) : les modèles de départ ne remplacent jamais ceux de la mémoire. Lus
+ * une fois par message (`DemandeServir.modeles`).
  */
 export function modelesActifs(dep: Pick<Dependances, 'note' | 'reglages'>): ModelesDeNote {
 	let charge: ReturnType<NonNullable<Dependances['note']>> | undefined;
 	try {
 		charge = dep.note?.();
 	} catch {
-		charge = undefined;
+		charge = { coefficients: { complets: modeleNonAppris(), sens: modeleNonAppris() }, installes: { sens: null, reranker: null } };
 	}
 	let contexte: Reglages['contexte'];
 	try {

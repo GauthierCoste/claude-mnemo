@@ -977,6 +977,16 @@ describe('calculerCartes : note de confiance (modèle accepté, refusé, aucun)'
 		expect(c.classement.some((l) => l.pNonCalibree !== undefined && l.depart === true)).toBe(true);
 	});
 
+	it('lecture des coefficients en panne : aucun modèle appris (règle provisoire), jamais les modèles de départ du module livré', async () => {
+		const dep = await avecSens();
+		dep.note = () => {
+			throw new Error('lecture impossible');
+		};
+		const c = await calculerCartes(dep, suite());
+		expect(c.calibree).toBe(false);
+		expect(c.classement.every((l) => l.p === null && l.pNonCalibree === undefined && l.depart === undefined)).toBe(true);
+	});
+
 	it('modèle de départ (livré avec Mnemo) : le régime du refusé (même ordre, mêmes pistes, sans % ni injection), sa note marquée de départ', async () => {
 		const dep = await avecSens();
 		avecModeles(dep, { sens: modele({ ...SENS, accepte: false, refus: ['trop peu d’injections'] }) });

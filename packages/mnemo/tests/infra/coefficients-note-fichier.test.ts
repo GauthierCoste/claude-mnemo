@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { COEFFICIENTS_NOTE } from '../../src/domaine/coefficients-note.ts';
 import { echelleDesSignaux, jsonDeCoefficients, modeleNonAppris } from '../../src/domaine/modele-de-note.ts';
 import { REGLAGES_PAR_DEFAUT } from '../../src/domaine/reglages.ts';
+import { modelesDeNote, noteApprise } from '../../src/domaine/note-de-confiance.ts';
 import type { CoefficientsNote } from '../../src/domaine/modele-de-note.ts';
 import { fichierDesCoefficients, ggufInstalles, lireCoefficientsDuDossier, noteAvecJournal, noteDuDossier } from '../../src/infra/coefficients-note-fichier.ts';
 import { dependancesReelles } from '../../src/infra/systeme.ts';
@@ -22,6 +23,20 @@ const ecrire = (racine: string, texte: string) => {
 describe('.mnemo/coefficients-note.json', () => {
 	it('absent : le module du dépôt, sans avertissement', async () => {
 		expect(lireCoefficientsDuDossier(await dossierTemporaire())).toEqual({ coefficients: COEFFICIENTS_NOTE, avertissement: null });
+	});
+
+	it('installation neuve : les modèles de départ du module ordonnent (sans % ni injection) ; un fichier appris, même refusé, prime', async () => {
+		const racine = await dossierTemporaire();
+		const echelle = echelleDesSignaux(REGLAGES_PAR_DEFAUT.contexte);
+		const neuve = modelesDeNote(lireCoefficientsDuDossier(racine).coefficients, INSTALLES, echelle);
+		expect(noteApprise(neuve)).toBe(true);
+		expect([neuve.complets.etat, neuve.sens.etat].every((e) => e === 'depart' || e === 'non_appris')).toBe(true);
+		expect([neuve.complets.etat, neuve.sens.etat]).toContain('depart');
+		const refuse = appris(-1);
+		refuse.sens = { ...refuse.sens, accepte: false, refus: ['trop peu d’injections'] };
+		ecrire(racine, jsonDeCoefficients(refuse));
+		const apprise = modelesDeNote(lireCoefficientsDuDossier(racine).coefficients, INSTALLES, echelle);
+		expect([apprise.complets.etat, apprise.sens.etat]).toEqual(['non_appris', 'refuse']);
 	});
 
 	it('présent et valide : chargé en priorité', async () => {
