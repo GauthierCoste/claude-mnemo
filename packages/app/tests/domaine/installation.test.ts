@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bilanDesinstallation, type EntreeDesinstallation, planDesinstallation } from '../../src/domaine/desinstallation.ts';
 import { aRefaire, entreeMnemo, etatCommande, etatEntreeMcp, texteSansEntreeMnemo } from '../../src/domaine/installation.ts';
-import { ouverteParLaSession } from '../../src/domaine/ouverture-session.ts';
+import { optionsOuvertureSession, ouverteParLaSession } from '../../src/domaine/ouverture-session.ts';
 
 const RESSOURCES = '/Applications/Mnemo.app/Contents/Resources';
 const ATTENDU = {
@@ -69,9 +69,16 @@ describe('ce que Mnemo a installé', () => {
 		expect(ouverteParLaSession(['/Applications/Mnemo.app/Contents/MacOS/Mnemo'], true)).toBe(true);
 		expect(ouverteParLaSession(['/Applications/Mnemo.app/Contents/MacOS/Mnemo'], false)).toBe(false);
 	});
+
+	it('élément d’ouverture : sous Windows l’exécutable et l’argument (mêmes options pour inscrire, lire et retirer) ; sous macOS l’argument seul', () => {
+		const exe = 'D:\\Profils\\exemple\\AppData\\Local\\Programs\\Mnemo\\Mnemo.exe';
+		expect(optionsOuvertureSession('win32', exe)).toEqual({ path: exe, args: ['--ouverture-session'] });
+		expect(optionsOuvertureSession('darwin', '/Applications/Mnemo.app/Contents/MacOS/Mnemo')).toEqual({ args: ['--ouverture-session'] });
+	});
 });
 
 const entree = (e: Partial<EntreeDesinstallation> = {}): EntreeDesinstallation => ({
+	plateforme: 'darwin',
 	etat: { commande: 'nous', claudeCode: 'nous', appClaude: 'nous' },
 	ouvertureSession: true,
 	serviceVivant: true,
@@ -114,5 +121,21 @@ describe('désinstallation', () => {
 		expect(ko.ok).toBe(false);
 		expect(ko.detail).toContain('✗ la déclaration de la mémoire à Claude Code (serveur MCP « mnemo ») : `claude` introuvable.');
 		expect(ko.detail).toContain('Ta mémoire et /maison/exemple/Mnemo/.mnemo sont restés en place.');
+	});
+
+	it('Windows : l’app retirée par son désinstalleur après la fermeture, jamais la corbeille ; sans désinstalleur, Paramètres › Applications', () => {
+		const windows = { plateforme: 'win32', racine: 'D:\\Profils\\exemple\\Mnemo', chemins: { commande: '~\\.local\\bin\\mnemo', app: 'D:\\Profils\\exemple\\AppData\\Local\\Programs\\Mnemo\\Uninstall Mnemo.exe', dossierApp: 'D:\\Profils\\exemple\\AppData\\Roaming\\Mnemo' } } as const;
+		const plan = planDesinstallation(entree({ ...windows, etat: { commande: 'absent', claudeCode: 'nous', appClaude: 'nous' } }));
+		expect(plan.etapes).toEqual(['ouvertureSession', 'claudeCode', 'appClaude', 'configuration', 'service', 'desinstalleur']);
+		expect(plan.detail).toContain('• l’app elle-même, par son désinstalleur (D:\\Profils\\exemple\\AppData\\Local\\Programs\\Mnemo\\Uninstall Mnemo.exe), qui s’ouvre quand Mnemo a quitté');
+		expect(plan.detail).toContain('ta mémoire (D:\\Profils\\exemple\\Mnemo\\_mnemo) et le dossier local D:\\Profils\\exemple\\Mnemo\\.mnemo');
+		expect(plan.detail).not.toMatch(/corbeille|image disque|macOS/u);
+		const sans = planDesinstallation(entree({ ...windows, empaquetee: false }));
+		expect(sans.etapes).not.toContain('desinstalleur');
+		expect(sans.detail).toContain('l’app elle-même : à désinstaller depuis Paramètres › Applications');
+		expect(sans.detail).not.toMatch(/image disque|macOS/u);
+		const e = entree(windows);
+		expect(bilanDesinstallation([{ etape: 'configuration', ok: true }, { etape: 'desinstalleur', ok: true }], e).message).toBe('Mnemo est désinstallé ; son désinstalleur retire l’app quand tu quittes.');
+		expect(bilanDesinstallation([{ etape: 'configuration', ok: true }], e).message).toBe('Mnemo est désinstallé.');
 	});
 });

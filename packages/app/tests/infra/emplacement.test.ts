@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { emplacementProvisoire, lancementDuPaquet, paquetDeLApp, pathParDefaut } from '../../src/infra/emplacement.ts';
+import { desinstalleurWindows, emplacementProvisoire, lancementDuPaquet, paquetDeLApp, pathParDefaut } from '../../src/infra/emplacement.ts';
 
 describe('emplacement du Node et du main.ts', () => {
 	it('app empaquetée : ceux du dossier de ressources', () => {
@@ -46,6 +46,14 @@ describe('emplacement du Node et du main.ts', () => {
 	it('PATH par défaut : dossiers habituels devant, sans doublon', () => {
 		expect(pathParDefaut('/maison/exemple', '/usr/bin:/bin:/opt/homebrew/bin')).toBe('/maison/exemple/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin');
 		expect(pathParDefaut('/maison/exemple', undefined)).toBe('/maison/exemple/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin');
+	});
+
+	it('désinstalleur de Windows : à côté de l’exécutable, s’il est là ; jamais hors de Windows', () => {
+		const exe = join('C:', 'Programs', 'Mnemo', 'Mnemo.exe');
+		const attendu = join('C:', 'Programs', 'Mnemo', 'Uninstall Mnemo.exe');
+		expect(desinstalleurWindows(exe, 'win32', (c) => c === attendu)).toBe(attendu);
+		expect(desinstalleurWindows(exe, 'win32', () => false)).toBeNull();
+		expect(desinstalleurWindows(exe, 'darwin', () => true)).toBeNull();
 	});
 
 	it('PATH par défaut sous Windows : le Path du processus tel quel, sans doublon ni dossier POSIX', () => {

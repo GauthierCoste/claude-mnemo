@@ -4,7 +4,9 @@
  * `mnemo/src/adaptateurs/cli/main.ts` (l'interface construite est dans `ui/dist`, là où le service la cherche). En
  * développement (Electron lancé depuis le dépôt), rien : ils viennent de la configuration (`pnpm installer-dev`).
  */
+import { existsSync } from 'node:fs';
 import { basename, delimiter, dirname, join } from 'node:path';
+import { NOM_APP } from '../domaine/identite-app.ts';
 import type { Lancement } from '../domaine/configuration.ts';
 
 /**
@@ -29,6 +31,19 @@ export function paquetDeLApp(ressources: string, plateforme: NodeJS.Platform = p
 	const paquet = dirname(contents);
 	if (basename(ressources) !== 'Resources' || basename(contents) !== 'Contents' || !basename(paquet).endsWith('.app') || basename(paquet) === '.app') return null;
 	return emplacementProvisoire(ressources, plateforme) ? null : paquet;
+}
+
+/** Nom du désinstalleur que l'installeur Windows (NSIS) pose à côté de `Mnemo.exe`. */
+export const NOM_DESINSTALLEUR = `Uninstall ${NOM_APP}.exe`;
+
+/**
+ * Le désinstalleur de l'app installée sous Windows, à côté de son exécutable (`app.getPath('exe')`), s'il est là ; null
+ * hors de Windows, ou sans lui (version de développement, copie posée à la main : Paramètres › Applications).
+ */
+export function desinstalleurWindows(executable: string, plateforme: NodeJS.Platform = process.platform, existe: (chemin: string) => boolean = existsSync): string | null {
+	if (plateforme !== 'win32') return null;
+	const chemin = join(dirname(executable), NOM_DESINSTALLEUR);
+	return existe(chemin) ? chemin : null;
 }
 
 /**

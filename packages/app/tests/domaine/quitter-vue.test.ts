@@ -34,7 +34,7 @@ describe('quitter Mnemo', () => {
 	});
 });
 
-const REGLAGES = { ouvertureSession: false, version: '1.5.0', nouvelleVersion: null, chercherVersions: true };
+const REGLAGES = { plateforme: 'darwin' as const, ouvertureSession: false, version: '1.5.0', nouvelleVersion: null, chercherVersions: true };
 
 describe('vue de l’app', () => {
 	it('service vivant : état, infobulle, menu et pastille tirés des mêmes sessions', () => {

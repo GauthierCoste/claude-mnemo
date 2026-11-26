@@ -4,8 +4,12 @@
  * redémarrer) ; « Ouvrir à l'ouverture de session » ; « Journal du service » ; « Reprendre le PATH du terminal » ; la version de l'app, la version plus récente
  * publiée s'il y en a une (un clic ouvre sa page), « Chercher les nouvelles versions », « Désinstaller Mnemo… » ;
  * « Quitter Mnemo ».
+ *
+ * Sous Windows : pas de « Reprendre le PATH du terminal » (pas de shell de connexion à lire : l'app reçoit déjà le `Path`
+ * du compte) ; le détail d'une session (seconde ligne, ignorée par Windows) va dans son libellé.
  */
 import type { SessionVue } from '@mnemo/contrat';
+import type { PlateformeApp } from './plateforme.ts';
 import type { EtatVie } from './vie-service.ts';
 import type { VersionPubliee } from './version.ts';
 import { dossierAffiche, LIBELLES_ETATS, libelleSession, sessionsActives } from './sessions.ts';
@@ -39,6 +43,7 @@ export type ElementMenu =
 	| { type: 'separateur' };
 
 export type EntreeMenu = {
+	plateforme: PlateformeApp;
 	vie: EtatVie;
 	/** Raison de l'erreur du service (`VieService.raison`). */
 	raison: string | null;
@@ -65,7 +70,7 @@ export function modeleMenu(entree: EntreeMenu): ElementMenu[] {
 		elementService(entree.vie),
 		{ type: 'case', libelle: 'Ouvrir à l’ouverture de session', coche: entree.ouvertureSession, action: { type: 'ouvertureSession', active: !entree.ouvertureSession } },
 		action('Journal du service', { type: 'journal' }),
-		action('Reprendre le PATH du terminal', { type: 'reprendrePath' }),
+		...(entree.plateforme === 'win32' ? [] : [action('Reprendre le PATH du terminal', { type: 'reprendrePath' })]),
 		SEPARATEUR,
 		{ type: 'texte', libelle: `Mnemo ${entree.version}` },
 		...(entree.nouvelleVersion === null ? [] : [action(`Version ${entree.nouvelleVersion.version} disponible`, { type: 'nouvelleVersion', url: entree.nouvelleVersion.url })]),
@@ -90,7 +95,11 @@ function partieSessions(entree: EntreeMenu): ElementMenu[] {
 		case 'vivant': {
 			const actives = sessionsActives(entree.sessions);
 			if (actives.length === 0) return [{ type: 'texte', libelle: 'Aucune session active' }];
-			const listees = actives.slice(0, SESSIONS_MENU_MAX).map((s) => action(libelleSession(s), { type: 'ouvrirSession', session: s.id }, true, `${LIBELLES_ETATS[s.etat]} · ${dossierAffiche(s)}`));
+			const listees = actives.slice(0, SESSIONS_MENU_MAX).map((s) => {
+				const detail = `${LIBELLES_ETATS[s.etat]} · ${dossierAffiche(s)}`;
+				const ouvrir: ActionMenu = { type: 'ouvrirSession', session: s.id };
+				return entree.plateforme === 'win32' ? action(`${libelleSession(s)} — ${detail}`, ouvrir) : action(libelleSession(s), ouvrir, true, detail);
+			});
 			const reste = actives.length - listees.length;
 			return reste > 0 ? [...listees, action(`${reste} autre${reste > 1 ? 's' : ''} session${reste > 1 ? 's' : ''}…`, { type: 'ouvrir' })] : listees;
 		}

@@ -5,15 +5,23 @@
  * et « Quitter Mnemo ». Mince : ce qui se décide sans Electron est dans le domaine.
  *
  * Le dossier de données d'Electron est le dossier de l'app (`~/Library/Application Support/Mnemo`, sous le dossier
- * personnel de `HOME`, voir `infra/dossiers.ts`), celui de `config.json`, de `preferences.json` et du journal de l'app ; en
- * essai, un dossier temporaire.
+ * personnel de `HOME` ; sous Windows `%APPDATA%\Mnemo` ; voir `infra/dossiers.ts`), celui de `config.json`, de
+ * `preferences.json` et du journal de l'app ; en essai, un dossier temporaire.
+ *
+ * Sous Windows : identifiant de modèle d'application posé avant tout (notifications), icône dans la zone de notification,
+ * élément d'ouverture de session lu et retiré avec les mêmes options qu'à l'inscription, et l'app retirée par son
+ * désinstalleur, lancé une fois Mnemo fermé.
  */
+import { spawn } from 'node:child_process';
+import { sep } from 'node:path';
 import { app, Notification, shell } from 'electron';
 import type { Configuration, Lancement } from '../domaine/configuration.ts';
 import { bilanDesinstallation, type EntreeDesinstallation, planDesinstallation } from '../domaine/desinstallation.ts';
 import { toutesLesImages } from '../domaine/icone.ts';
+import { IDENTIFIANT_APP } from '../domaine/identite-app.ts';
 import type { ActionMenu } from '../domaine/menu.ts';
-import { ARGUMENT_OUVERTURE_SESSION, ouverteParLaSession } from '../domaine/ouverture-session.ts';
+import { optionsOuvertureSession, ouverteParLaSession } from '../domaine/ouverture-session.ts';
+import { plateformeApp } from '../domaine/plateforme.ts';
 import type { Preferences } from '../domaine/preferences.ts';
 import { suiteQuitter } from '../domaine/quitter.ts';
 import { estPageDeVersion, verificationDue, versionAAnnoncer } from '../domaine/version.ts';
@@ -23,7 +31,7 @@ import { decisionAuLancement } from '../infra/assistant.ts';
 import { cheminConfiguration, remplacerPathConfiguration } from '../infra/configuration-fichier.ts';
 import { actionsFichiers, executerEtapes } from '../infra/desinstallation.ts';
 import { dossierApp, dossierEssai, dossierPersonnel } from '../infra/dossiers.ts';
-import { emplacementProvisoire, lancementDuPaquet, paquetDeLApp } from '../infra/emplacement.ts';
+import { desinstalleurWindows, emplacementProvisoire, lancementDuPaquet, paquetDeLApp } from '../infra/emplacement.ts';
 import { dossierImages, lireImagesBarre } from '../infra/images-barre.ts';
 import { cheminsInstallation, lireEtatInstallation } from '../infra/installation-fichiers.ts';
 import { cheminJournalApp, journalFichier } from '../infra/journal-app.ts';
@@ -42,6 +50,8 @@ import { installerMenuApplication } from './menu-application.ts';
 /** Message écrit sur la sortie standard en mode essai, une fois l'application prête. */
 export const MESSAGE_ESSAI = 'mnemo-app : prête';
 
+const PLATEFORME = plateformeApp(process.platform);
+
 /** La recherche de version (une par jour au plus) est réexaminée toutes les heures : l'app peut rester ouverte des jours. */
 const INTERVALLE_EXAMEN_VERSION_MS = 60 * 60 * 1000;
 
@@ -51,6 +61,8 @@ const INTERVALLE_EXAMEN_VERSION_MS = 60 * 60 * 1000;
  */
 export function demarrerApplication(options: { essai: boolean; dossierMain: string }): void {
 	app.setName('Mnemo');
+	// Windows : sans lui, les notifications ne s'affichent pas (et l'app est mal regroupée dans la barre des tâches)
+	if (PLATEFORME === 'win32') app.setAppUserModelId(IDENTIFIANT_APP);
 	const images = dossierImages(options.dossierMain);
 	if (options.essai) {
 		app.setPath('userData', dossierEssai());
@@ -86,9 +98,20 @@ export function demarrerApplication(options: { essai: boolean; dossierMain: stri
 		});
 }
 
+/**
+ * Options de l'élément d'ouverture de session, les mêmes pour l'inscrire, le lire et le retirer (sous Windows, l'élément
+ * est identifié par l'exécutable et ses arguments : voir le domaine).
+ */
+const optionsSession = () => optionsOuvertureSession(PLATEFORME, app.getPath('exe'));
+
 /** Inscrit ou retire l'ouverture à l'ouverture de session (l'argument n'est transmis que sous Windows : voir le domaine). */
 function reglerOuvertureSession(active: boolean): void {
-	app.setLoginItemSettings({ openAtLogin: active, args: [ARGUMENT_OUVERTURE_SESSION] });
+	app.setLoginItemSettings({ openAtLogin: active, ...optionsSession() });
+}
+
+/** L'élément d'ouverture de session tel que le système le voit (sous macOS, lu sans options, comme toujours). */
+function lireOuvertureSession(): Electron.LoginItemSettings {
+	return PLATEFORME === 'win32' ? app.getLoginItemSettings(optionsSession()) : app.getLoginItemSettings();
 }
 
 async function lancer(home: string, images: string): Promise<void> {
@@ -220,17 +243,22 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 		}
 	}
 
+	/** Windows : le désinstalleur à lancer quand l'app quitte (il ne retire pas une app encore ouverte). */
+	let desinstalleurALancer: string | null = null;
+
 	async function desinstaller(): Promise<void> {
 		if (quitteEnCours) return;
 		quitteEnCours = true;
 		// la vérification au lancement, si elle tourne encore, finit d'abord : elle ne refait rien après les retraits
 		await verification;
 		const chemins = cheminsInstallation(home);
-		const abreger = (chemin: string): string => (chemin.startsWith(`${home}/`) ? `~${chemin.slice(home.length)}` : chemin);
-		const cheminApp = paquetDeLApp(process.resourcesPath);
+		const abreger = (chemin: string): string => (chemin.startsWith(`${home}${sep}`) ? `~${chemin.slice(home.length)}` : chemin);
+		// macOS : le paquet `.app`, mis à la corbeille ; Windows : le désinstalleur, lancé une fois Mnemo fermé
+		const cheminApp = PLATEFORME === 'win32' ? desinstalleurWindows(app.getPath('exe')) : paquetDeLApp(process.resourcesPath);
 		const entree: EntreeDesinstallation = {
+			plateforme: PLATEFORME,
 			etat: lireEtatInstallation(home, lancement),
-			ouvertureSession: app.getLoginItemSettings().openAtLogin,
+			ouvertureSession: lireOuvertureSession().openAtLogin,
 			serviceVivant: suivi.instantane().vie.etat === 'vivant',
 			empaquetee: app.isPackaged && cheminApp !== null,
 			racine,
@@ -245,7 +273,7 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 		const resultats = await executerEtapes(plan.etapes, {
 			...fichiers,
 			async ouvertureSession() {
-				app.setLoginItemSettings({ openAtLogin: false });
+				reglerOuvertureSession(false);
 			},
 			async configuration() {
 				desinstallee = true;
@@ -261,6 +289,13 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 				const vie = suivi.instantane().vie.etat;
 				if (vie !== 'arrete' && vie !== 'erreur') throw new Error('le service, lancé depuis l’app, tourne encore : l’app est laissée en place.');
 				await shell.trashItem(cheminApp);
+			},
+			async desinstalleur() {
+				if (cheminApp === null) throw new Error('désinstalleur introuvable : désinstalle Mnemo depuis Paramètres › Applications.');
+				// le service lancé depuis l'app (son Node) tient ses fichiers ouverts : il doit être arrêté avant
+				const vie = suivi.instantane().vie.etat;
+				if (vie !== 'arrete' && vie !== 'erreur') throw new Error('le service, lancé depuis l’app, tourne encore : désinstalle Mnemo depuis Paramètres › Applications une fois le service arrêté.');
+				desinstalleurALancer = cheminApp;
 			},
 		});
 		await direBilan(bilanDesinstallation(resultats, entree));
@@ -313,6 +348,7 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 			case 'arreterService': {
 				const r = await suivi.arreter();
 				if (!r.ok) await direErreur('Le service ne s’est pas arrêté.', r.raison);
+				else if (r.force === true) journal('Service arrêté de force : la demande d’arrêt ne lui parvenait pas et il ne s’est pas arrêté seul (ses sessions n’ont pas été fermées proprement).');
 				return;
 			}
 			case 'ouvertureSession':
@@ -342,12 +378,13 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 		}
 	}
 
-	const barre = creerBarre({ images: lireImagesBarre(images, toutesLesImages()), surAction: (a) => void action(a).catch((e: unknown) => journal(`Menu : ${e instanceof Error ? e.message : String(e)}`)) });
+	const barre = creerBarre({ plateforme: PLATEFORME, images: lireImagesBarre(images, toutesLesImages()), surAction: (a) => void action(a).catch((e: unknown) => journal(`Menu : ${e instanceof Error ? e.message : String(e)}`)) });
 	const version = app.getVersion();
 
 	function afficher(i: InstantaneSuivi): void {
 		const v = vueApp(i.vie, i.sessions, {
-			ouvertureSession: app.getLoginItemSettings().openAtLogin,
+			plateforme: PLATEFORME,
+			ouvertureSession: lireOuvertureSession().openAtLogin,
 			version,
 			// réglage coupé : plus rien n'est annoncé
 			nouvelleVersion: preferences.chercherVersions ? versionAAnnoncer(version, preferences.versionPubliee) : null,
@@ -385,6 +422,15 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 		suivi.fermer();
 	});
 	app.on('will-quit', () => barre.detruire());
+	// Windows, après « Désinstaller Mnemo… » : le désinstalleur s'ouvre, détaché, au moment où l'app se ferme
+	app.on('quit', () => {
+		if (desinstalleurALancer === null) return;
+		try {
+			spawn(desinstalleurALancer, [], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+		} catch (e) {
+			journal(`Désinstalleur non lancé (${desinstalleurALancer}) : ${e instanceof Error ? e.message : String(e)}`);
+		}
+	});
 
 	afficher(suivi.instantane());
 	void chercherVersion();
@@ -402,6 +448,6 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 		);
 	}
 	// ouverte à l'ouverture de session : seulement la barre des menus ; sinon la fenêtre, si le service répond
-	if (service !== null && (apresAssistant || !ouverteParLaSession(process.argv, app.getLoginItemSettings().wasOpenedAtLogin))) fenetre.montrer(service);
+	if (service !== null && (apresAssistant || !ouverteParLaSession(process.argv, lireOuvertureSession().wasOpenedAtLogin))) fenetre.montrer(service);
 	return () => void ouvrir();
 }

@@ -11,8 +11,8 @@ import type { VieService } from './vie-service.ts';
 
 export type VueApp = { etat: EtatAgrege; infobulle: string; menu: ElementMenu[]; pastille: string };
 
-/** Ce que le menu montre hors du service : l'ouverture à l'ouverture de session, la version, les nouvelles versions. */
-export type ReglagesMenu = Pick<EntreeMenu, 'ouvertureSession' | 'version' | 'nouvelleVersion' | 'chercherVersions'>;
+/** Ce que le menu montre hors du service : la plateforme, l'ouverture à l'ouverture de session, la version, les nouvelles versions. */
+export type ReglagesMenu = Pick<EntreeMenu, 'plateforme' | 'ouvertureSession' | 'version' | 'nouvelleVersion' | 'chercherVersions'>;
 
 /** `sessions` null (aucune liste reçue) : aucune session. */
 export function vueApp(vie: VieService, sessions: readonly SessionVue[] | null, reglages: ReglagesMenu): VueApp {

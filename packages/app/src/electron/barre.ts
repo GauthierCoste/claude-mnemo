@@ -1,11 +1,14 @@
 /**
  * Icône de la barre des menus (`Tray`) : l'image « template » de l'état agrégé (animée s'il en a deux), l'infobulle, et
- * le menu traduit tel quel du modèle du domaine. Aucune décision ici.
+ * le menu traduit tel quel du modèle du domaine. Aucune décision ici. Sous Windows (zone de notification) : l'image
+ * blanche ou noire selon la barre des tâches (`nativeTheme.shouldUseDarkColorsForSystemIntegratedUI`, suivie à chaque changement
+ * de thème), et un clic gauche ouvre la fenêtre (le clic droit montre le menu).
  */
-import { Menu, type MenuItemConstructorOptions, nativeImage, type NativeImage, Tray } from 'electron';
+import { Menu, type MenuItemConstructorOptions, nativeImage, type NativeImage, nativeTheme, Tray } from 'electron';
 import type { EtatAgrege } from '../domaine/etat.ts';
 import { IMAGES_ICONE, imageIcone, INTERVALLE_ANIMATION_MS } from '../domaine/icone.ts';
 import type { ActionMenu, ElementMenu } from '../domaine/menu.ts';
+import type { PlateformeApp } from '../domaine/plateforme.ts';
 import type { OctetsImage } from '../infra/images-barre.ts';
 
 export type Barre = {
@@ -13,12 +16,12 @@ export type Barre = {
 	detruire(): void;
 };
 
-/** Image template aux deux échelles (16 et 32 px). */
-export function imageTemplate(octets: OctetsImage): NativeImage {
+/** Image aux deux échelles (16 et 32 px) ; « template » (teintée par macOS) si `template`. */
+export function imageTemplate(octets: OctetsImage, template = true): NativeImage {
 	const image = nativeImage.createEmpty();
 	image.addRepresentation({ scaleFactor: 1, buffer: octets.x1 });
 	image.addRepresentation({ scaleFactor: 2, buffer: octets.x2 });
-	image.setTemplateImage(true);
+	if (template) image.setTemplateImage(true);
 	return image;
 }
 
@@ -37,19 +40,24 @@ function traduire(elements: readonly ElementMenu[], surAction: (a: ActionMenu) =
 	});
 }
 
-export function creerBarre(o: { images: ReadonlyMap<string, OctetsImage>; surAction: (a: ActionMenu) => void }): Barre {
+export function creerBarre(o: { images: ReadonlyMap<string, OctetsImage>; surAction: (a: ActionMenu) => void; plateforme: PlateformeApp }): Barre {
 	const cache = new Map<string, NativeImage>();
 	const image = (nom: string): NativeImage => {
 		let i = cache.get(nom);
 		if (i === undefined) {
 			const octets = o.images.get(nom);
 			if (octets === undefined) throw new Error(`Image de la barre des menus absente : ${nom}`);
-			i = imageTemplate(octets);
+			i = imageTemplate(octets, nom.endsWith('Template'));
 			cache.set(nom, i);
 		}
 		return i;
 	};
-	const tray = new Tray(image(imageIcone('arrete', 0)));
+	const windows = o.plateforme === 'win32';
+	/** Barre des tâches sombre (Windows seulement : macOS teinte lui-même les images « template »). */
+	let sombre = windows && nativeTheme.shouldUseDarkColorsForSystemIntegratedUI;
+	const nomImage = (etat: EtatAgrege, pas: number): string => imageIcone(etat, pas, o.plateforme, sombre);
+	const tray = new Tray(image(nomImage('arrete', 0)));
+	let pasCourant = 0;
 	let etatCourant: EtatAgrege | null = null;
 	let infobulleCourante: string | null = null;
 	let menuCourant: string | null = null;
@@ -60,14 +68,26 @@ export function creerBarre(o: { images: ReadonlyMap<string, OctetsImage>; surAct
 		etatCourant = etat;
 		if (animation !== null) clearInterval(animation);
 		animation = null;
-		let pas = 0;
-		tray.setImage(image(imageIcone(etat, pas)));
+		pasCourant = 0;
+		tray.setImage(image(nomImage(etat, pasCourant)));
 		if (IMAGES_ICONE[etat].length > 1) {
 			animation = setInterval(() => {
-				pas++;
-				tray.setImage(image(imageIcone(etat, pas)));
+				pasCourant++;
+				tray.setImage(image(nomImage(etat, pasCourant)));
 			}, INTERVALLE_ANIMATION_MS);
 		}
+	}
+
+	/** Windows : le thème de la barre des tâches a changé ; l'image courante est remplacée par sa variante. */
+	const surTheme = (): void => {
+		const maintenant = nativeTheme.shouldUseDarkColorsForSystemIntegratedUI;
+		if (maintenant === sombre) return;
+		sombre = maintenant;
+		if (etatCourant !== null) tray.setImage(image(nomImage(etatCourant, pasCourant)));
+	};
+	if (windows) {
+		nativeTheme.on('updated', surTheme);
+		tray.on('click', () => o.surAction({ type: 'ouvrir' }));
 	}
 
 	return {
@@ -83,6 +103,7 @@ export function creerBarre(o: { images: ReadonlyMap<string, OctetsImage>; surAct
 		detruire() {
 			if (animation !== null) clearInterval(animation);
 			animation = null;
+			if (windows) nativeTheme.removeListener('updated', surTheme);
 			tray.destroy();
 		},
 	};

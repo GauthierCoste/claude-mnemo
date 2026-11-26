@@ -142,6 +142,7 @@ describe('désinstallation', () => {
 				throw new Error('le service ne répond pas');
 			},
 			corbeille: async () => void faits.push('corbeille'),
+			desinstalleur: async () => void faits.push('desinstalleur'),
 		});
 		expect(resultats.map((r) => [r.etape, r.ok])).toEqual([
 			['ouvertureSession', true],

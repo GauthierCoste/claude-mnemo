@@ -18,7 +18,7 @@ function lignes(menu: ElementMenu[]): string[] {
 	});
 }
 
-const base = { raison: null, ouvertureSession: false, version: '1.5.0', nouvelleVersion: null, chercherVersions: true } as const;
+const base = { plateforme: 'darwin', raison: null, ouvertureSession: false, version: '1.5.0', nouvelleVersion: null, chercherVersions: true } as const;
 
 describe('menu de la barre des menus', () => {
 	it('service vivant : les sessions actives (objectif, état, dossier), puis arrêter, la case, le journal, quitter', () => {
@@ -53,6 +53,13 @@ describe('menu de la barre des menus', () => {
 		expect(menu[5]).toMatchObject({ action: { type: 'arreterService' } });
 		expect(menu[6]).toMatchObject({ action: { type: 'ouvertureSession', active: false } });
 		expect(menu[8]).toMatchObject({ actif: true, action: { type: 'reprendrePath' } });
+	});
+
+	it('sous Windows : pas de « Reprendre le PATH du terminal », le détail d’une session dans son libellé', () => {
+		const menu = modeleMenu({ ...base, plateforme: 'win32', vie: 'vivant', sessions: [session({ id: 'a', objectif: 'Relire le contrat', etat: 'attend', dossier: '' })] });
+		expect(lignes(menu).slice(0, 8)).toEqual(['Ouvrir Mnemo', '—', 'Relire le contrat — Attend ta réponse · racine', '—', 'Arrêter le service', '[ ] Ouvrir à l’ouverture de session', 'Journal du service', '—']);
+		expect(menu[2]).toMatchObject({ detail: null, action: { type: 'ouvrirSession', session: 'a' } });
+		expect(menu.some((e) => e.type === 'action' && e.action.type === 'reprendrePath')).toBe(false);
 	});
 
 	it('« Reprendre le PATH du terminal » : toujours là (le menu n’existe qu’avec une configuration), quel que soit le service', () => {
