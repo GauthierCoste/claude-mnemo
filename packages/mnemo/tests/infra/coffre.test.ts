@@ -100,6 +100,44 @@ describe('coffreFichiers', () => {
 		await expect(coffre.ecrire('../dehors.md', 'x')).rejects.toThrow(/hors de la mémoire/);
 	});
 
+	it('deplacerDossier : tout le dossier suit (fichiers .md ou non, sous-dossiers) ; refuse une cible existante, la racine, un lien', async () => {
+		const racine = await dossierTemporaire();
+		const coffre = coffreFichiers(racine);
+		await coffre.ecrire('skills/devis/SKILL.md', 'a');
+		await mkdir(join(racine, 'skills', 'devis', 'scripts'), { recursive: true });
+		await writeFile(join(racine, 'skills', 'devis', 'scripts', 'calc.py'), 'print(1)\r\n');
+		await coffre.deplacerDossier('skills/devis', 'skills/neuf/devis-maison');
+		expect(await readdir(join(racine, 'skills'))).toEqual(['neuf']);
+		expect(await readFile(join(racine, 'skills', 'neuf', 'devis-maison', 'scripts', 'calc.py'), 'utf8')).toBe('print(1)\r\n');
+		await coffre.ecrire('skills/autre/SKILL.md', 'b');
+		await expect(coffre.deplacerDossier('skills/autre', 'skills/neuf/devis-maison')).rejects.toThrow('existe déjà');
+		await expect(coffre.deplacerDossier('skills/absent', 'skills/x')).rejects.toThrow();
+		await expect(coffre.deplacerDossier('', 'x')).rejects.toThrow('racine');
+		await mkdir(join(racine, 'dehors'));
+		await symlink(join(racine, 'dehors'), join(racine, 'skills', 'lien'));
+		await expect(coffre.deplacerDossier('skills/lien', 'skills/y')).rejects.toThrow('lien symbolique');
+		await expect(coffre.deplacerDossier('skills/autre', '../evade')).rejects.toThrow();
+	});
+
+	it('retirerDossier : tout le dossier part, un lien dedans est retiré sans être suivi ; refuse la racine et un lien ; absent sans erreur', async () => {
+		const racine = await dossierTemporaire();
+		const coffre = coffreFichiers(racine);
+		await coffre.ecrire('skills/devis/SKILL.md', 'a');
+		await mkdir(join(racine, 'skills', 'devis', 'assets'));
+		await writeFile(join(racine, 'skills', 'devis', 'assets', 'logo.png'), 'x');
+		await mkdir(join(racine, 'dehors'));
+		await writeFile(join(racine, 'dehors', 'garde.md'), 'g');
+		await symlink(join(racine, 'dehors'), join(racine, 'skills', 'devis', 'lien'));
+		await coffre.retirerDossier('skills/devis');
+		expect(await readdir(join(racine, 'skills'))).toEqual([]);
+		expect(await readFile(join(racine, 'dehors', 'garde.md'), 'utf8')).toBe('g');
+		await coffre.retirerDossier('skills/absent');
+		await expect(coffre.retirerDossier('')).rejects.toThrow('racine');
+		await symlink(join(racine, 'dehors'), join(racine, 'lien'));
+		await expect(coffre.retirerDossier('lien')).rejects.toThrow('lien symbolique');
+		expect(await readFile(join(racine, 'dehors', 'garde.md'), 'utf8')).toBe('g');
+	});
+
 	it('retirerDossierVide : retire un dossier vide, garde un dossier non vide, la racine et un lien ; sans erreur si absent', async () => {
 		const racine = await dossierTemporaire();
 		const coffre = coffreFichiers(join(racine, '_mnemo'));

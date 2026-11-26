@@ -30,10 +30,15 @@ describe('routes : skills de la mémoire', () => {
 		expect(r.corps as SkillDetailVue).toMatchObject({ ...DEVIS, origine: 'memoire', modifiee: false, agents: ['redaction', 'travail'], avertissements: [] });
 	});
 
-	it('GET skill inconnue ou nom invalide : 404', async () => {
+	it('GET skill inconnue, nom qui sort du dossier (encodé) ou profil qui sort de profils/ : 404', async () => {
 		const c = await serviceFaux();
+		await c.dep.coffre.ecrire('profils/archiviste/archiviste.md', '---\ntype: profil\n---\n# Profil archiviste\n\nRange.\n');
 		expect((await api(c).get(chemin(ROUTES.skill, 'absente'))).statut).toBe(404);
-		expect((await api(c).get(chemin(ROUTES.skill, '..'))).statut).toBe(404);
+		// « ../x » encodé reste un seul segment : l'identifiant reçu est « ../x », refusé comme nom de skill
+		expect((await api(c).get(chemin(ROUTES.skill, '../x'))).statut).toBe(404);
+		expect((await api(c).get(chemin(ROUTES.skill, '../profils/archiviste/archiviste'))).statut).toBe(404);
+		expect((await api(c).get(`${chemin(ROUTES.skill, 'archiviste')}?profil=${encodeURIComponent('../x')}`)).statut).toBe(404);
+		expect((await api(c).post(`${ROUTES.skills}?profil=${encodeURIComponent('../x')}`, DEVIS)).statut).toBe(404);
 	});
 
 	it('POST : 400 avec un motif par champ (nom pris, description vide) ; corps mal formé : 400', async () => {

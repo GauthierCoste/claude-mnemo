@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { creerSkill, detailSkill, modifierSkill, supprimerSkill } from '../../src/application/gerer-skills.ts';
@@ -55,5 +55,28 @@ describe('skills de la mémoire, sur disque', () => {
 		const { empreinte } = (await detailSkill(dep, 'devis'))!;
 		await modifierSkill(dep, 'devis', DEVIS, empreinte);
 		expect(git(racine, 'log', '--format=%s', '-2').split('\n')).toEqual(['mnemo: modifie skills/devis/SKILL.md', 'mnemo: modification manuelle']);
+	});
+
+	it('une skill avec d\'autres fichiers que des .md (scripts/calc.py) : renommée puis supprimée en entier, dans le commit', async () => {
+		const { racine, dep } = await surDisque();
+		await creerSkill(dep, DEVIS);
+		await mkdir(join(racine, 'skills', 'devis', 'scripts'), { recursive: true });
+		await writeFile(join(racine, 'skills', 'devis', 'scripts', 'calc.py'), 'print(1)\n');
+		await dep.historique.commit('script', 'tout');
+		const { empreinte } = (await detailSkill(dep, 'devis'))!;
+		expect(await modifierSkill(dep, 'devis', { ...DEVIS, nom: 'devis-maison' }, empreinte)).toMatchObject({ ok: true });
+		expect(existsSync(join(racine, 'skills', 'devis'))).toBe(false);
+		expect(await readFile(join(racine, 'skills', 'devis-maison', 'scripts', 'calc.py'), 'utf8')).toBe('print(1)\n');
+		const renomme = git(racine, 'show', '--name-status', '--format=', 'HEAD').split('\n');
+		expect(renomme).toHaveLength(2);
+		expect(renomme).toContain('R100\tskills/devis/scripts/calc.py\tskills/devis-maison/scripts/calc.py');
+		expect(renomme.some((l) => /^R\d+\tskills\/devis\/SKILL\.md\tskills\/devis-maison\/SKILL\.md$/u.test(l))).toBe(true);
+		expect(await creerSkill(dep, DEVIS)).toMatchObject({ ok: true });
+
+		expect(await supprimerSkill(dep, 'devis-maison')).toMatchObject({ ok: true });
+		expect(existsSync(join(racine, 'skills', 'devis-maison'))).toBe(false);
+		expect(git(racine, 'show', '--name-status', '--format=', 'HEAD').split('\n').sort()).toEqual(['D\tskills/devis-maison/SKILL.md', 'D\tskills/devis-maison/scripts/calc.py']);
+		expect(await readdir(join(racine, 'skills'))).toEqual(['devis']);
+		expect(git(racine, 'status', '--porcelain')).toBe('');
 	});
 });

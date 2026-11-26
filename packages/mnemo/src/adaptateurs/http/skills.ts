@@ -13,7 +13,7 @@ import { ErreurHttp } from './routes.ts';
 import type { Reponse, Requete, Route } from './routes.ts';
 
 /** Message d'un conflit d'écriture (409). */
-export const MOTIF_CONFLIT_SKILL = 'Le SKILL.md de la skill a changé depuis son ouverture : rechargez-la.';
+export const MOTIF_CONFLIT_SKILL = 'Le SKILL.md de la skill a changé depuis son ouverture : à recharger.';
 
 const CLES_SKILL = ['nom', 'description', 'icone', 'contenu'] as const;
 

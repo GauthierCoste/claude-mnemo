@@ -28,14 +28,21 @@ const FOURNIES: Readonly<Record<string, Readonly<Record<string, Version>>>> = {
 };
 
 const MOTIF_NOM = 'nom refusé : minuscules, chiffres et tirets, 40 caractères au plus, sans tiret au début';
-const motifFixe = (nom: string, profil: string) => `la skill « ${nom} » est fournie par Mnemo : elle serait redéposée au prochain lancement de « ${profil} » ; modifie-la, ou reviens à sa version d'origine`;
+const motifFixe = (nom: string, profil: string) =>
+	`skill « ${nom} » fournie par Mnemo : elle se modifie ou revient à sa version d'origine, mais ne se renomme ni ne se supprime (le prochain lancement de « ${profil} » la redéposerait)`;
+/** Mêmes bornes que le service (`domaine/skill.ts`). */
 const motifs = (s: SkillEditableVue): string[] => {
 	const refus: string[] = [];
 	if (!/^[a-z0-9][a-z0-9-]{0,39}$/u.test(s.nom)) refus.push(MOTIF_NOM);
 	if (s.description.trim() === '') refus.push('description obligatoire : c’est elle qui fait charger la skill par l’agent');
-	if (s.icone !== null && (s.icone === '' || /\s/u.test(s.icone))) refus.push('icône refusée : un emoji ou un caractère, sans espace');
+	else if (/[\r\n]/u.test(s.description)) refus.push('description sur une seule ligne');
+	else if (s.description.length > 1024) refus.push('description de 1024 caractères au plus');
+	if (s.icone !== null && (s.icone === '' || s.icone.length > 16 || /[\s\p{Cc}]/u.test(s.icone))) refus.push('icône refusée : un emoji ou un caractère, sans espace');
+	if (s.contenu.length > 100_000) refus.push('contenu de 100000 caractères au plus');
 	return refus;
 };
+/** Clés admises dans un corps, comme le service : celles d'une skill, plus `empreinte` au `PUT`. */
+const CLES = ['nom', 'description', 'icone', 'contenu'];
 const memes = (a: Version, b: Version) => a.description === b.description && a.icone === b.icone && a.contenu === b.contenu;
 
 /** `profil` null : la mémoire. Clé d'une portée dans l'état de la démo. */
@@ -68,15 +75,28 @@ export function creerSkillsDemo(profils: ProfilsPourSkills) {
 	};
 	const fournie = (nom: string, profil: string | null): Version | undefined => (profil === null ? undefined : FOURNIES[profil]?.[nom]);
 	const empreinte = (nom: string, e: Etat) => `${nom}-${e.version}`;
-	const valider = (s: SkillEditableVue, ancien: string | null, profil: string | null) => {
-		const refus = motifs(s);
-		if (ancien !== null && s.nom !== ancien && fournie(ancien, profil) !== undefined) refus.push(motifFixe(ancien, profil!));
-		if (s.nom !== ancien && skillsDe(profil).has(s.nom)) refus.push(`la skill « ${s.nom} » existe déjà`);
+	/** Refus des champs (400) : motifs de la skill, et renommage d'une skill fournie. */
+	const refuser = (refus: string[]) => {
 		if (refus.length > 0) throw new ErreurApi(`Skill refusée : ${refus.join(' ; ')}`, 400);
 	};
-	const editable = (corps: unknown): SkillEditableVue => {
-		const { nom, description, icone, contenu } = corps as SkillEditableVue;
-		return { nom: String(nom ?? ''), description: String(description ?? ''), icone: icone ?? null, contenu: String(contenu ?? '') };
+	const champs = (s: SkillEditableVue, ancien: string | null, profil: string | null): string[] => {
+		const refus = motifs(s);
+		if (ancien !== null && s.nom !== ancien && fournie(ancien, profil) !== undefined) refus.push(motifFixe(ancien, profil!));
+		return refus;
+	};
+	const nomPris = (s: SkillEditableVue, ancien: string | null, profil: string | null) => {
+		if (s.nom !== ancien && skillsDe(profil).has(s.nom)) refuser([`la skill « ${s.nom} » existe déjà`]);
+	};
+	/** Corps reçu, forme vérifiée comme le service (clés inconnues, types) ; `autres` : clés admises en plus. */
+	const editable = (corps: unknown, autres: readonly string[] = []): SkillEditableVue => {
+		if (typeof corps !== 'object' || corps === null || Array.isArray(corps)) throw new ErreurApi(`Corps attendu : { ${[...CLES, ...autres].join(', ')} }.`, 400);
+		for (const cle of Object.keys(corps)) if (!CLES.includes(cle) && !autres.includes(cle)) throw new ErreurApi(`Champ inconnu « ${cle} ».`, 400);
+		const { nom, description, icone, contenu } = corps as Record<string, unknown>;
+		if (typeof nom !== 'string') throw new ErreurApi('Champ « nom » : texte attendu.', 400);
+		if (typeof description !== 'string') throw new ErreurApi('Champ « description » : texte attendu.', 400);
+		if (icone !== null && typeof icone !== 'string') throw new ErreurApi('Champ « icone » : texte ou null attendu.', 400);
+		if (typeof contenu !== 'string') throw new ErreurApi('Champ « contenu » : texte attendu.', 400);
+		return { nom, description, icone, contenu };
 	};
 	const liste = (profil: string | null): SkillVue[] =>
 		[...(portees.get(cle(profil)) ?? new Map<string, Etat>()).entries()]
@@ -88,6 +108,15 @@ export function creerSkillsDemo(profils: ProfilsPourSkills) {
 		memoire: (): SkillVue[] => liste(null),
 		/** Les skills propres au profil `nom`, comme `skillsDuProfil`. */
 		duProfil: (nom: string): SkillVue[] => liste(nom),
+		/** Copie les skills propres du profil `source` dans le profil `cible` (duplication d'un profil). */
+		copierProfil(source: string, cible: string): void {
+			const copie = new Map([...(portees.get(cle(source)) ?? new Map<string, Etat>()).entries()].map(([nom, e]) => [nom, { ...e, version: 1 }]));
+			portees.set(cle(cible), copie);
+		},
+		/** Retire les skills propres du profil `nom` (suppression d'un profil). */
+		retirerProfil(nom: string): void {
+			portees.delete(cle(nom));
+		},
 
 		detail(nom: string, profil: string | null): SkillDetailVue {
 			const e = etat(nom, profil);
@@ -108,17 +137,23 @@ export function creerSkillsDemo(profils: ProfilsPourSkills) {
 		},
 
 		creer(corps: unknown, profil: string | null): ReponseEcritureSkill {
+			skillsDe(profil);
 			const s = editable(corps);
-			valider(s, null, profil);
+			refuser(champs(s, null, profil));
+			nomPris(s, null, profil);
 			skillsDe(profil).set(s.nom, { description: s.description.trim(), icone: s.icone, contenu: s.contenu.trim(), version: 1 });
 			return { commit: 'demo0101', nom: s.nom };
 		},
 
+		/** Comme le service : 404, puis 400 sur les champs, puis 409 sur l'empreinte, puis 400 si le nouveau nom est pris. */
 		modifier(nom: string, corps: unknown, profil: string | null): ReponseEcritureSkill {
 			const e = etat(nom, profil);
-			if ((corps as { empreinte?: unknown }).empreinte !== empreinte(nom, e)) throw new ErreurApi('Le SKILL.md de la skill a changé depuis son ouverture : rechargez-la.', 409);
-			const s = editable(corps);
-			valider(s, nom, profil);
+			const s = editable(corps, ['empreinte']);
+			const lue = (corps as { empreinte?: unknown }).empreinte;
+			if (typeof lue !== 'string') throw new ErreurApi('Champ « empreinte » : texte attendu.', 400);
+			refuser(champs(s, nom, profil));
+			if (lue !== empreinte(nom, e)) throw new ErreurApi('Le SKILL.md de la skill a changé depuis son ouverture : à recharger.', 409);
+			nomPris(s, nom, profil);
 			const suivante: Etat = { description: s.description.trim(), icone: s.icone, contenu: s.contenu.trim(), version: e.version + 1 };
 			if (s.nom === nom && memes(suivante, e)) return { commit: null, nom };
 			const skills = skillsDe(profil);

@@ -15,6 +15,9 @@ afterEach(() => {
 	vi.useRealTimers();
 });
 
+/** Corps d'un `PUT` de skill, comme l'écran l'envoie : les champs réglables et l'empreinte, rien d'autre. */
+const corpsDe = (d: SkillDetailVue) => ({ nom: d.nom, description: d.description, icone: d.icone, contenu: d.contenu, empreinte: d.empreinte });
+
 describe('mode démo', () => {
 	it('nourrit la coquille sans jeton : racine, pastilles, connexion ouverte', async () => {
 		const client = creerClientDemo();
@@ -166,11 +169,11 @@ describe('mode démo', () => {
 		await expect(api.envoyer(ROUTES.skills, { nom: 'courrier', description: 'x', icone: null, contenu: '' })).rejects.toMatchObject({ statut: 400 });
 		await expect(api.envoyer(ROUTES.skills, { nom: 'autre', description: ' ', icone: null, contenu: '' })).rejects.toMatchObject({ statut: 400 });
 
-		const renommee = await api.remplacer<ReponseEcritureSkill>(chemin(ROUTES.skill, 'relecture'), { ...relecture, nom: 'relecture-finale', empreinte: relecture.empreinte });
+		const renommee = await api.remplacer<ReponseEcritureSkill>(chemin(ROUTES.skill, 'relecture'), { ...corpsDe(relecture), nom: 'relecture-finale' });
 		expect(renommee.nom).toBe('relecture-finale');
 		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'redaction'))).editable.skillsMemoire).toEqual(['relecture-finale']);
 		await expect(api.lire(chemin(ROUTES.skill, 'relecture'))).rejects.toMatchObject({ statut: 404 });
-		await expect(api.remplacer(chemin(ROUTES.skill, 'relecture-finale'), { ...relecture, empreinte: relecture.empreinte })).rejects.toMatchObject({ statut: 409 });
+		await expect(api.remplacer(chemin(ROUTES.skill, 'relecture-finale'), corpsDe(relecture))).rejects.toMatchObject({ statut: 409 });
 
 		await api.supprimer<ReponseEcritureSkill>(chemin(ROUTES.skill, 'relecture-finale'));
 		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'redaction'))).editable.skillsMemoire).toEqual([]);
@@ -188,9 +191,9 @@ describe('mode démo', () => {
 		expect(menage.motifFixe).toMatch(/fournie par Mnemo/u);
 		await expect(api.lire(chemin(ROUTES.skill, 'menage'))).rejects.toMatchObject({ statut: 404 });
 		const ici = `${chemin(ROUTES.skill, 'menage')}?profil=archiviste`;
-		await api.remplacer(ici, { ...menage, contenu: 'À ma façon.' });
+		await api.remplacer(ici, { ...corpsDe(menage), contenu: 'À ma façon.' });
 		expect((await api.lire<SkillDetailVue>(ici)).modifiee).toBe(true);
-		await expect(api.remplacer(ici, { ...(await api.lire<SkillDetailVue>(ici)), nom: 'menage-perso' })).rejects.toMatchObject({ statut: 400 });
+		await expect(api.remplacer(ici, { ...corpsDe(await api.lire<SkillDetailVue>(ici)), nom: 'menage-perso' })).rejects.toMatchObject({ statut: 400 });
 		await expect(api.supprimer(chemin(ROUTES.skill, 'menage'), { profil: 'archiviste' })).rejects.toMatchObject({ statut: 400 });
 		await api.envoyer(`${chemin(ROUTES.skillOrigine, 'menage')}?profil=archiviste`);
 		expect((await api.lire<SkillDetailVue>(ici)).modifiee).toBe(false);
@@ -199,6 +202,26 @@ describe('mode démo', () => {
 		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'archiviste'))).skillsDuProfil.find((x) => x.nom === 'factures')).toMatchObject({ icone: '🧾', origine: 'memoire' });
 		await api.supprimer(chemin(ROUTES.skill, 'factures'), { profil: 'archiviste' });
 		await expect(api.envoyer(`${ROUTES.skills}?profil=inconnu`, { nom: 'x', description: 'x', icone: null, contenu: '' })).rejects.toMatchObject({ statut: 404 });
+	});
+
+	it('skills (démo) : mêmes refus que le service (clés inconnues, bornes), 400 avant 409 ; un profil dupliqué emporte ses skills, supprimé les retire', async () => {
+		const { api } = creerClientDemo();
+		const chemin = (route: string, nom: string) => route.replace(':id', encodeURIComponent(nom));
+		const devis = await api.lire<SkillDetailVue>(chemin(ROUTES.skill, 'devis'));
+		await expect(api.remplacer(chemin(ROUTES.skill, 'devis'), devis)).rejects.toMatchObject({ statut: 400 });
+		await expect(api.envoyer(ROUTES.skills, { nom: 'x', description: 'x', icone: null, contenu: '', pirate: 1 })).rejects.toMatchObject({ statut: 400 });
+		for (const refuse of [{ description: 'deux\nlignes' }, { description: 'x'.repeat(1025) }, { icone: 'x'.repeat(17) }, { icone: '\u0007' }, { contenu: 'x'.repeat(100_001) }]) {
+			await expect(api.envoyer(ROUTES.skills, { nom: 'neuve', description: 'Neuve.', icone: null, contenu: '', ...refuse })).rejects.toMatchObject({ statut: 400 });
+		}
+		// empreinte périmée et champ refusé : le refus du champ (400) passe avant le conflit (409)
+		await expect(api.remplacer(chemin(ROUTES.skill, 'devis'), { ...corpsDe(devis), empreinte: 'perimee', description: '' })).rejects.toMatchObject({ statut: 400 });
+		await expect(api.remplacer(chemin(ROUTES.skill, 'devis'), { ...corpsDe(devis), empreinte: 'perimee' })).rejects.toMatchObject({ statut: 409 });
+
+		await api.envoyer(chemin(ROUTES.profilDupliquer, 'redaction'), { nom: 'courriers' });
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'courriers'))).skillsDuProfil.map((x) => x.nom)).toEqual(['signature']);
+		await api.supprimer(chemin(ROUTES.profil, 'courriers'));
+		await api.envoyer(chemin(ROUTES.profilDupliquer, 'travail'), { nom: 'courriers' });
+		expect((await api.lire<ProfilDetailVue>(chemin(ROUTES.profil, 'courriers'))).skillsDuProfil).toEqual([]);
 	});
 
 	it('moteurs : les trois du catalogue dans /api/moteurs, chaque profil et chaque session sur un moteur connu, avec un modèle proposé ; sans quotas pour Vibe', async () => {

@@ -42,8 +42,8 @@ const HOOKS_TOUS: EvenementHookVue[] = ['debut', 'message', 'outil', 'apres_outi
 
 type Etat = { editable: ProfilEditableVue; consigneParDefaut: string; ecrit: boolean; version: number };
 
-/** Les skills de la démo (celles de `creerSkillsDemo`), lues à chaque appel : de la mémoire, et propres à un profil. */
-export type SkillsPourProfils = { memoire(): SkillVue[]; duProfil(nom: string): SkillVue[] };
+/** Les skills de la démo (celles de `creerSkillsDemo`) : de la mémoire, propres à un profil (copiées avec lui, retirées avec lui). */
+export type SkillsPourProfils = { memoire(): SkillVue[]; duProfil(nom: string): SkillVue[]; copierProfil(source: string, cible: string): void; retirerProfil(nom: string): void };
 
 export function creerProfilsDemo(skills: SkillsPourProfils) {
 	const skillsMemoire = () => skills.memoire();
@@ -159,7 +159,7 @@ export function creerProfilsDemo(skills: SkillsPourProfils) {
 			verifierNom(nom);
 			const { editable, empreinte: lue } = corps as { editable: ProfilEditableVue; empreinte: string | null };
 			const e = profils.get(nom);
-			if ((e === undefined ? null : empreinte(nom, e)) !== lue) throw new ErreurApi('La fiche du profil a changé depuis son ouverture : rechargez-la.', 409);
+			if ((e === undefined ? null : empreinte(nom, e)) !== lue) throw new ErreurApi('La fiche du profil a changé depuis son ouverture : à recharger.', 409);
 			if (editable.hooks.length === 0) throw new ErreurApi('Profil refusé : au moins un événement, parmi ceux de Mnemo', 400);
 			if (editable.moteur !== 'claude-code' && editable.plugins.length > 0) throw new ErreurApi('Profil refusé : les plugins ne valent que pour Claude Code', 400);
 			if (editable.moteur !== 'claude-code' && nom === PROFIL_ARCHIVISTE) throw new ErreurApi('Profil refusé : l’archiviste reste sur Claude Code', 400);
@@ -175,6 +175,7 @@ export function creerProfilsDemo(skills: SkillsPourProfils) {
 			const e = etat(source);
 			if (profils.has(nom)) throw new ErreurApi(`Profil refusé : le profil « ${nom} » existe déjà`, 400);
 			profils.set(nom, { editable: { ...structuredClone(e.editable), consigne: consigne(e) }, consigneParDefaut: CONSIGNE_TRAVAIL, ecrit: true, version: 1 });
+			skills.copierProfil(source, nom);
 			return { commit: 'demo0002' };
 		},
 
@@ -182,6 +183,7 @@ export function creerProfilsDemo(skills: SkillsPourProfils) {
 			if (nom === PROFIL_TRAVAIL || nom === PROFIL_ARCHIVISTE) throw new ErreurApi(`Profil refusé : le profil « ${nom} » ne se supprime pas`, 400);
 			etat(nom);
 			profils.delete(nom);
+			skills.retirerProfil(nom);
 			return { commit: 'demo0003' };
 		},
 

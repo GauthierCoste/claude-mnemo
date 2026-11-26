@@ -14,7 +14,7 @@ import { ErreurHttp } from './routes.ts';
 import type { Reponse, Route } from './routes.ts';
 
 /** Message d'un conflit d'écriture (409). */
-export const MOTIF_CONFLIT_PROFIL = 'La fiche du profil a changé depuis son ouverture : rechargez-la.';
+export const MOTIF_CONFLIT_PROFIL = 'La fiche du profil a changé depuis son ouverture : à recharger.';
 
 const CLES_EDITABLES = ['avatar', 'consigne', 'lancement', 'hooks', 'skillsMemoire', 'plugins', 'moteur', 'modele'] as const;
 

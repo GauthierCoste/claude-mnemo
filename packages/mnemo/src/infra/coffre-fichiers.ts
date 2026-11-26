@@ -175,6 +175,31 @@ export function coffreFichiers(racineMemoire: string, options: OptionsCoffre = {
 			return 'retire';
 		},
 
+		async deplacerDossier(de, vers) {
+			const source = absolu(de);
+			const cible = absolu(vers);
+			if (source === racine || cible === racine) throw new Error('La racine de la mémoire ne se déplace pas.');
+			if ((await traverseUnLien(de)) || (await traverseUnLien(vers))) throw new Error(`Déplacement refusé : ${de} ou ${vers} passe par un lien symbolique.`);
+			if (!(await lstat(source)).isDirectory()) throw new Error(`${de} n'est pas un dossier.`);
+			const existe = await lstat(cible).then(
+				() => true,
+				(erreur: unknown) => {
+					sansAbsent(erreur);
+					return false;
+				},
+			);
+			if (existe) throw new Error(`${vers} existe déjà.`);
+			await mkdir(dirname(cible), { recursive: true });
+			await reessayer(() => renommer(source, cible), delais);
+		},
+
+		async retirerDossier(dossier) {
+			const complet = absolu(dossier);
+			if (complet === racine) throw new Error('La racine de la mémoire ne se retire pas.');
+			if (await traverseUnLien(dossier)) throw new Error(`Retrait refusé : ${dossier} passe par un lien symbolique.`);
+			await rm(complet, { recursive: true, force: true });
+		},
+
 		async lister(dossier) {
 			const complet = absolu(dossier);
 			const fiches: string[] = [];

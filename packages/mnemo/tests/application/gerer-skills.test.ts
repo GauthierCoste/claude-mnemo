@@ -3,7 +3,7 @@ import { detailProfil } from '../../src/application/gerer-profils.ts';
 import { creerSkill, detailSkill, modifierSkill, motifSkillFournie, revenirALOrigine, supprimerSkill } from '../../src/application/gerer-skills.ts';
 import type { SkillEntree } from '../../src/application/gerer-skills.ts';
 import { ANCIENNES_SKILLS, chargerProfil, cheminDeProfil, deposerSkillsParDefaut, dossierSkillsDuProfil, SKILLS_PAR_DEFAUT } from '../../src/application/profil.ts';
-import { MOTIF_NOM_DE_SKILL, texteDeSkill } from '../../src/domaine/skill.ts';
+import { lireSkill, MOTIF_NOM_DE_SKILL, texteDeSkill } from '../../src/domaine/skill.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
 
 const DEVIS: SkillEntree = { nom: 'devis', description: 'Rédiger un devis au format de la maison.', icone: '📜', contenu: '# Devis\n\nPérimètre, lots, jours, total HT.' };
@@ -97,13 +97,34 @@ describe('skills de la mémoire : modifier', () => {
 		expect(r).toEqual({ ok: true, commit: expect.any(String), nom: 'devis-maison' });
 		const commit = dep.commits.at(-1)!;
 		expect(commit.message).toBe('mnemo: renomme skills/devis → skills/devis-maison');
-		expect([...commit.chemins].sort()).toEqual([cheminDeProfil('redaction'), 'skills/devis-maison/SKILL.md', 'skills/devis-maison/exemples.md', CHEMIN, 'skills/devis/exemples.md'].sort());
+		expect(commit.chemins).toEqual(['skills/devis', 'skills/devis-maison', cheminDeProfil('redaction')]);
 		expect([...dep.fichiers.keys()].filter((c) => c.startsWith('skills/devis/'))).toEqual([]);
 		expect(dep.fichiers.get('skills/devis-maison/SKILL.md')).toMatch(/^name: devis-maison$/mu);
 		expect(dep.fichiers.get('skills/devis-maison/exemples.md')).toBe('# Exemples\n');
 		expect((await chargerProfil(dep, 'redaction')).skillsMemoire).toEqual(['devis-maison', 'relecture']);
 		expect((await chargerProfil(dep, 'revue')).skillsMemoire).toEqual(['relecture']);
 		expect((await detailSkill(dep, 'devis-maison'))!.agents).toEqual(['redaction', 'travail']);
+	});
+
+	it('renommer : un commit qui échoue remet tout en place (dossier, SKILL.md, profils)', async () => {
+		const dep = await memoire();
+		const avant = new Map(dep.fichiers);
+		const { empreinte } = (await detailSkill(dep, 'devis'))!;
+		dep.historique.commit = async () => {
+			throw new Error('git indisponible');
+		};
+		await expect(modifierSkill(dep, 'devis', { ...DEVIS, nom: 'devis-maison', contenu: 'Autre.' }, empreinte)).rejects.toThrow('git indisponible');
+		expect(dep.fichiers).toEqual(avant);
+	});
+
+	it('supprimer : un commit qui échoue rend le dossier et les profils', async () => {
+		const dep = await memoire();
+		const avant = new Map(dep.fichiers);
+		dep.historique.commit = async () => {
+			throw new Error('git indisponible');
+		};
+		await expect(supprimerSkill(dep, 'devis')).rejects.toThrow('git indisponible');
+		expect(dep.fichiers).toEqual(avant);
 	});
 
 	it('renommer vers un nom pris : refusé, rien ne bouge', async () => {
@@ -123,7 +144,7 @@ describe('skills de la mémoire : supprimer', () => {
 		expect(await supprimerSkill(dep, 'devis')).toEqual({ ok: true, commit: expect.any(String), nom: 'devis' });
 		const commit = dep.commits.at(-1)!;
 		expect(commit.message).toBe('mnemo: supprime skills/devis/');
-		expect([...commit.chemins].sort()).toEqual([cheminDeProfil('redaction'), CHEMIN, 'skills/devis/exemples.md'].sort());
+		expect(commit.chemins).toEqual(['skills/devis', cheminDeProfil('redaction')]);
 		expect([...dep.fichiers.keys()].filter((c) => c.startsWith('skills/devis/'))).toEqual([]);
 		expect((await chargerProfil(dep, 'redaction')).skillsMemoire).toEqual(['relecture']);
 		expect(await detailSkill(dep, 'devis')).toBeNull();
@@ -145,6 +166,7 @@ describe('skills de la mémoire : version d\'origine', () => {
 describe('skills d\'un profil', () => {
 	const MENAGE = SKILLS_PAR_DEFAUT.archiviste!.find((s) => s.nom === 'menage')!;
 	const cheminMenage = `${dossierSkillsDuProfil('archiviste')}/menage/SKILL.md`;
+	const MENAGE_LU = lireSkill(MENAGE.texte);
 
 	/** L'archiviste avec ses skills par défaut déposées, et `redaction` avec une skill propre. */
 	async function avecProfils() {
@@ -189,10 +211,24 @@ describe('skills d\'un profil', () => {
 		expect(liste.map((s) => [s.nom, s.origine])).toEqual(SKILLS_PAR_DEFAUT.archiviste!.map((s) => [s.nom, 'mnemo']).sort());
 	});
 
-	it('restée une version fournie passée (ANCIENNES_SKILLS) : pas « modifiee », le prochain dépôt la remplacera', async () => {
+	it('restée une version fournie passée (ANCIENNES_SKILLS) : présentée dans sa version actuelle, pas « modifiee »', async () => {
 		const dep = await avecProfils();
 		dep.fichiers.set(cheminMenage, ANCIENNES_SKILLS.archiviste!.find((s) => s.nom === 'menage')!.texte);
 		expect((await detailSkill(dep, 'menage', 'archiviste'))!.modifiee).toBe(false);
+	});
+
+	it('menage déposée avec l\'ancien frontmatter illisible : présentée et enregistrée depuis la version actuelle, frontmatter réécrit propre', async () => {
+		const dep = await avecProfils();
+		const illisible = ANCIENNES_SKILLS.archiviste!.filter((s) => s.nom === 'menage').at(-1)!.texte;
+		dep.fichiers.set(cheminMenage, illisible);
+		const detail = (await detailSkill(dep, 'menage', 'archiviste'))!;
+		expect(detail).toMatchObject({ description: MENAGE_LU.description, contenu: MENAGE_LU.contenu, modifiee: false, avertissements: [] });
+		const liste = (await detailProfil(dep, 'archiviste'))!.skillsDuProfil;
+		expect(liste.find((s) => s.nom === 'menage')!.description).toBe(MENAGE_LU.description);
+		await modifierSkill(dep, 'menage', { nom: 'menage', description: detail.description, icone: '🧹', contenu: detail.contenu }, detail.empreinte, 'archiviste');
+		const ecrit = dep.fichiers.get(cheminMenage)!;
+		expect(lireSkill(ecrit)).toMatchObject({ illisible: false, description: MENAGE_LU.description, icone: '🧹', contenu: MENAGE_LU.contenu });
+		expect(ecrit.match(/^---$/gmu)).toHaveLength(2);
 	});
 
 	it('modifier une skill fournie : « modifiee », plus jamais réécrite par le dépôt ; revenir à l\'origine réécrit la version fournie', async () => {

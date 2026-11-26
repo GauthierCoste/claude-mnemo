@@ -1246,11 +1246,13 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 
 	// Réglages de la démo : en mémoire ; comme le service, le port changé attend un redémarrage
 	// les profils lisent les skills, qui font suivre aux profils le renommage ou la suppression d'une skill de la mémoire
-	const lienSkills: SkillsPourProfils = { memoire: () => [], duProfil: () => [] };
+	const lienSkills: SkillsPourProfils = { memoire: () => [], duProfil: () => [], copierProfil: () => {}, retirerProfil: () => {} };
 	const profilsDemo = creerProfilsDemo(lienSkills);
 	const skillsDemo = creerSkillsDemo(profilsDemo);
 	lienSkills.memoire = skillsDemo.memoire;
 	lienSkills.duProfil = skillsDemo.duProfil;
+	lienSkills.copierProfil = skillsDemo.copierProfil;
+	lienSkills.retirerProfil = skillsDemo.retirerProfil;
 	/** Une route de skill : l'identifiant de `route` dans le chemin (requête ôtée), et la portée `?profil=` (du chemin ou de `params`). */
 	const skillDe = (route: string, chemin: string, params?: Record<string, string>): { nom: string; profil: string | null } | undefined => {
 		const [sansRequete, requete] = chemin.split('?') as [string, string | undefined];

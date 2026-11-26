@@ -12,7 +12,7 @@ import { ecrireEtCommiter, ficheVide, fichiersDuDossier, sousVerrou, texteDeFich
 import { anciennesConsignes } from './consignes-par-defaut.ts';
 import type { Dependances, PluginInstalle, SkillInstallee } from './ports.ts';
 import { chargerProfil, cheminDeProfil, dossierSkillsDuProfil, profilParDefaut } from './profil.ts';
-import { origineDeSkill } from './gerer-skills.ts';
+import { origineDeSkill, textePresente } from './gerer-skills.ts';
 import { reindexerApresEcriture } from './synchroniser.ts';
 
 /**
@@ -70,7 +70,8 @@ async function existe(dep: Dependances, nom: string): Promise<boolean> {
 /**
  * Skills d'un dossier, celui de la mémoire (`profil` null) ou celui du profil `profil` : chaque sous-dossier qui contient un
  * `SKILL.md` (nom = dossier, description et icône du frontmatter ; frontmatter illisible : la skill reste listée par son nom),
- * avec son `origine` (`origineDeSkill`) : toutes s'éditent depuis Réglages (`gerer-skills.ts`).
+ * avec son `origine` (`origineDeSkill`) : toutes s'éditent depuis Réglages (`gerer-skills.ts`). Une skill restée une version
+ * fournie passée est lue dans sa version actuelle (`textePresente`).
  */
 async function skillsDuDossier(dep: Dependances, dossier: string, profil: string | null): Promise<SkillInstallee[]> {
 	const resultat: SkillInstallee[] = [];
@@ -78,7 +79,7 @@ async function skillsDuDossier(dep: Dependances, dossier: string, profil: string
 		const texte = await dep.coffre.lire(`${sous}/SKILL.md`);
 		if (texte === null) continue;
 		const nom = sous.slice(sous.lastIndexOf('/') + 1);
-		const { description, icone } = lireSkill(texte);
+		const { description, icone } = lireSkill(textePresente(profil, nom, texte));
 		resultat.push({ nom, description, ...(icone === null ? {} : { icone }), origine: origineDeSkill(profil, nom) });
 	}
 	return resultat;

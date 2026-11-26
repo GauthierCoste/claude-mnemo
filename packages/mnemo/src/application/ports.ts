@@ -31,6 +31,14 @@ export interface Coffre {
 	 */
 	retirerDossierVide(dossier: string): Promise<RetraitDossier>;
 	/**
+	 * Déplace le dossier `de` entier (tous ses fichiers, `.md` ou non) vers `vers` (relatifs à `_mnemo/`), dossiers parents
+	 * créés. Lève si `de` n'est pas un dossier, si `vers` existe déjà, si l'un des deux est la racine ou traverse un lien
+	 * symbolique.
+	 */
+	deplacerDossier(de: string, vers: string): Promise<void>;
+	/** Retire le dossier `dossier` et tout ce qu'il contient (liens symboliques retirés, jamais suivis). Absent : sans erreur. Lève pour la racine ou un chemin qui traverse un lien symbolique. */
+	retirerDossier(dossier: string): Promise<void>;
+	/**
 	 * Fiches `.md` et sous-dossiers directs de `dossier` (« » = racine), sans les entrées cachées (« . »).
 	 * Chemins RELATIFS à `_mnemo/` (pas à `dossier`), séparés par « / », triés. Dossier absent : listes vides.
 	 * Liens symboliques jamais suivis : ni listés, ni parcourus (`dossier` atteint par un lien : listes vides).
