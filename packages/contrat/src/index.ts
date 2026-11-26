@@ -511,8 +511,8 @@ export type MessageClient =
  * - `lots` GET → `ReponseLots` : les lots d'informations en attente de l'utilisateur, les plus anciens d'abord ;
  * - `lotValider` POST `{ lignes: number[] }` (indices des lignes cochées, de 0 à n − 1 ; au moins une, sans doublon) →
  *   `ReponseValidationLot` : les lignes s'appliquent en un commit (400 : corps ou choix invalide, ou lignes qui ne
- *   s'appliquent pas, le lot restant en attente ; 404 : lot inconnu ou déjà décidé ; 409 : la fiche a changé depuis la
- *   proposition, le lot est écarté et l'archiviste le reproposera) ; canal de l'utilisateur seulement ;
+ *   s'appliquent pas, le lot restant en attente ; 404 : lot inconnu ou déjà décidé ; 409 : une information visée a changé
+ *   depuis la proposition, le lot est écarté, à faire reproposer par l'archiviste) ; canal de l'utilisateur seulement ;
  * - `entrainement` GET → `VueEntrainement` : l'état de l'entraînement de la note de confiance (page Mémoire › Entraîner) ;
  * - `entrainementPreparer` POST `DemandePreparer`, `entrainementPrejuger` POST, `entrainementApprendre` POST → 202
  *   `VueEntrainement` : lance la tâche (une seule à la fois ; 409 si une tâche tourne, si une commande `mnemo banc contexte`
@@ -1029,7 +1029,8 @@ export type LigneDeLotVue = { indice: number; ligne: LigneDeLotProposeeVue; avan
 /**
  * Un lot d'informations proposé par l'archiviste, en attente de l'utilisateur : `fiche` (chemin) et son `titre` (null si
  * absente ou illisible), `motif` de l'archiviste, `proposeMs`, `session` qui l'a proposé (null : hors session Mnemo),
- * `perime` (la fiche a changé depuis : la validation sera refusée, 409).
+ * `perime` (une information visée a changé depuis, ou la fiche est absente ou illisible : la validation sera refusée, 409 ;
+ * un ajout ailleurs dans la fiche ne périme pas le lot).
  */
 export type LotVue = {
 	id: string;

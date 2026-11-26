@@ -79,9 +79,9 @@ describe('routes des lots d\'informations', () => {
 		expect(((await api(c).get(ROUTES.lots)).corps as ReponseLots).lots).toHaveLength(1);
 	});
 
-	it('la fiche a changé depuis la proposition : 409, le lot est écarté', async () => {
+	it('une information visée a changé depuis la proposition : 409, le lot est écarté', async () => {
 		const { c, id } = await avecLot('supprimer', [{ ancre: 'f-0005' }]);
-		c.dep.fichiers.set(ACME, `${c.dep.fichiers.get(ACME)!}\n`);
+		c.dep.fichiers.set(ACME, c.dep.fichiers.get(ACME)!.replace('s\'appelle Corbano', 's\'appelle Corbani'));
 		expect(((await api(c).get(ROUTES.lots)).corps as ReponseLots).lots[0]!.perime).toBe(true);
 		expect((await api(c).post(chemin(ROUTES.lotValider, id), { lignes: [0] })).statut).toBe(409);
 		expect(c.dep.commits).toEqual([]);

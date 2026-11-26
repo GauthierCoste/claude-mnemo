@@ -912,8 +912,8 @@ lower in a search), to confirm, struck out, probable duplicates (same note,
 close wording, same numbers; a pair noted as `contredit` is left out), notes over 40 facts (struck-out ones counted), sources
 with the same document or never cited, rare categories (used twice at most, high-stake ones aside), file name different
 from the title (folder notes aside) and **lots en attente** (pending batches: note, batch, kind, number of lines, reason, and
-"périmé" when the note changed since the proposal). `rubriques` picks sections, `limite` the entries shown per section (20
-by default, 1 to 200); profiles, instructions, `profils/` and `skills/` are only checked for broken links. Nothing is
+"périmé" when an information it targets changed since the proposal). `rubriques` picks sections, `limite` the entries
+shown per section (20 by default, 1 to 200); profiles, instructions, `profils/` and `skills/` are only checked for broken links. Nothing is
 written, synchronised or extracted.
 
 ### Maintaining information
@@ -948,11 +948,17 @@ Besides notes, `entretenir` acts on the information lines of a note (the `ancre`
 
 **Validating a batch.** Pending batches appear in Mémoire › Archiviste, under « À arbitrer » (they count in the badges).
 **Tout valider** applies every line; **Revoir** shows each line before and after, with a checkbox: **Valider N lignes**
-applies the checked lines only; **Rejeter** drops the batch. A validation is one commit (`mnemo: fusionne|supprime|confirme
-<n> informations <path>`). A batch whose note changed since the proposal is stale: validating it is refused ("la fiche a
-changé"), it leaves the list, and the archivist sees it at its next proposal. Deleting a fact: the links to it lose their
-anchor, and a fact it struck out keeps its date without the reference; a live fact still to confirm that contradicts it
-makes the batch refused until that contradiction is decided.
+applies the checked lines only; **Rejeter** drops the batch. A validation is one commit (`mnemo:
+fusionne|supprime|confirme <n> informations <path>`). A batch records, at its proposal, a fingerprint of each
+information it targets (the fact line with its quote and corroborations). It is stale only when one of them was removed
+or rewritten since (or the note is gone or unreadable); an information added or changed elsewhere in the note leaves it
+valid, and it is checked again against the current note when validated. A stale batch says so on its card: reject it,
+then ask the archivist to propose it again (nothing re-proposes it by itself). Validating it is refused, it leaves the
+list, and the archivist sees its fate at its next proposal. A new proposal on the same note drops the pending batches of
+that note that are stale, and only those. Batches recorded before these fingerprints keep the former rule: stale as soon
+as the note's text changed. Deleting a fact: the links to it lose their anchor, and a fact it struck out keeps its date
+without the reference; a live fact still to confirm that contradicts it makes the batch refused until that contradiction
+is decided.
 
 **Several sources and confidence.** An information can have several sources (first `src:` mention, then corroboration
 lines). Its `confiance` cumulates them: 1 − Π(1 − cᵢ), where cᵢ is the reliability of each distinct source, capped at 0.9

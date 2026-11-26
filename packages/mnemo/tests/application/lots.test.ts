@@ -7,6 +7,7 @@ import { presenterLotPropose } from '../../src/application/presenter.ts';
 import { demandeDEntretien, validerArguments } from '../../src/application/validation.ts';
 import { empreinte } from '../../src/domaine/empreinte.ts';
 import { lireFiche } from '../../src/domaine/fiche.ts';
+import { empreinteDInformation } from '../../src/domaine/lot.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
 import { faitDe, fiche, ligne, remplir } from '../aides/memoire-lots.ts';
 
@@ -35,6 +36,8 @@ describe('proposer_lot (archiviste) : enregistré, jamais appliqué', () => {
 		expect(dep.commits).toEqual([]);
 		const [enAttente] = await dep.lots.enAttente();
 		expect(enAttente).toMatchObject({ genre: 'fusionner', fiche: ACME, lignes: [{ garder: 'f-0001', absorber: ['f-0002', 'f-0003'] }], motif: 'Doublons de la note A', empreinte: empreinte(avant.get(ACME)!), session: null });
+		const faits = lireFiche(ACME, avant.get(ACME)!).faits;
+		expect(enAttente!.empreintes).toEqual({ 'f-0001': empreinteDInformation(faits, 'f-0001'), 'f-0002': empreinteDInformation(faits, 'f-0002'), 'f-0003': empreinteDInformation(faits, 'f-0003') });
 	});
 
 	it('refuse : ancre absente, information barrée (fusion), pas à confirmer, ancre nommée deux fois, consigne, motif vide, information déjà dans un lot en attente', async () => {
@@ -167,16 +170,48 @@ describe('valider un lot (utilisateur)', () => {
 		expect(parLot.commits.map((c) => c.message)).toEqual(['mnemo: confirme 1 information clients/acme.md']);
 	});
 
-	it('la fiche a changé depuis la proposition : refusé, rien n\'écrit, le lot est écarté (périmé)', async () => {
+	it('une information visée a changé depuis la proposition : refusé, rien n\'écrit, le lot est écarté (périmé)', async () => {
 		const dep = memoire();
 		const id = await proposerLot(dep, lot('supprimer', [{ ancre: 'f-0005' }]));
-		dep.fichiers.set(ACME, `${dep.fichiers.get(ACME)!}- Une nouvelle | declare | src: utilisateur ^f-0009\n`);
+		dep.fichiers.set(ACME, dep.fichiers.get(ACME)!.replace('s\'appelle Corbano', 's\'appelle Corbani'));
 		const avant = dep.fichiers.get(ACME);
-		expect(await validerLot(dep, id, [0])).toMatchObject({ statut: 'perime' });
+		const r = await validerLot(dep, id, [0]);
+		expect(r).toMatchObject({ statut: 'perime' });
+		expect('motif' in r ? r.motif : '').toBe(`Une information visée par le lot a changé dans ${ACME} depuis sa proposition : lot écarté, demander à l'archiviste de le reproposer.`);
 		expect(dep.fichiers.get(ACME)).toBe(avant);
 		expect(dep.commits).toEqual([]);
 		expect(await dep.lots.enAttente()).toEqual([]);
 		expect(await validerLot(dep, id, [0])).toMatchObject({ statut: 'inconnu' });
+	});
+
+	it('ajouts et changements ailleurs dans la fiche après la proposition : le lot n\'est pas périmé, il se valide sur la fiche actuelle', async () => {
+		const dep = memoire();
+		const id = await proposerLot(dep, lot('supprimer', [{ ancre: 'f-0005' }, { ancre: 'f-0003' }]));
+		const change = dep.fichiers
+			.get(ACME)!
+			.replace('Le client Acme.', 'Le client Acme, à Lyon.')
+			.replace('Acme est cliente', 'Acme est bien cliente')
+			.replace('  + src: [[sources/n]] | corroboré 2026-11-10', ['  + src: [[sources/n]] | corroboré 2026-11-10', ...Array.from({ length: 10 }, (_, i) => `- Information ajoutée ${i + 1} | declare | src: utilisateur ^f-00${10 + i}`)].join('\n'));
+		dep.fichiers.set(ACME, change);
+		expect((await lotsEnAttente(dep)).map((l) => l.perime)).toEqual([false]);
+		const r = await validerLot(dep, id, [0, 1]);
+		expect(r).toMatchObject({ statut: 'valide', lignes: [0, 1] });
+		const apres = dep.fichiers.get(ACME)!;
+		expect(faitDe(apres, 'f-0005')).toBeUndefined();
+		expect(faitDe(apres, 'f-0003')).toBeUndefined();
+		expect(faitDe(apres, 'f-0008')).toMatchObject({ texte: 'Acme est bien cliente' });
+		expect(faitDe(apres, 'f-0019')).toMatchObject({ texte: 'Information ajoutée 10' });
+		expect(apres).toContain('Le client Acme, à Lyon.');
+	});
+
+	it('lot enregistré sans empreintes par information (d\'avant) : règle de la fiche entière, un ajout ailleurs le périme', async () => {
+		const dep = memoire();
+		await dep.lots.enregistrer({ id: 'ancien', genre: 'supprimer', fiche: ACME, lignes: [{ ancre: 'f-0005' }], motif: 'm', empreinte: empreinte(dep.fichiers.get(ACME)!), proposeMs: 1, session: null });
+		expect((await lotsEnAttente(dep)).map((l) => l.perime)).toEqual([false]);
+		dep.fichiers.set(ACME, `${dep.fichiers.get(ACME)!}- Une nouvelle | declare | src: utilisateur ^f-0009\n`);
+		expect((await lotsEnAttente(dep)).map((l) => l.perime)).toEqual([true]);
+		expect(await validerLot(dep, 'ancien', [0])).toMatchObject({ statut: 'perime' });
+		expect(dep.commits).toEqual([]);
 	});
 
 	it('la plus haute ancre retirée par un lot (suppression ou fusion) n\'est jamais redonnée', async () => {
@@ -254,7 +289,9 @@ describe('lots en attente, rejet, sort rendu à l\'archiviste', () => {
 		]);
 		expect(l2!.lignes).toEqual([{ indice: 0, ligne: { ancre: 'f-0005' }, avant: [{ ancre: 'f-0005', lignes: [ligne(5)] }], apres: null, motif: null }]);
 		dep.fichiers.set(ACME, `${dep.fichiers.get(ACME)!}\n`);
-		expect((await lotsEnAttente(dep)).map((l) => l.perime)).toEqual([true, true]);
+		expect((await lotsEnAttente(dep)).map((l) => l.perime)).toEqual([false, false]);
+		dep.fichiers.set(ACME, dep.fichiers.get(ACME)!.replace('  > « Acme client »', '  > « Acme, client »'));
+		expect((await lotsEnAttente(dep)).map((l) => l.perime)).toEqual([true, false]);
 	});
 
 	it('rejeter : le lot disparaît, rien n\'est écrit ; l\'archiviste voit le sort de ses lots à sa proposition suivante', async () => {
@@ -279,15 +316,17 @@ describe('lots en attente, rejet, sort rendu à l\'archiviste', () => {
 });
 
 describe('revue : lots périmés, plafonds, contradictions, avertissements', () => {
-	it('un lot en attente proposé sur un autre texte de la fiche ne bloque plus : il est écarté à la proposition suivante', async () => {
+	it('un lot en attente dont une information a changé ne bloque plus : il est écarté à la proposition suivante ; un lot intact reste', async () => {
 		const dep = memoire();
 		const ancien = await proposerLot(dep, lot('supprimer', [{ ancre: 'f-0005' }]));
-		dep.fichiers.set(ACME, `${dep.fichiers.get(ACME)!}\n`);
+		const intact = await proposerLot(dep, lot('supprimer', [{ ancre: 'f-0003' }]));
+		dep.fichiers.set(ACME, `${dep.fichiers.get(ACME)!.replace('s\'appelle Corbano', 's\'appelle Corbani')}\n`);
 		const r = await entretenir(dep, lot('supprimer', [{ ancre: 'f-0005' }]));
 		expect(r).toMatchObject({ statut: 'lot_propose' });
 		if (r.statut !== 'lot_propose') return;
 		expect(r.decides.map((l) => [l.id, l.decision.sort])).toEqual([[ancien, 'perime']]);
-		expect((await dep.lots.enAttente()).map((l) => l.id)).toEqual([r.lot]);
+		expect((await dep.lots.enAttente()).map((l) => l.id)).toEqual([intact, r.lot]);
+		expect(await entretenir(dep, lot('supprimer', [{ ancre: 'f-0003' }]))).toMatchObject({ statut: 'refuse' });
 	});
 
 	it(`au plus ${LOTS_EN_ATTENTE_MAX} lots en attente : au-delà, la proposition est refusée`, async () => {
@@ -311,13 +350,19 @@ describe('revue : lots périmés, plafonds, contradictions, avertissements', () 
 		expect((await validerLot(dep, id, [0, 1])).statut).toBe('valide');
 	});
 
-	it('deux lots sur une fiche : valider l\'un rend l\'autre périmé', async () => {
+	it('deux lots sur une fiche : valider l\'un ne périme l\'autre que s\'il change une de ses informations', async () => {
 		const dep = memoire();
 		const a = await proposerLot(dep, lot('supprimer', [{ ancre: 'f-0005' }]));
-		const b = await proposerLot(dep, lot('supprimer', [{ ancre: 'f-0002' }]));
+		const b = await proposerLot(dep, lot('supprimer', [{ ancre: 'f-0003' }]));
 		expect((await validerLot(dep, a, [0])).statut).toBe('valide');
-		expect(await validerLot(dep, b, [0])).toMatchObject({ statut: 'perime' });
-		expect(dep.commits).toHaveLength(1);
+		expect((await validerLot(dep, b, [0])).statut).toBe('valide');
+		expect(dep.commits).toHaveLength(2);
+		// supprimer f-0002 efface le renvoi « invalidé … par ^f-0002 » de f-0004 : le lot qui vise f-0004 est périmé
+		const c = await proposerLot(dep, lot('supprimer', [{ ancre: 'f-0002' }]));
+		const d = await proposerLot(dep, lot('supprimer', [{ ancre: 'f-0004' }]));
+		expect((await validerLot(dep, c, [0])).statut).toBe('valide');
+		expect(await validerLot(dep, d, [0])).toMatchObject({ statut: 'perime' });
+		expect(dep.commits).toHaveLength(3);
 		expect(await dep.lots.enAttente()).toEqual([]);
 	});
 

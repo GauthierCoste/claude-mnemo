@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ErreurApi } from '../../src/client/api.ts';
 import { Application } from '../../src/composants/Application.tsx';
-import { FICHE_CHANGEE } from '../../src/composants/archiviste/LotAValider.tsx';
+import { FICHE_CHANGEE, LOT_PERIME } from '../../src/composants/archiviste/LotAValider.tsx';
 import { dossiersFaux } from '../aides/dossiers-faux.ts';
 import { creerFauxClient } from '../aides/faux-client.tsx';
 
@@ -265,7 +265,7 @@ describe('Mémoire › Archiviste : lots d’informations à valider', () => {
 		await waitFor(() => expect(screen.queryByRole('article', { name: '4 doublons proposés dans Module stocks' })).toBeNull());
 	});
 
-	it('refus 409 : toast « la fiche a changé », lot rendu actionnable et relu', async () => {
+	it('refus 409 : toast « une information visée a changé », lot rendu actionnable et relu', async () => {
 		const { faux } = monter({
 			valider: () => {
 				throw new ErreurApi('La fiche a changé.', 409);
@@ -275,7 +275,7 @@ describe('Mémoire › Archiviste : lots d’informations à valider', () => {
 		const avant = lireLots(faux);
 		await act(async () => fireEvent.click(within(carte).getByRole('button', { name: 'Tout valider' })));
 		expect(await screen.findByText(FICHE_CHANGEE)).toBeTruthy();
-		expect(FICHE_CHANGEE).toMatch(/la fiche a changé/i);
+		expect(FICHE_CHANGEE).toBe('Une information visée a changé depuis la proposition : lot écarté, demander à l’archiviste de le reproposer.');
 		expect(carte.getAttribute('aria-busy')).toBe('false');
 		await waitFor(() => expect(lireLots(faux)).toBeGreaterThan(avant));
 	});
@@ -291,10 +291,11 @@ describe('Mémoire › Archiviste : lots d’informations à valider', () => {
 		expect(await screen.findByText('Refusé : tranche d’abord cette contradiction.')).toBeTruthy();
 	});
 
-	it('lot périmé : dit, « Tout valider » inactif, « Rejeter » possible', async () => {
+	it('lot périmé : dit quoi faire (rejeter, faire reproposer), « Tout valider » inactif, « Rejeter » possible', async () => {
 		monter({ lots: [{ ...DOUBLONS, perime: true }] });
 		const carte = await carteDuLot('4 doublons proposés dans Module stocks');
-		expect(within(carte).getByRole('note').textContent).toMatch(/La fiche a changé/);
+		expect(within(carte).getByRole('note').textContent).toBe(LOT_PERIME);
+		expect(LOT_PERIME).toBe('Une information visée a changé depuis la proposition : rejeter ce lot, puis demander à l’archiviste de le reproposer.');
 		expect((within(carte).getByRole('button', { name: 'Tout valider' }) as HTMLButtonElement).disabled).toBe(true);
 		expect((within(carte).getByRole('button', { name: 'Rejeter' }) as HTMLButtonElement).disabled).toBe(false);
 		// ses lignes ne se cochent pas

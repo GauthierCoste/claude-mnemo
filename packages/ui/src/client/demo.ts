@@ -862,10 +862,10 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 	/** Validation de démonstration : les lignes choisies sont vérifiées, le commit est noté, les fiches ne changent pas. */
 	function validerLot(id: string, corps: Record<string, unknown>): ReponseValidationLot {
 		const lot = lotEnAttente(id);
-		// comme le service : la fiche a changé depuis la proposition, le lot est écarté
+		// comme le service : une information visée a changé depuis la proposition, le lot est écarté
 		if (lot.perime) {
 			retirerLot(lot);
-			throw new ErreurApi('La fiche a changé depuis la proposition du lot : il est écarté, l’archiviste le reproposera.', 409);
+			throw new ErreurApi('Une information visée par le lot a changé depuis sa proposition : lot écarté, demander à l’archiviste de le reproposer.', 409);
 		}
 		const choisies = Array.isArray(corps['lignes']) ? corps['lignes'] : [];
 		const lignes = [...new Set(choisies)].sort((a, b) => a - b);

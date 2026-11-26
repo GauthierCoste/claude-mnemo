@@ -548,7 +548,7 @@ describe('etat.sqlite', () => {
 		verif.close();
 	});
 
-	it('migre la version 14 (sans l’outil d’un dialogue ouvert) vers la 15 : la session est gardée, son dialogue sans outil', async () => {
+	it('migre la version 14 (sans l’outil d’un dialogue ouvert) vers la dernière : la session est gardée, son dialogue sans outil', async () => {
 		const { etat, chemin } = await ouvrir();
 		await etat.creer(session('d1', { moteur: 'mistral-vibe', dernierArret: 'notification', fil: 'f' }));
 		etat.fermer();
@@ -561,7 +561,7 @@ describe('etat.sqlite', () => {
 		ouverts.push(rouvert);
 		expect(await rouvert.lire('d1')).toMatchObject({ moteur: 'mistral-vibe', dernierArret: 'notification', dialogueOutil: null, fil: 'f' });
 		const verif = new DatabaseSync(chemin);
-		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: 15 });
+		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
 		verif.close();
 	});
 
@@ -1056,7 +1056,7 @@ describe('etat.sqlite', () => {
 		expect(await rouvert.noterMessagePorteur('s1', 'la suite')).toBe(2);
 		const verif = new DatabaseSync(chemin);
 		expect(verif.prepare('PRAGMA user_version').get()).toEqual({ user_version: VERSION_ETAT });
-		expect(VERSION_ETAT).toBe(15);
+		expect(VERSION_ETAT).toBe(16);
 		verif.close();
 	});
 

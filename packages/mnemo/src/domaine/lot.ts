@@ -5,6 +5,7 @@ import { ecrireFait, faitsEgaux, lireFait, LONGUEUR_MAX_CITATION, LONGUEUR_MAX_F
 import type { Corroboration, Fait } from './fait.ts';
 import { retenirPlusHauteAncre } from './fiche.ts';
 import type { Fiche, LigneDeFait } from './fiche.ts';
+import { empreinte } from './empreinte.ts';
 import { ancreDeLigneBrute, renvoisDeLigneBrute } from './renumerotation.ts';
 import { confiance } from './regles.ts';
 import type { Regles, TypeSource } from './regles.ts';
@@ -22,14 +23,25 @@ export const ABSORBEES_MAX = 50;
 export const MOTIF_MAX_LOT = 500;
 
 /**
- * Un lot proposé : `empreinte` du texte de la fiche à la proposition (le lot ne s'applique qu'à ce texte-là), `session`
- * qui l'a proposé (null : hors session Mnemo). Les ancres sont nues (`f-0001`).
+ * Un lot proposé : `empreinte` du texte de la fiche à la proposition, `empreintes` de chaque information visée à la
+ * proposition (ancre → `empreinteDInformation` ; absent : lot enregistré avant elles, jugé sur l'empreinte de la fiche entière),
+ * `session` qui l'a proposé (null : hors session Mnemo). Les ancres sont nues (`f-0001`).
  */
-export type Lot = { id: string; genre: GenreLot; fiche: string; lignes: LigneDeLot[]; motif: string; empreinte: string; proposeMs: number; session: string | null };
+export type Lot = {
+	id: string;
+	genre: GenreLot;
+	fiche: string;
+	lignes: LigneDeLot[];
+	motif: string;
+	empreinte: string;
+	empreintes?: Record<string, string>;
+	proposeMs: number;
+	session: string | null;
+};
 
 /**
- * Sort d'un lot décidé : `valide` (`lignes` : indices appliqués, `commit`), `rejete` par l'utilisateur, `perime` (la fiche a
- * changé depuis la proposition : refusé à la validation, à reproposer).
+ * Sort d'un lot décidé : `valide` (`lignes` : indices appliqués, `commit`), `rejete` par l'utilisateur, `perime` (une
+ * information visée a changé depuis la proposition, `lotPerime` : refusé à la validation, à reproposer).
  */
 export type DecisionLot = { sort: 'valide'; lignes: number[]; commit: string } | { sort: 'rejete' } | { sort: 'perime' };
 export type LotDecide = Lot & { decision: DecisionLot; decideMs: number };
@@ -53,6 +65,41 @@ const faitDe = (faits: readonly LigneDeFait[], ancre: string): Fait | undefined 
 	for (const l of faits) if ('fait' in l && l.fait.ancre === ancre) return l.fait;
 	return undefined;
 };
+
+/**
+ * Empreinte d'une information de la fiche : celle de ses lignes telles que Mnemo les écrit (la ligne du fait, sa citation,
+ * ses corroborations, `ecrireFait`) ; null si l'ancre ne nomme aucune information lisible.
+ */
+export function empreinteDInformation(faits: readonly LigneDeFait[], ancre: string): string | null {
+	const fait = faitDe(faits, ancre);
+	return fait === undefined ? null : empreinte(ecrireFait(fait).join('\n'));
+}
+
+/** Empreinte de chaque information visée par les lignes (ancre → empreinte) ; une ancre sans information n'y est pas. */
+export function empreintesDesInformations(lignes: readonly LigneDeLot[], faits: readonly LigneDeFait[]): Record<string, string> {
+	const empreintes: Record<string, string> = {};
+	for (const ancre of lignes.flatMap(ancresDeLigne)) {
+		const e = empreinteDInformation(faits, ancre);
+		if (e !== null) empreintes[ancre] = e;
+	}
+	return empreintes;
+}
+
+/**
+ * Un lot est périmé quand ce qu'il vise a changé depuis sa proposition : fiche absente (`texte` null) ou illisible (`faits`
+ * null), ou une information visée disparue ou réécrite (`empreintes`). Un ajout ou un changement ailleurs dans la fiche ne
+ * le périme pas : les contrôles d'application (`appliquerLot`) se font de toute façon sur la fiche actuelle. Lot sans
+ * `empreintes` (enregistré avant elles) : périmé dès que le texte de la fiche a changé.
+ */
+export function lotPerime(lot: Pick<Lot, 'lignes' | 'empreinte' | 'empreintes'>, texte: string | null, faits: readonly LigneDeFait[] | null): boolean {
+	if (texte === null) return true;
+	if (lot.empreintes === undefined) return empreinte(texte) !== lot.empreinte;
+	if (faits === null) return true;
+	return lot.lignes.flatMap(ancresDeLigne).some((ancre) => {
+		const avant = lot.empreintes![ancre];
+		return avant === undefined || empreinteDInformation(faits, ancre) !== avant;
+	});
+}
 
 /**
  * Premier défaut des lignes d'un lot au regard des informations de la fiche, sinon null : forme selon le genre, ancre
