@@ -28,13 +28,23 @@ const RETIRES_MODULES = ['.modules.yaml', '.pnpm-workspace-state-v1.json', '.pnp
 
 const lireJson = (chemin: string): Record<string, unknown> => JSON.parse(readFileSync(chemin, 'utf8')) as Record<string, unknown>;
 
-/** `pnpm` : celui qui lance la construction (`npm_execpath`), sinon celui du `PATH`. */
+/**
+ * Comment lancer `pnpm`, d'après `npm_execpath` (le pnpm qui lance la construction) : un script (`.cjs`, `.mjs`, `.js`) par
+ * le Node courant, un exécutable (`.exe`) directement ; sans lui, `pnpm` du `PATH`, sauf sous Windows où c'est un script
+ * `.cmd`, que seul un shell lance (arguments à citer pour cmd.exe) : la construction demande alors d'être lancée par
+ * `pnpm construire-app`. Jamais de shell.
+ */
+export function commandePnpm(execpath: string | undefined, plateforme: NodeJS.Platform, node: string): { commande: string; debut: string[] } {
+	if (execpath !== undefined && /\.[cm]?js$/iu.test(execpath)) return { commande: node, debut: [execpath] };
+	if (execpath !== undefined && /\.exe$/iu.test(execpath)) return { commande: execpath, debut: [] };
+	if (plateforme === 'win32') throw new ErreurConstruction('pnpm introuvable pour la construction : lancez-la par « pnpm construire-app » (npm_execpath absent ou inattendu).');
+	return { commande: 'pnpm', debut: [] };
+}
+
 function pnpm(args: string[], cwd: string): void {
-	const execpath = process.env['npm_execpath'];
-	const [commande, debut] = execpath !== undefined && /pnpm[^/\\]*\.c?js$/u.test(execpath) ? [process.execPath, [execpath]] : ['pnpm', []];
+	const { commande, debut } = commandePnpm(process.env['npm_execpath'], process.platform, process.execPath);
 	try {
-		// sous Windows, `pnpm` du PATH est un script `.cmd` : lancé par le shell
-		execFileSync(commande, [...debut, ...args], { cwd, stdio: ['ignore', 'ignore', 'pipe'], shell: commande === 'pnpm' && process.platform === 'win32' });
+		execFileSync(commande, [...debut, ...args], { cwd, stdio: ['ignore', 'ignore', 'pipe'] });
 	} catch (e) {
 		const sortie = (e as { stderr?: Buffer }).stderr?.toString('utf8').trim();
 		throw new ErreurConstruction(`pnpm ${args.join(' ')} a échoué${sortie ? ` : ${sortie}` : '.'}`);

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ErreurConstruction } from '../../outils/erreur.ts';
-import { dependancesSansChemin, elaguerNodePty, precompilesNodePty, verifierSansLien } from '../../outils/mnemo-deploye.ts';
+import { commandePnpm, dependancesSansChemin, elaguerNodePty, precompilesNodePty, verifierSansLien } from '../../outils/mnemo-deploye.ts';
 
 let dossier: string;
 beforeEach(() => {
@@ -77,5 +77,16 @@ describe('arbre emporté', () => {
 		verifierSansLien(dossier);
 		symlinkSync(join('b', 'f'), join(dossier, 'a', 'lien'));
 		expect(() => verifierSansLien(dossier)).toThrow(/Lien refusé/u);
+	});
+});
+
+describe('lancement de pnpm, sans shell', () => {
+	it('script par le Node courant ; exécutable directement ; sinon pnpm du PATH, refusé sous Windows (script .cmd)', () => {
+		expect(commandePnpm('/outils/pnpm/bin/pnpm.cjs', 'darwin', '/node')).toEqual({ commande: '/node', debut: ['/outils/pnpm/bin/pnpm.cjs'] });
+		expect(commandePnpm('C:\\outils\\pnpm\\pnpm.mjs', 'win32', 'C:\\node.exe')).toEqual({ commande: 'C:\\node.exe', debut: ['C:\\outils\\pnpm\\pnpm.mjs'] });
+		expect(commandePnpm('C:\\outils\\pnpm.exe', 'win32', 'C:\\node.exe')).toEqual({ commande: 'C:\\outils\\pnpm.exe', debut: [] });
+		expect(commandePnpm(undefined, 'darwin', '/node')).toEqual({ commande: 'pnpm', debut: [] });
+		expect(() => commandePnpm(undefined, 'win32', 'C:\\node.exe')).toThrow(ErreurConstruction);
+		expect(() => commandePnpm('C:\\outils\\pnpm.cmd', 'win32', 'C:\\node.exe')).toThrow(ErreurConstruction);
 	});
 });
