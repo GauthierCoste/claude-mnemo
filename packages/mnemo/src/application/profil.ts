@@ -163,6 +163,13 @@ export const ANCIENNES_SKILLS: Record<string, readonly SkillParDefaut[]> = {
 	],
 };
 
+/**
+ * Skills de la mémoire (`skills/<nom>/`) fournies par Mnemo : leur version d'origine, que « revenir à la version
+ * d'origine » réécrit (Réglages › Agents). Aucune aujourd'hui : les skills fournies par Mnemo sont celles des profils
+ * (`SKILLS_PAR_DEFAUT`), déposées dans le dossier du profil et en lecture seule dans l'interface.
+ */
+export const SKILLS_MEMOIRE_FOURNIES: readonly SkillParDefaut[] = [];
+
 /** Dossier des skills d'un profil, relatif à la mémoire. */
 export const dossierSkillsDuProfil = (nom: string): string => `${DOSSIERS_FIXES.profils}/${nomDeProfil(nom)}/${DOSSIERS_FIXES.skills}`;
 

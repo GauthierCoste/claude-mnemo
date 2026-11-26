@@ -2,12 +2,13 @@
 import type { Avatar, IdMoteur } from '@mnemo/commun';
 import { COULEURS_AVATAR, DOSSIERS_FIXES, estIdMoteur, estModele, FORMES_AVATAR, IDS_MOTEURS, MODELE_MAX, MOTEUR_PAR_DEFAUT, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import { empreinte } from '../domaine/empreinte.ts';
-import { lireFiche, separerFrontmatter } from '../domaine/fiche.ts';
+import { lireFiche } from '../domaine/fiche.ts';
 import type { Fiche } from '../domaine/fiche.ts';
 import { CLES_GEREES_DU_PROFIL, donneesDeProfil, estConsigneParDefaut, estIdentifiantDePlugin, estNomDeProfil, EVENEMENTS_HOOK, moteurOuModeleInvalides, MOTIF_NOM_DE_PROFIL, PROFILS_PAR_DEFAUT, refusDuMoteur } from '../domaine/profil.ts';
 import type { Profil } from '../domaine/profil.ts';
+import { lireSkill } from '../domaine/skill.ts';
 import type { EvenementHook } from '../domaine/session.ts';
-import { ecrireEtCommiter, ficheVide, sousVerrou, texteDeFiche } from './commun.ts';
+import { ecrireEtCommiter, ficheVide, fichiersDuDossier, sousVerrou, texteDeFiche } from './commun.ts';
 import { anciennesConsignes } from './consignes-par-defaut.ts';
 import type { Dependances, PluginInstalle, SkillInstallee } from './ports.ts';
 import { chargerProfil, cheminDeProfil, dossierSkillsDuProfil, profilParDefaut } from './profil.ts';
@@ -65,21 +66,17 @@ async function existe(dep: Dependances, nom: string): Promise<boolean> {
 	return (await dep.coffre.lister(DOSSIERS_FIXES.profils)).dossiers.includes(dossierDuProfil(nom));
 }
 
-/** Skills d'un dossier : chaque sous-dossier qui contient un `SKILL.md` (nom = dossier, description du frontmatter). */
+/**
+ * Skills d'un dossier : chaque sous-dossier qui contient un `SKILL.md` (nom = dossier, description et icône du frontmatter ;
+ * frontmatter illisible : la skill reste listée par son nom).
+ */
 async function skillsDuDossier(dep: Dependances, dossier: string): Promise<SkillInstallee[]> {
 	const resultat: SkillInstallee[] = [];
 	for (const sous of (await dep.coffre.lister(dossier)).dossiers) {
 		const texte = await dep.coffre.lire(`${sous}/SKILL.md`);
 		if (texte === null) continue;
-		const nom = sous.slice(sous.lastIndexOf('/') + 1);
-		let description = '';
-		try {
-			const valeur = separerFrontmatter(`${sous}/SKILL.md`, texte).entete.description;
-			if (typeof valeur === 'string') description = valeur;
-		} catch {
-			// frontmatter illisible : la skill reste listée par son nom
-		}
-		resultat.push({ nom, description });
+		const { description, icone } = lireSkill(texte);
+		resultat.push({ nom: sous.slice(sous.lastIndexOf('/') + 1), description, ...(icone === null ? {} : { icone }) });
 	}
 	return resultat;
 }
@@ -207,14 +204,6 @@ export async function enregistrerProfil(dep: Dependances, nom: string, entree: P
 	return resultat;
 }
 
-/** Fichiers `.md` d'un dossier de la mémoire, récursivement. */
-async function fichiersDe(dep: Dependances, dossier: string): Promise<string[]> {
-	const { fiches, dossiers } = await dep.coffre.lister(dossier);
-	const resultat = [...fiches];
-	for (const sous of dossiers) resultat.push(...(await fichiersDe(dep, sous)));
-	return resultat;
-}
-
 /**
  * Copie le profil `source` sous le nom `nouveau` : ses valeurs effectives (sa consigne comprise, qui devient la consigne de la
  * copie) et ses skills propres. Refusé si `nouveau` est invalide ou existe déjà, ou si `source` n'existe pas. Un commit.
@@ -229,7 +218,7 @@ export async function dupliquerProfil(dep: Dependances, source: string, nouveau:
 		const fiche = ficheAEcrire(dep, nouveau, null, editable);
 		const aEcrire = [{ chemin: cheminDeProfil(nouveau), texte: texteDeFiche(dep, fiche) }];
 		const dossierSource = dossierSkillsDuProfil(source);
-		for (const chemin of await fichiersDe(dep, dossierSource)) {
+		for (const chemin of await fichiersDuDossier(dep, dossierSource)) {
 			const texte = await dep.coffre.lire(chemin);
 			if (texte !== null) aEcrire.push({ chemin: `${dossierSkillsDuProfil(nouveau)}${chemin.slice(dossierSource.length)}`, texte });
 		}
@@ -248,7 +237,7 @@ export async function supprimerProfil(dep: Dependances, nom: string): Promise<Re
 	if (!estNomDeProfil(nom) || !(await existe(dep, nom))) return { ok: false, motifs: { nom: `profil inconnu : « ${nom} »` } };
 	const dossier = dossierDuProfil(nom);
 	const resultat = await sousVerrou(dep, async (): Promise<ResultatProfil> => {
-		const aSupprimer = await fichiersDe(dep, dossier);
+		const aSupprimer = await fichiersDuDossier(dep, dossier);
 		const commit = aSupprimer.length === 0 ? null : await ecrireEtCommiter(dep, [], `mnemo: supprime ${dossier}/`, aSupprimer);
 		await dep.coffre.retirerDossierVide(dossier);
 		return { ok: true, commit };

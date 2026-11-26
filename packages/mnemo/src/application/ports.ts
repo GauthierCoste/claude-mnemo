@@ -317,7 +317,8 @@ export interface Lots {
 	fermer(): void;
 }
 
-export type SkillInstallee = { nom: string; description: string };
+/** Une skill installée ; `icone` : celle de `metadata.icone` de son frontmatter, s'il y en a une. */
+export type SkillInstallee = { nom: string; description: string; icone?: string };
 
 /** Un plugin Claude Code installé : `id` (`nom@place`), `portee` (`scope` de l'installation, vide si absente). */
 export type PluginInstalle = { id: string; nom: string; version: string; portee: string; skills: SkillInstallee[]; hooks: boolean };

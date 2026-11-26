@@ -319,6 +319,14 @@ export async function typeDeSourceDe(dep: Dependances, fait: Fait): Promise<Type
 	return typeDeMention(dep, fait.source ?? '');
 }
 
+/** Fichiers `.md` d'un dossier de la mémoire, récursivement. */
+export async function fichiersDuDossier(dep: Dependances, dossier: string): Promise<string[]> {
+	const { fiches, dossiers } = await dep.coffre.lister(dossier);
+	const resultat = [...fiches];
+	for (const sous of dossiers) resultat.push(...(await fichiersDuDossier(dep, sous)));
+	return resultat;
+}
+
 /** Sous verrou ; les retouches manuelles sont versionnées à part, avant toute écriture de Mnemo. */
 export async function sousVerrou<T>(dep: Dependances, action: () => Promise<T>): Promise<T> {
 	return dep.verrou.avec(async () => {
