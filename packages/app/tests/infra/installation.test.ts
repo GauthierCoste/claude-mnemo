@@ -131,7 +131,9 @@ describe('désinstallation', () => {
 
 	it('étapes indépendantes : un échec n’arrête pas les suivantes ; commande et configuration retirées', async () => {
 		const home = maison();
-		installer(home, { commande: script(NOUS), appClaude: entree(NOUS) });
+		// sous Windows, Mnemo n'installe jamais de commande (`mnemo commande` y refuse, même --retirer) : aucune à retirer,
+		// l'étape la dit déjà absente
+		installer(home, { ...(process.platform === 'win32' ? {} : { commande: script(NOUS) }), appClaude: entree(NOUS) });
 		const config = join(home, 'config.json');
 		writeFileSync(config, '{}');
 		const fichiers = actionsFichiers({ home, lancement: NOUS, path: process.env['PATH'] ?? '', fichiersApp: [config, join(home, 'absent.json')], base: envDe(home) });
