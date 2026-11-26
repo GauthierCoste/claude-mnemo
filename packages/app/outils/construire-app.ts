@@ -145,7 +145,13 @@ async function construire(args: readonly string[]): Promise<void> {
 			renameSync(fait, installeur);
 		}
 	} finally {
-		rmSync(travail, { recursive: true, force: true });
+		// un fichier encore ouvert (antivirus, indexation sous Windows) : quelques essais ; un échec est signalé sans
+		// remplacer l'erreur de la construction, s'il y en a une
+		try {
+			rmSync(travail, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+		} catch (e) {
+			console.error(`Dossier de travail non effacé : ${travail} (${e instanceof Error ? e.message : String(e)}).`);
+		}
 	}
 	console.log(`Construit : ${produit}`);
 	if (cible.plateforme === 'win32') {
