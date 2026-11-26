@@ -1,6 +1,8 @@
-# The macOS app: usage
+# The desktop app: usage
 
-The app ([installation](installation.md)) puts Mnemo in the menu bar and the interface in its own window.
+The app ([installation](installation.md)) puts Mnemo in the menu bar (macOS) or in the notification area of the taskbar
+(Windows), and the interface in its own window. This page describes the macOS app; what changes on Windows is in
+[On Windows](#on-windows).
 It does not contain the service: it attaches to the service of its Mnemo folder, or starts it, and talks to it as the
 interface does (HTTP and WebSocket, with the token).
 
@@ -91,6 +93,32 @@ its sessions, and the app attaches to it at its next opening. « Ne plus demande
 `~/Library/Application Support/Mnemo/preferences.json` (remove its `quitter` entry to be asked again). If the service
 does not stop, the app stays open and says why. Quitting from the Dock, or when you log out of macOS, asks nothing: the
 service keeps running.
+
+## On Windows
+
+The app works as on macOS, with these differences:
+
+- **Notification area.** The icon is in the notification area of the taskbar (perhaps among the hidden icons, behind
+  the « ^ » arrow), white on a dark taskbar and black on a light one, following the theme of Windows. A left click opens
+  the window (and starts a stopped service); a right click opens the menu. In the menu, each session takes one line: its
+  objective, then its state and folder.
+- **No « Reprendre le PATH du terminal ».** The app gives the service and the sessions the `Path` of Windows as it was
+  when the app opened: after installing a tool (git, Claude Code…), quit Mnemo and open it again.
+- **The window.** The buttons of Windows (minimize, maximize, close) sit at the right of the title bar of the interface;
+  there is no menu bar (Alt shows it), but its shortcuts work: Ctrl+Q quits (as « Quitter Mnemo »), and those of the
+  « Édition » and « Présentation » menus (copy, paste, reload, zoom) work as their Ctrl versions. Closing the window does not quit:
+  Mnemo stays in the notification area.
+- **No badge.** The count of waiting sessions is only in the menu and the tooltip of the icon; notifications are those
+  of Windows, and a click on one opens the window on its session.
+- **Opening at login** (« Ouvrir à l'ouverture de session ») is when you sign in to Windows; it also shows in Settings ›
+  Apps › Startup.
+- **« Journal du service »** opens `.mnemo\service.log` with the program Windows uses for `.log` files (Notepad by
+  default).
+- **« Désinstaller Mnemo… »** removes what Mnemo installed, then quits and opens the uninstaller of the app (see
+  [installation.md](installation.md#uninstall-cleanly)).
+- **Quitting** with Ctrl+Q or « Quitter Mnemo » asks about the service as on macOS. Signing out of Windows closes Mnemo
+  without asking, and Windows also ends the service, like every program of your session. Preferences are in
+  `%APPDATA%\Mnemo\preferences.json`.
 
 ## New versions
 

@@ -100,19 +100,27 @@ it.
 
 ## Getting started
 
-### The macOS app (free)
+### The desktop app (free)
 
-Download `Mnemo-<version>-arm64.dmg` from the [latest release](https://github.com/GauthierCoste/claude-mnemo/releases/latest),
-open it and drag Mnemo onto Applications. The app puts Mnemo in the menu bar and the interface in its own window; it
-carries its own Node.js and its own copy of Mnemo, so you only need git and Claude Code (Apple silicon; on an Intel Mac, [build it](docs/app/installation.md#build-the-app-from-the-sources)). It is signed ad hoc, not by an
-identified Apple developer: the first time, macOS asks you to confirm in System Settings › Privacy & Security
-(« Ouvrir quand même »). See [the app's installation](docs/app/installation.md) and [usage](docs/app/usage.md).
+The app puts Mnemo in the menu bar (macOS) or the notification area (Windows) and the interface in its own window; it
+carries its own Node.js and its own copy of Mnemo, so you only need git and Claude Code. Both downloads are in the
+[latest release](https://github.com/GauthierCoste/claude-mnemo/releases/latest):
+
+- **macOS**: `Mnemo-<version>-arm64.dmg`; open it and drag Mnemo onto Applications (Apple silicon; on an Intel Mac,
+  [build it](docs/app/installation.md#build-the-app-from-the-sources)). It is signed ad hoc, not by an identified Apple
+  developer: the first time, macOS asks you to confirm in System Settings › Privacy & Security (« Ouvrir quand même »).
+- **Windows**: `Mnemo-Setup-<version>-x64.exe`; run it and follow its steps (for you only by default, no administrator
+  rights). It is not signed: the first time, SmartScreen asks you to click « More info », then « Run anyway »
+  (« Informations complémentaires », « Exécuter quand même »). Git ([Git for Windows](https://git-scm.com/downloads/win))
+  and Claude Code are needed; there is no `mnemo` command on Windows, the app does without it.
+
+See [the app's installation](docs/app/installation.md) and [usage](docs/app/usage.md).
 
 ### From the sources
 
 You'll need:
 
-- macOS (Apple silicon or Intel) or Windows (x64 or ARM; being adapted, see [Status](#status));
+- macOS (Apple silicon or Intel) or Windows (x64 or ARM; without the `mnemo` command, see [Status](#status));
 - Node.js 24 or later, git and pnpm (`npm install -g pnpm`);
 - the `claude` command line tool, signed in with your subscription;
 - optionally, Codex 0.171 or later or Mistral Vibe 3.1.5 or later, each signed in by you (see
@@ -162,7 +170,7 @@ tokens, private keys) are masked before anything is written or indexed. What the
 
 Version 1.8.0. Mnemo runs on macOS (Apple silicon and Intel) and is being adapted to Windows, where it has not been
 tried in real use yet; Linux has not been used. The CI runs the type check and the tests at each push on Linux and
-Windows with Node.js 24, and on macOS with Node.js 26. The interface runs in the browser, or in its own window with the macOS app.
+Windows with Node.js 24, and on macOS with Node.js 26. The interface runs in the browser, or in its own window with the desktop app (macOS and Windows).
 
 **Next: [coming next](docs/coming-next.md).** Mnemo runs Claude Code, Codex and Mistral Vibe sessions side by
 side, each profile choosing its engine and model. Mistral Vibe was measured without an account; a round of measurements
@@ -177,7 +185,8 @@ Help towards an English interface is welcome.
 - [Coming next](docs/coming-next.md): the next work item, with its reasons and open questions.
 - [Installation](docs/installation.md): requirements, disk and memory, settings, uninstalling.
 - [Usage](docs/usage.md): command line, service, sessions, profiles, interface and shortcuts.
-- [The macOS app](docs/app/installation.md): download, installation assistant, building it, [using it](docs/app/usage.md).
+- [The desktop app](docs/app/installation.md) for macOS and Windows: download, installation assistant, building it,
+  [using it](docs/app/usage.md).
 - [Memory format](docs/format-coffre.md): grammar of the notes and facts.
 - [Document size limits](docs/references/document-limits.md).
 - [Memory implementation guide](docs/references/guide-memoire.md): the design direction behind the memory.
