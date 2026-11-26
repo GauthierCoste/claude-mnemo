@@ -29,9 +29,10 @@ import { ErreurConstruction } from './erreur.ts';
 import { icoDepuisPng } from './ico.ts';
 import { creerInstalleur, nomInstalleur } from './installeur.ts';
 import { deployerMnemo } from './mnemo-deploye.ts';
-import { archiveNodeVerifiee, extraireNode, lireVersionNode } from './node-officiel.ts';
+import { archiveNodeVerifiee, binaireNode, extraireNode, lireVersionNode } from './node-officiel.ts';
 import { optionsPlateforme } from './options-packager.ts';
 import { decrireSignature, signatureDepuisEnv } from './signature.ts';
+import { verifierImports } from './verification-imports.ts';
 
 const APP = join(import.meta.dirname, '..');
 const DIST = join(APP, 'dist');
@@ -114,6 +115,7 @@ async function construire(args: readonly string[]): Promise<void> {
 		const archive = await archiveNodeVerifiee(versionNode, cible, CACHE, readFileSync(join(import.meta.dirname, 'sommes-node.txt'), 'utf8'));
 		await extraireNode(archive, versionNode, cible, join(ressources, 'node'));
 		deployerMnemo(RACINE, join(RACINE, 'packages'), ressources, cible);
+		verifierImports(binaireNode(join(ressources, 'node'), cible), join(ressources, 'mnemo'));
 
 		const [chemin] = await packager({
 			dir: source,

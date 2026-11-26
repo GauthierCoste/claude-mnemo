@@ -108,6 +108,11 @@ export async function archiveNodeVerifiee(version: string, cible: Cible, cache: 
 	throw new ErreurConstruction(`Somme SHA-256 de ${nom} différente de la somme épinglée (outils/sommes-node.txt) : archive refusée.`);
 }
 
+/** Le binaire de Node dans le dossier où `extraireNode` l'a installé : `bin/node`, ou `node.exe` sous Windows. */
+export function binaireNode(dossier: string, cible: Cible): string {
+	return cible.plateforme === 'win32' ? join(dossier, 'node.exe') : join(dossier, 'bin', 'node');
+}
+
 /**
  * Installe le binaire de Node et `LICENSE` de l'archive dans `destination` (créé ; il ne doit pas exister) : `bin/node`
  * (0755) sous macOS, `node.exe` sous Windows. Seuls des fichiers ordinaires sont extraits : un lien (symbolique ou
