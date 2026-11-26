@@ -65,7 +65,7 @@ describe('node-pty emporté', () => {
 describe('arbre emporté', () => {
 	it('dépendances vers les paquets du dépôt : leur version, plus aucun chemin de la machine ; autre dépendance locale refusée', () => {
 		const versions = { '@mnemo/commun': '1.8.0', '@mnemo/contrat': '1.8.0' };
-		const paquet = { dependencies: { '@mnemo/commun': '@mnemo/commun@file:///Users/exemple/depot/packages/commun', '@mnemo/contrat': 'workspace:*', ws: '8.23.0' } };
+		const paquet = { dependencies: { '@mnemo/commun': '@mnemo/commun@file:///depot/exemple/packages/commun', '@mnemo/contrat': 'workspace:*', ws: '8.23.0' } };
 		expect(dependancesSansChemin(paquet, versions, 'package.json')).toEqual({ '@mnemo/commun': '1.8.0', '@mnemo/contrat': '1.8.0', ws: '8.23.0' });
 		expect(() => dependancesSansChemin({ dependencies: { autre: 'file:../autre' } }, versions, 'package.json')).toThrow(ErreurConstruction);
 		expect(dependancesSansChemin({}, versions, 'package.json')).toEqual({});

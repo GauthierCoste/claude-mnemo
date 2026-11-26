@@ -72,3 +72,7 @@ secret:url-identifiants outils/tests/verifier-publication.test.ts ^https:[/]/uti
 
 # Octets compressés d'une image PNG qui ressemblent par hasard à une adresse (aucun texte dans l'image).
 email docs/images/graphe.png ^Bv@ok\.aR$
+
+# Message d'obsolescence publié par le paquet glob 7 (dépendance d'electron-builder), recopié par pnpm dans le verrou :
+# l'adresse publique de son auteur, pas une donnée du projet.
+email pnpm-lock.yaml ^i@izs\.me$
