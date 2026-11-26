@@ -1,0 +1,413 @@
+/**
+ * Entraînement de la note de confiance en démonstration (`?demo`, Mémoire › Entraîner) : un banc fictif de 6 messages (2
+ * validés, 2 pré-jugés par Claude à relire, 2 à juger), une note apprise refusée, un modèle d'avant (la note de départ) et
+ * deux lignes d'historique. Toutes les routes `entrainement…` répondent comme le service : préparer, pré-juger et apprendre
+ * lancent une tâche qui progresse (diffusée par `{ type: 'entrainement' }`), arrêtable ; apprendre finit sur un verdict
+ * refusé crédible ; revenir échange les modèles ; message, annuler et « Accepter les sûres » tiennent le banc. Messages et
+ * fiches fictifs. `&entrainement=vide` : rien de préparé, note de départ ; `sansjuge` : Claude Code introuvable.
+ */
+import {
+	ROUTES,
+	type CandidateAJugerVue,
+	type EtatNoteVue,
+	type JugementVue,
+	type LigneHistoriqueVue,
+	type MessageServeur,
+	type NoteDuNiveauVue,
+	type PropositionDuJugeVue,
+	type ReponseAccepterSures,
+	type ReponseAnnulation,
+	type ReponseMessageAJuger,
+	type ReponseReponseMessage,
+	type ResultatApprentissageVue,
+	type TacheEntrainementVue,
+	type VueEntrainement,
+} from '@mnemo/contrat';
+import { ErreurApi } from './api.ts';
+
+/** Départs de `&entrainement=`. */
+export type DepartEntrainementDemo = 'vide' | 'sansjuge';
+
+const JOUR = 86_400_000;
+/** Cadence des fausses tâches : un message préparé, un message pré-jugé, la durée d'un apprentissage. */
+const PREPARER_MS = 280;
+const PREJUGER_MS = 650;
+const APPRENDRE_MS = 2600;
+const SEUIL_SUR = 0.9;
+
+type Candidate = Pick<CandidateAJugerVue, 'chemin' | 'titre' | 'ligne' | 'synthese'>;
+type Cas = {
+	message: string;
+	precedent: string | null;
+	candidates: Candidate[];
+	propositions: Record<string, PropositionDuJugeVue> | null;
+	jugements: Record<string, JugementVue>;
+	valide: boolean;
+	silence: boolean;
+	saute: boolean;
+};
+
+const fiche = (chemin: string, ligne: string, synthese: string): Candidate => ({ chemin, titre: chemin.split('/').pop()!.replace(/\.md$/, ''), ligne, synthese });
+
+const EXPORT_CSV = fiche('projets/erp-saas/Export CSV.md', 'Séparateur point-virgule, encodage UTF-8 avec BOM.', 'Les exports CSV de l’ERP : séparateur, encodage, colonnes communes.');
+const STOCKS = fiche('projets/erp-saas/Module stocks.md', 'Les mouvements de stock sont historisés par lot.', 'Le module stocks : mouvements, lots, inventaires.');
+const COMMANDES = fiche('projets/erp-saas/achats/Commandes fournisseurs.md', 'Une commande validée ne se modifie plus.', 'Cycle de vie des commandes fournisseurs.');
+const MAINTENANCE = fiche('clients/logistique-durand/Contrat de maintenance.md', 'Intervention sous 4 h ouvrées.', 'Le contrat de maintenance du client Logistique Durand.');
+const VENDREDI = fiche('consignes/Pas de mise en production le vendredi.md', 'Aucune mise en production le vendredi après 12 h.', 'Consigne de mise en production.');
+const ERP = fiche('projets/erp-saas/erp-saas.md', 'ERP en SaaS, Symfony et PostgreSQL.', 'Le projet ERP SaaS : périmètre, équipe, pile.');
+const MULTI = fiche('projets/erp-saas/Multi-tenant.md', 'Un schéma PostgreSQL par client.', 'Isolation des clients dans l’ERP.');
+const POSTGRES = fiche('stacks/PostgreSQL.md', 'Version 17 en production.', 'Pratiques PostgreSQL de l’équipe.');
+const SYMFONY = fiche('stacks/Symfony.md', 'Symfony 7.3, contrôleurs fins.', 'Pratiques Symfony de l’équipe.');
+const SFTP = fiche('projets/api-facturation/Dépôt SFTP.md', 'Dépôt chaque nuit à 2 h.', 'Le dépôt des factures par SFTP.');
+const TEST = fiche('consignes/Test avant correction.md', 'Écrire le test qui échoue avant de corriger.', 'Consigne de correction des bugs.');
+const FACTURATION = fiche('projets/api-facturation/api-facturation.md', 'API de facturation, arrondis au centime.', 'Le projet API de facturation.');
+const COMMITS = fiche('consignes/Commits en français.md', 'Messages de commit en français.', 'Consigne de rédaction des commits.');
+const MARC = fiche('personnes/Marc Lefèvre.md', 'Chef de projet côté client.', 'Contact du projet ERP.');
+const MIGRATIONS = fiche('consignes/Migrations réversibles.md', 'Chaque migration a sa méthode down.', 'Consigne des migrations de base.');
+const LOTS = fiche('episodes/erp-saas/2026-11-21-schema-des-lots.md', 'Schéma des lots arrêté le 21/11.', 'Session du 21/11 sur le schéma des lots.');
+const ARCHI = fiche('projets/agent-maison/Architecture.md', 'Un agent par dossier.', 'Architecture de l’agent maison.');
+const CLAIRE = fiche('personnes/Claire Martin.md', 'Développeuse front, kit UI.', 'Contact du kit UI.');
+
+const nouveau = (message: string, candidates: Candidate[], precedent: string | null = null): Cas => ({ message, precedent, candidates, propositions: null, jugements: {}, valide: false, silence: false, saute: false });
+const propose = (jugement: JugementVue, confiance: number, raison: string): PropositionDuJugeVue => ({ jugement, confiance, raison });
+
+/** Le banc de départ : 2 validés, 2 pré-jugés à relire (l'un sûr, l'autre non), 2 à juger. */
+function bancDeDepart(): Cas[] {
+	return [
+		{
+			...nouveau('Ajoute l’export CSV des mouvements de stock, avec le même séparateur que l’export des commandes.', [EXPORT_CSV, STOCKS, COMMANDES, MAINTENANCE]),
+			jugements: { [EXPORT_CSV.chemin]: 'pertinente', [STOCKS.chemin]: 'pertinente', [COMMANDES.chemin]: 'non_pertinente', [MAINTENANCE.chemin]: 'non_pertinente' },
+			valide: true,
+		},
+		{
+			...nouveau('Le client veut décaler la mise en production à vendredi soir, on fait comment ?', [VENDREDI, MAINTENANCE, ERP]),
+			jugements: { [VENDREDI.chemin]: 'pertinente', [MAINTENANCE.chemin]: 'indecise', [ERP.chemin]: 'non_pertinente' },
+			valide: true,
+		},
+		{
+			...nouveau('oui, vas-y', [MULTI, POSTGRES, SYMFONY], 'On part sur un schéma PostgreSQL par client pour le multi-tenant ?'),
+			propositions: {
+				[MULTI.chemin]: propose('pertinente', 0.96, 'La fiche décrit exactement ce choix d’isolation.'),
+				[POSTGRES.chemin]: propose('pertinente', 0.92, 'La version en production compte pour les schémas.'),
+				[SYMFONY.chemin]: propose('non_pertinente', 0.94, 'Rien sur le multi-tenant.'),
+			},
+		},
+		{
+			...nouveau('Corrige le bug d’arrondi sur les factures déposées en SFTP.', [SFTP, TEST, FACTURATION]),
+			propositions: {
+				[SFTP.chemin]: propose('pertinente', 0.71, 'Le dépôt est concerné, mais l’arrondi se calcule avant.'),
+				[TEST.chemin]: propose('pertinente', 0.93, 'La consigne s’applique à toute correction.'),
+				[FACTURATION.chemin]: propose('pertinente', 0.88, 'La règle d’arrondi y est écrite.'),
+			},
+		},
+		nouveau('Merci, c’est parfait.', [COMMITS, MARC]),
+		nouveau('Écris la migration de la table des lots, réversible bien sûr.', [MIGRATIONS, LOTS, STOCKS]),
+	];
+}
+
+/** Ce qui reste dans le faux journal des sessions, pour « Préparer » ; épuisé, la préparation échoue comme au service. */
+function journalRestant(): Cas[] {
+	return [
+		nouveau('Ajoute un filtre par entrepôt sur l’inventaire.', [STOCKS, ERP]),
+		nouveau('Qui valide les maquettes du kit UI côté client ?', [CLAIRE, MARC]),
+		nouveau('Relance le dépôt SFTP de cette nuit, il a échoué.', [SFTP, FACTURATION, MAINTENANCE]),
+		nouveau('On garde un agent par dossier ou on mutualise ?', [ARCHI]),
+		nouveau('Fais le commit.', [COMMITS, TEST]),
+		nouveau('Ajoute la colonne « lot » à l’export des stocks.', [EXPORT_CSV, STOCKS, LOTS]),
+		nouveau('Peut-on livrer jeudi en fin de journée ?', [VENDREDI, MAINTENANCE]),
+		nouveau('Prépare le schéma de la table des inventaires.', [MIGRATIONS, STOCKS, POSTGRES]),
+	];
+}
+
+const VERDICTS: Record<EtatNoteVue, string> = {
+	accepte: 'Accepté : les % sont justes et Mnemo injecte seul au-dessus de 90 %',
+	coupe: 'Accepté, mais injection automatique coupée : trop de fiches injectées par Mnemo ont été écartées',
+	refuse: 'Refusé : la note ordonne le classement, sans %',
+	depart: 'Note de départ, à entraîner : elle ordonne le classement, sans %',
+	non_appris: "Pas encore entraînée : le classement suit l'ordre de la recherche, sans %",
+};
+
+const DEPART: NoteDuNiveauVue[] = (['complets', 'sens'] as const).map((niveau) => ({
+	niveau,
+	etat: 'depart',
+	origine: 'depart',
+	date: '2026-11-25T18:00:00.000Z',
+	verdict: VERDICTS.depart,
+	criteres: ['note de départ livrée avec Mnemo, pas encore entraînée sur tes jugements'],
+	refus: ['note de départ, à entraîner'],
+}));
+
+/** Un apprentissage refusé, crédible pour un petit banc : trop peu de fiches au-dessus de 90 % et de messages silence. */
+function apprentissageRefuse(date: string, messages: number, sessions: number, paires: number): { note: NoteDuNiveauVue[]; resultat: ResultatApprentissageVue } {
+	const complets = {
+		refus: ['2 injections simulées (au moins 25)', 'pas assez de messages silence : 1 de 1 sessions réelles (au moins 5 de 3)'],
+		criteres: ['trop peu de fiches au-dessus de 90 % : 2, il en faut 25', "trop peu de messages « Rien d'utile ici » : 1 venus de 1 sessions, il en faut 5 venus de 3"],
+	};
+	const sens = { refus: ['précision - (au moins 0.85)'], criteres: ['aucune fiche au-dessus de 90 % pour mesurer si les % sont justes'] };
+	const fiabilite = (decalage: number) =>
+		[
+			[0, 0.2, 0.08, 0.05],
+			[0.2, 0.4, 0.31, 0.27],
+			[0.4, 0.6, 0.5, 0.58],
+			[0.6, 0.8, 0.69, 0.63],
+			[0.8, 1, 0.86, 0.79],
+		].map(([de, a, pMoyen, frequence], i) => ({ de: de!, a: a!, paires: Math.max(0, Math.round(paires * [0.34, 0.22, 0.18, 0.16, 0.1][i]!) - decalage), pMoyen: pMoyen!, frequence: frequence! }));
+	return {
+		note: [
+			{ niveau: 'complets', etat: 'refuse', origine: 'appris', date, verdict: VERDICTS.refuse, ...complets },
+			{ niveau: 'sens', etat: 'refuse', origine: 'appris', date, verdict: VERDICTS.refuse, ...sens },
+		],
+		resultat: {
+			date,
+			remplace: true,
+			messages,
+			sessions,
+			niveaux: [
+				{ niveau: 'complets', accepte: false, verdict: VERDICTS.refuse, ...complets, paires, fiabilite: fiabilite(0) },
+				{ niveau: 'sens', accepte: false, verdict: VERDICTS.refuse, ...sens, paires, fiabilite: fiabilite(1) },
+			],
+		},
+	};
+}
+
+export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, depart?: DepartEntrainementDemo) {
+	const vide = depart === 'vide';
+	let banc: Cas[] = vide ? [] : bancDeDepart();
+	let journal = journalRestant();
+	const avantHier = new Date(Date.now() - 2 * JOUR).toISOString();
+	const appris = apprentissageRefuse(avantHier, 2, 2, 6);
+	let note: NoteDuNiveauVue[] = vide ? structuredClone(DEPART) : appris.note;
+	let avant: NoteDuNiveauVue[] | null = vide ? null : structuredClone(DEPART);
+	let resultat: ResultatApprentissageVue | null = vide ? null : appris.resultat;
+	let historique: LigneHistoriqueVue[] = vide
+		? []
+		: [
+				{
+					date: new Date(Date.now() - JOUR).toISOString(),
+					origine: 'automatique',
+					verdicts: { complets: 'refuse', sens: 'refuse' },
+					remplace: false,
+					erreur: 'Le reranker local n’a pas répondu : les modèles ont été arrêtés pendant l’essai.',
+				},
+				{ date: avantHier, origine: 'manuel', verdicts: { complets: 'refuse', sens: 'refuse' }, remplace: true },
+			];
+	const juge: VueEntrainement['juge'] =
+		depart === 'sansjuge' ? { disponible: false, raison: 'Claude Code introuvable (commande claude absente du PATH, ou MNEMO_CLAUDE) : le pré-jugement par Claude n’est pas disponible.' } : { disponible: true };
+	let tache: TacheEntrainementVue | null = null;
+	let minuteur: ReturnType<typeof setTimeout> | null = null;
+	let derniereErreur: string | undefined;
+	/** Annulations : les messages tels qu'ils étaient avant chaque réponse (ou « Accepter les sûres »). */
+	const annulations: { indice: number; cas: Cas }[][] = [];
+
+	const aRelire = (c: Cas) => !c.valide && !c.saute && c.propositions !== null;
+	const aJuger = (c: Cas) => !c.valide && !c.saute;
+	const paires = (c: Cas) => (c.valide ? Object.values(c.jugements).filter((j) => j !== 'indecise').length : 0);
+
+	function vue(): VueEntrainement {
+		const presents = banc.filter((c) => !c.saute);
+		return {
+			note: { niveaux: structuredClone(note), avant: avant !== null },
+			banc: {
+				messages: presents.length,
+				valides: presents.filter((c) => c.valide).length,
+				aJuger: banc.filter(aJuger).length,
+				aRelire: banc.filter(aRelire).length,
+				aPrejuger: banc.filter((c) => aJuger(c) && c.propositions === null).length,
+				silences: banc.filter((c) => c.silence).length,
+				sautes: banc.filter((c) => c.saute).length,
+				paires: banc.reduce((n, c) => n + paires(c), 0),
+			},
+			tache: tache === null ? null : { ...tache },
+			historique: structuredClone(historique),
+			juge,
+			resultat: structuredClone(resultat),
+			...(derniereErreur === undefined ? {} : { derniereErreur }),
+		};
+	}
+	const changer = () => diffuser({ type: 'entrainement', etat: vue() });
+
+	const NOMS = { preparer: 'préparer des messages', prejuger: 'pré-juger avec Claude', apprendre: 'apprendre la note' } as const;
+	/** Lance une fausse tâche : `pas` fait avancer d'un cran et rend faux quand elle est finie. */
+	function lancer(genre: TacheEntrainementVue['genre'], total: number, delai: number, pas: (fait: number) => boolean): VueEntrainement {
+		if (tache !== null) throw new ErreurApi(`Une tâche est déjà en cours (${NOMS[tache.genre]}) : attends sa fin ou arrête-la.`, 409);
+		derniereErreur = undefined;
+		tache = { genre, fait: 0, total, depuis: new Date().toISOString() };
+		const suivant = () => {
+			minuteur = setTimeout(() => {
+				if (tache === null) return;
+				const encore = pas(tache.fait);
+				tache = encore ? { ...tache, fait: tache.fait + 1 } : null;
+				if (encore) suivant();
+				else minuteur = null;
+				changer();
+			}, delai);
+		};
+		suivant();
+		changer();
+		return vue();
+	}
+
+	function preparer(corps: Record<string, unknown>): VueEntrainement {
+		const nombre = corps['nombre'] ?? 30;
+		if (typeof nombre !== 'number' || !Number.isInteger(nombre) || nombre < 1 || nombre > 200) throw new ErreurApi('Nombre de messages : de 1 à 200.', 400);
+		const choisis = Math.min(nombre, journal.length);
+		return lancer('preparer', choisis, PREPARER_MS, (fait) => {
+			if (choisis === 0) {
+				derniereErreur = "Aucun message nouveau dans le journal des sessions : utilise Mnemo, puis prépares-en d'autres.";
+				return false;
+			}
+			banc = [...banc, journal.shift()!];
+			return fait + 1 < choisis;
+		});
+	}
+
+	function prejuger(): VueEntrainement {
+		if (!juge.disponible) throw new ErreurApi(juge.raison ?? 'Claude Code introuvable.', 409);
+		const cibles = banc.filter((c) => aJuger(c) && c.propositions === null);
+		return lancer('prejuger', cibles.length, PREJUGER_MS, (fait) => {
+			const c = cibles[fait];
+			if (c === undefined) return false;
+			// une confiance par fiche, sûre pour la première, plus hésitante ensuite
+			c.propositions = Object.fromEntries(
+				c.candidates.map((x, i) => [x.chemin, propose(i === 0 && !c.message.startsWith('Merci') ? 'pertinente' : 'non_pertinente', [0.95, 0.82, 0.91, 0.67][i % 4]!, `Proposition fictive pour « ${x.titre} ».`)]),
+			);
+			return fait + 1 < cibles.length;
+		});
+	}
+
+	function apprendre(): VueEntrainement {
+		if (banc.reduce((n, c) => n + paires(c), 0) === 0) throw new ErreurApi('Aucun jugement validé : juge des messages avant d’apprendre.', 409);
+		return lancer('apprendre', 0, APPRENDRE_MS, () => {
+			const date = new Date().toISOString();
+			const valides = banc.filter((c) => c.valide);
+			const appris = apprentissageRefuse(date, valides.length, Math.max(1, Math.ceil(valides.length / 2)), valides.reduce((n, c) => n + paires(c), 0));
+			avant = note;
+			note = appris.note;
+			resultat = appris.resultat;
+			historique = [{ date, origine: 'manuel' as const, verdicts: { complets: 'refuse' as const, sens: 'refuse' as const }, remplace: true }, ...historique].slice(0, 10);
+			return false;
+		});
+	}
+
+	function arreter(): VueEntrainement {
+		if (minuteur !== null) clearTimeout(minuteur);
+		minuteur = null;
+		if (tache !== null) {
+			tache = null;
+			changer();
+		}
+		return vue();
+	}
+
+	function revenir(): VueEntrainement {
+		if (tache?.genre === 'apprendre') throw new ErreurApi('Un apprentissage est en cours : attends sa fin ou arrête-le.', 409);
+		if (avant === null) throw new ErreurApi("Aucun modèle d'avant.", 409);
+		[note, avant] = [avant, note];
+		changer();
+		return vue();
+	}
+
+	/** Le prochain à juger : ceux à relire d'abord. */
+	const prochain = (): number | null => {
+		const i = banc.findIndex(aRelire);
+		if (i >= 0) return i;
+		const j = banc.findIndex(aJuger);
+		return j >= 0 ? j : null;
+	};
+
+	function message(params: Record<string, string>): ReponseMessageAJuger {
+		const i = params['indice'] !== undefined ? Number(params['indice']) : prochain();
+		if (i === null) return { message: null };
+		const c = banc[i];
+		if (c === undefined) throw new ErreurApi(`Message ${i} inconnu.`, 404);
+		// ordre de présentation mêlé : stable pour un message
+		const ordre = [...c.candidates].sort((a, b) => (a.chemin.length * (i + 3)) % 7 - (b.chemin.length * (i + 3)) % 7);
+		return {
+			message: {
+				indice: i,
+				message: c.message,
+				precedent: c.precedent,
+				candidates: ordre.map((x) => ({ ...x, proposition: c.propositions?.[x.chemin] ?? null, jugement: c.jugements[x.chemin] ?? null })),
+				valide: c.valide,
+				silence: c.silence,
+				saute: c.saute,
+				aRelire: aRelire(c),
+				restants: banc.filter(aJuger).length,
+			},
+		};
+	}
+
+	function repondre(corps: Record<string, unknown>): ReponseReponseMessage {
+		const i = Number(corps['indice']);
+		const c = banc[i];
+		if (c === undefined) throw new ErreurApi(`Message ${i} inconnu.`, 404);
+		const jugements = (corps['jugements'] ?? {}) as Record<string, JugementVue>;
+		if (corps['silence'] === true && Object.values(jugements).includes('pertinente')) throw new ErreurApi("« Rien d'utile ici » est refusé : une fiche de ce message est jugée utile.", 409);
+		annulations.push([{ indice: i, cas: structuredClone(c) }]);
+		if (corps['passer'] === true) c.saute = true;
+		else if (corps['silence'] === true) Object.assign(c, { silence: true, valide: true, jugements: Object.fromEntries(c.candidates.map((x) => [x.chemin, 'non_pertinente'])) });
+		else {
+			const reste = corps['resteNonUtile'] === true ? Object.fromEntries(c.candidates.map((x) => [x.chemin, 'non_pertinente' as const])) : {};
+			c.jugements = { ...reste, ...c.jugements, ...jugements };
+			c.valide = c.candidates.every((x) => c.jugements[x.chemin] !== undefined);
+		}
+		changer();
+		return { suivant: prochain() };
+	}
+
+	function annuler(): ReponseAnnulation {
+		const a = annulations.pop();
+		if (a === undefined) throw new ErreurApi('Rien à annuler.', 409);
+		for (const { indice, cas } of a) banc[indice] = cas;
+		changer();
+		return { indice: a[0]!.indice };
+	}
+
+	function accepterSures(): ReponseAccepterSures {
+		const avantGeste: { indice: number; cas: Cas }[] = [];
+		banc.forEach((c, indice) => {
+			const p = c.propositions;
+			if (!aRelire(c) || p === null || !c.candidates.every((x) => (p[x.chemin]?.confiance ?? 0) >= SEUIL_SUR)) return;
+			avantGeste.push({ indice, cas: structuredClone(c) });
+			c.jugements = Object.fromEntries(c.candidates.map((x) => [x.chemin, p[x.chemin]!.jugement]));
+			c.valide = true;
+		});
+		if (avantGeste.length > 0) {
+			annulations.push(avantGeste);
+			changer();
+		}
+		return { acceptes: avantGeste.length };
+	}
+
+	return {
+		/** GET : la réponse, ou undefined pour une route qui n'est pas de l'entraînement. */
+		lire(chemin: string, params: Record<string, string> = {}): unknown {
+			if (chemin === ROUTES.entrainement) return vue();
+			if (chemin === ROUTES.entrainementMessage) return message(params);
+			return undefined;
+		},
+		/** POST : la réponse, ou undefined pour une route qui n'est pas de l'entraînement. */
+		envoyer(chemin: string, corps: Record<string, unknown>): unknown {
+			switch (chemin) {
+				case ROUTES.entrainementPreparer:
+					return preparer(corps);
+				case ROUTES.entrainementPrejuger:
+					return prejuger();
+				case ROUTES.entrainementApprendre:
+					return apprendre();
+				case ROUTES.entrainementArreter:
+					return arreter();
+				case ROUTES.entrainementRevenir:
+					return revenir();
+				case ROUTES.entrainementMessage:
+					return repondre(corps);
+				case ROUTES.entrainementAnnuler:
+					return annuler();
+				case ROUTES.entrainementAccepterSures:
+					return accepterSures();
+				default:
+					return undefined;
+			}
+		},
+	};
+}

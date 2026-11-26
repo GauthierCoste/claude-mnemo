@@ -4,6 +4,7 @@
  */
 import type { EtapeCalcul } from '@mnemo/commun';
 import { ErreurApi, type Api } from './api.ts';
+import { creerEntrainementDemo, type DepartEntrainementDemo } from './demo-entrainement.ts';
 import { lotsDemo } from './demo-lots.ts';
 import { creerModelesDemo } from './demo-modeles.ts';
 import { creerClaudeDesktopDemo } from './demo-claude-desktop.ts';
@@ -708,6 +709,8 @@ export type OptionsDemo = {
 	coupure?: boolean;
 	/** Suggestion de la règle des 3 sessions sur la première session, sa fiche écartée ici (`&suggestion=1`). */
 	suggestion?: boolean;
+	/** Départ de Mémoire › Entraîner (`&entrainement=vide` ou `sansjuge`) ; absent : un banc entamé. */
+	entrainement?: DepartEntrainementDemo;
 };
 
 function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo): Api {
@@ -1252,6 +1255,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 	};
 	const claudeDesktopDemo = creerClaudeDesktopDemo();
 	const moteursDemo = creerMoteursDemo();
+	const entrainementDemo = creerEntrainementDemo(connexion.diffuser, o.entrainement);
 	/** Route de profil (`:id`) du chemin, décodée ; undefined sinon. */
 	const profilDe = (route: string, chemin: string) => {
 		const id = idDans(route, chemin);
@@ -1297,10 +1301,13 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 		lire: <T>(chemin: string, params?: Record<string, string>, options?: { signal?: AbortSignal }) =>
 			attendre(() => {
 				options?.signal?.throwIfAborted();
-				return (claudeDesktopDemo.traiter('GET', chemin) ?? lire(chemin, params)) as T;
+				return (claudeDesktopDemo.traiter('GET', chemin) ?? entrainementDemo.lire(chemin, params) ?? lire(chemin, params)) as T;
 			}),
 		envoyer: <T>(chemin: string, corps?: unknown) =>
-			attendre(() => (claudeDesktopDemo.traiter('POST', chemin, corps) ?? envoyer(chemin, (corps ?? {}) as Record<string, unknown>)) as T),
+			attendre(() => {
+				const objet = (corps ?? {}) as Record<string, unknown>;
+				return (claudeDesktopDemo.traiter('POST', chemin, corps) ?? entrainementDemo.envoyer(chemin, objet) ?? envoyer(chemin, objet)) as T;
+			}),
 		remplacer: <T>(chemin: string, corps: unknown) =>
 			attendre(() => {
 				const app = claudeDesktopDemo.traiter('PUT', chemin, corps);

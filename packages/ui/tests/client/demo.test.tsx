@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { avertissementNonCherchable, consigneATraiter, estIdMoteur, IDS_MOTEURS, NOMS_MOTEURS } from '@mnemo/commun';
-import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EtatModelesVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseEcarteesToujours, type ReponseServis, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseMoteurs, type ReponseProfils, type ReponseQuotas, type ReponseValidationLot, type SessionTermineeVue, type SessionVue } from '@mnemo/contrat';
+import { ROUTES, type ClaudeDesktopVue, type DocumentVue, type EtatModelesVue, type EntreeServieVue, type LueVue, type ReponseDocuments, type ReponseEcarteesToujours, type ReponseServis, type ReponseTraiter, type DonneesGraphe, type FicheVue, type FilVue, type ReponseLots, type ReponseMoteurs, type ReponseProfils, type ReponseQuotas, type ReponseValidationLot, type SessionTermineeVue, type SessionVue, type ReponseAccepterSures, type ReponseAnnulation, type ReponseMessageAJuger, type ReponseReponseMessage, type VueEntrainement } from '@mnemo/contrat';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ErreurApi } from '../../src/client/api.ts';
@@ -223,6 +223,77 @@ describe('mode démo', () => {
 		const r = await api.remplacer<{ session: SessionVue }>(ROUTES.sessionModeles.replace(':id', id), { niveau: 'coupes' });
 		expect(r.session).toMatchObject({ id, niveauModeles: 'coupes' });
 		expect(sessions.at(-1)).toMatchObject({ id, niveauModeles: 'coupes' });
+	});
+
+	it('entraînement : banc de 6 messages fictifs ; préparer, pré-juger, apprendre progressent (diffusés) puis un verdict refusé ; revenir, message, accepter les sûres, annuler', async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		const { api, connexion } = creerClientDemo();
+		const recus: VueEntrainement[] = [];
+		connexion.surMessage((m) => m.type === 'entrainement' && void recus.push(m.etat));
+		const depart = await api.lire<VueEntrainement>(ROUTES.entrainement);
+		expect(depart.banc).toMatchObject({ messages: 6, valides: 2, aJuger: 4, aRelire: 2, aPrejuger: 2 });
+		expect(depart.note).toMatchObject({ avant: true });
+		expect(depart.historique.map((l) => l.origine)).toEqual(['automatique', 'manuel']);
+		expect(depart.historique[0]!.erreur).toBeTruthy();
+		// le prochain : un message à relire, avec les propositions du juge
+		const { message } = await api.lire<ReponseMessageAJuger>(ROUTES.entrainementMessage);
+		expect(message!.aRelire).toBe(true);
+		expect(message!.candidates.every((c) => c.proposition !== null)).toBe(true);
+		// accepter les sûres : le message sûr seulement ; annuler le rend
+		expect(await api.envoyer<ReponseAccepterSures>(ROUTES.entrainementAccepterSures)).toEqual({ acceptes: 1 });
+		expect((await api.lire<VueEntrainement>(ROUTES.entrainement)).banc.aRelire).toBe(1);
+		expect(await api.envoyer<ReponseAnnulation>(ROUTES.entrainementAnnuler)).toEqual({ indice: 2 });
+		await expect(api.envoyer(ROUTES.entrainementAnnuler)).rejects.toMatchObject({ statut: 409 });
+		// une réponse : « Rien d'utile ici » refusé si une fiche est utile ; sinon validé, le suivant rendu
+		const premier = message!;
+		await expect(api.envoyer(ROUTES.entrainementMessage, { indice: premier.indice, jugements: { [premier.candidates[0]!.chemin]: 'pertinente' }, resteNonUtile: true, silence: true })).rejects.toMatchObject({ statut: 409 });
+		const r = await api.envoyer<ReponseReponseMessage>(ROUTES.entrainementMessage, { indice: premier.indice, jugements: { [premier.candidates[0]!.chemin]: 'pertinente' }, resteNonUtile: true });
+		expect(r.suivant).not.toBe(premier.indice);
+		// pré-juger : une tâche qui progresse, une deuxième refusée (409)
+		expect((await api.envoyer<VueEntrainement>(ROUTES.entrainementPrejuger)).tache).toMatchObject({ genre: 'prejuger', total: 2 });
+		await expect(api.envoyer(ROUTES.entrainementApprendre)).rejects.toMatchObject({ statut: 409 });
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(recus.at(-1)).toMatchObject({ tache: null, banc: { aPrejuger: 0 } });
+		// apprendre : un verdict refusé crédible, le modèle remplacé, une ligne d'historique manuelle
+		await api.envoyer(ROUTES.entrainementApprendre);
+		await vi.advanceTimersByTimeAsync(3000);
+		const appris = recus.at(-1)!;
+		expect(appris.tache).toBeNull();
+		expect(appris.resultat).toMatchObject({ remplace: true, niveaux: [{ niveau: 'complets', accepte: false }, { niveau: 'sens', accepte: false }] });
+		expect(appris.resultat!.niveaux[0]!.criteres.join(' ')).toContain('il en faut 25');
+		expect(appris.historique).toHaveLength(3);
+		expect(appris.historique[0]).toMatchObject({ origine: 'manuel', remplace: true });
+		// revenir : les modèles s'échangent
+		const avant = appris.note.niveaux[0]!.date;
+		const revenu = await api.envoyer<VueEntrainement>(ROUTES.entrainementRevenir);
+		expect(revenu.note.niveaux[0]!.date).not.toBe(avant);
+		// préparer : les messages du faux journal, puis plus rien (erreur dite comme le service)
+		await api.envoyer(ROUTES.entrainementPreparer, { nombre: 200 });
+		await vi.advanceTimersByTimeAsync(4000);
+		expect(recus.at(-1)!.banc.messages).toBe(14);
+		await api.envoyer(ROUTES.entrainementPreparer, { nombre: 5 });
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(recus.at(-1)!.derniereErreur).toContain('Aucun message nouveau');
+		await expect(api.envoyer(ROUTES.entrainementPreparer, { nombre: 0 })).rejects.toMatchObject({ statut: 400 });
+	});
+
+	it('entraînement : `&entrainement=vide` (rien de préparé, note de départ, sans modèle d’avant) et `sansjuge` (pré-juger refusé)', async () => {
+		const vide = await creerClientDemo({ entrainement: 'vide' }).api.lire<VueEntrainement>(ROUTES.entrainement);
+		expect(vide).toMatchObject({ banc: { messages: 0 }, note: { avant: false }, resultat: null, historique: [] });
+		expect(vide.note.niveaux.map((n) => n.etat)).toEqual(['depart', 'depart']);
+		const { api } = creerClientDemo({ entrainement: 'sansjuge' });
+		expect((await api.lire<VueEntrainement>(ROUTES.entrainement)).juge.disponible).toBe(false);
+		await expect(api.envoyer(ROUTES.entrainementPrejuger)).rejects.toMatchObject({ statut: 409 });
+	});
+
+	it('entraînement : messages et fiches fictifs, des fiches de la démo', async () => {
+		const { api } = creerClientDemo();
+		const { fiches } = await api.lire<DonneesGraphe>(ROUTES.graphe);
+		const chemins = new Set(fiches.map((f) => f.chemin));
+		for (let i = 0; i < 6; i++) {
+			const { message } = await api.lire<ReponseMessageAJuger>(ROUTES.entrainementMessage, { indice: String(i) });
+			for (const c of message!.candidates) expect(chemins.has(c.chemin), c.chemin).toBe(true);
+		}
 	});
 
 	it('modèles : `&modeles=` fixe chaque état de départ ; `anime` fait défiler le scénario, arrêté par le premier geste', async () => {
