@@ -1,212 +1,193 @@
 /**
- * Contenu de l'onglet Documentation de la vue Réglages : six chapitres (Le principe, Une session, Les agents, Le rappel, La
- * confiance, L'archiviste), chacun une suite de blocs que `Documentation.tsx` met en forme. Chaque affirmation est vérifiée
- * dans le code du service (`packages/mnemo`) ; les chiffres sont les valeurs par défaut. Dans un texte, `**gras**` et
- * `` `code` `` sont rendus comme tels. Les capacités (noms, icônes) viennent de `profils/hooks.ts` : la frise ne donne que
- * leur explication, par événement.
+ * Contenu de l'onglet Documentation de la vue Réglages : une seule page, en sections (sommaire du panneau), registre neutre et
+ * technique. Chaque affirmation est vérifiée dans le code du service (`packages/mnemo`) ; les chiffres sont les valeurs par
+ * défaut (`domaine/reglages.ts`, `domaine/regles.ts`). Dans un texte, `**gras**` et `` `code` `` sont rendus comme tels. Le
+ * tableau des capacités prend noms, symboles et caractère toujours actif dans `profils/hooks.ts` ; ce fichier n'en donne que
+ * l'effet, par hook.
  */
 import type { EvenementHookVue } from '@mnemo/contrat';
 
-export type CaseSchema = { icone?: string; titre: string; texte: string; accent?: true };
-export type Sort = { ton: 'injectee' | 'piste' | 'aucun'; nom: string; texte: string };
-export type FacteurFormule = { nom: string; detail: string; resultat?: true };
-
 export type BlocDoc =
-	| { genre: 'chapo'; texte: string }
+	| { genre: 'definitions'; termes: readonly (readonly [string, string])[] }
+	| { genre: 'etapes'; etapes: readonly string[] }
+	| { genre: 'tableau'; legende: string; colonnes: readonly string[]; lignes: readonly (readonly string[])[] }
+	| { genre: 'capacites'; effets: Readonly<Record<EvenementHookVue, string>> }
 	| { genre: 'intertitre'; texte: string }
-	| { genre: 'paragraphe'; texte: string }
-	| { genre: 'note'; texte: string }
-	| { genre: 'points'; points: readonly string[] }
-	| { genre: 'schema'; fleche: string; cases: readonly CaseSchema[] }
-	| { genre: 'frise'; etapes: Readonly<Record<EvenementHookVue, string>> }
-	| { genre: 'glossaire'; termes: readonly (readonly [string, string])[] }
-	| { genre: 'sorts'; sorts: readonly Sort[] }
-	| { genre: 'formule'; facteurs: readonly FacteurFormule[] };
+	| { genre: 'note'; texte: string };
 
-export type ChapitreDoc = { cle: string; titre: string; sous: string; titreLong: string; blocs: readonly BlocDoc[] };
+export type SectionDoc = { id: string; titre: string; blocs: readonly BlocDoc[] };
 
-export const CHAPITRES_DOC: readonly ChapitreDoc[] = [
+export const SECTIONS_DOC: readonly SectionDoc[] = [
 	{
-		cle: 'principe',
-		titre: 'Le principe',
-		sous: 'une mémoire pour les sessions',
-		titreLong: 'Le principe',
+		id: 'doc-principe',
+		titre: 'Principe',
 		blocs: [
 			{
-				genre: 'chapo',
-				texte: 'Une session d’agent oublie tout en se fermant. Mnemo lui donne une mémoire : des fiches en Markdown dans le dossier, versionnées avec git, qu’il injecte dans chaque session au bon moment.',
-			},
-			{
-				genre: 'schema',
-				fleche: '⇄',
-				cases: [
-					{ icone: '📁', titre: 'La mémoire', texte: 'des fiches Markdown dans `_mnemo/` : projets, personnes, décisions, pratiques, consignes' },
-					{ icone: '◆', titre: 'Mnemo', texte: 'cherche, classe, injecte, et écrit sous git ce que les sessions apprennent', accent: true },
-					{ icone: '⌨', titre: 'Tes sessions', texte: 'Claude Code, Codex ou Mistral Vibe, lancées depuis Mnemo' },
-				],
-			},
-			{ genre: 'intertitre', texte: 'Ce qu’il faut retenir' },
-			{
-				genre: 'points',
-				points: [
-					'**Tout est lisible.** Une fiche est un fichier texte qui s’ouvre, se corrige, se supprime.',
-					'**Tout est réversible.** Chaque écriture est un commit git : rien ne se perd.',
-					'**La mémoire reste sur le poste.** La recherche et la note des fiches tournent sur des modèles locaux ; seul ce que Mnemo injecte et ce que l’agent lit avec ses outils part, avec la session, chez le fournisseur de l’agent.',
+				genre: 'definitions',
+				termes: [
+					['Mémoire', 'fiches Markdown dans `_mnemo/`, versionnées par git.'],
+					['Écriture', 'sous verrou, un commit par écriture : `mnemo: <action> <chemin>`.'],
+					['Moteurs', 'Claude Code, Codex, Mistral Vibe ; serveur MCP et hooks (Réglages › Branchements).'],
+					['Outils MCP', '`chercher`, `lire`, `lister`, `voisins`, `chronologie`, `contexte`, `proposer`, `entretenir`, `deplacer`, `extraire_source`, `diagnostiquer`.'],
+					['Local', 'embeddings et reranker sur le poste ; seul ce qui est injecté ou lu part chez le fournisseur.'],
 				],
 			},
 		],
 	},
 	{
-		cle: 'session',
-		titre: 'Une session',
-		sous: 'du lancement à la fermeture',
-		titreLong: 'Une session, du lancement à la fermeture',
+		id: 'doc-session',
+		titre: 'Session',
 		blocs: [
 			{
-				genre: 'chapo',
-				texte: 'Mnemo intervient à six moments de la vie d’une session. Ce sont les **capacités** d’un agent (des « hooks »). Trois s’allument ou s’éteignent dans l’onglet Agents (Souffle, Bouclier, Carnet) ; Éveil, Veille et Récit tiennent l’état de la session et restent toujours actifs.',
-			},
-			{
-				genre: 'frise',
-				etapes: {
-					debut: 'La session démarre : Mnemo note sa branche et son commit de départ. Rien n’est encore injecté.',
-					message:
-						'À chaque message : Mnemo injecte les consignes permanentes, la fiche du projet si elle n’y est pas déjà et les fiches très proches de la demande, et propose des pistes (voir « Le rappel »).',
-					outil: 'Avant chaque action de l’agent : si elle viole une consigne vérifiée (un chemin ou une commande interdits), Mnemo la refuse.',
-					apres_outil: 'Après chaque action : Mnemo note les fiches que l’agent a lues ou écrites. Elles ne lui sont plus proposées, et une piste lue compte comme utile pour les notes suivantes.',
-					arret: 'L’agent s’arrête ou attend un accord : la session passe en attente de réponse dans Sessions.',
-					fin: 'À la fermeture : Mnemo termine la session et, si aucun bilan n’en a laissé, écrit un épisode minimal, sans IA (objectif, dates, branche, fichiers modifiés). Ce que la session a appris, elle l’a écrit en cours de route.',
+				genre: 'capacites',
+				effets: {
+					debut: 'branche et commit de départ ; rien d’injecté',
+					message: 'consignes permanentes, fiche de position, injections automatiques, pistes',
+					outil: 'refuse une action contraire à une consigne `verifiee`',
+					apres_outil: 'fiches lues ou écrites notées, plus proposées',
+					arret: 'session « attend une réponse »',
+					fin: 'sans bilan : épisode minimal sans IA (objectif, dates, branche, fichiers)',
 				},
 			},
-			{ genre: 'note', texte: 'Un agent sans Souffle travaille sans la mémoire : il peut la consulter avec ses outils, mais rien ne lui est injecté.' },
+			{ genre: 'note', texte: 'Sans Souffle : rien d’injecté ; les outils MCP restent disponibles.' },
 			{
 				genre: 'note',
-				texte: 'Un **projet** est un dossier qui contient l’un des marqueurs choisis (`.git`, `package.json`… : Réglages › Mémoire › Rappel) : il porte ◆ dans l’arbre des dossiers où se choisit le dossier d’une session.',
+				texte: 'Projet : dossier avec un marqueur (`.git`, `package.json`…, Réglages › Mémoire › Rappel), ◆ dans l’arbre des dossiers.',
 			},
 		],
 	},
 	{
-		cle: 'agents',
-		titre: 'Les agents',
-		sous: 'classe, équipement, capacités',
-		titreLong: 'Les agents',
+		id: 'doc-agents',
+		titre: 'Agents',
 		blocs: [
-			{ genre: 'chapo', texte: 'Un agent, c’est un profil de session : ce qu’une session reçoit en démarrant. Il en existe autant que de façons de travailler.' },
 			{
-				genre: 'glossaire',
+				genre: 'definitions',
 				termes: [
+					['Fiche', '`_mnemo/profils/<nom>/<nom>.md`.'],
+					['Classe', 'moteur et modèle ; moteur non lié verrouillé.'],
+					['Mission', 'consigne ajoutée aux instructions système.'],
 					[
-						'Classe',
-						'L’agent de code qui fait tourner la session : Claude Code (Anthropic), Codex (OpenAI) ou Mistral Vibe (Mistral), et le modèle choisi. Un moteur doit être **lié à Mnemo** (Réglages › Branchements) pour que ses sessions reçoivent la mémoire ; d’ici là, sa classe reste verrouillée.',
+						'Skills',
+						'`_mnemo/skills/<nom>/SKILL.md` et `_mnemo/profils/<nom>/skills/` (prioritaire) ; chargées selon `description` ; icône : `metadata.icone`.',
 					],
-					['Mission', 'La consigne de l’agent, ajoutée aux instructions de chaque session : son rôle, sa façon de faire.'],
-					[
-						'Équipement',
-						'**Skills** : des savoir-faire écrits dans la mémoire (`_mnemo/skills/`) ou propres à l’agent ; l’agent en lit une quand sa tâche correspond à sa description. Le crayon ✎ d’une skill ouvre son éditeur. **Plugins** : des extensions de Claude Code (commandes, outils), propres à ce moteur.',
-					],
-					['Capacités', 'Les moments où Mnemo agit dans la session (voir « Une session ») : Souffle, Bouclier et Carnet se basculent ; Éveil, Veille et Récit restent toujours actifs.'],
-					[
-						'Départ',
-						'« Démarre dans la mémoire » : ses sessions s’ouvrent dans le dossier de la mémoire, pour ranger ou relire les fiches ; sinon dans le dossier choisi au lancement. L’archiviste démarre toujours dans la mémoire.',
-					],
-					['Stats', 'Ce que l’agent emporte : skills, plugins (avec Claude Code) et capacités, chacune rapportée à ce qui peut être équipé.'],
+					['Skill fournie', 'de l’archiviste : modifiable, rétablissable ; ni renommée ni supprimée.'],
+					['Plugins', 'Claude Code : cochés activés, autres désactivés.'],
+					['Capacités', 'Agents › Capacités.'],
+					['Départ', '`_mnemo/` ou dossier choisi au lancement.'],
 				],
 			},
 		],
 	},
 	{
-		cle: 'rappel',
-		titre: 'Le rappel',
-		sous: 'injection, pistes, ordre',
-		titreLong: 'Le rappel',
+		id: 'doc-rappel',
+		titre: 'Rappel',
 		blocs: [
-			{ genre: 'chapo', texte: 'À chaque message, Mnemo cherche les fiches utiles, leur donne une note, puis décide de leur sort.' },
 			{
-				genre: 'schema',
-				fleche: '→',
-				cases: [
-					{ titre: '1 · Chercher', texte: 'autour du projet en cours, parmi les fiches que le message nomme (titre ou alias), et les voisines des fiches injectées à la main' },
-					{ titre: '2 · Noter', texte: 'des modèles locaux et une note apprise des gestes passés estiment la chance qu’une fiche soit utile ici, de 0 à 100 %' },
-					{ titre: '3 · Décider', texte: 'injecter, proposer en piste, ou laisser de côté', accent: true },
-				],
-			},
-			{ genre: 'intertitre', texte: 'Les trois sorts d’une fiche' },
-			{
-				genre: 'sorts',
-				sorts: [
-					{ ton: 'injectee', nom: 'Injectée', texte: 'Au-dessus du seuil d’injection : elle entre entière dans la session sans geste. Au plus « Fiches injectées » par message.' },
-					{
-						ton: 'piste',
-						nom: 'Piste',
-						texte: 'Au-dessus du seuil des pistes : une carte (titre, chemin, première phrase) que l’agent lit s’il en a besoin, ou qui s’injecte d’un geste. Les fiches que le message nomme sont proposées en plus.',
-					},
-					{ ton: 'aucun', nom: 'Laissée de côté', texte: 'En dessous : rien n’est envoyé.' },
+				genre: 'etapes',
+				etapes: [
+					'Candidates : projet, fiches nommées, voisines des injections à la main.',
+					'Note : sens et signaux, puis modèle appris ; % si modèle accepté.',
+					'Décision : injectée entière, piste (titre, chemin, première phrase), ou rien.',
 				],
 			},
 			{
-				genre: 'paragraphe',
-				texte: 'L’injection automatique attend une note **calibrée** (un modèle de note accepté). Avant, aucune fiche n’entre seule : les premières de l’ordre partent en pistes, au premier message et quand une fiche est injectée à la main.',
+				genre: 'tableau',
+				legende: 'Réglages › Mémoire › Rappel',
+				colonnes: ['Réglage', 'Effet', 'Défaut'],
+				lignes: [
+					['Seuil d’injection', 'note minimale d’injection automatique', '90 %'],
+					['Fiches injectées', 'injections automatiques par message', '2'],
+					['Seuil des pistes', 'note minimale d’une piste', '10 %'],
+					['Pistes proposées', 'pistes par message', '3'],
+					['Fiches nommées', 'cartes de fiches citées par message', '5'],
+					['Poids d’une injection à la main', 'bonus des voisines', '0,25'],
+					['Demi-vie', 'messages pour diviser ce bonus par deux', '3'],
+				],
 			},
-			{ genre: 'intertitre', texte: 'L’ordre des recherches' },
+			{ genre: 'note', texte: 'Sans modèle accepté : aucune injection automatique. Sans note apprise : pistes au premier message et après une injection à la main.' },
+		],
+	},
+	{
+		id: 'doc-recherche',
+		titre: 'Recherche',
+		blocs: [
 			{
-				genre: 'paragraphe',
-				texte: 'Pour une recherche (outil `chercher` de l’agent, recherche de l’interface), entre deux résultats aussi pertinents passent devant ceux du **projet en cours**, les plus **sûrs**, ceux de la **mémoire** plutôt que des documents, et les plus **récents**, selon les poids « Ce qui passe devant » de Réglages › Mémoire › Recherche.',
-			},
-			{
-				genre: 'note',
-				texte: 'Quand une fiche est injectée à la main, ses voisines montent dans la note pendant quelques messages, puis l’effet s’estompe (la demi-vie, dans les réglages fins du Rappel).',
+				genre: 'tableau',
+				legende: 'Réglages › Mémoire › Recherche (`chercher`, interface)',
+				colonnes: ['Réglage', 'Effet', 'Défaut'],
+				lignes: [
+					['Projet en cours', 'bonus, voisinage du projet', '0,1'],
+					['Confiance', 'malus maximal, faible confiance', '0,05'],
+					['Fiches de la mémoire', 'bonus, hors documents', '0,05'],
+					['Fraîcheur', 'bonus, divisé par deux après un an', '0,05'],
+					['Seuil de rappel', 'pertinence minimale', '0,4'],
+					['Similarité min.', 'sens minimal (carte Rappel)', '0,45'],
+					['Résultats / recherche', 'résultats par défaut', '10'],
+					['Chronologie', 'faits de `chronologie`', '30'],
+					['Graphe', 'fiches dont les liens sont suivis', '5'],
+					['Reranker', 'candidats reclassés', '40'],
+				],
 			},
 		],
 	},
 	{
-		cle: 'confiance',
-		titre: 'La confiance',
-		sous: 'sources, faits, consignes',
-		titreLong: 'La confiance',
+		id: 'doc-confiance',
+		titre: 'Confiance',
 		blocs: [
-			{ genre: 'chapo', texte: 'Chaque fait d’une fiche a une confiance. Elle vient de deux choses : d’où il vient, et comment on le sait.' },
+			{ genre: 'note', texte: 'Confiance = fiabilité de la source × poids de la nature ; `email` observé : 0,7 × 0,85 ≈ 0,6.' },
 			{
-				genre: 'formule',
-				facteurs: [
-					{ nom: 'Fiabilité de la source', detail: 'toi 1 · contrat 1 · e-mail 0,7 · déduction 0,5…' },
-					{ nom: 'Façon dont on le sait', detail: 'déclaré 1 · observé 0,85 · inféré 0,7' },
-					{ nom: 'Confiance du fait', detail: 'ex. un e-mail observé : 0,7 × 0,85 ≈ 0,6', resultat: true },
+				genre: 'tableau',
+				legende: 'Fiabilité par source (Réglages › Mémoire › Confiance)',
+				colonnes: ['Type de source', 'Fiabilité'],
+				lignes: [
+					['`utilisateur`, `contrat`', '1'],
+					['`spec_validee`', '0,9'],
+					['`compte_rendu`', '0,8'],
+					['`email`', '0,7'],
+					['`note`, `session`', '0,6'],
+					['`deduction`', '0,5'],
+					['`inconnue`', '0,3'],
 				],
 			},
 			{
-				genre: 'paragraphe',
-				texte: 'Une seconde source qui confirme le fait le fait monter, jusqu’à 0,9 (jusqu’à 1 si l’une d’elles est l’utilisateur ou un contrat). Les valeurs se règlent dans Réglages › Mémoire › Confiance.',
+				genre: 'definitions',
+				termes: [
+					['Nature', '`declare` 1 · `observe` 0,85 · `infere` 0,7.'],
+					['Sources multiples', '1 − Π(1 − cᵢ), plafond 0,9 (1 avec `utilisateur`, `contrat`).'],
+					[
+						'À confirmer',
+						'`infere`, contradiction d’une source plus fiable, `montant`, `echeance`, `perimetre`, type éteint dans « L’archiviste écrit seul… ». Validation : Mémoire › Archiviste › À arbitrer.',
+					],
+				],
 			},
-			{ genre: 'intertitre', texte: 'Les consignes' },
+			{ genre: 'intertitre', texte: 'Consignes' },
 			{
-				genre: 'paragraphe',
-				texte: 'Une consigne est une règle donnée aux sessions. D’abord **rappelée** : injectée au premier message, puis quand un message en parle. Redite le nombre de fois choisi, Mnemo propose de la passer à **toujours** : injectée à chaque message. Si elle porte une règle vérifiable (chemins ou commandes interdits), elle peut devenir **vérifiée** : injectée à chaque message, et la capacité Bouclier refuse les actions qui la violent. Chaque montée attend un accord.',
+				genre: 'tableau',
+				legende: 'Niveaux d’une consigne',
+				colonnes: ['Niveau', 'Injection', 'Montée proposée'],
+				lignes: [
+					['`rappelee`', 'premier message, puis si mentionnée', '`toujours` après 2 redites'],
+					['`toujours`', 'chaque message', '`verifiee` si `regle`'],
+					['`verifiee`', 'chaque message ; Bouclier applique `chemins_interdits`, `commandes_interdites`', '—'],
+				],
 			},
-			{
-				genre: 'note',
-				texte: 'Montants, échéances et périmètres sont des faits à fort enjeu : Mnemo ne les écrit jamais seul. Comme un fait inféré ou qui contredit une source plus fiable, ils sont écrits « à confirmer » et attendent un accord dans Mémoire › Archiviste › À arbitrer.',
-			},
+			{ genre: 'note', texte: 'Montée : sur confirmation (À arbitrer).' },
 		],
 	},
 	{
-		cle: 'rangement',
-		titre: 'L’archiviste',
-		sous: 'qui range la mémoire',
-		titreLong: 'L’archiviste',
+		id: 'doc-archiviste',
+		titre: 'Archiviste',
 		blocs: [
 			{
-				genre: 'chapo',
-				texte: 'L’archiviste est un agent comme les autres, dont la mission est de ranger : il classe ce qui lui est confié (documents, notes importées), fait le ménage (doublons, liens cassés, fiches mal nommées) et relie les fiches entre elles.',
-			},
-			{
-				genre: 'points',
-				points: [
-					'**Il écrit seul** dans les types de fiche laissés allumés (Réglages › Mémoire › Confiance, « L’archiviste écrit seul… ») ; dans les autres, ses informations sont écrites « à confirmer ».',
-					'**Il demande** pour le reste : les informations à confirmer, les montées de consigne et ses lots (plusieurs suppressions, fusions ou confirmations d’un coup) attendent un accord dans Mémoire › Archiviste › À arbitrer.',
-					'**Il tourne sur Claude Code** et démarre toujours dans la mémoire.',
+				genre: 'definitions',
+				termes: [
+					['Profil', '`archiviste`, Claude Code, dans `_mnemo/` (racine en `--add-dir`).'],
+					['Rôle', 'sources (`extraire_source`), ménage (`diagnostiquer`, `entretenir`, `deplacer`).'],
+					['Skills', '`_mnemo/profils/archiviste/skills/` : `emails`, `specs`, `comptes-rendus`, `menage`.'],
+					['Sans confirmation', 'types allumés (Réglages › Mémoire › Confiance).'],
+					['À arbitrer', 'faits à confirmer, montées, lots (`proposer_lot`).'],
 				],
 			},
-			{ genre: 'note', texte: 'Chaque écriture de l’archiviste est un commit : un retour en arrière reste toujours possible.' },
 		],
 	},
 ];

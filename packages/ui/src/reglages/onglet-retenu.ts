@@ -1,7 +1,7 @@
 /**
  * Onglet de la vue Réglages retenu dans ce navigateur (le dernier ouvert), et la demande d'ouvrir une section précise depuis
  * une autre vue (« Voir dans Réglages » de la Nouvelle session : Réglages › Branchements) : la vue Réglages, montée ensuite,
- * s'y ouvre. Le chapitre ouvert de l'onglet Documentation est retenu de même. Une valeur retenue avant la 1.9 (`profils`, `systeme`, `app-claude`) mène à l'onglet qui a repris son contenu.
+ * s'y ouvre. Une valeur retenue avant la 1.9 (`profils`, `systeme`, `app-claude`) mène à l'onglet qui a repris son contenu.
  */
 
 export type OngletReglages = 'agents' | 'reglages' | 'documentation';
@@ -26,27 +26,6 @@ export function retenirOnglet(o: OngletReglages): void {
 		localStorage.setItem(CLE_ONGLET, o);
 	} catch {
 		// stockage indisponible : l'onglet n'est pas retenu
-	}
-}
-
-const CLE_CHAPITRE = 'mnemo.reglages.chapitre';
-
-/** Chapitre de la Documentation retenu, s'il est parmi `chapitres` ; sinon le premier. */
-export function chapitreRetenu(chapitres: readonly string[]): string {
-	try {
-		const v = localStorage.getItem(CLE_CHAPITRE);
-		if (v !== null && chapitres.includes(v)) return v;
-	} catch {
-		// stockage indisponible : le premier chapitre
-	}
-	return chapitres[0] ?? '';
-}
-
-export function retenirChapitre(cle: string): void {
-	try {
-		localStorage.setItem(CLE_CHAPITRE, cle);
-	} catch {
-		// stockage indisponible : le chapitre n'est pas retenu
 	}
 }
 

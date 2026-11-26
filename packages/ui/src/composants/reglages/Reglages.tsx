@@ -2,7 +2,7 @@
  * Vue Réglages (roue dentée en bas du rail, ⌥,) : trois onglets, chacun avec son panneau à gauche. « Agents » (les profils de
  * session : consigne, skills, plugins, hooks, lancement, avatar, et l'aperçu de ce que reçoit une session), « Réglages »
  * (Branchements : moteurs et app Claude ; Mémoire : rappel, recherche, confiance ; Système : service, modèles, couleur) et
- * « Documentation » (comment Mnemo fonctionne, en six chapitres). Une pastille ambre sur « Réglages » quand un moteur attend un geste. Le dernier onglet ouvert est retenu
+ * « Documentation » (fonctionnement de Mnemo, une page et son sommaire). Une pastille ambre sur « Réglages » quand un moteur attend un geste. Le dernier onglet ouvert est retenu
  * dans ce navigateur. Changer d'onglet avec des modifications non enregistrées est retenu : un avertissement propose de les
  * abandonner ou de rester.
  */
