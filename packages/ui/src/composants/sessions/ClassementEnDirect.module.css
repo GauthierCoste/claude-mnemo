@@ -317,12 +317,13 @@
 	pointer-events: auto;
 }
 
+/* ➤ allumé (injection demandée) : les gestes restent affichés, dans le flux de la ligne, pour que le titre s'arrête avant eux
+   (en position absolue, sans fond, le titre passait dessous) */
 .gestes[data-force='true'] {
+	position: static;
+	align-self: center;
+	padding-left: 0;
 	background: none;
-}
-
-.ligne:hover .gestes[data-force='true'] {
-	background: linear-gradient(to right, transparent, var(--s3) 10px);
 }
 
 .ligne:hover .delta {
