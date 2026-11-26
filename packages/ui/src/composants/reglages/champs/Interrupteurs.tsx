@@ -14,6 +14,10 @@ import { BadgeEffet, Defaut } from './Defaut.tsx';
 export function Interrupteurs(p: { champ: ChampReglageVue; dispose: ChampDispose; saisie: Saisie; surSaisie(v: Saisie): void }): ReactNode {
 	const coches = Array.isArray(p.saisie) ? p.saisie : [];
 	const choix = p.champ.choix ?? [];
+	const allume = (valeur: string, valeurs: readonly unknown[]) => (p.dispose.inverse === true ? !valeurs.includes(valeur) : valeurs.includes(valeur));
+	// le défaut dit par les interrupteurs allumés, pas par la valeur du service (inversée pour l'archiviste)
+	const allumesParDefaut = choix.filter((x) => allume(x.valeur, Array.isArray(p.champ.defaut) ? p.champ.defaut : []));
+	const defaut = allumesParDefaut.length === choix.length ? 'tous' : allumesParDefaut.length === 0 ? 'aucun' : allumesParDefaut.map((x) => x.libelle).join(', ');
 	const basculer = (valeur: string) => {
 		const avec = !coches.includes(valeur);
 		p.surSaisie(choix.map((x) => x.valeur).filter((v) => (v === valeur ? avec : coches.includes(v))));
@@ -26,12 +30,12 @@ export function Interrupteurs(p: { champ: ChampReglageVue; dispose: ChampDispose
 					<span className={c.libelleBascule} aria-hidden="true">
 						{x.libelle}
 					</span>
-					<Bascule actif={p.dispose.inverse === true ? !coches.includes(x.valeur) : coches.includes(x.valeur)} surChangement={() => basculer(x.valeur)}>
+					<Bascule actif={allume(x.valeur, coches)} surChangement={() => basculer(x.valeur)}>
 						<span className={c.horsEcran}>{x.libelle}</span>
 					</Bascule>
 				</div>
 			))}
-			<Defaut champ={p.champ} saisie={p.saisie} surSaisie={p.surSaisie} />
+			<Defaut champ={p.champ} saisie={p.saisie} surSaisie={p.surSaisie} lisible={defaut} />
 		</div>
 	);
 }

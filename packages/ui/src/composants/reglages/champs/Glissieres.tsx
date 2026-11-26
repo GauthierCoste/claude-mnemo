@@ -22,11 +22,12 @@ function nombreDe(champ: ChampReglageVue, saisie: Saisie): number {
 /** Nombre saisi par la glissière, écrit comme dans un champ texte (virgule décimale). */
 const enTexte = (champ: ChampReglageVue, n: number): string => (champ.genre === 'decimal' ? String(n).replace('.', ',') : String(n));
 
-/** Attributs de la glissière : bornes du service, pas d'un centième pour un décimal. */
-function glissiere(p: Props, id: string) {
+/** Attributs de la glissière : bornes du service, pas d'un centième pour un décimal ; lue comme la valeur affichée. */
+function glissiere(p: Props, id: string, affichee: string) {
 	const n = nombreDe(p.champ, p.saisie);
 	return {
 		id,
+		'aria-valuetext': affichee,
 		type: 'range',
 		min: p.champ.min ?? 0,
 		max: p.champ.max ?? (p.champ.genre === 'decimal' ? 1 : 100),
@@ -40,6 +41,7 @@ export function Curseur(p: Props): ReactNode {
 	const id = useId();
 	const n = nombreDe(p.champ, p.saisie);
 	const phrase = phraseEffet(p.champ.cle, n, p.valeurDe);
+	const affichee = p.dispose.format?.(n) ?? valeurLisible(p.champ, n);
 	return (
 		<div className={c.curseur}>
 			<span className={c.libelle}>
@@ -49,9 +51,9 @@ export function Curseur(p: Props): ReactNode {
 				<BadgeEffet champ={p.champ} />
 			</span>
 			<output htmlFor={id} className={c.valeur}>
-				{p.dispose.format?.(n) ?? valeurLisible(p.champ, n)}
+				{affichee}
 			</output>
-			<input {...glissiere(p, id)} />
+			<input {...glissiere(p, id, affichee)} />
 			{phrase !== null && (
 				<p className={c.effet} role="status">
 					{phrase}
@@ -65,14 +67,15 @@ export function Curseur(p: Props): ReactNode {
 export function Barre(p: Props): ReactNode {
 	const id = useId();
 	const n = nombreDe(p.champ, p.saisie);
+	const affichee = p.champ.genre === 'decimal' ? n.toFixed(2).replace('.', ',') : String(n);
 	return (
 		<div className={c.barre}>
 			<label htmlFor={id} title={`${p.dispose.libelle} : ${p.champ.explication}`}>
 				{p.dispose.libelle}
 			</label>
-			<input {...glissiere(p, id)} />
+			<input {...glissiere(p, id, affichee)} />
 			<output htmlFor={id} className={c.valeur}>
-				{p.champ.genre === 'decimal' ? n.toFixed(2).replace('.', ',') : n}
+				{affichee}
 			</output>
 			<BadgeEffet champ={p.champ} />
 			<Defaut champ={p.champ} saisie={p.saisie} surSaisie={p.surSaisie} />

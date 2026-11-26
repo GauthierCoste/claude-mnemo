@@ -1,7 +1,8 @@
 /**
  * Couleur principale de l'interface en pastilles : le vert d'origine et les couleurs des agents (jetons du thème, lus sur la
  * page à l'exécution : aucune couleur écrite hors de jetons.css), puis « Autre couleur » (le sélecteur du système), qui montre
- * aussi une couleur choisie à la main. Sous le nuancier, l'avertissement quand la couleur se lit mal sur le fond.
+ * aussi une couleur choisie à la main. Chaque pastille est un bouton, enfoncé quand sa couleur est la couleur choisie. Sous
+ * le nuancier, l'avertissement quand la couleur se lit mal sur le fond.
  */
 import type { ChampReglageVue } from '@mnemo/contrat';
 import { ACCENT_PAR_DEFAUT, estCouleurHex } from '@mnemo/commun';
@@ -42,13 +43,12 @@ export function Nuancier(p: { champ: ChampReglageVue; dispose: ChampDispose; sai
 	return (
 		<div>
 			<BadgeEffet champ={p.champ} />
-			<div className={c.nuancier} role="radiogroup" aria-label={p.dispose.libelle} title={p.champ.explication}>
+			<div className={c.nuancier} role="group" aria-label={p.dispose.libelle} title={p.champ.explication}>
 				{pastilles.map((x) => (
 					<button
 						key={x.hex}
 						type="button"
-						role="radio"
-						aria-checked={x.hex === choisie}
+						aria-pressed={x.hex === choisie}
 						aria-label={x.nom}
 						className={c.nuance}
 						style={{ '--c': x.fond } as CSSProperties}

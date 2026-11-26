@@ -3,7 +3,7 @@
  * variables (`NOM=valeur`, une par ligne). En modification, les valeurs existantes ne sont jamais montrées (le service ne
  * les donne pas) : `NOM` seul garde la valeur actuelle, une ligne effacée retire la variable. Une saisie non enregistrée est
  * signalée par `surModifie` : l'onglet Réglages retient alors la sortie des Réglages, et ce formulaire propose de l'enregistrer,
- * de l'abandonner ou de rester.
+ * de l'abandonner ou de rester (sauf quand les réglages ont aussi une saisie : l'onglet annonce alors les deux).
  */
 import type { ServeurMcpEcriture, ServeurMcpVue } from '@mnemo/contrat';
 import { useEffect, useId, useState, type ReactNode } from 'react';
@@ -21,6 +21,8 @@ export function FormulaireServeur(p: {
 	enregistrer(demande: ServeurMcpEcriture): Promise<string | null>;
 	annuler(): void;
 	surModifie?(modifie: boolean): void;
+	/** Une autre saisie non enregistrée (les réglages) : la sortie retenue est alors annoncée par l'onglet, pour les deux. */
+	autreBrouillon?: boolean;
 }): ReactNode {
 	const id = useId();
 	const [depart] = useState<SaisieServeur>(() => (p.serveur ? saisieDe(p.serveur) : SAISIE_VIDE));
@@ -83,7 +85,7 @@ export function FormulaireServeur(p: {
 				</span>
 				<textarea className={d.consigne} rows={3} spellCheck={false} autoComplete="off" aria-describedby={`${id}-variables`} value={saisie.env} onChange={changer('env')} />
 			</label>
-			{nav.sortieRetenue && modifie && (
+			{nav.sortieRetenue && modifie && !p.autreBrouillon && (
 				<div className={d.avis} role="alert">
 					<p>Serveur MCP non enregistré : l’enregistrer avant de quitter les Réglages ?</p>
 					<div className={d.actions}>

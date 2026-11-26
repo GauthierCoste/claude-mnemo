@@ -25,8 +25,11 @@ const ETATS: Record<ClaudeDesktopVue['mnemo'], string> = {
 	perime: 'Son entrée ne correspond plus à cette installation (autre Node, autre emplacement de Mnemo ou autre dossier).',
 };
 
-/** `surModifie` : prévenu quand un formulaire de serveur a des modifications non enregistrées (changement d'onglet ou sortie retenus). */
-export function AppClaude(p: { surModifie?(modifie: boolean): void }): ReactNode {
+/**
+ * `surModifie` : prévenu quand un formulaire de serveur a des modifications non enregistrées (changement d'onglet ou sortie
+ * retenus) ; `autreBrouillon` : les réglages en ont aussi, la sortie retenue est alors annoncée par l'onglet.
+ */
+export function AppClaude(p: { surModifie?(modifie: boolean): void; autreBrouillon?: boolean }): ReactNode {
 	const { api } = useClient();
 	const ressource = useClaudeDesktop();
 	const [ecrite, setEcrite] = useState<ClaudeDesktopVue | null>(null);
@@ -85,7 +88,7 @@ export function AppClaude(p: { surModifie?(modifie: boolean): void }): ReactNode
 						brancher={() => api.remplacer<ClaudeDesktopVue>(ROUTES.claudeDesktopMnemo, {})}
 						debrancher={() => api.supprimer<ClaudeDesktopVue>(ROUTES.claudeDesktopMnemo)}
 					/>
-					<ServeursMcp serveurs={vue.serveurs} envoi={envoi} ecrire={ecrire} {...(p.surModifie ? { surModifie: p.surModifie } : {})} />
+					<ServeursMcp serveurs={vue.serveurs} envoi={envoi} ecrire={ecrire} {...(p.surModifie ? { surModifie: p.surModifie } : {})} autreBrouillon={p.autreBrouillon ?? false} />
 					<p className={`${c.discret} ${s.fichier}`}>
 						Fichier : <code>{vue.fichier}</code>
 					</p>

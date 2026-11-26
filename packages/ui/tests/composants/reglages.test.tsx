@@ -150,6 +150,7 @@ describe('vue Réglages', () => {
 		expect(within(injectees).getByText('3 fiches')).toBeTruthy();
 		expect(within(injectees).getByText('Jusqu’à 3 fiches par message.')).toBeTruthy();
 		expect(within(injectees).getByText(/Défaut : 2 fiches/u)).toBeTruthy();
+		expect(curseur(page, 'Fiches injectées').getAttribute('aria-valuetext')).toBe('3 fiches');
 		// au défaut : pas de ligne « Défaut »
 		const seuil = blocDe(page, 'Seuil d’injection');
 		expect(within(seuil).queryByText(/Défaut/u)).toBeNull();
@@ -190,6 +191,8 @@ describe('vue Réglages', () => {
 		const archiviste = within(page).getByRole('group', { name: 'Types de fiche' });
 		expect(within(archiviste).getAllByRole('switch').map((x) => x.getAttribute('aria-checked'))).toEqual(['true', 'true']);
 		await act(async () => within(archiviste).getByRole('switch', { name: 'Entité' }).click());
+		// le défaut dit par les interrupteurs : tous allumés (aucun type à confirmer)
+		expect(within(archiviste).getByText(/Défaut : tous/u)).toBeTruthy();
 		// marqueurs en puces : retirer, ajouter (un doublon n'est pas ajouté)
 		const marqueurs = within(page).getByRole('list', { name: 'Marqueurs de projet' });
 		await act(async () => within(marqueurs).getByRole('button', { name: 'Retirer package.json' }).click());
@@ -315,6 +318,52 @@ describe('vue Réglages', () => {
 		expect(faux.api.remplacer).toHaveBeenCalledTimes(1);
 	});
 
+	it('quitter avec des réglages et un serveur MCP en saisie : un seul avertissement nomme les deux ; « Enregistrer les réglages » laisse le serveur à enregistrer', async () => {
+		const { faux, nav, panneau, section } = await ouvrirReglages({
+			'PUT /api/reglages': enregistrerVue,
+			'/api/claude-desktop': { installee: true, fichier: '~/claude_desktop_config.json', mnemo: 'absent', serveurs: [] },
+		});
+		const sessions = () => within(nav).getByRole('button', { name: /Sessions/ });
+		const page = await section('Mémoire');
+		await glisser(curseur(page, 'Seuil d’injection'), '70');
+		await act(async () => within(within(panneau).getByRole('navigation', { name: 'Sections des réglages' })).getByRole('button', { name: /^Branchements/u }).click());
+		await act(async () => within(panneau).getByRole('button', { name: '+ Ajouter un serveur' }).click());
+		const formulaire = within(panneau).getByRole('form', { name: 'Ajouter un serveur MCP' });
+		await act(async () => fireEvent.change(within(formulaire).getByLabelText('Nom'), { target: { value: 'outil' } }));
+		// depuis Mémoire : la sortie retenue montre Branchements, un seul avertissement
+		await act(async () => within(within(panneau).getByRole('navigation', { name: 'Sections des réglages' })).getByRole('button', { name: /^Mémoire/u }).click());
+		await act(async () => sessions().click());
+		expect(within(within(panneau).getByRole('navigation', { name: 'Sections des réglages' })).getByRole('button', { name: /^Branchements/u }).getAttribute('aria-current')).toBe('true');
+		const alertes = within(panneau).getAllByRole('alert');
+		expect(alertes).toHaveLength(1);
+		expect(alertes[0]!.textContent).toMatch(/Deux saisies non enregistrées : des réglages.*et un serveur MCP/u);
+		await act(async () => within(alertes[0]!).getByRole('button', { name: 'Enregistrer les réglages' }).click());
+		expect(faux.api.remplacer).toHaveBeenCalledWith('/api/reglages', { valeurs: { 'contexte.seuilInjection': 70 } });
+		// les réglages enregistrés, la sortie reste retenue : le formulaire propose maintenant le serveur
+		expect(within(nav).getByRole('button', { name: /Réglages/ }).getAttribute('aria-current')).toBe('page');
+		const restante = within(formulaire).getByRole('alert');
+		expect(restante.textContent).toContain('Serveur MCP non enregistré');
+		expect((within(formulaire).getByLabelText('Nom') as HTMLInputElement).value).toBe('outil');
+		await act(async () => within(restante).getByRole('button', { name: 'Abandonner' }).click());
+		expect(sessions().getAttribute('aria-current')).toBe('page');
+	});
+
+	it('« Tout abandonner » : part sans rien enregistrer', async () => {
+		const { faux, nav, panneau, section } = await ouvrirReglages({
+			'/api/claude-desktop': { installee: true, fichier: '~/claude_desktop_config.json', mnemo: 'absent', serveurs: [] },
+		});
+		const page = await section('Système');
+		await act(async () => fireEvent.change(within(page).getByRole('spinbutton', { name: 'Port' }), { target: { value: '4800' } }));
+		await act(async () => within(within(panneau).getByRole('navigation', { name: 'Sections des réglages' })).getByRole('button', { name: /^Branchements/u }).click());
+		await act(async () => within(panneau).getByRole('button', { name: '+ Ajouter un serveur' }).click());
+		await act(async () => fireEvent.change(within(within(panneau).getByRole('form')).getByLabelText('Nom'), { target: { value: 'outil' } }));
+		await act(async () => within(nav).getByRole('button', { name: /Sessions/ }).click());
+		await act(async () => within(within(panneau).getByRole('alert')).getByRole('button', { name: 'Tout abandonner' }).click());
+		expect(within(nav).getByRole('button', { name: /Sessions/ }).getAttribute('aria-current')).toBe('page');
+		expect(faux.api.remplacer).not.toHaveBeenCalled();
+		expect(faux.api.envoyer).not.toHaveBeenCalled();
+	});
+
 	it('avertissements de lecture du fichier affichés en tête', async () => {
 		const { panneau } = await ouvrirReglages({ '/api/reglages': { ...VUE, avertissements: ['.mnemo/reglages.json : Réglage « modeles.inactiviteMinutes » invalide ; défaut : 15.'] } });
 		expect(await within(panneau).findByText(/modeles\.inactiviteMinutes.*invalide/u)).toBeTruthy();
@@ -337,7 +386,7 @@ describe('couleur principale', () => {
 		await act(async () => within(screen.getByRole('navigation')).getByRole('button', { name: /Réglages/ }).click());
 		await act(async () => screen.getByRole('tab', { name: 'Réglages' }).click());
 		await act(async () => within(screen.getByRole('navigation', { name: 'Sections des réglages' })).getByRole('button', { name: /^Système/u }).click());
-		return { faux, nuancier: await screen.findByRole('radiogroup', { name: 'Couleur de l’interface' }) };
+		return { faux, nuancier: await screen.findByRole('group', { name: 'Couleur de l’interface' }) };
 	}
 
 	it('posée sur --ac au chargement, d’après le réglage', async () => {
@@ -350,14 +399,14 @@ describe('couleur principale', () => {
 		racine().setProperty('--violet', '#a394ff');
 		const { faux, nuancier } = await ouvrirCouleur({ 'PUT /api/reglages': { ...vue, champs: [{ ...ACCENT, valeur: '#a394ff' }] } });
 		// les jetons absents (ici, tous sauf --violet) ne donnent pas de pastille
-		expect(within(nuancier).getAllByRole('radio').map((x) => [x.getAttribute('aria-label'), x.getAttribute('aria-checked')])).toEqual([
+		expect(within(nuancier).getAllByRole('button').map((x) => [x.getAttribute('aria-label'), x.getAttribute('aria-pressed')])).toEqual([
 			['Vert d’origine', 'false'],
 			['Violet', 'false'],
 		]);
 		expect((within(nuancier).getByLabelText('Autre couleur') as HTMLInputElement).value).toBe('#ff8800');
-		await act(async () => within(nuancier).getByRole('radio', { name: 'Violet' }).click());
+		await act(async () => within(nuancier).getByRole('button', { name: 'Violet' }).click());
 		expect(racine().getPropertyValue('--ac')).toBe('#a394ff');
-		expect(within(nuancier).getByRole('radio', { name: 'Violet' }).getAttribute('aria-checked')).toBe('true');
+		expect(within(nuancier).getByRole('button', { name: 'Violet' }).getAttribute('aria-pressed')).toBe('true');
 		await act(async () => screen.getByRole('button', { name: 'Enregistrer' }).click());
 		expect(faux.api.remplacer).toHaveBeenCalledWith('/api/reglages', { valeurs: { 'interface.accent': '#a394ff' } });
 	});
@@ -368,7 +417,7 @@ describe('couleur principale', () => {
 		expect(racine().getPropertyValue('--ac')).toBe('#1d3557');
 		expect(racine().getPropertyValue('--sur-accent')).toBe('var(--sur-accent-clair)');
 		await act(async () => screen.getByRole('button', { name: /Rétablir/u }).click());
-		expect(within(nuancier).getByRole('radio', { name: 'Vert d’origine' }).getAttribute('aria-checked')).toBe('true');
+		expect(within(nuancier).getByRole('button', { name: 'Vert d’origine' }).getAttribute('aria-pressed')).toBe('true');
 		expect(racine().getPropertyValue('--ac')).toBe('#7df0c6');
 	});
 

@@ -4,7 +4,7 @@ import { remedesDuMoteur } from './remedes.ts';
 
 /**
  * Messages de la liaison d'un moteur à Mnemo (serveur MCP, hooks du poste), communs à `mnemo init --<option>` et à la route
- * qui lie un moteur (Réglages › Système) : phrases neutres, sans impératif, lisibles dans un terminal comme dans l'interface.
+ * qui lie un moteur (Réglages › Branchements) : phrases neutres, sans impératif, lisibles dans un terminal comme dans l'interface.
  */
 
 /** Une ligne pour le résultat de `declarationMcp.declarer` chez ce moteur. */

@@ -4,9 +4,10 @@
  * de suite). Mémoire (cartes Rappel et Confiance) et Système : les réglages du dossier (`ReglagesVue` : `.mnemo/reglages.json`,
  * et les règles de `SCHEMA.md`), enregistrés ensemble par un seul pied Annuler / Enregistrer, validés par le service (tout ou
  * rien). Les trois sections restent montées (cachées hors de la section choisie) : une saisie survit au changement de section.
- * Une pastille ambre sur Branchements quand un moteur attend un geste. Changer d'onglet ou quitter les Réglages avec une
- * saisie non enregistrée (réglages ou serveur MCP) est retenu : un avertissement propose de l'enregistrer, de l'abandonner ou
- * de rester.
+ * Une pastille ambre sur Branchements quand un moteur attend un geste. Changer d'onglet avec une saisie non enregistrée
+ * (réglages ou serveur MCP) est retenu par la vue Réglages ; quitter les Réglages l'est ici : un avertissement propose
+ * d'enregistrer, d'abandonner ou de rester. Avec les deux saisies, un seul avertissement les nomme, Branchements montré :
+ * « Enregistrer les réglages » laisse le serveur à enregistrer (la sortie reste retenue), « Tout abandonner » perd les deux.
  */
 import type { ReglagesVue } from '@mnemo/contrat';
 import { ROUTES } from '@mnemo/contrat';
@@ -73,10 +74,10 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 		definirGardeSortie(() => modifieCourant.current);
 		return () => definirGardeSortie(null);
 	}, [definirGardeSortie]);
-	// sortie retenue pour un serveur MCP en cours de saisie : sa section est montrée, avec son avertissement
+	// sortie retenue pour un serveur MCP en cours de saisie : sa section est montrée, avec son avertissement (ou celui des deux)
 	useEffect(() => {
-		if (nav.sortieRetenue && serveurModifie && !reglagesModifies) setSection('branchements');
-	}, [nav.sortieRetenue, serveurModifie, reglagesModifies]);
+		if (nav.sortieRetenue && serveurModifie) setSection('branchements');
+	}, [nav.sortieRetenue, serveurModifie]);
 
 	// la couleur principale choisie s'applique tout de suite (aperçu) ; sans enregistrement, la page retrouve celle du service
 	const accentSaisi = saisies['interface.accent'];
@@ -102,9 +103,10 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 			setEnvoi(false);
 		}
 	};
+	// réglages enregistrés : partir, sauf si un serveur MCP reste en saisie (la sortie reste retenue, son formulaire le propose)
 	const enregistrerPuisPartir = async () => {
-		if (await enregistrer()) nav.poursuivreSortie();
-		else nav.annulerSortie();
+		if (!(await enregistrer())) nav.annulerSortie();
+		else if (!serveurModifie) nav.poursuivreSortie();
 	};
 
 	const surSaisie = useCallback((cle: string, v: Saisie) => setSaisies((x) => ({ ...x, [cle]: v })), []);
@@ -121,7 +123,13 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 		},
 	};
 	const marque = (cle: SectionReglages): ReactNode => {
-		if (cle === 'branchements') return geste ? <span className={r.pastille} title="Un moteur attend un geste" /> : null;
+		if (cle === 'branchements')
+			return geste ? (
+				<>
+					<span className={r.pastille} aria-hidden="true" title="Un moteur attend un geste" />
+					<span className={c.horsEcran}>(un moteur attend un geste)</span>
+				</>
+			) : null;
 		return Object.keys(aEnvoyer).some((x) => sectionDuChamp(x) === cle) ? <span className={d.badge}>modifié</span> : null;
 	};
 	const libelles = (cles: string[]) => cles.map((cle) => vue?.champs.find((x) => x.cle === cle)?.libelle ?? cle).join(', ');
@@ -147,7 +155,7 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 					))}
 				</ul>
 				<p className={d.discret}>
-					Dans <code>.mnemo/reglages.json</code> ; la confiance dans <code>SCHEMA.md</code> (un commit). Raccourci : <kbd>⌥,</kbd>
+					Dans <code>.mnemo/reglages.json</code> ; les règles de la mémoire (confiance, seuil de rappel) dans <code>SCHEMA.md</code>, versionné (un commit). Raccourci : <kbd>⌥,</kbd>
 				</p>
 			</nav>
 			<div className={c.contenu}>
@@ -170,7 +178,7 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 						</h2>
 						<p className={c.sous}>Les moteurs de tes agents, et ce que l’app Claude peut utiliser.</p>
 						<Moteurs />
-						<AppClaude surModifie={setServeurModifie} />
+						<AppClaude surModifie={setServeurModifie} autreBrouillon={reglagesModifies} />
 					</section>
 				</div>
 				<div className={c.duo} hidden={section !== 'memoire'}>
@@ -194,13 +202,20 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 					<footer className={c.pied}>
 						{nav.sortieRetenue && reglagesModifies && (
 							<div className={c.avis} role="alert">
-								<p>Modifications non enregistrées : les enregistrer avant de quitter les Réglages ?</p>
+								{serveurModifie ? (
+									<p>
+										Deux saisies non enregistrées : des réglages (Mémoire, Système) et un serveur MCP (ci-dessus, dans Branchements). Enregistrer les réglages
+										laisse le serveur à enregistrer ensuite ; Tout abandonner perd les deux.
+									</p>
+								) : (
+									<p>Modifications non enregistrées : les enregistrer avant de quitter les Réglages ?</p>
+								)}
 								<div className={c.actions}>
 									<Bouton genre="primaire" disabled={envoi} onClick={() => void enregistrerPuisPartir()}>
-										Enregistrer
+										{serveurModifie ? 'Enregistrer les réglages' : 'Enregistrer'}
 									</Bouton>
 									<Bouton disabled={envoi} onClick={nav.poursuivreSortie}>
-										Abandonner
+										{serveurModifie ? 'Tout abandonner' : 'Abandonner'}
 									</Bouton>
 									<Bouton disabled={envoi} onClick={nav.annulerSortie}>
 										Rester

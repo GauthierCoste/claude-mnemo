@@ -1,5 +1,5 @@
 /**
- * Routes de gestion des profils (Réglages › Profils) : détail, enregistrement, duplication, suppression, aperçu. Canal de
+ * Routes de gestion des profils (Réglages › Agents) : détail, enregistrement, duplication, suppression, aperçu. Canal de
  * l'utilisateur seulement (le serveur MCP n'expose rien de tout cela) ; mêmes protections que toute route de l'API.
  */
 import { MODELE_MAX } from '@mnemo/commun';

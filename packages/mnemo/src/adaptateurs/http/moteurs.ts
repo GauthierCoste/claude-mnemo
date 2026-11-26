@@ -1,9 +1,9 @@
 import { NOMS_MOTEURS } from '@mnemo/commun';
 /**
  * Route des moteurs (`ROUTES.moteurs`) : chaque agent de code du service, sa commande, sa version et ses modèles (Réglages ›
- * Profils) ; avec `poste=1`, ce que vérifie `mnemo verifier-poste` (déclaration MCP, hooks du poste et leur approbation), la
+ * Agents) ; avec `poste=1`, ce que vérifie `mnemo verifier-poste` (déclaration MCP, hooks du poste et leur approbation), la
  * commande cherchée de nouveau (adoptée par le service si elle a changé) et la version relue (« Relire »), chaque point non
- * satisfaisant avec la commande qui y remédie (Réglages › Système). Une seule vérification du poste en vol à la fois.
+ * satisfaisant avec la commande qui y remédie (Réglages › Branchements). Une seule vérification du poste en vol à la fois.
  * `ROUTES.moteurLier` : lie un moteur à Mnemo (serveur MCP, hooks du poste : `lierMoteur`), puis relit le poste.
  */
 import { ROUTES } from '@mnemo/contrat';

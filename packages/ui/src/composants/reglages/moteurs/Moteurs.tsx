@@ -7,7 +7,7 @@ import { FOURNISSEURS_MOTEURS } from '@mnemo/commun';
 import type { MoteurVue } from '@mnemo/contrat';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useMoteurs } from '../../../client/hooks.ts';
-import { actionDuMoteur, attendUnGeste, statutDuMoteur } from '../../../moteurs/circuit.ts';
+import { actionDuMoteur, statutDuMoteur } from '../../../moteurs/circuit.ts';
 import { LogoMoteur } from '../../../moteurs/logos.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
 import r from '../../commun/Reflet.module.css';
@@ -67,14 +67,19 @@ function LigneMoteur(p: { moteur: MoteurVue; lecture: boolean }): ReactNode {
 				<span className={c.nom}>{m.nom}</span>
 				<span className={c.detailLigne}>
 					{FOURNISSEURS_MOTEURS[m.id]}
-					{!pret && ` · ${statut.libelle.toLocaleLowerCase('fr')}`}
+					{/* sans geste (pas installé, introuvable…), la phrase sous la ligne le dit : le statut n'est pas répété ici */}
+					{!pret && (action === null || action.geste !== null) && ` · ${statut.libelle.toLocaleLowerCase('fr')}`}
 				</span>
 			</span>
 			{/* une action par moteur : le retour d'une liaison reste quand l'étape qui bloque change avec la vue relue */}
 			{action !== null ? (
-				<ActionMoteur key={m.id} id={m.id} moteur={m.nom} action={action} statut={statut.libelle} eteint={!attendUnGeste(m)} lecture={p.lecture} />
+				<ActionMoteur key={m.id} id={m.id} moteur={m.nom} action={action} lecture={p.lecture} />
 			) : (
-				<span className={c.droite}>{pret ? <span className={c.pret}>● prêt</span> : <span className={c.eteint}>{statut.libelle}</span>}</span>
+				pret && (
+					<span className={c.droite}>
+						<span className={c.pret}>● prêt</span>
+					</span>
+				)
 			)}
 		</li>
 	);

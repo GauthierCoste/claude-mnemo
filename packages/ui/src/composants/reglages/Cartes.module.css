@@ -49,7 +49,7 @@
 
 .sous {
 	margin: 0 0 14px;
-	color: var(--dim);
+	color: var(--mu);
 	font-size: 12.5px;
 }
 
@@ -82,7 +82,7 @@
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
-	color: var(--dim);
+	color: var(--mu);
 }
 
 .teteGroupe .titreGroupe {
@@ -161,18 +161,6 @@
 	white-space: nowrap;
 }
 
-.attention {
-	color: var(--amber);
-	font-size: 12px;
-	white-space: nowrap;
-}
-
-.eteint {
-	color: var(--dim);
-	font-size: 12px;
-	white-space: nowrap;
-}
-
 /* sous le nom, sur toute la largeur restante : pourquoi ça bloque, le retour d'une liaison, la commande en repli */
 .sousLigne {
 	grid-column: 2 / -1;
@@ -224,13 +212,8 @@
 .defaut {
 	grid-column: 1 / -1;
 	margin: 0;
-	font-size: 12px;
-	color: var(--mu);
-}
-
-.defaut {
 	font-size: 11.5px;
-	color: var(--dim);
+	color: var(--mu);
 }
 
 /* « Rétablir » : un lien dans la phrase du défaut */
@@ -346,7 +329,7 @@
 }
 
 .libelleBascule small {
-	color: var(--dim);
+	color: var(--mu);
 	font-size: 11.5px;
 }
 
@@ -452,7 +435,7 @@
 	cursor: pointer;
 }
 
-.nuance[aria-checked='true'] {
+.nuance[aria-pressed='true'] {
 	border-color: var(--tx);
 }
 
@@ -475,6 +458,11 @@
 .autre[data-choisie] {
 	border-style: solid;
 	border-color: var(--tx);
+}
+
+.autre:focus-within {
+	outline: 2px solid var(--tx);
+	outline-offset: 2px;
 }
 
 .autre input {

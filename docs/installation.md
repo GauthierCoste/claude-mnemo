@@ -289,15 +289,16 @@ falls back to its default with a warning, never a crash.
 | Weight added to a search result that belongs to the memory rather than an imported source, 0 to 0.5 (`recherche.poidsMemoire`) | 0.05 | immediately |
 | Weight added to a recent search result, halved after a year, 0 to 0.5 (`recherche.poidsFraicheur`) | 0.05 | immediately |
 | Model shutdown after inactivity, with or without the service, 1 to 240 (`modeles.inactiviteMinutes`). The servers are shared by the machine: they keep the delay of the folder that started them | 15 minutes | next start of the models |
-| Note types whose proposed information needs confirmation (`archiviste.typesAConfirmer`) | none | immediately |
+| Note types whose proposed information needs confirmation (`archiviste.typesAConfirmer`; in the interface, the types the archivist writes alone are switched on) | none (all switched on) | immediately |
 | Service port (`service.port`) | 4747 | **service restart** |
 | Launcher browser (`service.navigateur`) | automatic (Chrome, then Edge, then the default browser) | next opening |
 | Main colour of the interface, `#rrggbb` (`interface.accent`): active items, links, titles, focus; the logo does not change. The text on it turns light on a dark colour | `#7df0c6` (green) | immediately |
 
-The **Mémoire** group shows the rules of the memory, which live in the header of `_mnemo/SCHEMA.md` (versioned with the
-memory) rather than in `.mnemo/reglages.json`: recall threshold (`seuil_rappel`, 0.4), repetitions before an instruction is
-proposed one level up (`repetitions_pour_monter`, 2), weight of a declared, observed or inferred fact (`poids_*`), and
-reliability of each source type (`fiabilites`). Saving them rewrites only those lines of the header, in one commit
+Some settings of the **Mémoire** section are rules of the memory, which live in the header of `_mnemo/SCHEMA.md`
+(versioned with the memory) rather than in `.mnemo/reglages.json`: in **Rappel**, the recall threshold (`seuil_rappel`,
+0.4, under « Réglages fins »); in **Confiance**, the reliability of each source type (`fiabilites`), the weight of a
+declared, observed or inferred fact (`poids_*`) and the repetitions before an instruction is proposed one level up
+(`repetitions_pour_monter`, 2). Saving them rewrites only those lines of the header, in one commit
 (`mnemo: reglages SCHEMA.md`).
 
 Changing the port changes the interface address: bookmarks, the installed app and the launcher follow the new address
@@ -310,8 +311,8 @@ version) are kept, and so are invalid entries you did not touch (they stay liste
 
 ## Uninstall cleanly
 
-1. If the memory is connected to the Claude app, click « Débrancher » in **Settings › Réglages › Branchements**, then restart the
-   Claude app.
+1. If the memory is connected to the Claude app, turn off « Mémoire Mnemo » under App Claude in **Settings › Réglages ›
+   Branchements** (« Débrancher » when its entry is out of date), then restart the Claude app.
 2. Stop what runs: `mnemo arreter` (service), from the Mnemo folder, and `mnemo modeles arreter` (model servers of the
    machine).
 3. Remove the launcher and the command: `mnemo lanceur --retirer` and `mnemo commande --retirer` (each removes only

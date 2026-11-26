@@ -12,7 +12,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-/** Réglages de la démo ouverts (onglet Profils d'abord). */
+/** Réglages de la démo ouverts (onglet Agents d'abord). */
 async function ouvrirReglages(client: Client = creerClientDemo()) {
 	render(<Application client={client} />);
 	const nav = screen.getByRole('navigation');
@@ -199,6 +199,7 @@ describe('Réglages › Branchements › Moteurs', () => {
 		expect(within(screen.getByRole('tabpanel')).queryByRole('button', { name: 'Enregistrer' })).toBeNull();
 		// un moteur attend un geste : la pastille sur l'onglet Réglages et sur Branchements
 		expect(pastille()).not.toBeNull();
+		expect(within(screen.getByRole('navigation', { name: 'Sections des réglages' })).getByRole('button', { name: /^Branchements/u }).textContent).toContain('(un moteur attend un geste)');
 		const onglet = screen.getByRole('tab', { name: 'Réglages' });
 		expect(document.getElementById(onglet.getAttribute('aria-describedby')!)?.textContent).toBe('Un moteur attend un geste (Branchements)');
 	});
@@ -300,10 +301,11 @@ describe('Réglages › Branchements › Moteurs', () => {
 		await ouvrirReglages(client);
 		await act(async () => screen.getByRole('tab', { name: 'Réglages' }).click());
 		const section = await screen.findByRole('region', { name: 'Moteurs' });
-		await waitFor(() => expect(identite(ligne(section, 'Codex'))).toBe('CodexOpenAI · pas installé'));
+		// dit une seule fois, dans la phrase sous la ligne
+		await waitFor(() => expect(within(ligne(section, 'Codex')).getByText('Pas installé sur ce poste. Codex absent du PATH')).toBeTruthy());
 		const codex = ligne(section, 'Codex');
-		expect(within(codex).getByText('Pas installé sur ce poste. Codex absent du PATH')).toBeTruthy();
-		expect(within(codex).getByText('Pas installé').className).toMatch(/eteint/u);
+		expect(identite(codex)).toBe('CodexOpenAI');
+		expect(codex.textContent!.match(/pas installé/giu)).toHaveLength(1);
 		expect(within(codex).queryByRole('button')).toBeNull();
 		expect(pastille()).toBeNull();
 		expect(screen.getByRole('tab', { name: 'Réglages' }).getAttribute('aria-describedby')).toBeNull();
@@ -352,7 +354,7 @@ describe('Réglages › Branchements › Moteurs', () => {
 		await waitFor(() => expect(relire.disabled).toBe(false));
 		expect(statut()).toMatch(/^Vérifié à \d\d:\d\d$/u);
 		const codex = ligne(section, 'Codex');
-		expect(identite(codex)).toBe('CodexOpenAI · introuvable');
+		expect(identite(codex)).toBe('CodexOpenAI');
 		expect(within(codex).getByText('Codex introuvable maintenant. commande disparue')).toBeTruthy();
 		await act(async () => relire.click());
 		await waitFor(() => expect(lectures).toBe(2));

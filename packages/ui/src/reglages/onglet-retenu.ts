@@ -15,7 +15,7 @@ export function ongletRetenu(): OngletReglages {
 	try {
 		const v = localStorage.getItem(CLE_ONGLET);
 		if (v === null) return 'agents';
-		return ONGLETS_REGLAGES.find((o) => o === v) ?? ANCIENS[v] ?? 'agents';
+		return ONGLETS_REGLAGES.find((o) => o === v) ?? (Object.hasOwn(ANCIENS, v) ? ANCIENS[v]! : 'agents');
 	} catch {
 		return 'agents';
 	}

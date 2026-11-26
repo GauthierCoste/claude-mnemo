@@ -583,7 +583,7 @@ export function creerPilote(dep: Dependances, pil: Pilotage, options: { battemen
 		if (duService === null) return { refus: `Le profil « ${profil.nom} » utilise le moteur « ${profil.moteur} », pas encore pris en charge par ce service.` };
 		const { moteur: duProfil, commande } = duService;
 		if (commande === null && duProfil.sansCommande === 'refus') {
-			return { refus: `Le profil « ${profil.nom} » utilise ${NOMS_MOTEURS[duProfil.id]}, introuvable sur ce poste (commande « ${duProfil.commandeParDefaut} ») : installe-le, puis « Relire » dans Réglages › Système › Moteurs.` };
+			return { refus: `Le profil « ${profil.nom} » utilise ${NOMS_MOTEURS[duProfil.id]}, introuvable sur ce poste (commande « ${duProfil.commandeParDefaut} ») : installe-le, puis « Relire » dans Réglages › Branchements.` };
 		}
 		// une version trop ancienne du moteur est refusée ; illisible, elle n'empêche rien
 		if (commande !== null && duProfil.version !== undefined && duProfil.refusDeVersion !== undefined) {

@@ -76,14 +76,14 @@ export type ProfilVue = {
 };
 
 /**
- * Équipement d'un profil, compté comme l'aperçu de Réglages › Profils : `skills`, celles que ses sessions reçoivent (du
+ * Équipement d'un profil, compté comme l'aperçu de Réglages › Agents : `skills`, celles que ses sessions reçoivent (du
  * profil, puis de la mémoire qu'il retient, sans filtre par projet) ; `plugins`, les plugins Claude Code qu'il allume (0 avec
  * un autre moteur) ; `hooks`, ses événements de hook de Mnemo.
  */
 export type EquipementProfilVue = { skills: number; plugins: number; hooks: EvenementHookVue[] };
 
 /**
- * Ce qui se règle d'un profil dans Réglages › Profils ; `consigne` : `null` = la consigne par défaut du code ; `moteur` : l'agent
+ * Ce qui se règle d'un profil dans Réglages › Agents ; `consigne` : `null` = la consigne par défaut du code ; `moteur` : l'agent
  * de code de ses sessions ; `modele` : « » = le modèle par défaut du moteur ; `plugins` (Claude Code) : vide avec un autre moteur.
  */
 export type ProfilEditableVue = {

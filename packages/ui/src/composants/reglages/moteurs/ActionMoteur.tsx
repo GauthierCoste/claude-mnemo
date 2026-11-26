@@ -1,6 +1,6 @@
 /**
  * Le geste d'un moteur qui n'est pas prêt, dans sa ligne (Réglages › Branchements) : à droite, « Lier à Mnemo » ou « Copier »
- * la commande (sinon son statut en un mot) ; sous son nom, pourquoi ça bloque. « Lier à Mnemo » (serveur MCP et hooks du
+ * la commande (sinon rien) ; sous son nom, pourquoi ça bloque. « Lier à Mnemo » (serveur MCP et hooks du
  * poste) : désactivé pendant l'appel (avec le reflet des actions en cours) et pendant une vérification du poste ; lié, un
  * toast ; une déclaration de l'utilisateur laissée ou une étape en échec, leurs messages ici (en alerte pour un échec), gardés
  * quand l'étape qui bloque change avec la vue relue, jusqu'à la vérification suivante ; la commande à lancer soi-même reste
@@ -17,11 +17,8 @@ import { useToast } from '../../Toast.tsx';
 import c from '../Cartes.module.css';
 import s from './Moteurs.module.css';
 
-/**
- * `statut` : le statut du moteur en un mot, montré à droite quand il n'y a pas de geste (atténué si `eteint` : pas installé,
- * rien à faire dans Mnemo) ; `lecture` : une vérification du poste en cours (« Relire »).
- */
-export function ActionMoteur(p: { id: IdMoteur; moteur: string; action: Action; statut: string; eteint: boolean; lecture: boolean }): ReactNode {
+/** `lecture` : une vérification du poste en cours (« Relire »). */
+export function ActionMoteur(p: { id: IdMoteur; moteur: string; action: Action; lecture: boolean }): ReactNode {
 	const a = p.action;
 	const toast = useToast();
 	const { enCours, retour, lier, effacer } = useLiaisonMoteur(p.id, p.moteur);
@@ -46,7 +43,6 @@ export function ActionMoteur(p: { id: IdMoteur; moteur: string; action: Action; 
 						Copier « {commande.texte} »
 					</Bouton>
 				)}
-				{a.geste === null && <span className={p.eteint ? c.eteint : c.attention}>{p.statut}</span>}
 			</span>
 			<div className={c.sousLigne}>
 				<p className={s.motif}>

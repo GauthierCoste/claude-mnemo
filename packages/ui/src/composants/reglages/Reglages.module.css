@@ -18,6 +18,7 @@
 	min-width: 0;
 	min-height: 0;
 	background: var(--s1);
+	container-type: inline-size;
 }
 
 .barreOnglets {
@@ -57,6 +58,17 @@
 .onglet:focus-visible {
 	outline: 2px solid var(--ac);
 	outline-offset: -2px;
+}
+
+/* vue étroite (téléphone, fenêtre réduite) : les trois onglets tiennent sur la ligne, à côté du rail */
+@container (max-width: 22rem) {
+	.barreOnglets {
+		padding-inline: var(--esp-4);
+	}
+
+	.onglet {
+		padding-inline: 8px;
+	}
 }
 
 .retenu {

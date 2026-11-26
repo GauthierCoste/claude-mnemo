@@ -14,12 +14,13 @@ const EFFETS: Readonly<Record<ChampReglageVue['effet'], string | null>> = {
 	modeles: 'Au prochain démarrage des modèles',
 };
 
-export function Defaut(p: { champ: ChampReglageVue; saisie: Saisie; surSaisie(v: Saisie): void }): ReactNode {
+/** `lisible` : le défaut dit autrement que par la valeur du service (interrupteurs inversés : ceux allumés par défaut). */
+export function Defaut(p: { champ: ChampReglageVue; saisie: Saisie; surSaisie(v: Saisie): void; lisible?: string }): ReactNode {
 	const champ = p.champ;
 	if (egales(enValeur(champ, p.saisie), champ.defaut)) return null;
 	return (
 		<p className={c.defaut}>
-			Défaut : {valeurLisible(champ, champ.defaut)} ·{' '}
+			Défaut : {p.lisible ?? valeurLisible(champ, champ.defaut)} ·{' '}
 			<button type="button" className={c.lien} aria-label={`Rétablir le défaut : ${champ.libelle}`} onClick={() => p.surSaisie(enSaisie(champ, champ.defaut))}>
 				Rétablir
 			</button>

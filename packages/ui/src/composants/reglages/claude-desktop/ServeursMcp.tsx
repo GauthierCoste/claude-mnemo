@@ -24,7 +24,7 @@ function detailDe(x: ServeurMcpVue, complet = false): string {
 	return `${ligneDeCommande(x)}${x.env.length > 0 ? ` · variables : ${x.env.join(', ')}` : ''}`;
 }
 
-export function ServeursMcp(p: { serveurs: ServeurMcpVue[]; envoi: boolean; ecrire: Ecrire; surModifie?(modifie: boolean): void }): ReactNode {
+export function ServeursMcp(p: { serveurs: ServeurMcpVue[]; envoi: boolean; ecrire: Ecrire; surModifie?(modifie: boolean): void; autreBrouillon?: boolean }): ReactNode {
 	const { api } = useClient();
 	const [edition, setEdition] = useState<Edition | null>(null);
 	const [aRetirer, setARetirer] = useState<string | null>(null);
@@ -121,6 +121,7 @@ export function ServeursMcp(p: { serveurs: ServeurMcpVue[]; envoi: boolean; ecri
 					enregistrer={enregistrer}
 					annuler={fermer}
 					{...(p.surModifie ? { surModifie: p.surModifie } : {})}
+					autreBrouillon={p.autreBrouillon ?? false}
 				/>
 			)}
 		</>

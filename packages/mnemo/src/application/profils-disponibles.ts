@@ -1,4 +1,4 @@
-// Profils qui peuvent être lancés (dialogue Nouvelle session, Réglages › Moteurs) : ce qui les décrit et leur équipement.
+// Profils qui peuvent être lancés (dialogue Nouvelle session, Réglages › Agents) : ce qui les décrit et leur équipement.
 import { DOSSIERS_FIXES, MOTEUR_PAR_DEFAUT } from '@mnemo/commun';
 import { estNomDeProfil, lanceurPropreSansChemin, moteurOuModeleInvalides, MOTIF_LANCEUR_PROPRE, MOTIF_NOM_DE_PROFIL, PROFILS_PAR_DEFAUT } from '../domaine/profil.ts';
 import type { Profil } from '../domaine/profil.ts';
@@ -9,7 +9,7 @@ import type { Dependances, PluginInstalle } from './ports.ts';
 import { chargerProfil, dossierSkillsDuProfil, ficheDeProfil, profilParDefaut } from './profil.ts';
 
 /**
- * Équipement d'un profil, compté comme le montre l'aperçu de Réglages › Profils : `skills`, celles que ses sessions reçoivent
+ * Équipement d'un profil, compté comme le montre l'aperçu de Réglages › Agents : `skills`, celles que ses sessions reçoivent
  * (comme `skillsRetenues` sans projet : celles du profil, puis celles de la mémoire qu'il retient, celle du profil gagnant à
  * nom égal) ; `plugins`, les plugins Claude Code installés qu'il allume (`enabledPluginsDe`, seulement avec ce moteur) ;
  * `hooks`, ses événements de hook de Mnemo.
