@@ -21,7 +21,7 @@ function monter(sessions: SessionVue[]) {
 const agents = () => within(screen.getByRole('list', { name: 'Agents en cours' })).getAllByRole('button');
 
 describe('agents en cours', () => {
-	it('un agent par profil ayant une session vivante, dans l’ordre des profils, l’archiviste en dernier ; l’état le plus urgent et la session qui le porte', () => {
+	it('un agent par profil ayant une session vivante, dans l’ordre des profils, sans l’archiviste (son bouton le montre) ; l’état le plus urgent et la session qui le porte', () => {
 		const liste = agentsEnCours(
 			[x('a', PROFIL_ARCHIVISTE, 'travaille'), x('t1', PROFIL_TRAVAIL, 'en_pause', 9), x('t2', PROFIL_TRAVAIL, 'travaille'), x('t3', PROFIL_TRAVAIL, 'attend'), x('r', 'redaction', 'terminee'), x('v', 'veille', 'a_relire')],
 			['redaction', PROFIL_ARCHIVISTE, PROFIL_TRAVAIL],
@@ -29,10 +29,9 @@ describe('agents en cours', () => {
 		expect(liste.map((a) => [a.profil, a.etat, a.session])).toEqual([
 			[PROFIL_TRAVAIL, 'attend', 't3'],
 			['veille', 'repos', 'v'],
-			[PROFIL_ARCHIVISTE, 'travaille', 'a'],
 		]);
 		expect(libelleAgent(liste[0]!)).toBe('travail : 3 sessions, 1 travaille, 1 attend une réponse, 1 au repos');
-		expect(libelleAgent(liste[2]!)).toBe('archiviste : 1 session, 1 travaille');
+		expect(libelleAgent(liste[1]!)).toBe('veille : 1 session, 1 au repos');
 		// au repos : la plus récemment active
 		expect(agentsEnCours([x('p1', PROFIL_TRAVAIL, 'en_pause', 1), x('p2', PROFIL_TRAVAIL, 'en_pause', 5)], [])[0]!.session).toBe('p2');
 	});
@@ -40,12 +39,12 @@ describe('agents en cours', () => {
 	it('rangée : nom accessible neutre, état sur l’avatar (`data-etat`), nombre de sessions ; un clic va à la plus urgente', async () => {
 		const surAgent = monter([x('t1', PROFIL_TRAVAIL, 'travaille'), x('t2', PROFIL_TRAVAIL, 'attend'), x('a', PROFIL_ARCHIVISTE, 'travaille')]);
 		await act(async () => {});
-		const [travail, archiviste] = agents() as [HTMLElement, HTMLElement];
+		// l'archiviste n'a pas d'avatar dans la rangée
+		expect(agents()).toHaveLength(1);
+		const [travail] = agents() as [HTMLElement];
 		expect(travail.getAttribute('aria-label')).toBe('travail : 2 sessions, 1 travaille, 1 attend une réponse');
 		expect(travail.dataset['etat']).toBe('attend');
 		expect(travail.textContent).toBe('2');
-		expect(archiviste.dataset['etat']).toBe('travaille');
-		expect(archiviste.textContent).toBe('');
 		await act(async () => travail.click());
 		expect(surAgent).toHaveBeenCalledWith('t2', PROFIL_TRAVAIL);
 	});

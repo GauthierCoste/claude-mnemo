@@ -1,6 +1,9 @@
-import type { ReactNode, RefObject } from 'react';
+import { PROFIL_ARCHIVISTE } from '@mnemo/commun';
+import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { raccourciAlt, toucheCommande } from '../raccourcis.ts';
 import { Quotas } from './Quotas.tsx';
+import { AvatarProfil, JETONS_COULEUR } from './commun/AvatarProfil.tsx';
+import { useAvatarsDeProfils } from './commun/avatar-de-profil.ts';
 import { LogoMnemo } from './commun/LogoMnemo.tsx';
 import { BoutonModeles } from './modeles/BoutonModeles.tsx';
 import s from './BarreTitre.module.css';
@@ -21,6 +24,7 @@ export function BarreTitre(p: {
 	surPalette(): void;
 	surArchiviste(): void;
 }): ReactNode {
+	const avatar = useAvatarsDeProfils()(PROFIL_ARCHIVISTE);
 	return (
 		<header className={s.titre}>
 			{/* en ligne, à la couleur principale (réglage `interface.accent`) */}
@@ -42,7 +46,11 @@ export function BarreTitre(p: {
 					aria-label={p.archivisteAttend ? 'Archiviste, attend une réponse' : undefined}
 					title={p.archivisteAttend ? 'L’archiviste attend une réponse' : undefined}
 				>
-					<span className={s.pouls} data-attend={p.archivisteAttend ? 'true' : undefined} aria-hidden="true" />
+					{/* l'avatar de l'archiviste (Réglages › Agents) et, en coin, son pouls ; ambre cerclé quand il attend une réponse */}
+					<span className={s.avatarArchiviste} style={{ '--profil': JETONS_COULEUR[avatar.couleur] } as CSSProperties} aria-hidden="true">
+						<AvatarProfil avatar={avatar} taille={16} sansFond />
+						<span className={s.pouls} data-attend={p.archivisteAttend ? 'true' : undefined} />
+					</span>
 					Archiviste
 					<kbd>{raccourciAlt('A')}</kbd>
 				</button>

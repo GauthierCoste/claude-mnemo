@@ -1,15 +1,15 @@
 /**
  * Agents en cours (barre du haut de la vue Sessions, juste à gauche des bascules Dossier et Contexte) : un avatar miniature
- * par profil qui a au moins une session vivante (archiviste compris), pour voir d'un coup d'œil qui travaille. Seuls les
+ * par profil qui a au moins une session vivante, pour voir d'un coup d'œil qui travaille. Seuls les
  * agents en cours sont montrés : un profil sans session ne dit rien et prendrait la place des bascules.
  *
  * Sur chaque avatar, l'état le plus urgent de ses sessions (attend une réponse > travaille > au repos), lisible sans la
  * couleur : attend, une pastille ambre cerclée d'un anneau (comme le bouton Archiviste) ; travaille, une pastille qui pulse
  * (fixe en mouvement réduit) ; au repos, une pastille creuse. Plusieurs sessions : leur nombre en exposant. Nom accessible et
  * infobulle neutres : « travail : 2 sessions, 1 travaille, 1 attend une réponse ». Un clic va à la session la plus urgente
- * (`surAgent` : choisie, zoomée si la grille l'est ; l'archiviste ouvre son tiroir).
+ * (`surAgent` : choisie, zoomée si la grille l'est). L'archiviste n'y est pas : son avatar est sur son bouton, dans la barre de titre.
  *
- * Ordre stable : celui des profils (Réglages › Profils), l'archiviste en dernier. Au plus `AGENTS_VISIBLES` avatars, puis
+ * Ordre stable : celui des profils (Réglages › Agents). Au plus `AGENTS_VISIBLES` avatars, puis
  * « +N » ; la rangée disparaît (container query de la barre) avant de pousser les bascules.
  */
 import { PROFIL_ARCHIVISTE } from '@mnemo/commun';
@@ -38,11 +38,11 @@ export type Agent = {
 const URGENCE: Record<EtatAgent, number> = { attend: 0, travaille: 1, repos: 2 };
 const etatDe = (x: Pick<SessionVue, 'etat'>): EtatAgent => (x.etat === 'attend' ? 'attend' : x.etat === 'travaille' ? 'travaille' : 'repos');
 
-/** Un agent par profil ayant une session vivante (non terminée), dans l'ordre de `profils`, l'archiviste en dernier. */
+/** Un agent par profil ayant une session vivante (non terminée), dans l'ordre de `profils` ; l'archiviste exclu (son bouton le montre). */
 export function agentsEnCours(sessions: readonly Pick<SessionVue, 'id' | 'profil' | 'etat' | 'majMs'>[], profils: readonly string[]): Agent[] {
 	const parProfil = new Map<string, Pick<SessionVue, 'id' | 'profil' | 'etat' | 'majMs'>[]>();
-	for (const x of sessions) if (x.etat !== 'terminee') parProfil.set(x.profil, [...(parProfil.get(x.profil) ?? []), x]);
-	const rang = (profil: string) => (profil === PROFIL_ARCHIVISTE ? Infinity : profils.includes(profil) ? profils.indexOf(profil) : profils.length);
+	for (const x of sessions) if (x.etat !== 'terminee' && x.profil !== PROFIL_ARCHIVISTE) parProfil.set(x.profil, [...(parProfil.get(x.profil) ?? []), x]);
+	const rang = (profil: string) => (profils.includes(profil) ? profils.indexOf(profil) : profils.length);
 	return [...parProfil]
 		.sort(([a], [b]) => rang(a) - rang(b) || (a < b ? -1 : a > b ? 1 : 0))
 		.map(([profil, liste]) => {

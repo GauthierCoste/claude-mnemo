@@ -62,6 +62,8 @@ describe('Application', () => {
 		const faux = creerFauxClient(REPONSES);
 		render(<Application client={faux.client} />);
 		const bouton = screen.getByRole('button', { name: /Archiviste/ });
+		// son avatar sur le bouton, à la place d'un simple point
+		expect(bouton.querySelector('svg')).not.toBeNull();
 		await act(async () => faux.connexion.emettre({ type: 'sessions', sessions: [session('d', 'travaille', 'archiviste')] }));
 		expect(bouton.getAttribute('aria-label')).toBeNull();
 		// repos après `arret` : état `attend`, aucun dialogue

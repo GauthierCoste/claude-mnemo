@@ -72,6 +72,7 @@ const PERMIS = new Set([
 	'composants/sessions/RechercheFiche.module.css .boutonLoupe',
 	'composants/sessions/AgentsEnCours.module.css .agent',
 	'composants/sessions/AgentsEnCours.module.css .tuile',
+	'composants/BarreTitre.module.css .avatarArchiviste',
 	'composants/sessions/AgentsEnCours.module.css .nombre',
 ]);
 
