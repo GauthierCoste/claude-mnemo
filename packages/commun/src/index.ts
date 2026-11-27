@@ -10,6 +10,7 @@ export * from './consignes.ts';
 export * from './encodage.ts';
 export * from './etapes-calcul.ts';
 export * from './formats.ts';
+export * from './langue.ts';
 export * from './limites.ts';
 export * from './memoire.ts';
 export * from './moteurs.ts';

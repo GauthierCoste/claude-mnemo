@@ -3,8 +3,8 @@
  * valeurs réglables. Les défauts sont le comportement de Mnemo sans fichier. Lecture tolérante (un réglage absent ou invalide
  * prend son défaut, avec un avertissement : jamais d'exception) ; modification stricte (une valeur invalide refuse le lot).
  */
-import { ACCENT_PAR_DEFAUT, CARACTERES_INVISIBLES, estCouleurHex, GROUPES_REGLAGES } from '@mnemo/commun';
-import type { GroupeReglage } from '@mnemo/commun';
+import { ACCENT_PAR_DEFAUT, CARACTERES_INVISIBLES, CHOIX_LANGUE, estCouleurHex, GROUPES_REGLAGES } from '@mnemo/commun';
+import type { ChoixLangue, GroupeReglage } from '@mnemo/commun';
 import { estTypeFiche } from './fiche.ts';
 import type { TypeFiche } from './fiche.ts';
 import { estObjet } from './valeurs.ts';
@@ -44,7 +44,8 @@ export type Reglages = {
 	archiviste: { typesAConfirmer: TypeFiche[] };
 	service: { port: number; navigateur: Navigateur };
 	/** Couleur principale de l'interface, `#rrggbb` ; l'interface la pose sur `--ac` à l'exécution. */
-	interface: { accent: string };
+	/** `langue` : langue de l'interface ; `systeme` la laisse suivre le système de qui l'affiche. */
+	interface: { accent: string; langue: ChoixLangue };
 };
 
 /** Quand une modification prend effet : tout de suite, au redémarrage du service, au prochain démarrage des modèles. */
@@ -327,6 +328,16 @@ export const CHAMPS_REGLAGES: readonly ChampReglage[] = [
 		explication: 'Couleur des éléments actifs, des liens, des titres, du focus et du logo.',
 		genre: 'couleur',
 		defaut: ACCENT_PAR_DEFAUT,
+		effet: 'immediat',
+	},
+	{
+		cle: 'interface.langue',
+		groupe: 'interface',
+		libelle: 'Langue de l’interface',
+		explication: 'Langue de l’interface et de l’app de bureau ; « systeme » suit la langue du système. Le contenu de la mémoire n’est jamais traduit.',
+		genre: 'choix',
+		defaut: 'systeme',
+		choix: CHOIX_LANGUE.map((valeur) => ({ valeur, libelle: valeur })),
 		effet: 'immediat',
 	},
 ];

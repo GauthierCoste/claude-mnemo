@@ -1,7 +1,9 @@
+import { estChoixLangue } from '@mnemo/commun';
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { EtatConnexion } from '../client/connexion.ts';
 import { FournisseurClient, useClient, type Client } from '../client/contexte.tsx';
 import { useGraphe, useReglages, useSante, useSessions } from '../client/hooks.ts';
+import { LangueFournie } from '../langue/langue.tsx';
 import { useAFaire } from '../memoire/a-faire.ts';
 import { FournisseurNavigation, useNavigation, type OngletMemoire, type Vue } from '../navigation.tsx';
 import { appliquerAccent } from '../reglages/accent.ts';
@@ -33,21 +35,35 @@ export type Depart = { vue: Vue; ongletMemoire?: OngletMemoire; zoom?: number; f
  * demandé par l'adresse au chargement (`#session=<id>`), ouvert dès qu'il est dans la liste des sessions.
  */
 export function Application(p: { client: Client | null; depart?: Depart; session?: string | null }): ReactNode {
-	if (!p.client) return <EcranJeton />;
+	if (!p.client) {
+		return (
+			<LangueFournie>
+				<EcranJeton />
+			</LangueFournie>
+		);
+	}
 	return (
 		<FournisseurClient client={p.client}>
-			<FournisseurNavigation
-				{...(p.depart ? { vueInitiale: p.depart.vue } : {})}
-				{...(p.depart?.ongletMemoire ? { ongletMemoireInitial: p.depart.ongletMemoire } : {})}
-				{...(p.depart?.archiviste ? { tiroirInitial: true } : {})}
-				{...(p.depart?.palette !== undefined ? { paletteInitiale: true } : {})}
-			>
-				<FournisseurToast>
-					<Coquille depart={p.depart} session={p.session ?? null} />
-				</FournisseurToast>
-			</FournisseurNavigation>
+			<LangueDuReglage>
+				<FournisseurNavigation
+					{...(p.depart ? { vueInitiale: p.depart.vue } : {})}
+					{...(p.depart?.ongletMemoire ? { ongletMemoireInitial: p.depart.ongletMemoire } : {})}
+					{...(p.depart?.archiviste ? { tiroirInitial: true } : {})}
+					{...(p.depart?.palette !== undefined ? { paletteInitiale: true } : {})}
+				>
+					<FournisseurToast>
+						<Coquille depart={p.depart} session={p.session ?? null} />
+					</FournisseurToast>
+				</FournisseurNavigation>
+			</LangueDuReglage>
 		</FournisseurClient>
 	);
+}
+
+/** La langue du réglage `interface.langue`, une fois les réglages lus. */
+function LangueDuReglage(p: { children: ReactNode }): ReactNode {
+	const valeur = useReglages().donnees?.champs.find((c) => c.cle === 'interface.langue')?.valeur;
+	return <LangueFournie reglage={estChoixLangue(valeur) ? valeur : undefined}>{p.children}</LangueFournie>;
 }
 
 function useEtatConnexion(): EtatConnexion {

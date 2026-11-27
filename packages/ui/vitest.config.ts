@@ -14,7 +14,7 @@ export default defineConfig({
 	test: {
 		maxWorkers: MAX_WORKERS,
 		include: ['tests/**/*.test.{ts,tsx}'],
-		setupFiles: ['../../outils-tests/garde.ts'],
+		setupFiles: ['../../outils-tests/garde.ts', './tests/aides/langue-francaise.ts'],
 		environment: 'node',
 		css: { modules: { classNameStrategy: 'non-scoped' } },
 		env: {

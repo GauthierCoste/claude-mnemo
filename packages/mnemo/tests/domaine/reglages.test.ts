@@ -22,7 +22,7 @@ describe('réglages : valeurs par défaut', () => {
 			modeles: { inactiviteMinutes: 15 },
 			archiviste: { typesAConfirmer: [] },
 			service: { port: 4747, navigateur: 'auto' },
-			interface: { accent: '#7df0c6' },
+			interface: { accent: '#7df0c6', langue: 'systeme' },
 		});
 	});
 
@@ -223,6 +223,18 @@ describe('interface.accent', () => {
 		}
 		expect(modifierReglages(REGLAGES_PAR_DEFAUT, { 'interface.accent': 'bleu' }).ok).toBe(false);
 		expect(modifierReglages(REGLAGES_PAR_DEFAUT, { 'interface.accent': '#336699' }).ok).toBe(true);
+	});
+});
+
+describe('interface.langue', () => {
+	it('défaut systeme ; fr et en lus tels quels ; autre valeur : le défaut et un avertissement', () => {
+		expect(REGLAGES_PAR_DEFAUT.interface.langue).toBe('systeme');
+		expect(lireReglages({ interface: { langue: 'en' } }).reglages.interface.langue).toBe('en');
+		const { reglages, avertissements } = lireReglages({ interface: { langue: 'de' } });
+		expect(reglages.interface.langue).toBe('systeme');
+		expect(avertissements).toHaveLength(1);
+		expect(modifierReglages(REGLAGES_PAR_DEFAUT, { 'interface.langue': 'de' }).ok).toBe(false);
+		expect(modifierReglages(REGLAGES_PAR_DEFAUT, { 'interface.langue': 'fr' }).ok).toBe(true);
 	});
 });
 

@@ -28,6 +28,7 @@ describe('routes : réglages', () => {
 			'service',
 			'service',
 			'interface',
+			'interface',
 			...Array<string>(14).fill('memoire'),
 		]);
 		expect(vue.champs.find((x) => x.cle === 'service.port')).toMatchObject({ defaut: 4747, valeur: 4747, effet: 'service', min: 1024, max: 65535 });
