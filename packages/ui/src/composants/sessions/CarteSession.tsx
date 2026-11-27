@@ -10,6 +10,7 @@ import { moteurEtModele, moteurParticulier } from '../../moteurs/noms.ts';
 import { Terminal } from '../../terminal/Terminal.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
 import { cx } from '../commun/classes.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import { raccourciAlt } from '../../raccourcis.ts';
 import s from './CarteSession.module.css';
 import { FermerSession } from './FermerSession.tsx';
@@ -32,15 +33,16 @@ export type PropsCarte = {
 
 export function CarteSession(p: PropsCarte): ReactNode {
 	const { session } = p;
+	const t = useTextes().sessions;
 	const choisir = () => p.surChoisir(session.id);
 	return (
 		<div className={cx(s.carte, p.choisie && s.foc)} data-session={session.id} onMouseDown={choisir}>
 			<div className={s.barre} onDoubleClick={() => p.surZoom(session.id)}>
 				<AvatarSession session={session} taille="barre" />
 				{p.rang <= 9 && <kbd>{raccourciAlt(String(p.rang))}</kbd>}
-				<span className={s.objectif}>{session.objectif ?? 'Sans objectif'}</span>
+				<span className={s.objectif}>{session.objectif ?? t.sansObjectif}</span>
 				{moteurParticulier(session) !== null && (
-					<span className={s.moteur} title={`Moteur : ${moteurEtModele(session)}`}>
+					<span className={s.moteur} title={t.carte.moteur(moteurEtModele(session))}>
 						{moteurParticulier(session)}
 					</span>
 				)}
@@ -48,8 +50,8 @@ export function CarteSession(p: PropsCarte): ReactNode {
 				<button
 					type="button"
 					className={s.agrandir}
-					title="Agrandir ou réduire"
-					aria-label="Agrandir ou réduire"
+					title={t.carte.agrandir}
+					aria-label={t.carte.agrandir}
 					aria-keyshortcuts={p.rang <= 9 ? `Alt+${p.rang}` : undefined}
 					onClick={(e) => {
 						e.stopPropagation();
@@ -66,18 +68,18 @@ export function CarteSession(p: PropsCarte): ReactNode {
 				<Terminal session={session.id} actif={p.choisie} compact={!p.zoomee} surFocus={choisir} />
 			) : (
 				<div className={s.sansTerminal}>
-					<p>Session suivie sans terminal dans Mnemo</p>
+					<p>{t.carte.sansTerminal}</p>
 					{p.terminauxDisponibles &&
 						(session.sansReprise === undefined ? (
 							<Bouton petit onClick={() => p.surReprendre(session.id)}>
-								Reprendre ici
+								{t.carte.reprendreIci}
 							</Bouton>
 						) : (
 							<>
 								<Bouton petit indisponible={{ raison: `reprise-${session.id}` }}>
-									Reprendre ici
+									{t.carte.reprendreIci}
 								</Bouton>
-								<p id={`reprise-${session.id}`}>Reprise impossible : {session.sansReprise}.</p>
+								<p id={`reprise-${session.id}`}>{t.carte.repriseImpossible(session.sansReprise)}</p>
 							</>
 						))}
 				</div>

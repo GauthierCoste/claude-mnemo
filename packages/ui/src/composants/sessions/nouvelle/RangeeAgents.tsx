@@ -8,9 +8,12 @@ import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { nomDuMoteur } from '../../../moteurs/noms.ts';
 import { modeleDuProfil } from '../../../sessions/agents.ts';
 import { AvatarProfil } from '../../commun/AvatarProfil.tsx';
+import { useTextes } from '../../../langue/langue.tsx';
 import s from './RangeeAgents.module.css';
 
 export function RangeeAgents(p: { agents: readonly ProfilVue[]; choisi: number; eteints: ReadonlySet<string>; surChoisir(i: number): void }): ReactNode {
+	const ts = useTextes().sessions;
+	const t = ts.nouvelle;
 	const vignettes = useRef<(HTMLButtonElement | null)[]>([]);
 	const n = p.agents.length;
 	const aller = (i: number) => {
@@ -27,10 +30,10 @@ export function RangeeAgents(p: { agents: readonly ProfilVue[]; choisi: number; 
 		aller(cible);
 	};
 	return (
-		<div role="listbox" aria-label="Agents" aria-orientation="horizontal" className={s.rangee} onKeyDown={clavier}>
+		<div role="listbox" aria-label={t.agents} aria-orientation="horizontal" className={s.rangee} onKeyDown={clavier}>
 			{p.agents.map((a, j) => {
 				const eteint = p.eteints.has(a.nom);
-				const infobulle = `${a.nom} · ${nomDuMoteur(a.moteur)} · ${modeleDuProfil(a).texte}${eteint ? ' · lancement impossible' : ''}`;
+				const infobulle = `${a.nom} · ${nomDuMoteur(a.moteur)} · ${modeleDuProfil(a, ts).texte}${eteint ? ` · ${t.lancementImpossibleCourt}` : ''}`;
 				return (
 					<button
 						key={a.nom}
@@ -40,7 +43,7 @@ export function RangeeAgents(p: { agents: readonly ProfilVue[]; choisi: number; 
 						type="button"
 						role="option"
 						aria-selected={j === p.choisi}
-						aria-label={eteint ? `${a.nom}, lancement impossible` : a.nom}
+						aria-label={eteint ? t.eteint(a.nom) : a.nom}
 						tabIndex={j === p.choisi ? 0 : -1}
 						title={infobulle}
 						className={s.vignette}

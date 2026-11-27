@@ -6,19 +6,21 @@ import { useClient } from '../../client/contexte.tsx';
 import { avecId } from '../../client/hooks.ts';
 import { useNavigation } from '../../navigation.tsx';
 import { useToast } from '../Toast.tsx';
+import { useTextes } from '../../langue/langue.tsx';
 
 /** La session est lue au service (terminée comprise) ; introuvable ou illisible : le motif en toast, rien d'autre n'est ouvert. */
 export function useOuvrirSession(): (id: string, o?: { zoom?: boolean }) => void {
 	const { api } = useClient();
 	const { ouvrirSession } = useNavigation();
 	const toast = useToast();
+	const t = useTextes().sessions;
 	return useCallback(
 		(id: string, o?: { zoom?: boolean }) => {
 			api.lire<{ session: SessionVue }>(avecId(ROUTES.session, id)).then(
 				(r) => ouvrirSession(r.session, o),
-				(e: unknown) => toast(e instanceof ErreurApi ? e.message : 'Session illisible.'),
+				(e: unknown) => toast(e instanceof ErreurApi ? e.message : t.vue.sessionIllisible),
 			);
 		},
-		[api, ouvrirSession, toast],
+		[api, ouvrirSession, toast, t],
 	);
 }

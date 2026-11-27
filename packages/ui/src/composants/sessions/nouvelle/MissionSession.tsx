@@ -7,11 +7,13 @@ import { Fragment, useId, useState, type ReactNode } from 'react';
 import { PLIAGE_INITIAL } from '../../../dossiers/arbre.ts';
 import { ArbreDossiers } from '../../commun/ArbreDossiers.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
+import { useTextes } from '../../../langue/langue.tsx';
 import s from './MissionSession.module.css';
 
 type Props = { dansLaMemoire: boolean; dossier: string; nomRacine: string; surDossier(chemin: string): void; objectif: string; surObjectif(objectif: string): void };
 
 export function MissionSession(p: Props): ReactNode {
+	const t = useTextes().sessions.nouvelle.mission;
 	const id = useId();
 	const [ouvert, setOuvert] = useState(false);
 	const [pliage, setPliage] = useState(PLIAGE_INITIAL);
@@ -26,11 +28,11 @@ export function MissionSession(p: Props): ReactNode {
 		<div className={s.mission}>
 			<div className={s.champ} role="group" aria-labelledby={`${id}-dossier`}>
 				<span id={`${id}-dossier`} className={s.lbl}>
-					Dossier
+					{t.dossier}
 				</span>
 				{p.dansLaMemoire ? (
 					<p className={s.lieu} data-fige>
-						Se lance dans la mémoire, quel que soit le dossier.
+						{t.dansLaMemoire}
 					</p>
 				) : (
 					<>
@@ -44,14 +46,14 @@ export function MissionSession(p: Props): ReactNode {
 								))}
 							</span>
 							<Bouton petit id={`${id}-changer`} className={s.cible} aria-expanded={ouvert} aria-controls={`${id}-arbre`} onClick={() => (ouvert ? replier() : setOuvert(true))}>
-								{ouvert ? 'Replier' : 'Changer'}
+								{ouvert ? t.replier : t.changer}
 							</Bouton>
 						</div>
 						{ouvert && (
 							<div id={`${id}-arbre`} className={s.arbre} data-arbre>
 								<ArbreDossiers
 									presentation="cadre"
-									entete={<span className={s.lbl}>Choisir le dossier</span>}
+									entete={<span className={s.lbl}>{t.choisirDossier}</span>}
 									choisi={p.dossier}
 									surChoisir={(chemin) => {
 										p.surDossier(chemin);
@@ -67,8 +69,8 @@ export function MissionSession(p: Props): ReactNode {
 				)}
 			</div>
 			<label className={s.champ}>
-				<span className={s.lbl}>Objectif (facultatif)</span>
-				<input type="text" className={s.saisie} maxLength={OBJECTIF_MAX} value={p.objectif} onChange={(e) => p.surObjectif(e.target.value)} placeholder="Ce que la session doit faire" />
+				<span className={s.lbl}>{t.objectif}</span>
+				<input type="text" className={s.saisie} maxLength={OBJECTIF_MAX} value={p.objectif} onChange={(e) => p.surObjectif(e.target.value)} placeholder={t.objectifPlaceholder} />
 			</label>
 		</div>
 	);

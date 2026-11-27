@@ -1,6 +1,6 @@
 import type { EtatSessionVue } from '@mnemo/contrat';
 import type { CSSProperties, ReactNode } from 'react';
-import { LIBELLES_ETATS } from '../../sessions/etats.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import { cx } from '../commun/classes.ts';
 import s from './Point.module.css';
 
@@ -15,7 +15,7 @@ export const COULEURS_ETATS: Record<EtatSessionVue, string> = {
 
 /** Point d'état d'une session : pulse quand elle travaille ; son nom est le libellé de l'état. */
 export function Point(p: { etat: EtatSessionVue; petit?: boolean }): ReactNode {
-	const libelle = LIBELLES_ETATS[p.etat];
+	const libelle = useTextes().sessions.etats[p.etat];
 	return (
 		<span
 			role="img"

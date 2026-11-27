@@ -18,6 +18,7 @@ import { disposerGrille } from '../../sessions/grille.ts';
 import { grouperSessions } from '../../sessions/groupes.ts';
 import { fichesServies } from '../../sessions/servis.ts';
 import { useToast } from '../Toast.tsx';
+import { useTextes } from '../../langue/langue.tsx';
 import { BarreEtats } from './BarreEtats.tsx';
 import { GrilleSessions, type GenrePoids } from './GrilleSessions.tsx';
 import { NouvelleSession } from './NouvelleSession.tsx';
@@ -56,6 +57,7 @@ export function Sessions(p: { visible: boolean; /** Mode démo : rang de la sess
 	const { api } = useClient();
 	const nav = useNavigation();
 	const toast = useToast();
+	const t = useTextes().sessions;
 	const sessions = useSessions();
 	const sante = useSante();
 	const maintenant = useMaintenant();
@@ -165,9 +167,9 @@ export function Sessions(p: { visible: boolean; /** Mode démo : rang de la sess
 	const reprendre = async (id: string) => {
 		try {
 			const r = await api.envoyer<{ session?: SessionVue } | null>(avecId(ROUTES.reprise, id), undefined);
-			if (r?.session && !r.session.terminal) toast('La session tourne ailleurs, ou les terminaux sont indisponibles.');
+			if (r?.session && !r.session.terminal) toast(t.vue.tourneAilleurs);
 		} catch (e) {
-			toast(e instanceof ErreurApi ? e.message : 'Reprise impossible.');
+			toast(e instanceof ErreurApi ? e.message : t.vue.repriseImpossible);
 		}
 	};
 	const basculerLigne = (cle: string) =>
@@ -271,7 +273,7 @@ export function Sessions(p: { visible: boolean; /** Mode démo : rang de la sess
 					<Separateur
 						bord
 						orientation="vertical"
-						label="Largeur du panneau Dossier"
+						label={t.vue.largeurDossier}
 						valeur={largeurDossier.valeur}
 						min={LARGEUR_DOSSIER.min}
 						max={largeurMax}
@@ -300,15 +302,15 @@ export function Sessions(p: { visible: boolean; /** Mode démo : rang de la sess
 					/>
 				) : (
 					<div className={s.vide}>
-						<p>Aucune session en cours.</p>
-						<p className={s.mu}>« + Nouvelle session » en lance une dans un dossier.</p>
+						<p>{t.vue.aucune}</p>
+						<p className={s.mu}>{t.vue.aucuneAide}</p>
 					</div>
 				)}
 				{contexteVisible && selection && (
 					<Separateur
 						bord
 						orientation="vertical"
-						label="Largeur du panneau Contexte"
+						label={t.vue.largeurContexte}
 						valeur={largeurContexte.valeur}
 						min={LARGEUR_CONTEXTE.min}
 						max={largeurMax}

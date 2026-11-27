@@ -17,7 +17,7 @@ import { Bouton } from '../commun/Bouton.tsx';
 import { cx } from '../commun/classes.ts';
 import { Tiroir } from '../commun/Tiroir.tsx';
 import { useToast } from '../Toast.tsx';
-import { dateHeure } from './PanneauContexte.tsx';
+import { useTextes } from '../../langue/langue.tsx';
 import { AvatarProfil } from '../commun/AvatarProfil.tsx';
 import { useAvatarsDeProfils } from '../commun/avatar-de-profil.ts';
 import s from './Terminees.module.css';
@@ -28,6 +28,9 @@ export function Terminees(p: { ouvert: boolean; historique: Ressource<SessionTer
 	const nav = useNavigation();
 	const toast = useToast();
 	const avatarDe = useAvatarsDeProfils();
+	const textes = useTextes();
+	const t = textes.sessions.historique;
+	const dateHeure = textes.commun.formats.dateHeure;
 	const [confirmation, setConfirmation] = useState<string | null>(null);
 	const [enCours, setEnCours] = useState<string | null>(null);
 	const sessions = p.historique.donnees ?? [];
@@ -70,10 +73,10 @@ export function Terminees(p: { ouvert: boolean; historique: Ressource<SessionTer
 		setEnCours(id);
 		try {
 			await api.supprimer(avecId(ROUTES.session, id));
-			toast('Session retirée de l’historique.');
+			toast(t.retiree);
 			p.historique.recharger();
 		} catch (e) {
-			toast(e instanceof ErreurApi ? e.message : 'Retrait impossible.');
+			toast(e instanceof ErreurApi ? e.message : t.retraitImpossible);
 		} finally {
 			setEnCours(null);
 		}
@@ -84,20 +87,20 @@ export function Terminees(p: { ouvert: boolean; historique: Ressource<SessionTer
 	};
 
 	return (
-		<Tiroir ouvert={p.ouvert} titre="Sessions terminées" surFermer={p.surFermer}>
+		<Tiroir ouvert={p.ouvert} titre={t.titre} surFermer={p.surFermer}>
 			<div ref={contenu} className={s.contenu}>
 				{p.historique.erreur !== null && <p className={s.mu}>{p.historique.erreur}</p>}
-				{introuvable && <p className={s.mu}>La session demandée n’est pas dans l’historique.</p>}
-				{p.historique.erreur === null && sessions.length === 0 && <p className={s.mu}>{p.historique.donnees === undefined ? 'Chargement…' : 'Aucune session terminée.'}</p>}
+				{introuvable && <p className={s.mu}>{t.introuvable}</p>}
+				{p.historique.erreur === null && sessions.length === 0 && <p className={s.mu}>{p.historique.donnees === undefined ? t.chargement : t.aucune}</p>}
 				<ul className={s.liste}>
 					{sessions.map((x) => (
 						<li key={x.id} className={cx(s.session, x.id === p.demandee && s.demandee)} aria-current={x.id === p.demandee ? 'true' : undefined}>
 							<b className={s.titre}>
-								<AvatarProfil avatar={avatarDe(x.profil)} taille={16} titre={`Profil ${x.profil}`} /> {x.objectif ?? 'Sans objectif'}
+								<AvatarProfil avatar={avatarDe(x.profil)} taille={16} titre={textes.sessions.profil(x.profil)} /> {x.objectif ?? textes.sessions.sansObjectif}
 							</b>
 							<span className={s.mu}>
 								{x.dossier || p.nomRacine}
-								{x.profil !== PROFIL_TRAVAIL ? `, profil ${x.profil}` : ''}
+								{x.profil !== PROFIL_TRAVAIL ? t.profil(x.profil) : ''}
 								{moteurParticulier(x) !== null ? `, ${moteurParticulier(x)}` : ''}
 							</span>
 							<span className={s.dates}>
@@ -105,29 +108,29 @@ export function Terminees(p: { ouvert: boolean; historique: Ressource<SessionTer
 							</span>
 							{x.episode ? (
 								<button type="button" className={s.bilan} title={x.episode.chemin} onClick={() => ouvrirBilan(x.episode!.chemin)}>
-									{x.episode.minimal ? 'Épisode minimal' : 'Bilan'} : {x.episode.titre}
+									{x.episode.minimal ? t.episodeMinimal(x.episode.titre) : t.bilan(x.episode.titre)}
 								</button>
 							) : (
-								<span className={s.mu}>Sans bilan</span>
+								<span className={s.mu}>{t.sansBilan}</span>
 							)}
 							<span className={s.actions}>
 								{confirmation === x.id ? (
 									<>
 										<Bouton petit className={s.danger} disabled={enCours !== null} onClick={() => void retirer(x.id)}>
-											Confirmer le retrait
+											{t.confirmerRetrait}
 										</Bouton>
 										<Bouton petit onClick={() => setConfirmation(null)}>
-											Annuler
+											{textes.commun.actions.annuler}
 										</Bouton>
 									</>
 								) : (
 									<Bouton
 										petit
 										disabled={enCours !== null}
-										title={`Oublie la session dans Mnemo ; la transcription de ${nomDuMoteur(x.moteur)} et la mémoire restent.`}
+										title={t.retirerTitre(nomDuMoteur(x.moteur))}
 										onClick={() => setConfirmation(x.id)}
 									>
-										Retirer de l’historique
+										{t.retirer}
 									</Bouton>
 								)}
 							</span>

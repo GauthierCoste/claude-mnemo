@@ -4,7 +4,7 @@
  */
 import type { SessionVue } from '@mnemo/contrat';
 import type { CSSProperties, ReactNode } from 'react';
-import { LIBELLES_ETATS } from '../../sessions/etats.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import { AvatarProfil, JETONS_COULEUR } from '../commun/AvatarProfil.tsx';
 import { useAvatarsDeProfils } from '../commun/avatar-de-profil.ts';
 import { cx } from '../commun/classes.ts';
@@ -20,10 +20,11 @@ export function AvatarSession(p: { session: Pick<SessionVue, 'profil' | 'etat'>;
 	const avatarDe = useAvatarsDeProfils();
 	const avatar = avatarDe(p.session.profil);
 	const style = { '--profil': JETONS_COULEUR[avatar.couleur], '--etat': COULEURS_ETATS[p.session.etat] } as CSSProperties;
-	const libelle = LIBELLES_ETATS[p.session.etat];
+	const t = useTextes().sessions;
+	const libelle = t.etats[p.session.etat];
 	return (
 		<span className={cx(s.tuile, s[p.taille])} data-etat={p.session.etat} style={style}>
-			<AvatarProfil avatar={avatar} taille={DESSIN[p.taille]} titre={`Profil ${p.session.profil}`} sansFond />
+			<AvatarProfil avatar={avatar} taille={DESSIN[p.taille]} titre={t.profil(p.session.profil)} sansFond />
 			<span className={s.pastille} role="img" aria-label={libelle} title={libelle} />
 		</span>
 	);

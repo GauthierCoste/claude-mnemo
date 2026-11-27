@@ -10,58 +10,61 @@ import type { CSSProperties, ReactNode } from 'react';
 import { couleurFournisseur } from '../../../moteurs/fournisseurs.ts';
 import { nomDuMoteur } from '../../../moteurs/noms.ts';
 import { HOOKS_PROFIL } from '../../../profils/hooks.ts';
-import { annonceDeLAgent, etiquetteDuProfil, LIEUX_DE_LANCEMENT, modeleDuProfil, montrePlugins, motPlugins, motSkills, texteHooks, type EtatMoteurAgent as Etat } from '../../../sessions/agents.ts';
+import { annonceDeLAgent, etiquetteDuProfil, modeleDuProfil, montrePlugins, texteHooks, type EtatMoteurAgent as Etat } from '../../../sessions/agents.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { EtatMoteurAgent } from './EtatMoteurAgent.tsx';
 import s from './FicheAgent.module.css';
 
 type Props = { profil: ProfilVue; moteur: MoteurVue | undefined; etat: Etat; verification: boolean; idRaison: string; surVoirReglages(): void };
 
 export function FicheAgent(p: Props): ReactNode {
+	const ts = useTextes().sessions;
+	const t = ts.nouvelle;
 	const a = p.profil;
 	const nomMoteur = p.moteur?.nom ?? nomDuMoteur(a.moteur);
-	const modele = modeleDuProfil(a);
+	const modele = modeleDuProfil(a, ts);
 	const { skills, plugins, hooks } = a.equipement;
-	const lance = LIEUX_DE_LANCEMENT[a.lancement];
+	const lance = t.lieux[a.lancement];
 	return (
 		<div className={s.fiche}>
 			<p className={s.annonce} aria-live="polite">
-				{annonceDeLAgent(a.nom, nomMoteur, p.etat)}
+				{annonceDeLAgent(a.nom, nomMoteur, p.etat, ts)}
 			</p>
 			<div className={s.titre}>
 				<h3 className={s.nom} title={a.nom}>
 					{a.nom}
 				</h3>
-				<span className={s.etiquette}>{etiquetteDuProfil(a)}</span>
+				<span className={s.etiquette}>{etiquetteDuProfil(a, ts)}</span>
 			</div>
 			<p className={s.desc}>{a.description}</p>
 			<dl className={s.attributs}>
-				<dt>Fournisseur</dt>
+				<dt>{t.fiche.fournisseur}</dt>
 				<dd>
 					<span className={s.fournisseur} style={{ '--c': couleurFournisseur(a.moteur) } as CSSProperties}>
 						<i aria-hidden="true" />
 						{FOURNISSEURS_MOTEURS[a.moteur]}
 					</span>
 				</dd>
-				<dt>Moteur</dt>
+				<dt>{t.fiche.moteur}</dt>
 				<dd title={p.moteur?.version ? `${nomMoteur} ${p.moteur.version}` : nomMoteur}>
 					{nomMoteur}
 					{p.moteur?.version && <span className={`${s.sec} ${s.mono}`}>{` ${p.moteur.version}`}</span>}
 				</dd>
-				<dt>Modèle</dt>
+				<dt>{t.fiche.modele}</dt>
 				<dd title={modele.texte}>{modele.parDefaut ? <span className={s.sec}>{modele.texte}</span> : <span className={s.mono}>{modele.texte}</span>}</dd>
-				<dt>Se lance</dt>
+				<dt>{t.fiche.seLance}</dt>
 				<dd>{lance}</dd>
 			</dl>
-			<ul className={s.equipement} aria-label="Équipement">
+			<ul className={s.equipement} aria-label={t.fiche.equipement}>
 				<li>
-					<b>{skills}</b> {motSkills(skills)}
+					<b>{skills}</b> {t.skills(skills)}
 				</li>
 				{montrePlugins(a) && (
 					<li>
-						<b>{plugins}</b> {motPlugins(plugins)}
+						<b>{plugins}</b> {t.plugins(plugins)}
 					</li>
 				)}
-				<li title={HOOKS_PROFIL.filter((h) => hooks.includes(h.cle)).map((h) => `${h.libelle} : ${h.detail}`).join('\n')}>{`hooks : ${texteHooks(hooks)}`}</li>
+				<li title={HOOKS_PROFIL.filter((h) => hooks.includes(h.cle)).map((h) => `${h.libelle} : ${h.detail}`).join('\n')}>{t.hooks(texteHooks(hooks, ts))}</li>
 			</ul>
 			<EtatMoteurAgent key={a.moteur} id={a.moteur} moteur={nomMoteur} etat={p.etat} verification={p.verification} idRaison={p.idRaison} surVoirReglages={p.surVoirReglages} />
 		</div>

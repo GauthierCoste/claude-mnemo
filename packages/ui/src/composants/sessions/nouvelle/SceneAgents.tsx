@@ -8,10 +8,12 @@ import type { ProfilVue } from '@mnemo/contrat';
 import type { ReactNode } from 'react';
 import { ecartCirculaire, placeDansScene } from '../../../sessions/agents.ts';
 import { AvatarProfil } from '../../commun/AvatarProfil.tsx';
+import { useTextes } from '../../../langue/langue.tsx';
 import s from './SceneAgents.module.css';
 
 /** `choisi` : indice de l'agent choisi ; `eteints` : noms des agents dont le moteur bloque le lancement ; `surChoisir` reçoit un indice à ramener dans la liste. */
 export function SceneAgents(p: { agents: readonly ProfilVue[]; choisi: number; eteints: ReadonlySet<string>; surChoisir(i: number): void }): ReactNode {
+	const t = useTextes().sessions.nouvelle;
 	const n = p.agents.length;
 	const agent = p.agents[p.choisi];
 	return (
@@ -28,10 +30,10 @@ export function SceneAgents(p: { agents: readonly ProfilVue[]; choisi: number; e
 			</div>
 			{n > 1 && (
 				<>
-					<button type="button" className={`${s.fleche} ${s.gauche}`} aria-label="Agent précédent" onClick={() => p.surChoisir(p.choisi - 1)}>
+					<button type="button" className={`${s.fleche} ${s.gauche}`} aria-label={t.precedent} onClick={() => p.surChoisir(p.choisi - 1)}>
 						‹
 					</button>
-					<button type="button" className={`${s.fleche} ${s.droite}`} aria-label="Agent suivant" onClick={() => p.surChoisir(p.choisi + 1)}>
+					<button type="button" className={`${s.fleche} ${s.droite}`} aria-label={t.suivant} onClick={() => p.surChoisir(p.choisi + 1)}>
 						›
 					</button>
 				</>

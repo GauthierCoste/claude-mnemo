@@ -4,15 +4,17 @@
  */
 import type { ReponseProfils } from '@mnemo/contrat';
 import type { ReactNode } from 'react';
-import { LIEUX_DE_LANCEMENT } from '../../../sessions/agents.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import s from './AutresProfils.module.css';
 
 export function AutresProfils(p: { profils: ReponseProfils | undefined; erreur: string | null }): ReactNode {
+	const t = useTextes().sessions.nouvelle;
+	const a = t.autres;
 	const lignes = [
-		...(p.erreur === null ? [] : [{ cle: 'erreur', texte: `Profils illisibles : ${p.erreur}`, erreur: true }]),
-		...(p.profils?.profils ?? []).filter((x) => x.lanceur === 'propre').map((x) => ({ cle: `propre-${x.nom}`, texte: `${x.nom} : lancé par son propre chemin, ${LIEUX_DE_LANCEMENT[x.lancement]}.`, erreur: false })),
-		...(p.profils?.avertissements ?? []).map((x, i) => ({ cle: `avert-${i}`, texte: `Profil ${x.nom} : ${x.motif}`, erreur: false })),
-		...(p.profils?.ignores ?? []).map((x, i) => ({ cle: `ignore-${i}`, texte: `Profil ignoré, ${x.nom} : ${x.motif}`, erreur: false })),
+		...(p.erreur === null ? [] : [{ cle: 'erreur', texte: a.illisibles(p.erreur), erreur: true }]),
+		...(p.profils?.profils ?? []).filter((x) => x.lanceur === 'propre').map((x) => ({ cle: `propre-${x.nom}`, texte: a.propre(x.nom, t.lieux[x.lancement]), erreur: false })),
+		...(p.profils?.avertissements ?? []).map((x, i) => ({ cle: `avert-${i}`, texte: a.avertissement(x.nom, x.motif), erreur: false })),
+		...(p.profils?.ignores ?? []).map((x, i) => ({ cle: `ignore-${i}`, texte: a.ignore(x.nom, x.motif), erreur: false })),
 	];
 	if (lignes.length === 0) return null;
 	return (

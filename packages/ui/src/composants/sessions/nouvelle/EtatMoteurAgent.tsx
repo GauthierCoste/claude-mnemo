@@ -10,12 +10,14 @@ import { useEffect, type ReactNode } from 'react';
 import type { EtatMoteurAgent as Etat } from '../../../sessions/agents.ts';
 import { Bouton } from '../../commun/Bouton.tsx';
 import r from '../../commun/Reflet.module.css';
+import { useTextes } from '../../../langue/langue.tsx';
 import { useLiaisonMoteur } from '../../commun/useLiaisonMoteur.ts';
 import s from './FicheAgent.module.css';
 
 type Props = { id: IdMoteur; moteur: string; etat: Etat; verification: boolean; idRaison: string; surVoirReglages(): void };
 
 export function EtatMoteurAgent(p: Props): ReactNode {
+	const t = useTextes().sessions.nouvelle.etat;
 	const { enCours, retour, lier, effacer } = useLiaisonMoteur(p.id, p.moteur);
 	useEffect(() => {
 		if (p.verification) effacer();
@@ -23,11 +25,11 @@ export function EtatMoteurAgent(p: Props): ReactNode {
 	const e = p.etat;
 	const voir = (
 		<Bouton petit className={s.cible} onClick={p.surVoirReglages}>
-			Voir dans Réglages
+			{t.voirReglages}
 		</Bouton>
 	);
 	// une vérification relancée alors que l'état est déjà connu : dite à côté, sans masquer l'état
-	const enVerification = p.verification && e.genre !== 'verification' && <span className={`${s.verif} ${r.reflet}`}>vérification…</span>;
+	const enVerification = p.verification && e.genre !== 'verification' && <span className={`${s.verif} ${r.reflet}`}>{t.verificationEnCours}</span>;
 	const retourLiaison = retour !== null && (
 		<ul className={s.retour} role={retour.alerte ? 'alert' : 'status'}>
 			{retour.messages.map((m) => (
@@ -39,7 +41,7 @@ export function EtatMoteurAgent(p: Props): ReactNode {
 	if (e.genre === 'verification') {
 		return (
 			<p className={s.etat} data-genre="verification">
-				<span className={r.reflet}>{`Vérification de ${p.moteur} sur ce poste…`}</span>
+				<span className={r.reflet}>{t.verification(p.moteur)}</span>
 			</p>
 		);
 	}
@@ -47,7 +49,7 @@ export function EtatMoteurAgent(p: Props): ReactNode {
 		return (
 			<div className={s.etat} data-genre={e.genre === 'pret' ? 'pret' : 'attention'}>
 				<p className={s.ligne}>
-					{e.genre === 'pret' ? `✓ Prêt : ${p.moteur} trouvé et lié à Mnemo.` : `${p.moteur} introuvable ici : la session sera suivie, et à lancer à la main dans un terminal.`}
+					{e.genre === 'pret' ? t.pret(p.moteur) : t.manuel(p.moteur)}
 					{enVerification}
 				</p>
 				{retourLiaison}
@@ -58,7 +60,7 @@ export function EtatMoteurAgent(p: Props): ReactNode {
 		return (
 			<div className={s.etat} data-genre="attention">
 				<p className={s.titreEtat}>
-					{e.genre === 'illisible' ? `État de ${p.moteur} illisible : ${e.motif}` : e.titre}
+					{e.genre === 'illisible' ? t.illisible(p.moteur, e.motif) : e.titre}
 					{e.genre === 'attention' && e.motif !== null && <span className={s.motif}>{` ${e.motif}`}</span>}
 					{enVerification}
 				</p>
@@ -82,7 +84,7 @@ export function EtatMoteurAgent(p: Props): ReactNode {
 			<span className={s.actions}>
 				{e.lier && (
 					<Bouton petit genre="primaire" className={`${s.cible} ${s.lier}`} disabled={enCours || p.verification} onClick={() => void lier()}>
-						{enCours ? <span className={r.reflet}>Liaison…</span> : 'Lier à Mnemo'}
+						{enCours ? <span className={r.reflet}>{t.liaison}</span> : t.lier}
 					</Bouton>
 				)}
 				{voir}

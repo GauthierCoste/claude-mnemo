@@ -14,6 +14,7 @@ import type { TrouveRechercheVue } from '@mnemo/contrat';
 import { useEffect, useId, useRef, type ReactNode, type Ref } from 'react';
 import { titreDe } from '../../palette/presentation.ts';
 import { LONGUEUR_MIN_RECHERCHE, useRechercheMoteur } from '../../palette/useRechercheMoteur.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import r from '../commun/Reflet.module.css';
 import s from './RechercheFiche.module.css';
 
@@ -50,6 +51,7 @@ function Loupe(p: { className?: string }): ReactNode {
  * qu'une recherche a du texte.
  */
 export function BoutonLoupe(p: { ouverte: boolean; texte: string; surClic(): void; bouton: Ref<HTMLButtonElement> }): ReactNode {
+	const t = useTextes().sessions.recherche;
 	const allumee = p.ouverte && p.texte.trim() !== '';
 	return (
 		<button
@@ -57,10 +59,10 @@ export function BoutonLoupe(p: { ouverte: boolean; texte: string; surClic(): voi
 			type="button"
 			className={s.boutonLoupe}
 			data-allumee={allumee ? 'true' : undefined}
-			aria-label="Chercher une fiche"
+			aria-label={t.loupe}
 			aria-expanded={p.ouverte}
 			aria-keyshortcuts="/"
-			title={allumee ? `Recherche : « ${p.texte.trim()} » (Échap pour l'effacer)` : p.ouverte ? 'Fermer la recherche' : 'Chercher une fiche à injecter ( / )'}
+			title={allumee ? t.loupeAllumee(p.texte.trim()) : p.ouverte ? t.loupeFermer : t.loupeOuvrir}
 			onClick={p.surClic}
 		>
 			<Loupe />
@@ -69,6 +71,7 @@ export function BoutonLoupe(p: { ouverte: boolean; texte: string; surClic(): voi
 }
 
 export function RechercheFiche(p: { texte: string; surTexte(texte: string): void; surFermer(): void; rendreTrouvee(f: FicheTrouvee): ReactNode }): ReactNode {
+	const t = useTextes().sessions.recherche;
 	const champ = useRef<HTMLInputElement>(null);
 	const id = useId();
 	const active = rechercheActive(p.texte);
@@ -89,10 +92,10 @@ export function RechercheFiche(p: { texte: string; surTexte(texte: string): void
 
 	let etat: ReactNode = null;
 	if (active) {
-		if (moteur.erreur !== null && reponse === null) etat = <span className={s.erreur}>Recherche impossible : {moteur.erreur}</span>;
-		else if (reponse === null || perimees) etat = <span className={r.reflet}>Recherche…</span>;
-		else if (reponse.length === 0) etat = moteur.enCours ? <span className={r.reflet}>Recherche…</span> : `Aucune fiche pour « ${p.texte.trim()} »`;
-		else etat = `${reponse.length} fiche${reponse.length > 1 ? 's' : ''}`;
+		if (moteur.erreur !== null && reponse === null) etat = <span className={s.erreur}>{t.impossible(moteur.erreur)}</span>;
+		else if (reponse === null || perimees) etat = <span className={r.reflet}>{t.enCours}</span>;
+		else if (reponse.length === 0) etat = moteur.enCours ? <span className={r.reflet}>{t.enCours}</span> : t.aucune(p.texte.trim());
+		else etat = t.fiches(reponse.length);
 	}
 
 	return (
@@ -101,7 +104,7 @@ export function RechercheFiche(p: { texte: string; surTexte(texte: string): void
 				<div className={s.champ} role="search">
 					<Loupe className={s.loupe} />
 					<label className={s.masque} htmlFor={id}>
-						Chercher une fiche à injecter
+						{t.champ}
 					</label>
 					<input
 						ref={champ}
@@ -109,7 +112,7 @@ export function RechercheFiche(p: { texte: string; surTexte(texte: string): void
 						type="search"
 						className={s.saisie}
 						value={p.texte}
-						placeholder="Chercher une fiche…"
+						placeholder={t.placeholder}
 						autoComplete="off"
 						spellCheck={false}
 						maxLength={200}
@@ -130,7 +133,7 @@ export function RechercheFiche(p: { texte: string; surTexte(texte: string): void
 						}}
 					/>
 					{p.texte !== '' && (
-						<button type="button" className={s.effacer} aria-label="Effacer la recherche" title="Effacer la recherche (Échap)" onClick={vider}>
+						<button type="button" className={s.effacer} aria-label={t.effacer} title={t.effacerTitre} onClick={vider}>
 							×
 						</button>
 					)}

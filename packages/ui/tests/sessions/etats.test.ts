@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { dureeDepuis, LIBELLES_ETATS } from '../../src/sessions/etats.ts';
+import { TEXTES } from '../../src/langue/textes.ts';
+import { dureeDepuis } from '../../src/sessions/etats.ts';
 
 const MIN = 60_000;
 const H = 60 * MIN;
@@ -8,7 +9,7 @@ const T = 1_800_000_000_000;
 
 describe('états des sessions', () => {
 	it('libellés des états', () => {
-		expect(LIBELLES_ETATS).toEqual({ attend: 'Attend une réponse', travaille: 'Travaille', a_relire: 'Terminée, à relire', en_pause: 'En pause', terminee: 'Terminée' });
+		expect(TEXTES.fr.sessions.etats).toEqual({ attend: 'Attend une réponse', travaille: 'Travaille', a_relire: 'Terminée, à relire', en_pause: 'En pause', terminee: 'Terminée' });
 	});
 
 	it('dureeDepuis : minutes, heures, jours', () => {

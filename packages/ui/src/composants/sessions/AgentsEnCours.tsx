@@ -18,6 +18,8 @@ import type { CSSProperties, ReactNode } from 'react';
 import { useProfils } from '../../client/hooks.ts';
 import { AvatarProfil, JETONS_COULEUR } from '../commun/AvatarProfil.tsx';
 import { useAvatarsDeProfils } from '../commun/avatar-de-profil.ts';
+import { useTextes } from '../../langue/langue.tsx';
+import { TEXTES, type Textes } from '../../langue/textes.ts';
 import s from './AgentsEnCours.module.css';
 
 export const AGENTS_VISIBLES = 5;
@@ -53,28 +55,24 @@ export function agentsEnCours(sessions: readonly Pick<SessionVue, 'id' | 'profil
 }
 
 /** « travail : 2 sessions, 1 travaille, 1 attend une réponse » (registre neutre). */
-export function libelleAgent(a: Agent): string {
-	const parties = [
-		`${a.sessions} session${a.sessions > 1 ? 's' : ''}`,
-		...(a.travaillent > 0 ? [`${a.travaillent} ${a.travaillent > 1 ? 'travaillent' : 'travaille'}`] : []),
-		...(a.attendent > 0 ? [`${a.attendent} ${a.attendent > 1 ? 'attendent' : 'attend'} une réponse`] : []),
-		...(a.repos > 0 ? [`${a.repos} au repos`] : []),
-	];
-	return `${a.profil} : ${parties.join(', ')}`;
+export function libelleAgent(a: Agent, t: Textes['sessions'] = TEXTES.fr.sessions): string {
+	return t.agentsEnCours.agent(a.profil, a.sessions, a.travaillent, a.attendent, a.repos);
 }
 
 export function AgentsEnCours(p: { sessions: readonly SessionVue[]; surAgent(session: string, profil: string): void }): ReactNode {
 	const profils = useProfils().donnees?.profils;
 	const avatarDe = useAvatarsDeProfils();
+	const t = useTextes().sessions;
+	const libelleDe = (a: Agent) => libelleAgent(a, t);
 	const agents = agentsEnCours(p.sessions, (profils ?? []).map((x) => x.nom));
 	if (agents.length === 0) return null;
 	const visibles = agents.slice(0, agents.length > AGENTS_VISIBLES ? AGENTS_VISIBLES - 1 : AGENTS_VISIBLES);
 	const caches = agents.slice(visibles.length);
 	return (
-		<ul className={s.agents} aria-label="Agents en cours">
+		<ul className={s.agents} aria-label={t.agentsEnCours.liste}>
 			{visibles.map((a) => {
 				const avatar = avatarDe(a.profil);
-				const libelle = libelleAgent(a);
+				const libelle = libelleDe(a);
 				return (
 					<li key={a.profil}>
 						<button
@@ -82,7 +80,7 @@ export function AgentsEnCours(p: { sessions: readonly SessionVue[]; surAgent(ses
 							className={s.agent}
 							data-etat={a.etat}
 							aria-label={libelle}
-							title={`${libelle}\nAller à la session ${a.etat === 'attend' ? 'qui attend' : a.etat === 'travaille' ? 'qui travaille' : 'la plus récente'}`}
+							title={`${libelle}\n${t.agentsEnCours.allerA[a.etat]}`}
 							style={{ '--profil': JETONS_COULEUR[avatar.couleur] } as CSSProperties}
 							onClick={() => p.surAgent(a.session, a.profil)}
 						>
@@ -100,9 +98,9 @@ export function AgentsEnCours(p: { sessions: readonly SessionVue[]; surAgent(ses
 				);
 			})}
 			{caches.length > 0 && (
-				<li className={s.plus} title={caches.map(libelleAgent).join('\n')}>
+				<li className={s.plus} title={caches.map(libelleDe).join('\n')}>
 					<span aria-hidden="true">+{caches.length}</span>
-					<span className={s.masque}>{`Et ${caches.length} autres : ${caches.map(libelleAgent).join(' ; ')}`}</span>
+					<span className={s.masque}>{t.agentsEnCours.autres(caches.length, caches.map(libelleDe).join(' ; '))}</span>
 				</li>
 			)}
 		</ul>

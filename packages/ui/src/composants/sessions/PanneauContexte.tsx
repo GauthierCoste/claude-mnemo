@@ -14,20 +14,13 @@ import { couleurDeBranche, rangsDesFiches } from '../../graphe/branches.ts';
 import { moteurEtModele, nomDuMoteur } from '../../moteurs/noms.ts';
 import { bilanPermis, dureeSession } from '../../sessions/etats.ts';
 import { Bouton } from '../commun/Bouton.tsx';
+import { useTextes } from '../../langue/langue.tsx';
 import { abonnementDuMoteur } from '../Quotas.tsx';
 import { useActionSession, type ActionSession } from './actions-session.ts';
 import { ClassementEnDirect } from './ClassementEnDirect.tsx';
 import { EnteteSession } from './EnteteSession.tsx';
 import { libelleFenetre, tokensLisibles } from './JaugeContexte.tsx';
 import s from './PanneauContexte.module.css';
-
-const deux = (n: number) => String(n).padStart(2, '0');
-
-/** « 21.11.2026 09:12 », heure locale. */
-export function dateHeure(ms: number): string {
-	const d = new Date(ms);
-	return `${deux(d.getDate())}.${deux(d.getMonth() + 1)}.${d.getFullYear()} ${deux(d.getHours())}:${deux(d.getMinutes())}`;
-}
 
 function useCouleurBranche(): (chemin: string) => string {
 	const graphe = useGraphe();
@@ -51,6 +44,8 @@ export function PanneauContexte(p: {
 	injections?: readonly InjectionVue[];
 	surOuvrirFiche(chemin: string): void;
 }): ReactNode {
+	const textes = useTextes();
+	const t = textes.sessions.panneau;
 	const couleur = useCouleurBranche();
 	const fenetre = useFenetre(p.session.id);
 	const [confirmation, setConfirmation] = useState<string | null>(null);
@@ -75,7 +70,7 @@ export function PanneauContexte(p: {
 	const moteur = x.moteur ?? MOTEUR_PAR_DEFAUT;
 	const sansQuotas = estIdMoteur(moteur) && abonnementDuMoteur(moteur) === null;
 	return (
-		<aside className={s.panneau} aria-label="Contexte" style={p.largeur === undefined ? undefined : { width: p.largeur }}>
+		<aside className={s.panneau} aria-label={t.region} style={p.largeur === undefined ? undefined : { width: p.largeur }}>
 			<EnteteSession session={x} />
 			{x.dossierNonRattache !== null && (
 				<p role="note" className={s.avis}>
@@ -83,27 +78,27 @@ export function PanneauContexte(p: {
 				</p>
 			)}
 			<div className={s.carte}>
-				<span>Dossier</span>
+				<span>{t.dossier}</span>
 				<span>{x.dossier || p.nomRacine}</span>
-				<span>Moteur</span>
+				<span>{t.moteur}</span>
 				<span>{moteurEtModele(x)}</span>
-				<span>Démarrée</span>
-				<span>{dateHeure(x.creeeMs)}</span>
-				<span>Durée</span>
-				<span>{dureeSession(x, p.maintenant)}</span>
-				<span>Branche</span>
+				<span>{t.demarree}</span>
+				<span>{textes.commun.formats.dateHeure(x.creeeMs)}</span>
+				<span>{t.duree}</span>
+				<span>{dureeSession(x, p.maintenant, textes.sessions)}</span>
+				<span>{t.branche}</span>
 				<span>{x.branche ?? '—'}</span>
 				{sansQuotas && (
 					<>
-						<span>Quotas</span>
-						<span>non communiqués par {nomDuMoteur(moteur)}</span>
+						<span>{t.quotas}</span>
+						<span>{t.quotasAbsents(nomDuMoteur(moteur))}</span>
 					</>
 				)}
 				{fenetre !== null && (
 					<>
-						<span>Contexte</span>
-						<span title={libelleFenetre(fenetre)}>
-							{tokensLisibles(fenetre.utilises)} / {tokensLisibles(fenetre.max)} ({Math.round((fenetre.utilises / fenetre.max) * 100)} %)
+						<span>{t.contexte}</span>
+						<span title={libelleFenetre(fenetre, textes.sessions)}>
+							{t.fenetre(tokensLisibles(fenetre.utilises, textes.sessions), tokensLisibles(fenetre.max, textes.sessions), Math.round((fenetre.utilises / fenetre.max) * 100))}
 						</span>
 					</>
 				)}
@@ -125,13 +120,13 @@ export function PanneauContexte(p: {
 			/>
 			<div className={s.actions}>
 				{actif && (
-					<Bouton petit disabled={enCours} onClick={() => void agir('pause')} title="Mettre la session en pause" {...bloque}>
-						Pause
+					<Bouton petit disabled={enCours} onClick={() => void agir('pause')} title={t.pauseTitre} {...bloque}>
+						{t.pause}
 					</Bouton>
 				)}
 				{x.etat === 'en_pause' && (
 					<Bouton petit disabled={enCours} onClick={() => void agir('reprise')} {...bloque}>
-						Reprendre
+						{t.reprendre}
 					</Bouton>
 				)}
 				{bilanPossible && (
@@ -139,35 +134,35 @@ export function PanneauContexte(p: {
 						petit
 						disabled={enCours || x.bilanDemandeMs !== null}
 						onClick={() => void agir('bilan')}
-						{...(x.bilanDemandeMs !== null ? { title: 'Bilan demandé' } : { title: 'Terminer la session avec un bilan', ...bloque })}
+						{...(x.bilanDemandeMs !== null ? { title: textes.sessions.fermer.bilanDemande } : { title: t.bilanTitre, ...bloque })}
 					>
-						Bilan
+						{t.bilan}
 					</Bouton>
 				)}
 				{x.etat === 'a_relire' && (
 					<Bouton petit genre="primaire" disabled={enCours} onClick={() => void agir('bilan')} {...bloque}>
-						Faire le bilan
+						{textes.sessions.fermer.faireLeBilan}
 					</Bouton>
 				)}
 				{x.etat !== 'terminee' &&
 					(confirmer ? (
 						<span className={s.confirmation}>
 							<Bouton petit disabled={enCours} className={s.danger} onClick={() => void agir('abandon')}>
-								Confirmer l’abandon
+								{textes.sessions.fermer.confirmerAbandon}
 							</Bouton>
 							<Bouton petit onClick={() => setConfirmation(null)}>
-								Annuler
+								{textes.commun.actions.annuler}
 							</Bouton>
 						</span>
 					) : (
-						<Bouton petit disabled={enCours} onClick={() => setConfirmation(x.id)} title="Abandonner la session, sans bilan">
-							Abandonner
+						<Bouton petit disabled={enCours} onClick={() => setConfirmation(x.id)} title={t.abandonnerTitre}>
+							{textes.sessions.fermer.abandonner}
 						</Bouton>
 					))}
 			</div>
 			{sansReprise !== null && (
 				<p id={idRaison} role="note" className={s.avis}>
-					Pause, reprise et bilan impossibles pour l’instant : {sansReprise}. Abandonner reste possible.
+					{t.sansReprise(sansReprise)}
 				</p>
 			)}
 		</aside>

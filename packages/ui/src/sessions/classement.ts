@@ -1,5 +1,6 @@
 /** Classement en direct d'une session (panneau Contexte) : le dernier calcul de `servir`, sans les écartés. */
 import { SEUIL_NOTE_CLASSEMENT, type ClassementVue, type EntreeServieVue, type InjectionVue, type ReglagesVue } from '@mnemo/contrat';
+import { TEXTES, type Textes } from '../langue/textes.ts';
 
 /** Vrai si l'id est écarté : lui-même, ou sa fiche (un écarté sans `#`), comme le service. */
 export function estEcarte(id: string, ecartes: readonly string[]): boolean {
@@ -38,9 +39,9 @@ function classementTrie(entrees: readonly EntreeServieVue[]): ClassementVue[] {
 	return [...derniere.classement].sort((a, b) => cle(b) - cle(a) || a.rang - b.rang);
 }
 
-/** « 87 % » (pourcentage entier, espace insécable) ; null sans note. Une note de piste peut dépasser 1 (sens plus poids) : 100 %. */
-export function pourcentage(note: number | null): string | null {
-	return note === null ? null : `${Math.round(Math.min(note, 1) * 100)} %`;
+/** « 87 % » (pourcentage entier, au format de la langue) ; null sans note. Une note de piste peut dépasser 1 (sens plus poids) : 100 %. */
+export function pourcentage(note: number | null, t: Textes['sessions'] = TEXTES.fr.sessions): string | null {
+	return note === null ? null : t.formats.pourcentage(Math.round(Math.min(note, 1) * 100));
 }
 
 /**

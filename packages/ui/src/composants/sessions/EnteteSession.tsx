@@ -4,7 +4,7 @@
  */
 import type { SessionVue } from '@mnemo/contrat';
 import type { CSSProperties, ReactNode } from 'react';
-import { LIBELLES_ETATS } from '../../sessions/etats.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import { JETONS_COULEUR } from '../commun/AvatarProfil.tsx';
 import { useAvatarsDeProfils } from '../commun/avatar-de-profil.ts';
 import { Puce } from '../commun/Puce.tsx';
@@ -12,6 +12,7 @@ import { AvatarSession } from './AvatarSession.tsx';
 import s from './EnteteSession.module.css';
 
 export function EnteteSession(p: { session: SessionVue }): ReactNode {
+	const t = useTextes().sessions;
 	const avatarDe = useAvatarsDeProfils();
 	const x = p.session;
 	const style = { '--profil': JETONS_COULEUR[avatarDe(x.profil).couleur] } as CSSProperties;
@@ -21,9 +22,9 @@ export function EnteteSession(p: { session: SessionVue }): ReactNode {
 			<div className={s.texte}>
 				<div className={s.ligne}>
 					<span className={s.profil}>{x.profil}</span>
-					<Puce couleur={x.etat}>{LIBELLES_ETATS[x.etat]}</Puce>
+					<Puce couleur={x.etat}>{t.etats[x.etat]}</Puce>
 				</div>
-				<h2 className={s.objectif}>{x.objectif ?? 'Sans objectif'}</h2>
+				<h2 className={s.objectif}>{x.objectif ?? t.sansObjectif}</h2>
 			</div>
 		</div>
 	);

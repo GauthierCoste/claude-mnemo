@@ -28,12 +28,6 @@ export function cartesRecentes(entrees: readonly EntreeServieVue[], n: number): 
 	return new Set(recentes.flatMap((e) => e.cartes.map((c) => c.id)));
 }
 
-/** Ce que dit un message muet (rien n'a été proposé). */
-export const LIBELLES_MUET: Record<NonNullable<EntreeServieVue['muet']>, string> = {
-	sans_contenu: 'Message sans contenu : rien proposé',
-	balise: 'Message système : rien proposé',
-};
-
 /** Titres connus par les entrées (les plus récentes l'emportent), chemin → titre. */
 export function titresConnus(entrees: readonly EntreeServieVue[]): Map<string, string> {
 	const titres = new Map<string, string>();

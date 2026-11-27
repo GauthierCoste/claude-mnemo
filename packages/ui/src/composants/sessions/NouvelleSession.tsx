@@ -23,6 +23,7 @@ import { JETONS_COULEUR } from '../commun/AvatarProfil.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
 import { copierTexte } from '../commun/copier.ts';
 import { useToast } from '../Toast.tsx';
+import { useTextes } from '../../langue/langue.tsx';
 import { AutresProfils } from './nouvelle/AutresProfils.tsx';
 import { FicheAgent } from './nouvelle/FicheAgent.tsx';
 import { MissionSession } from './nouvelle/MissionSession.tsx';
@@ -36,6 +37,8 @@ const CHAMP = 'input, textarea, select, [contenteditable="true"], [data-arbre]';
 export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: string; surFermer(): void; surLancee(session: SessionVue): void }): ReactNode {
 	const { api } = useClient();
 	const toast = useToast();
+	const textes = useTextes();
+	const t = textes.sessions.nouvelle;
 	const nav = useNavigation();
 	const dialogue = useRef<HTMLDialogElement>(null);
 	const formulaire = useRef<HTMLFormElement>(null);
@@ -59,7 +62,7 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 	const moteurs = (poste.donnees ?? leger.donnees)?.moteurs;
 	const verification = poste.chargement;
 	const moteurDe = (a: ProfilVue) => moteurs?.find((m) => m.id === a.moteur);
-	const etatDe = (a: ProfilVue) => etatDuMoteur(moteurDe(a), poste.chargement || leger.chargement, poste.erreur ?? leger.erreur);
+	const etatDe = (a: ProfilVue) => etatDuMoteur(moteurDe(a), poste.chargement || leger.chargement, poste.erreur ?? leger.erreur, textes.sessions);
 	const eteints = new Set(agents.filter((a) => etatDe(a).genre === 'bloque').map((a) => a.nom));
 	const etat = agent === undefined ? null : etatDe(agent);
 	const bloque = etat?.genre === 'bloque' ? etat : null;
@@ -112,11 +115,11 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 				p.surLancee(r.session);
 			} else {
 				p.surLancee(r.session);
-				toast('Session lancée');
+				toast(t.lancee);
 				fermer();
 			}
 		} catch (x) {
-			setErreur(x instanceof ErreurApi ? x.message : 'Lancement impossible.');
+			setErreur(x instanceof ErreurApi ? x.message : t.lancementImpossible);
 		} finally {
 			setEnvoi(false);
 		}
@@ -137,7 +140,7 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 	};
 
 	const copier = () => {
-		if (manuel !== null) copierTexte(manuel, toast, 'Commande copiée');
+		if (manuel !== null) copierTexte(manuel, toast, t.commandeCopiee);
 	};
 
 	return (
@@ -155,11 +158,11 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 			<form ref={formulaire} className={s.formulaire} onSubmit={(e) => void lancer(e)}>
 				<div className={s.entete}>
 					<h2 id={titre} className={s.titre}>
-						Nouvelle session
+						{t.titre}
 					</h2>
 					{manuel === null && (
 						<span className={s.aide} aria-hidden="true">
-							<kbd>←</kbd> <kbd>→</kbd> changer d’agent · <kbd>↵</kbd> lancer · <kbd>Échap</kbd> fermer
+							<kbd>←</kbd> <kbd>→</kbd> {t.aide.changer} · <kbd>↵</kbd> {t.aide.lancer} · <kbd>{t.aide.echap}</kbd> {t.aide.fermer}
 						</span>
 					)}
 				</div>
@@ -170,10 +173,10 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 								<SceneAgents agents={agents} choisi={indice} eteints={eteints} surChoisir={choisir} />
 							) : profils.donnees === undefined && profils.erreur === null ? (
 								<div className={s.squelette} role="status">
-									<span className={s.horsVue}>Lecture des profils…</span>
+									<span className={s.horsVue}>{t.lectureProfils}</span>
 								</div>
 							) : (
-								<p className={s.attente}>Aucun agent à proposer : aucun profil ne se lance par ce dialogue.</p>
+								<p className={s.attente}>{t.aucunAgent}</p>
 							)}
 							<div className={s.colonneFiche}>
 								{agent !== undefined && etat !== null && <FicheAgent profil={agent} moteur={moteurDe(agent)} etat={etat} verification={verification} idRaison={idRaison} surVoirReglages={voirReglages} />}
@@ -189,30 +192,30 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 						)}
 						<div className={s.pied}>
 							{agent !== undefined && (
-								<span className={s.resume} title={resumeDeLaSession(agent, dossier, p.nomRacine)}>
-									{resumeDeLaSession(agent, dossier, p.nomRacine)}
+								<span className={s.resume} title={resumeDeLaSession(agent, dossier, p.nomRacine, textes.sessions)}>
+									{resumeDeLaSession(agent, dossier, p.nomRacine, textes.sessions)}
 								</span>
 							)}
 							<div className={s.boutons}>
 								<Bouton className={s.bouton} onClick={fermer}>
-									Annuler
+									{textes.commun.actions.annuler}
 								</Bouton>
-								<Bouton genre="primaire" type="submit" className={`${s.bouton} ${s.lancer}`} disabled={envoi} indisponible={bloque !== null && { raison: idRaison }} title={bloque?.raison ?? `Lancer ${agent?.nom ?? profil}`}>
-									{`Lancer ${agent?.nom ?? profil}`}
+								<Bouton genre="primaire" type="submit" className={`${s.bouton} ${s.lancer}`} disabled={envoi} indisponible={bloque !== null && { raison: idRaison }} title={bloque?.raison ?? t.lancer(agent?.nom ?? profil)}>
+									{t.lancer(agent?.nom ?? profil)}
 								</Bouton>
 							</div>
 						</div>
 					</>
 				) : (
 					<div className={s.manuel}>
-						<p className={s.mu}>Les terminaux ne sont pas disponibles dans Mnemo : la session est suivie, à lancer à la main dans un terminal.</p>
+						<p className={s.mu}>{t.manuel}</p>
 						<code className={s.commande}>{manuel}</code>
 						<div className={s.boutonsManuel}>
 							<Bouton className={s.bouton} onClick={copier}>
-								Copier
+								{t.copier}
 							</Bouton>
 							<Bouton genre="primaire" className={s.bouton} onClick={fermer}>
-								Fermer
+								{textes.commun.actions.fermer}
 							</Bouton>
 						</div>
 					</div>

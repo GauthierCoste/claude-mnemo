@@ -8,6 +8,7 @@ import { DePlus, useToutPour } from '../commun/DePlus.tsx';
 import { cx } from '../commun/classes.ts';
 import { copierTexte } from '../commun/copier.ts';
 import { useToast } from '../Toast.tsx';
+import { useTextes } from '../../langue/langue.tsx';
 import s from './PanneauDossier.module.css';
 
 type Props = {
@@ -28,6 +29,7 @@ type Props = {
 
 export function PanneauDossier(p: Props): ReactNode {
 	const toast = useToast();
+	const t = useTextes().sessions.panneauDossier;
 	// undefined : rien n'a encore été cliqué, le dossier de la session choisie est ouvert
 	const [ouvert, setOuvert] = useState<string | null | undefined>(undefined);
 	const choisi = ouvert === undefined ? p.dossierChoisi : ouvert;
@@ -39,17 +41,17 @@ export function PanneauDossier(p: Props): ReactNode {
 
 	const details = (chemin: string, git: GitDossierVue | undefined, retrait: number): ReactNode => (
 		<>
-			{git && <FichiersGit chemin={chemin} git={git} retrait={retrait} copier={(f) => copierTexte([p.racineAbsolue, chemin, f].filter(Boolean).join('/'), toast, 'Chemin copié')} />}
+			{git && <FichiersGit chemin={chemin} git={git} retrait={retrait} copier={(f) => copierTexte([p.racineAbsolue, chemin, f].filter(Boolean).join('/'), toast, t.cheminCopie)} />}
 			<div className={s.actions} style={{ paddingLeft: 18 + retrait }}>
 				<button type="button" className={s.ib} onClick={() => p.surNouvelle(chemin)}>
-					+ session
+					{t.nouvelle}
 				</button>
 			</div>
 		</>
 	);
 
 	return (
-		<aside className={s.panneau} aria-label="Dossier" style={p.largeur === undefined ? undefined : { width: p.largeur }}>
+		<aside className={s.panneau} aria-label={t.region} style={p.largeur === undefined ? undefined : { width: p.largeur }}>
 			<ArbreDossiers presentation="panneau" entete={<span className={s.lbl}>{p.racine}</span>} choisi={choisi} surChoisir={choisir} pliage={p.pliage} surPliage={p.surPliage} details={details} />
 		</aside>
 	);
@@ -59,11 +61,12 @@ export function PanneauDossier(p: Props): ReactNode {
 function FichiersGit(p: { chemin: string; git: NonNullable<GitDossierVue>; retrait: number; copier(fichier: string): void }): ReactNode {
 	const { tout, toutVoir } = useToutPour(p.chemin);
 	const entiere = useGitDossier(tout ? p.chemin : null, true).donnees;
+	const t = useTextes().sessions.panneauDossier;
 	const fichiers = (tout ? entiere?.fichiers : undefined) ?? p.git.fichiers;
 	return (
 		<>
 			{fichiers.map((f) => (
-				<button key={f.chemin} type="button" className={s.fichier} style={{ paddingLeft: 22 + p.retrait }} title={`Copier le chemin de ${f.chemin}`} onClick={() => p.copier(f.chemin)}>
+				<button key={f.chemin} type="button" className={s.fichier} style={{ paddingLeft: 22 + p.retrait }} title={t.copierChemin(f.chemin)} onClick={() => p.copier(f.chemin)}>
 					<span className={cx(s.statut, s[f.statut])}>{f.statut}</span>
 					<span className={s.nom}>{f.chemin}</span>
 				</button>

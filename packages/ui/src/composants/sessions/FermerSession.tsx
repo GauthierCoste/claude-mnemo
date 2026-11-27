@@ -8,14 +8,16 @@ import type { SessionVue } from '@mnemo/contrat';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { bilanPermis } from '../../sessions/etats.ts';
 import { cx } from '../commun/classes.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import { useActionSession, type ActionSession } from './actions-session.ts';
 import s from './FermerSession.module.css';
 
-/** Ligne d'un item indisponible faute de reprise possible ; la raison complète est dans le panneau Contexte. */
-const IMPOSSIBLE = 'impossible pour l’instant (raison dans le panneau Contexte)';
-
 export function FermerSession(p: { session: SessionVue }): ReactNode {
 	const x = p.session;
+	const textes = useTextes();
+	const t = textes.sessions.fermer;
+	// ligne d'un item indisponible faute de reprise possible ; la raison complète est dans le panneau Contexte
+	const impossible = t.impossible;
 	const [ouvert, setOuvert] = useState(false);
 	const [confirmer, setConfirmer] = useState(false);
 	const action = useActionSession();
@@ -42,7 +44,7 @@ export function FermerSession(p: { session: SessionVue }): ReactNode {
 	}, [ouvert, confirmer]);
 
 	// le moteur ne saurait pas reprendre la session pour son bilan (Codex pas encore commencé) : seul l'abandon reste
-	const sansBilan = x.sansReprise === undefined ? undefined : `Bilan impossible pour l’instant : ${x.sansReprise}.`;
+	const sansBilan = x.sansReprise === undefined ? undefined : t.bilanImpossible(x.sansReprise);
 	const agir = (a: ActionSession) => {
 		fermer(true);
 		void action.agir(x.id, a);
@@ -69,8 +71,8 @@ export function FermerSession(p: { session: SessionVue }): ReactNode {
 				ref={bouton}
 				type="button"
 				className={s.bouton}
-				title="Fermer la session"
-				aria-label="Fermer la session"
+				title={t.fermer}
+				aria-label={t.fermer}
 				aria-haspopup="menu"
 				aria-expanded={ouvert}
 				onClick={(e) => {
@@ -85,7 +87,7 @@ export function FermerSession(p: { session: SessionVue }): ReactNode {
 				<div
 					ref={menu}
 					role="menu"
-					aria-label="Fermer la session"
+					aria-label={t.fermer}
 					className={s.menu}
 					onKeyDown={(e) => {
 						if (e.key === 'Escape' || e.key === 'Tab') {
@@ -106,15 +108,15 @@ export function FermerSession(p: { session: SessionVue }): ReactNode {
 				>
 					{confirmer ? (
 						<>
-							{item('Confirmer l’abandon', () => agir('abandon'), { danger: true })}
-							{item('Annuler', () => fermer(true))}
+							{item(t.confirmerAbandon, () => agir('abandon'), { danger: true })}
+							{item(textes.commun.actions.annuler, () => fermer(true))}
 						</>
 					) : (
 						<>
 							{bilanPermis(x.etat) &&
-								item('Terminer avec bilan', () => agir('bilan'), x.bilanDemandeMs !== null ? { disabled: true, title: 'Bilan demandé' } : sansBilan === undefined ? {} : { indisponible: true, title: sansBilan, detail: IMPOSSIBLE })}
-							{x.etat === 'a_relire' && item('Faire le bilan', () => agir('bilan'), sansBilan === undefined ? {} : { indisponible: true, title: sansBilan, detail: IMPOSSIBLE })}
-							{item('Abandonner', () => setConfirmer(true))}
+								item(t.terminerAvecBilan, () => agir('bilan'), x.bilanDemandeMs !== null ? { disabled: true, title: t.bilanDemande } : sansBilan === undefined ? {} : { indisponible: true, title: sansBilan, detail: impossible })}
+							{x.etat === 'a_relire' && item(t.faireLeBilan, () => agir('bilan'), sansBilan === undefined ? {} : { indisponible: true, title: sansBilan, detail: impossible })}
+							{item(t.abandonner, () => setConfirmer(true))}
 						</>
 					)}
 				</div>

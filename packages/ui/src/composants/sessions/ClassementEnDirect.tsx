@@ -27,13 +27,15 @@
  * un ▲/▼ dit le changement de rang quelques secondes, une nouvelle venue apparaît en fondu. La liste défile seule et s'ancre
  * à la jonction. Pas de % calibré hors calibration : une entrée ancienne, ou un modèle de note non accepté, donne l'ordre seul.
  */
-import { libelleRaison, niveauEffectif, type NiveauModeles } from '@mnemo/commun';
+import { niveauEffectif, type NiveauModeles } from '@mnemo/commun';
 import type { ClassementVue, CoupureInjectionVue, EntreeServieVue, InjectionVue, LueVue, RaisonCarteVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
 import { useAServir, useEcartes, useEcarteesToujours, useModeles, useReactiverInjection, useReglages } from '../../client/hooks.ts';
 import { dernierClassement, derniereEntree, estCalibre, estEcarte, modesDInjection, pourcentage, seuilInjection, sousLeSeuil, type ModeInjection } from '../../sessions/classement.ts';
-import { cartesProposees, cartesRecentes, fichesServies, LIBELLES_MUET, titreFiche, titresConnus } from '../../sessions/servis.ts';
+import { cartesProposees, cartesRecentes, fichesServies, titreFiche, titresConnus } from '../../sessions/servis.ts';
+import { useTextes } from '../../langue/langue.tsx';
+import { TEXTES, type Textes } from '../../langue/textes.ts';
 import { Bouton } from '../commun/Bouton.tsx';
 import b from '../commun/Bouton.module.css';
 import { ItemMenu, MenuModeles } from '../modeles/MenuModeles.tsx';
@@ -70,34 +72,31 @@ function cleDe(entree: EntreeServieVue | null): string {
 	return entree === null ? '' : `${entree.horodatageMs}|${entree.classement.map((c) => `${c.id}:${c.rang}`).join(',')}`;
 }
 
-function libelleDelta(delta: number): string {
-	const n = Math.abs(delta);
-	return `${delta > 0 ? 'monte' : 'descend'} de ${n} rang${n > 1 ? 's' : ''}`;
-}
+type T = Textes['sessions'];
 
-const heure = (ms: number) => new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 const chemin = (id: string) => id.split('#')[0]!;
 
 /** Pourquoi le classement est en ordre seul (info-bulle du repère « ordre seul »). */
-export function raisonOrdreSeul(coupes: boolean): string {
-	return coupes
-		? "Ordre seul : modèles coupés pour cette session, ni sens ni reranker. L'ordre suit les mots, puis l'historique des gestes ; sans %, ni injection par Mnemo."
-		: "Ordre seul : aucune note apprise et validée sur les jugements pour les modèles installés (note de départ à entraîner, pas encore apprise, refusée, ou modèles changés depuis). L'ordre suit le sens et les mots ; sans %, ni injection par Mnemo.";
+export function raisonOrdreSeul(coupes: boolean, t: T = TEXTES.fr.sessions): string {
+	return coupes ? t.classement.ordreSeul.coupes : t.classement.ordreSeul.sansNote;
+}
+
+/** Libellé de la raison d'une piste, par son code (repli : le code), avec « à <titre> » quand la fiche d'origine est connue. */
+function libelleRaison(t: T, raison: RaisonCarteVue, depuis?: string | null): string {
+	const libelle = (t.raisons as Partial<Record<string, string>>)[raison] ?? raison;
+	return depuis === undefined || depuis === null || depuis === '' ? libelle : t.raisonDepuis(libelle, depuis);
 }
 
 /** Libellé à droite d'une fiche injectée et son info-bulle. */
-function modeAffiche(m: ModeInjection | undefined, duDossier: boolean, seuil: number): { libelle: string | null; bulle: string; auto: boolean } {
+function modeAffiche(t: T, m: ModeInjection | undefined, duDossier: boolean, seuil: number): { libelle: string | null; bulle: string; auto: boolean } {
+	const x = t.classement.mode;
 	if (m?.mode === 'auto') {
-		const note = pourcentage(m.p ?? null);
-		return {
-			libelle: note === null ? 'auto' : `auto ${note}`,
-			bulle: `Injectée par Mnemo${note === null ? '' : ` : ${note} pour ce message`} (seuil ${pourcentage(seuil)}), entière, au message de ${heure(m.horodatageMs)}`,
-			auto: true,
-		};
+		const note = pourcentage(m.p ?? null, t);
+		return { libelle: note === null ? x.auto : x.autoNote(note), bulle: x.bulleAuto(note, pourcentage(seuil, t)!, m.horodatageMs), auto: true };
 	}
-	if (m?.mode === 'main') return { libelle: 'à la main', bulle: `Injectée à la main (➤), entière, au message de ${heure(m.horodatageMs)}`, auto: false };
-	if (duDossier) return { libelle: 'du dossier', bulle: 'Fiche du dossier de la session, injectée entière', auto: false };
-	return { libelle: null, bulle: 'Injectée entière dans la session', auto: false };
+	if (m?.mode === 'main') return { libelle: x.main, bulle: x.bulleMain(m.horodatageMs), auto: false };
+	if (duDossier) return { libelle: x.dossier, bulle: x.bulleDossier, auto: false };
+	return { libelle: null, bulle: x.bulleInjectee, auto: false };
 }
 
 /**
@@ -105,13 +104,6 @@ function modeAffiche(m: ModeInjection | undefined, duDossier: boolean, seuil: nu
  * avec Mnemo, de la règle provisoire, ou d'une entrée ancienne.
  */
 type NoteNonCalibree = { valeur: number; origine: 'refusee' | 'depart' | 'provisoire' | 'ancienne' };
-
-const BULLES_NON_CALIBREES: Record<NoteNonCalibree['origine'], string> = {
-	refusee: "Note non calibrée : le modèle appris n'a pas passé les critères d'acceptation",
-	depart: 'Note non calibrée : note de départ, à entraîner (livrée avec Mnemo, pas encore apprise sur les jugements)',
-	provisoire: 'Note non calibrée : la règle provisoire (sens et mots), aucun modèle de note appris',
-	ancienne: "Note non calibrée : celle d'une entrée d'avant le classement vivant",
-};
 
 /** La note non calibrée d'une ligne en ordre seul, si elle en a une (sinon ◇). */
 function noteNonCalibree(l: ClassementVue): { nonCalibree?: NoteNonCalibree } {
@@ -158,6 +150,11 @@ export function ClassementEnDirect(p: {
 	couleur(chemin: string): string;
 }): ReactNode {
 	const toast = useToast();
+	const textes = useTextes();
+	const ts = textes.sessions;
+	const t = ts.classement;
+	const heure = textes.commun.formats.heure;
+	const pct = (n: number | null) => pourcentage(n, ts);
 	const { ecartes, ecarter, retablir } = useEcartes(p.session);
 	const toujours = useEcarteesToujours();
 	const aServir = useAServir(p.session);
@@ -342,7 +339,7 @@ export function ClassementEnDirect(p: {
 			await geste();
 			return true;
 		} catch (e) {
-			toast(e instanceof ErreurApi ? e.message : 'Action impossible.');
+			toast(e instanceof ErreurApi ? e.message : ts.actionImpossible);
 			return false;
 		}
 	};
@@ -431,9 +428,9 @@ export function ClassementEnDirect(p: {
 		const d = marques.deltas.get(id);
 		if (d === undefined) return null;
 		return (
-			<span className={`${s.delta} ${d > 0 ? s.monte : s.descend}`} data-delta="" title={libelleDelta(d)}>
+			<span className={`${s.delta} ${d > 0 ? s.monte : s.descend}`} data-delta="" title={t.delta(d)}>
 				<span aria-hidden="true">{`${d > 0 ? '▲' : '▼'}${Math.abs(d)}`}</span>
-				<span className={s.masque}>{libelleDelta(d)}</span>
+				<span className={s.masque}>{t.delta(d)}</span>
 			</span>
 		);
 	};
@@ -442,16 +439,16 @@ export function ClassementEnDirect(p: {
 	 * ➤ « Injecter dans la session » : au survol de la ligne (`ligne`), ou en bouton texte dans l'aperçu déplié (`apercu`) ;
 	 * allumé tant que l'injection est demandée, un clic l'annule.
 	 */
-	const boutonInjecter = (c: string, t: string, forme: 'ligne' | 'apercu'): ReactNode => {
+	const boutonInjecter = (c: string, titreFiche: string, forme: 'ligne' | 'apercu'): ReactNode => {
 		const attend = aServir.chemins.includes(c);
-		const bulle = attend ? 'Sera injectée au prochain message de la session ; cliquer pour annuler' : 'Injecter dans la session : la fiche entière, au prochain message';
+		const bulle = attend ? t.attendBulle : t.injecterBulle;
 		const clic = () => void agir(() => (attend ? aServir.annuler(c) : aServir.servir(c)));
 		return forme === 'apercu' ? (
 			<Bouton petit className={s.injecterApercu} aria-pressed={attend} title={bulle} onClick={clic}>
-				Injecter
+				{t.injecter}
 			</Bouton>
 		) : (
-			<button type="button" className={`${s.croix} ${s.servir}`} aria-pressed={attend} aria-label={`Injecter ${t} dans la session`} title={bulle} onClick={clic}>
+			<button type="button" className={`${s.croix} ${s.servir}`} aria-pressed={attend} aria-label={t.injecterLabel(titreFiche)} title={bulle} onClick={clic}>
 				➤
 			</button>
 		);
@@ -469,13 +466,13 @@ export function ClassementEnDirect(p: {
 			<>
 				{o.injecter && boutonInjecter(c, o.titre, forme)}
 				<MenuModeles
-					libelle={`Écarter ${o.titre}`}
-					titre="Écarter : de cette session, ou pour toujours"
+					libelle={t.ecarterLabel(o.titre)}
+					titre={t.ecarterTitre}
 					classeBouton={forme === 'apercu' ? cx(b.bouton, b.petit) : (s.croix ?? '')}
 					contenuBouton={
 						forme === 'apercu' ? (
 							<>
-								Écarter <span aria-hidden="true">▾</span>
+								{t.ecarter} <span aria-hidden="true">▾</span>
 							</>
 						) : (
 							'✗'
@@ -492,8 +489,8 @@ export function ClassementEnDirect(p: {
 					{(fermer) => (
 						<>
 							<ItemMenu
-								libelle="Pas pour cette session"
-								detail={o.ecartableIci ? 'Ni proposée ni injectée par Mnemo dans cette session. Se rétablit depuis « Écartées ».' : o.motifIci}
+								libelle={t.pasIci}
+								detail={o.ecartableIci ? t.pasIciDetail : o.motifIci}
 								desactive={!o.ecartableIci}
 								surChoix={() => {
 									fermer();
@@ -501,8 +498,8 @@ export function ClassementEnDirect(p: {
 								}}
 							/>
 							<ItemMenu
-								libelle="Ne plus jamais suggérer"
-								detail="Dans aucune session, ni par Mnemo ni en piste. Se rétablit depuis la fiche, page Mémoire."
+								libelle={t.jamais}
+								detail={t.jamaisDetail}
 								surChoix={() => {
 									fermer();
 									void (o.trouvee ? ecarterTrouvee(o.id, true) : ecarterToujours(o.id));
@@ -523,34 +520,34 @@ export function ClassementEnDirect(p: {
 	};
 
 	/** Le titre d'une ligne : un clic déplie (ou replie) l'aperçu de la fiche sous la ligne. */
-	const titreDeLigne = (cle: string, t: string, bulle: string): ReactNode => (
+	const titreDeLigne = (cle: string, titreFiche: string, bulle: string): ReactNode => (
 		<button type="button" className={s.fiche} title={bulle} aria-expanded={apercuOuvert === cle} aria-controls={apercuOuvert === cle ? idApercu : undefined} onClick={() => setApercuOuvert((o) => (o === cle ? null : cle))}>
 			<i aria-hidden="true" />
-			<span className={s.titre}>{t}</span>
+			<span className={s.titre}>{titreFiche}</span>
 		</button>
 	);
 
 	/** L'aperçu de la ligne `cle` s'il est déplié : la fiche de `id`, « Ouvrir la fiche » et `actions`. */
-	const apercu = (cle: string, id: string, t: string, actions: ReactNode): ReactNode =>
-		apercuOuvert === cle && <ApercuFiche id={idApercu} cible={id} titre={t} actions={actions} surOuvrir={() => p.surOuvrirFiche(chemin(id))} />;
+	const apercu = (cle: string, id: string, titreFiche: string, actions: ReactNode): ReactNode =>
+		apercuOuvert === cle && <ApercuFiche id={idApercu} cible={id} titre={titreFiche} actions={actions} surOuvrir={() => p.surOuvrirFiche(chemin(id))} />;
 
 	const ligneInjectee = (c: string): ReactNode => {
 		const m = modes.get(c) ?? (demandees.current.has(c) ? { mode: 'main' as const, horodatageMs: derniere?.horodatageMs ?? 0 } : undefined);
 		const duDossier = p.position !== undefined && p.position !== '' && c.startsWith(`${p.position}/`);
-		const { libelle, bulle, auto } = modeAffiche(m, duDossier, seuil);
+		const { libelle, bulle, auto } = modeAffiche(ts, m, duDossier, seuil);
 		const lueMs = lueA.get(c);
-		const t = titre(c);
+		const tf = titre(c);
 		const cle = `servie:${c}`;
 		const deplie = apercuOuvert === cle;
-		const ecart = { id: c, titre: t, ecartableIci: true, motifIci: '', resume: `${libelle} – injectée par Mnemo`, injecter: false };
+		const ecart = { id: c, titre: tf, ecartableIci: true, motifIci: '', resume: t.resumeInjectee(libelle), injecter: false };
 		return (
 			<li key={c} ref={refFiche(c)} className={s.ligne} data-id={c} data-servie="true" data-apercu={deplie ? '' : undefined} data-nouvelle={marques.nouvelles.has(c) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
-				<span className={`${s.note} ${s.injectee}`} role="img" aria-label="Injectée dans la session" title={bulle}>
+				<span className={`${s.note} ${s.injectee}`} role="img" aria-label={t.injectee} title={bulle}>
 					◆
 				</span>
 				<span className={s.corps}>
-					{titreDeLigne(cle, t, `${bulle}${lueMs === undefined ? '' : `, lue aussi à ${heure(lueMs)}`}\n${c}`)}
-					{apercu(cle, c, t, auto && gestes(ecart, 'apercu'))}
+					{titreDeLigne(cle, tf, `${bulle}${lueMs === undefined ? '' : t.lueAussi(lueMs)}\n${c}`)}
+					{apercu(cle, c, tf, auto && gestes(ecart, 'apercu'))}
 				</span>
 				{delta(c)}
 				{libelle !== null && (
@@ -567,20 +564,15 @@ export function ClassementEnDirect(p: {
 		const k = l.classee!;
 		const c = chemin(l.id);
 		const attend = aServir.chemins.includes(c);
-		const note = pourcentage(k.p);
+		const note = pct(k.p);
 		// ordre seul : la note qui existe, non calibrée, en gris (jamais la couleur d'accent ni le seuil)
-		const grise = k.nonCalibree === undefined ? null : `≈\u00a0${pourcentage(k.nonCalibree.valeur)!}`;
+		const grise = k.nonCalibree === undefined ? null : `≈\u00a0${pct(k.nonCalibree.valeur)!}`;
 		const auDessus = k.p !== null && k.p >= seuil;
-		const raison = l.raison === undefined ? null : libelleRaison(l.raison, l.depuis);
-		const pourquoiPasInjectee = !auDessus
-			? ''
-			: coupures.length > 0
-				? "\nAu-dessus du seuil, mais l'injection automatique est coupée : ➤ pour l'injecter."
-				: "\nAu-dessus du seuil sans être injectée (affinée après le message, plafond par message, ou déjà vue) : ➤ pour l'injecter.";
-		const bulle = `${raison ?? 'Classée pour ce message'}${k.piste ? ' – envoyée en piste dans la session (titre et résumé)' : ''}${l.lueMs === undefined ? '' : `, lue aussi à ${heure(l.lueMs)}`}${pourquoiPasInjectee}\n${c}`;
-		const noteBulle =
-			note !== null ? `${note} : chance que la fiche soit utile à ce message (note apprise sur les jugements)` : k.nonCalibree !== undefined ? BULLES_NON_CALIBREES[k.nonCalibree.origine] : `Rang ${k.rang} : ordre seul, sans note calibrée`;
-		const resume = `${note ?? grise ?? `rang ${k.rang}`}${raison === null ? '' : ` – ${raison}`}${k.piste ? ' – piste' : ''}`;
+		const raison = l.raison === undefined ? null : libelleRaison(ts, l.raison, l.depuis);
+		const pourquoiPasInjectee = !auDessus ? '' : coupures.length > 0 ? t.auDessusCoupee : t.auDessusNonInjectee;
+		const bulle = `${raison ?? t.classee}${k.piste ? t.enPiste : ''}${l.lueMs === undefined ? '' : t.lueAussi(l.lueMs)}${pourquoiPasInjectee}\n${c}`;
+		const noteBulle = note !== null ? t.noteBulle(note) : k.nonCalibree !== undefined ? t.nonCalibree[k.nonCalibree.origine] : t.rangBulle(k.rang);
+		const resume = `${note ?? grise ?? t.rang(k.rang)}${raison === null ? '' : `${t.separe}${raison}`}${k.piste ? `${t.separe}${t.piste}` : ''}`;
 		const cle = `classee:${l.id}`;
 		const deplie = apercuOuvert === cle;
 		const ecart = { id: l.id, titre: l.titre, ecartableIci: true, motifIci: '', resume, injecter: true };
@@ -594,11 +586,11 @@ export function ClassementEnDirect(p: {
 					{(attend || raison !== null || k.piste) && (
 						<span className={s.sous}>
 							{attend ? (
-								<span className={s.attend}>injectée au prochain message</span>
+								<span className={s.attend}>{t.auProchain}</span>
 							) : (
 								<>
 									{raison !== null && <span>{raison}</span>}
-									{k.piste && <span className={s.piste}>{raison === null ? 'piste' : ' – piste'}</span>}
+									{k.piste && <span className={s.piste}>{raison === null ? t.piste : `${t.separe}${t.piste}`}</span>}
 								</>
 							)}
 						</span>
@@ -612,18 +604,18 @@ export function ClassementEnDirect(p: {
 	};
 
 	const lignePlusTot = (l: Ligne): ReactNode => {
-		const t = l.plusTot!;
-		const lue = t.genre === 'lue';
+		const plus = l.plusTot!;
+		const lue = plus.genre === 'lue';
 		const c = chemin(l.id);
 		const attend = aServir.chemins.includes(c);
-		const quoi = lue ? `lue par la session à ${heure(t.heureMs)}` : `piste du message de ${heure(t.heureMs)}`;
+		const quoi = lue ? t.lueA(plus.heureMs) : t.pisteDe(plus.heureMs);
 		const cle = `plustot:${l.id}`;
 		const deplie = apercuOuvert === cle;
 		const ecart = {
 			id: l.id,
 			titre: l.titre,
 			ecartableIci: l.ecartable,
-			motifIci: lue ? "Indisponible : la session l'a lue d'elle-même, Mnemo ne l'a pas proposée." : 'Indisponible : proposée trop tôt dans la session pour être écartée ici.',
+			motifIci: lue ? t.motifLue : t.motifTropTot,
 			resume: quoi,
 			injecter: true,
 		};
@@ -632,14 +624,14 @@ export function ClassementEnDirect(p: {
 				<span
 					className={`${s.note} ${lue ? s.lue : ''}`}
 					role={lue ? 'img' : undefined}
-					aria-label={lue ? 'Lue par la session' : undefined}
-					title={lue ? 'Lue par la session' : "Piste d'un message précédent, absente du classement de ce message"}
+					aria-label={lue ? t.lue : undefined}
+					title={lue ? t.lue : t.pisteAncienne}
 				>
 					{lue ? '◈' : ''}
 				</span>
 				<span className={s.corps}>
-					{titreDeLigne(cle, l.titre, `${quoi}${l.raison === undefined ? '' : ` – ${libelleRaison(l.raison)}`}\n${c}`)}
-					<span className={s.sous}>{attend ? <span className={s.attend}>injectée au prochain message</span> : quoi}</span>
+					{titreDeLigne(cle, l.titre, `${quoi}${l.raison === undefined ? '' : `${t.separe}${libelleRaison(ts, l.raison)}`}\n${c}`)}
+					<span className={s.sous}>{attend ? <span className={s.attend}>{t.auProchain}</span> : quoi}</span>
 					{apercu(cle, l.id, l.titre, gestes(ecart, 'apercu'))}
 				</span>
 				{delta(l.id)}
@@ -649,9 +641,9 @@ export function ClassementEnDirect(p: {
 	};
 
 	/** ➤ seul : une fiche trouvée déjà écartée s'injecte encore à la main, sans ✗ (elle l'est déjà). */
-	const gestesSansEcart = (c: string, t: string): ReactNode => (
+	const gestesSansEcart = (c: string, titreFiche: string): ReactNode => (
 		<span className={s.gestes} data-force={aServir.chemins.includes(c) ? 'true' : undefined}>
-			{boutonInjecter(c, t, 'ligne')}
+			{boutonInjecter(c, titreFiche, 'ligne')}
 		</span>
 	);
 
@@ -660,34 +652,35 @@ export function ClassementEnDirect(p: {
 		const c = f.chemin;
 		const injectee = injectees.has(c);
 		const attend = aServir.chemins.includes(c);
-		const t = titres.get(c) ?? f.titre;
+		const tf = titres.get(c) ?? f.titre;
+		const x = t.trouvee;
 		const jamaisSuggeree = jamais.has(c);
 		const ecarteeIci = !jamaisSuggeree && estEcarte(c, idsEcartes);
-		const quoi = injectee ? 'déjà injectée dans la session' : attend ? null : jamaisSuggeree ? 'plus jamais suggérée' : ecarteeIci ? 'écartée de cette session' : 'trouvée par la recherche';
+		const quoi = injectee ? x.dejaInjectee : attend ? null : jamaisSuggeree ? x.jamais : ecarteeIci ? x.ecarteeIci : x.trouvee;
 		const cle = `trouvee:${c}`;
 		const deplie = apercuOuvert === cle;
 		const ecart = {
 			id: c,
-			titre: t,
+			titre: tf,
 			ecartableIci: classees.some((l) => chemin(l.id) === c),
-			motifIci: "Indisponible : trouvée par la recherche, Mnemo ne l'a pas proposée à ce message.",
-			resume: 'trouvée par la recherche',
+			motifIci: x.motif,
+			resume: x.trouvee,
 			injecter: true,
 			trouvee: true,
 		};
 		const sansEcart = jamaisSuggeree || ecarteeIci;
-		const actions = injectee || !p.modifiable ? null : sansEcart ? boutonInjecter(c, t, 'apercu') : gestes(ecart, 'apercu');
+		const actions = injectee || !p.modifiable ? null : sansEcart ? boutonInjecter(c, tf, 'apercu') : gestes(ecart, 'apercu');
 		return (
 			<li key={cle} className={s.ligne} data-id={c} data-trouvee="true" data-servie={injectee ? 'true' : 'false'} data-apercu={deplie ? '' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
-				<span className={`${s.note} ${s.injectee}`} role={injectee ? 'img' : undefined} aria-label={injectee ? 'Injectée dans la session' : undefined} title={injectee ? 'Déjà injectée dans la session' : undefined}>
+				<span className={`${s.note} ${s.injectee}`} role={injectee ? 'img' : undefined} aria-label={injectee ? t.injectee : undefined} title={injectee ? x.bulleInjectee : undefined}>
 					{injectee ? '◆' : ''}
 				</span>
 				<span className={s.corps}>
-					{titreDeLigne(cle, t, `${injectee ? 'Déjà injectée dans la session' : 'Trouvée par la recherche'}\n${c}`)}
-					<span className={s.sous}>{quoi === null ? <span className={s.attend}>injectée au prochain message</span> : quoi}</span>
-					{apercu(cle, c, t, actions)}
+					{titreDeLigne(cle, tf, `${injectee ? x.bulleInjectee : x.bulleTrouvee}\n${c}`)}
+					<span className={s.sous}>{quoi === null ? <span className={s.attend}>{t.auProchain}</span> : quoi}</span>
+					{apercu(cle, c, tf, actions)}
 				</span>
-				{!injectee && !deplie && (sansEcart ? gestesSansEcart(c, t) : gestes(ecart))}
+				{!injectee && !deplie && (sansEcart ? gestesSansEcart(c, tf) : gestes(ecart))}
 			</li>
 		);
 	};
@@ -697,29 +690,25 @@ export function ClassementEnDirect(p: {
 	// d'injection, vert pointillé ; coupée : de nouveau gris, avec « coupé ».
 	const injectionActive = calibre && coupures.length === 0 && !coupes;
 	const genreSeparateur = injectionActive ? 'seuil' : coupures.length > 0 && calibre ? 'coupe' : 'filet';
-	const bulleSeparateur =
-		genreSeparateur === 'seuil'
-			? `Au-dessus : vu par la session. Mnemo injecte au message même, entière, une fiche notée au-dessus de ${pourcentage(seuil)}. Réglages › Mémoire › Rappel.`
-			: genreSeparateur === 'coupe'
-				? `Seuil d'injection automatique : ${pourcentage(seuil)}. Injection coupée : rien n'est injecté au-dessus.`
-				: 'Au-dessus : vu par la session ; dessous : pas encore vu.';
+	const seuilAffiche = pct(seuil)!;
+	const bulleSeparateur = genreSeparateur === 'seuil' ? t.separateur.bulleSeuil(seuilAffiche) : genreSeparateur === 'coupe' ? t.separateur.bulleCoupe(seuilAffiche) : t.separateur.bulleFilet;
 	const lignesClassees = classees.map((l) => ligneClassee(l));
 
 	// sans fiche injectée, rien à séparer : pas de séparateur (la coupure se dit quand même, à la même place)
 	const separateurVisible = ordreServies.length > 0;
 	const jonctionVisible = separateurVisible || coupures.length > 0;
 	// au repos, le bouton des modèles dit l'état du classement : coupé, calibré (un niveau accepté injecte), sinon ordre seul
-	const repos = coupures.length > 0 ? 'injection coupée' : calibre ? 'calibré' : 'ordre seul';
+	const repos = coupures.length > 0 ? t.repos.coupee : calibre ? t.repos.calibre : t.repos.ordreSeul;
 	// ordre seul faute de note acceptée (et non parce que les modèles sont coupés) : le menu propose d'entraîner la note
-	const etatClassement = { affinage, ordreSeul: ordreSeul ? raisonOrdreSeul(coupes) : null, repos, entrainer: ordreSeul && !coupes };
+	const etatClassement = { affinage, ordreSeul: ordreSeul ? raisonOrdreSeul(coupes, ts) : null, repos, entrainer: ordreSeul && !coupes };
 	const niveaux = [...new Set(coupures.map((x) => x.niveau))];
-	const libelleNiveau = (n: CoupureInjectionVue['niveau']) => (n === 'complets' ? 'modèles complets' : 'sens seul');
+	const libelleNiveau = (n: CoupureInjectionVue['niveau']) => (n === 'complets' ? t.niveaux.complets : t.niveaux.sens);
 
 	return (
 		<div className={s.classement} onKeyDown={clavier}>
 			<div className={s.enteteClassement}>
 				<span className={s.lbl} id={`classement-${p.session}`} ref={titreSection} tabIndex={-1}>
-					Injecté dans la session
+					{t.titre}
 				</span>
 				{p.modifiable ? (
 					<span className={cx(s.aDroite, s.outils)}>
@@ -728,40 +717,36 @@ export function ClassementEnDirect(p: {
 					</span>
 				) : (
 					ordreSeul && (
-						<span className={cx(s.aDroite, s.ordreSeulFixe)} title={raisonOrdreSeul(coupes)}>
-							ordre seul
+						<span className={cx(s.aDroite, s.ordreSeulFixe)} title={raisonOrdreSeul(coupes, ts)}>
+							{t.repos.ordreSeul}
 						</span>
 					)
 				)}
 			</div>
 			{ordreServies.length + enLice.length === 0 && !jonctionVisible && !(p.modifiable && rechercheOuverte) ? (
-				<p className={s.mu}>Aucune fiche pour l’instant.</p>
+				<p className={s.mu}>{t.aucune}</p>
 			) : (
-				<ol className={s.liste} aria-label="Injecté dans la session" ref={liste}>
+				<ol className={s.liste} aria-label={t.titre} ref={liste}>
 					{ordreServies.map(ligneInjectee)}
 					{jonctionVisible && (
 						<li key="jonction" ref={jonction} className={s.jonction} role="presentation">
 							{separateurVisible && (
 								<div className={s.separateur} data-genre={genreSeparateur} title={bulleSeparateur}>
-									{genreSeparateur !== 'filet' && <span>{genreSeparateur === 'seuil' ? `seuil d’injection ${pourcentage(seuil)}` : `seuil ${pourcentage(seuil)} – coupé`}</span>}
+									{genreSeparateur !== 'filet' && <span>{genreSeparateur === 'seuil' ? t.separateur.seuil(seuilAffiche) : t.separateur.coupe(seuilAffiche)}</span>}
 								</div>
 							)}
 							{coupures.length > 0 && (
 								<div className={s.coupure} role="status">
-									<p>
-										<b>Injection automatique coupée</b>
-										{niveaux.length === 1 ? ` (${libelleNiveau(niveaux[0]!)})` : ''} : justesse récente insuffisante.
-									</p>
+									<p>{t.coupure(niveaux.length === 1 ? libelleNiveau(niveaux[0]!) : null)}</p>
 									{coupures.map((x) => (
 										<p key={x.niveau} className={s.detailCoupure}>
-											{niveaux.length > 1 ? `${libelleNiveau(x.niveau)} : ` : ''}
-											{x.motif}.
+											{t.detailCoupure(niveaux.length > 1 ? libelleNiveau(x.niveau) : null, x.motif)}
 										</p>
 									))}
-									<p className={s.detailCoupure}>{calibre ? 'Les % restent affichés ; ➤ pour injecter à la main.' : '➤ pour injecter à la main.'}</p>
+									<p className={s.detailCoupure}>{calibre ? t.coupureMainPourcent : t.coupureMain}</p>
 									{p.modifiable && (
-										<Bouton petit title="Réactiver l'injection automatique : elle se coupera de nouveau si les écarts continuent" onClick={() => void agir(() => reactiver(p.session))}>
-											Réactiver
+										<Bouton petit title={t.reactiverTitre} onClick={() => void agir(() => reactiver(p.session))}>
+											{t.reactiver}
 										</Bouton>
 									)}
 								</div>
@@ -774,7 +759,7 @@ export function ClassementEnDirect(p: {
 							{lignesClassees}
 							{classees.length > 0 && plusTot.length > 0 && (
 								<li key="plus-tot" className={s.intertitre} role="presentation">
-									Plus tôt dans la session
+									{t.plusTot}
 								</li>
 							)}
 							{plusTot.map((l) => lignePlusTot(l))}
@@ -783,73 +768,69 @@ export function ClassementEnDirect(p: {
 				</ol>
 			)}
 			{suggestion !== null && p.modifiable && (
-				<div className={s.suggestion} role="group" aria-label="Suggestion">
-					<p>
-						<b>{titre(suggestion.chemin)}</b> écartée dans {suggestion.sessions} sessions : ne plus la suggérer ?
-					</p>
+				<div className={s.suggestion} role="group" aria-label={t.suggestion}>
+					<p>{t.suggestionTexte(<b>{titre(suggestion.chemin)}</b>, suggestion.sessions)}</p>
 					<div className={s.boutons}>
-						<Bouton petit genre="primaire" title="Ne plus jamais la suggérer, dans aucune session ; se rétablit depuis la fiche (page Mémoire)" onClick={() => void ecarterToujours(suggestion.chemin)}>
-							Ne plus suggérer
+						<Bouton petit genre="primaire" title={t.neSuggererPlusTitre} onClick={() => void ecarterToujours(suggestion.chemin)}>
+							{t.neSuggererPlus}
 						</Bouton>
 						<Bouton
 							petit
-							title="La garder : elle reste écartée de cette session seulement"
+							title={t.garderTitre}
 							onClick={() => {
 								suggestionsGardees.add(`${p.session}|${suggestion.chemin}`);
 								rafraichir((n) => n + 1);
 							}}
 						>
-							Garder
+							{t.garder}
 						</Bouton>
 					</div>
 				</div>
 			)}
 			{jamaisIci.length > 0 && (
-				<p className={s.avis}>
-					{jamaisIci.map(titre).join(', ')} : plus jamais suggérée{jamaisIci.length > 1 ? 's' : ''}. Se rétablit depuis la fiche, page Mémoire.
-				</p>
+				<p className={s.avis}>{t.jamaisIci(jamaisIci.map(titre).join(', '), jamaisIci.length)}</p>
 			)}
-			{muetSeul !== null && <p className={s.avis}>{LIBELLES_MUET[muetSeul]}</p>}
-			{avantLeClassement && <p className={s.avis}>Dernier message classé avant cette version de Mnemo : le classement viendra au prochain message.</p>}
+			{muetSeul !== null && <p className={s.avis}>{t.muet[muetSeul]}</p>}
+			{avantLeClassement && <p className={s.avis}>{t.avantLeClassement}</p>}
 			{sansSens && demarrage?.pour === cle ? (
-				<p className={s.avis}>Modèles démarrés : les notes viendront au prochain message.</p>
+				<p className={s.avis}>{t.modelesDemarres}</p>
 			) : avis?.motif === 'arretes' ? (
 				<p className={s.avis}>
-					Notes indisponibles : modèles arrêtés
+					{t.notesArretes}
 					<button type="button" className={s.demarrer} onClick={demarrer}>
-						Démarrer
+						{t.demarrer}
 					</button>
 				</p>
 			) : avis?.motif === 'absents' ? (
-				<p className={s.avis}>Notes indisponibles : modèles non installés</p>
+				<p className={s.avis}>{t.notesAbsents}</p>
 			) : avis?.motif === 'chargement' ? (
-				<p className={s.avis}>Modèles en chargement : les notes viendront au prochain message.</p>
+				<p className={s.avis}>{t.modelesEnChargement}</p>
 			) : avis?.motif === 'coupes' || avis?.motif === 'sens' ? (
-				<p className={s.avis}>{`Notes indisponibles : ${avis.motif === 'coupes' ? 'modèles coupés' : 'sens seul'}${avis.pourLaSession ? ' pour cette session' : ''}`}</p>
+				<p className={s.avis}>{t.notesSans(avis.motif === 'coupes', avis.pourLaSession)}</p>
 			) : null}
 			{masquees.length > 0 && (
-				<details className={s.ecartees} role="group" aria-label={`Sous le seuil (${masquees.length})`}>
-					<summary>Sous le seuil ({masquees.length})</summary>
+				<details className={s.ecartees} role="group" aria-label={t.sousLeSeuil(masquees.length)}>
+					<summary>{t.sousLeSeuil(masquees.length)}</summary>
 					<ul>
 						{masquees.map((c) => (
 							<li key={c.id} title={c.id}>
 								<span className={s.titre}>{c.titre}</span>
-								<span>{pourcentage(c.note)}</span>
+								<span>{pct(c.note)}</span>
 							</li>
 						))}
 					</ul>
 				</details>
 			)}
 			{ecartes.length > 0 && (
-				<details className={s.ecartees} role="group" aria-label={`Écartées (${ecartes.length})`}>
-					<summary>Écartées ({ecartes.length})</summary>
+				<details className={s.ecartees} role="group" aria-label={t.ecartees(ecartes.length)}>
+					<summary>{t.ecartees(ecartes.length)}</summary>
 					<ul>
 						{ecartes.map((e) => (
 							<li key={e.id} title={e.id}>
 								<span className={`${s.titre} ${s.barre}`}>{e.titre}</span>
 								{p.modifiable && (
-									<button type="button" className={s.retablir} aria-label={`Rétablir ${e.titre}`} title="La remettre parmi les fiches proposées à cette session" onClick={() => void agir(() => retablir(e.id))}>
-										Rétablir
+									<button type="button" className={s.retablir} aria-label={t.retablirLabel(e.titre)} title={t.retablirTitre} onClick={() => void agir(() => retablir(e.id))}>
+										{t.retablir}
 									</button>
 								)}
 							</li>

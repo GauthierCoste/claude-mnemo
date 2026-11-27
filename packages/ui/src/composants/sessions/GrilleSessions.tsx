@@ -11,6 +11,7 @@ import { glisserSeparateur, MINIMUM_COLONNE, MINIMUM_LIGNE, type Grille } from '
 import type { GroupeSessions } from '../../sessions/groupes.ts';
 import { CLASSE_GLISSEMENT } from '../../terminal/useTerminal.ts';
 import { cx } from '../commun/classes.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import { useGestesSeparateur } from '../commun/gestes-separateur.ts';
 import { raccourciAlt } from '../../raccourcis.ts';
 import { AvatarSession } from './AvatarSession.tsx';
@@ -41,9 +42,8 @@ type Props = {
 	surPoids(genre: GenrePoids, poids: Record<string, number>): void;
 };
 
-const pluriel = (n: number, mot: string) => `${n} ${mot}${n > 1 ? 's' : ''}`;
-
 export function GrilleSessions(p: Props): ReactNode {
+	const t = useTextes().sessions;
 	const racine = useRef<HTMLDivElement>(null);
 	const [glisse, setGlisse] = useState(false);
 
@@ -85,12 +85,12 @@ export function GrilleSessions(p: Props): ReactNode {
 				>
 					<AvatarSession session={x} taille="rail" />
 					{rang <= 9 && <kbd>{raccourciAlt(String(rang))}</kbd>}
-					<span className={s.vertical}>{x.objectif ?? 'Sans objectif'}</span>
+					<span className={s.vertical}>{x.objectif ?? t.sansObjectif}</span>
 				</button>
 				<CarteSession
 					session={x}
 					rang={rang}
-					duree={dureeSession(x, p.maintenant)}
+					duree={dureeSession(x, p.maintenant, t)}
 					choisie={p.choisie === x.id}
 					zoomee={c?.zoomee ?? false}
 					terminauxDisponibles={p.terminauxDisponibles}
@@ -106,7 +106,7 @@ export function GrilleSessions(p: Props): ReactNode {
 		<div
 			ref={racine}
 			className={cx(s.grille, p.disposition.zoomee && s.zoomee, glisse && CLASSE_GLISSEMENT)}
-			aria-label="Grille des sessions"
+			aria-label={t.grille.region}
 			role="region"
 		>
 			<div className={s.lignes}>
@@ -123,24 +123,24 @@ export function GrilleSessions(p: Props): ReactNode {
 										type="button"
 										className={s.ib}
 										aria-expanded={!repliee}
-										aria-label={repliee ? `Déplier ${g.titre}` : `Replier ${g.titre}`}
+										aria-label={repliee ? t.grille.deplier(g.titre) : t.grille.replier(g.titre)}
 										onClick={() => p.surBasculerLigne(g.cle)}
 									>
 										{repliee ? '▸' : '▾'}
 									</button>
 									<b>{g.titre}</b>
-									<span>{pluriel(g.sessions.length, 'session')}</span>
+									<span>{t.grille.sessions(g.sessions.length)}</span>
 									<span className={s.pastilles}>
 										{g.sessions.map((x) => (
 											<button key={x.id} type="button" className={s.pastille} onClick={() => p.surPastille(x.id)} tabIndex={mini ? 0 : -1}>
 												<Point etat={x.etat} />
-												{x.objectif ?? 'Sans objectif'}
+												{x.objectif ?? t.sansObjectif}
 											</button>
 										))}
 									</span>
 									<span className={s.espace} />
 									<button type="button" className={s.ib} onClick={() => p.surNouvelle(g.cle)}>
-										+ session
+										{t.grille.nouvelle}
 									</button>
 								</div>
 								<div className={s.cellules}>
@@ -157,17 +157,16 @@ export function GrilleSessions(p: Props): ReactNode {
 				})}
 			</div>
 			<div className={s.aide} data-aide="">
-				<span>{nombre > 1 ? `${raccourciAlt('1')} à ${raccourciAlt(String(Math.min(nombre, 9)))} ouvre une session en grand` : `${raccourciAlt('1')} ouvre la session en grand`}</span>
-				<span>Échap revient à la grille</span>
-				<span>double-clic sur un titre pour agrandir</span>
-				<span>{raccourciAlt('A')} parle à l'archiviste</span>
+				<span>{nombre > 1 ? t.grille.aidePlusieurs(raccourciAlt('1'), raccourciAlt(String(Math.min(nombre, 9)))) : t.grille.aideUne(raccourciAlt('1'))}</span>
+				<span>{t.grille.aideEchap}</span>
+				<span>{t.grille.aideDoubleClic}</span>
+				<span>{t.grille.aideArchiviste(raccourciAlt('A'))}</span>
 			</div>
 		</div>
 	);
 }
 
 const ATTRIBUTS: Record<GenrePoids, string> = { cellules: 'data-cellule', lignes: 'data-ligne' };
-const LIBELLES: Record<GenrePoids, string> = { cellules: 'Largeur des sessions voisines', lignes: 'Hauteur des dossiers voisins' };
 const MINIMUMS: Record<GenrePoids, number> = { cellules: MINIMUM_COLONNE, lignes: MINIMUM_LIGNE };
 
 type Voisines = { a: string; b: string; tailleA: number; tailleB: number };
@@ -191,6 +190,7 @@ function voisinesDe(separateur: HTMLElement, genre: GenrePoids, surPoids: Props[
 
 /** Séparateur entre deux cellules (`.vs`) ou deux lignes (`.hs`) : il partage leur somme, chacune au moins à son minimum. */
 function SeparateurGrille(p: { genre: GenrePoids; inactif: boolean; surPoids: Props['surPoids']; surGlisse(glisse: boolean): void }): ReactNode {
+	const t = useTextes().sessions;
 	const voisines = useRef<Voisines | null>(null);
 	const element = useRef<HTMLDivElement>(null);
 	// valeur ARIA : la taille affichée de la voisine d'avant, relue après chaque rendu (poids, disposition, fenêtre)
@@ -231,7 +231,7 @@ function SeparateurGrille(p: { genre: GenrePoids; inactif: boolean; surPoids: Pr
 			data-separateur={p.genre}
 			role="separator"
 			aria-orientation={vertical ? 'vertical' : 'horizontal'}
-			aria-label={LIBELLES[p.genre]}
+			aria-label={t.grille.separateurs[p.genre]}
 			tabIndex={p.inactif ? -1 : 0}
 			ref={element}
 			aria-valuenow={mesure?.valeur}
