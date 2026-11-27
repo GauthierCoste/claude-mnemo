@@ -137,7 +137,7 @@ describe('vue Réglages', () => {
 		expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Agents', 'Réglages', 'Documentation']);
 		expect(screen.getByRole('tab', { name: 'Réglages' }).getAttribute('aria-selected')).toBe('true');
 		const sections = within(screen.getByRole('tabpanel')).getByRole('navigation', { name: 'Sections des réglages' });
-		expect(within(sections).getAllByRole('button').map((b) => b.textContent)).toEqual(['Branchementsmoteurs et app Claude', 'Mémoirerappel, recherche, confiance', 'Systèmeservice, modèles, couleur']);
+		expect(within(sections).getAllByRole('button').map((b) => b.textContent)).toEqual(['Branchementsmoteurs et app Claude', 'Mémoirerappel, recherche, confiance', 'Systèmeservice, modèles, interface']);
 		await act(async () => screen.getByRole('tab', { name: 'Documentation' }).click());
 		expect(valeurs.get('mnemo.reglages.onglet')).toBe('documentation');
 		expect(screen.getByRole('region', { name: 'Documentation' })).toBeTruthy();

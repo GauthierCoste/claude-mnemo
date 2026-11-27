@@ -33,7 +33,7 @@ describe('disposition des réglages', () => {
 			'recherche.reranker',
 		]);
 		expect(champs('Rappel').filter((c) => !c.startsWith('contexte.'))).toEqual(['entrainement.automatique', 'projets.marqueurs']);
-		expect(CARTES_REGLAGES.systeme.map((c) => c.groupes.map((g) => g.titre))).toEqual([['Service', 'Modèles locaux', 'Couleur']]);
+		expect(CARTES_REGLAGES.systeme.map((c) => c.groupes.map((g) => g.titre))).toEqual([['Service', 'Modèles locaux', 'Interface']]);
 		expect(sectionDuChamp('service.port')).toBe('systeme');
 		expect(sectionDuChamp('memoire.fiabilite_email')).toBe('memoire');
 	});

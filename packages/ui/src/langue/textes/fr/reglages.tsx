@@ -19,7 +19,7 @@ export const reglages = {
 		sections: {
 			branchements: { titre: 'Branchements', sous: 'moteurs et app Claude' },
 			memoire: { titre: 'Mémoire', sous: 'rappel, recherche, confiance' },
-			systeme: { titre: 'Système', sous: 'service, modèles, couleur' },
+			systeme: { titre: 'Système', sous: 'service, modèles, interface' },
 		},
 		geste: 'Un moteur attend un geste',
 		gesteHorsEcran: '(un moteur attend un geste)',
@@ -68,7 +68,7 @@ export const reglages = {
 			fait: 'Un fait vaut…',
 			archiviste: 'L’archiviste écrit seul…',
 		},
-		systeme: { titre: 'Système', sous: 'Mnemo qui tourne ici, et sa tête.', service: 'Service', modeles: 'Modèles locaux', interface: 'Couleur' },
+		systeme: { titre: 'Système', sous: 'Mnemo qui tourne ici, et sa tête.', service: 'Service', modeles: 'Modèles locaux', interface: 'Interface' },
 	},
 	disposition: {
 		'contexte.seuilInjection': 'Seuil d’injection',

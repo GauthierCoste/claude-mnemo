@@ -16,7 +16,7 @@ export const reglages: Forme<typeof fr> = {
 		sections: {
 			branchements: { titre: 'Connections', sous: 'engines and Claude app' },
 			memoire: { titre: 'Memory', sous: 'recall, search, confidence' },
-			systeme: { titre: 'System', sous: 'service, models, color' },
+			systeme: { titre: 'System', sous: 'service, models, interface' },
 		},
 		geste: 'An engine needs your action',
 		gesteHorsEcran: '(an engine needs your action)',
@@ -64,7 +64,7 @@ export const reglages: Forme<typeof fr> = {
 			fait: 'A fact is worth…',
 			archiviste: 'The archivist writes on its own…',
 		},
-		systeme: { titre: 'System', sous: 'Mnemo running here, and how it looks.', service: 'Service', modeles: 'Local models', interface: 'Color' },
+		systeme: { titre: 'System', sous: 'Mnemo running here, and how it looks.', service: 'Service', modeles: 'Local models', interface: 'Interface' },
 	},
 	disposition: {
 		'contexte.seuilInjection': 'Injection threshold',

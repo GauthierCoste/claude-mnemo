@@ -15,7 +15,8 @@ import s from './ImporterMemoireClaude.module.css';
 export function ImporterMemoireClaude(): ReactNode {
 	const { api } = useClient();
 	const toast = useToast();
-	const t = useTextes().archiviste.import;
+	const textes = useTextes();
+	const t = textes.archiviste.import;
 	const [enCours, setEnCours] = useState(false);
 	const [bilan, setBilan] = useState<BilanAmorceVue | null>(null);
 	const [erreur, setErreur] = useState<string | null>(null);
@@ -26,7 +27,7 @@ export function ImporterMemoireClaude(): ReactNode {
 		try {
 			const b = await api.envoyer<BilanAmorceVue>(ROUTES.amorce, {});
 			setBilan(b);
-			toast(resumeAmorce(b));
+			toast(resumeAmorce(b, textes.memoire.amorce));
 		} catch (e) {
 			const message = e instanceof Error ? e.message : t.erreurInconnue;
 			setErreur(message);
@@ -51,7 +52,7 @@ export function ImporterMemoireClaude(): ReactNode {
 					<summary>{t.bilan}</summary>
 					<div className={s.detail}>
 						<ul>
-							{lignesAmorce(bilan).map((l) => (
+							{lignesAmorce(bilan, textes.memoire.amorce).map((l) => (
 								<li key={l}>{l}</li>
 							))}
 						</ul>
