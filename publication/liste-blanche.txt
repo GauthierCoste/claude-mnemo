@@ -17,6 +17,7 @@ tsconfig.base.json
 
 # Intégration continue
 .github/workflows/*.yml
+.github/release-pied.md
 .gitleaks.toml
 
 # Outillage du dépôt
@@ -49,6 +50,7 @@ docs/coming-next.md
 docs/references/**
 docs/images/**
 docs/app/**
+docs/releases/**
 
 # Documents de conception et notes de travail : locaux, ignorés par git (.gitignore), jamais publiés (exclus
 # explicitement, même si un motif plus large venait à les couvrir).

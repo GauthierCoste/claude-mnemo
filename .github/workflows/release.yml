@@ -1,0 +1,110 @@
+# Release d'une version, lancée par la poussée d'une étiquette x.y.z (`pnpm publier`, voir outils/publier.ts) :
+# 1. contrôle : l'étiquette est la version des cinq paquets, ses notes docs/releases/<version>.md existent, la garde de
+#    publication passe ;
+# 2. macOS (Apple silicon) : types, tests complets, construction de l'app et du .dmg (signature ad hoc), image vérifiée ;
+#    Windows : app-windows.yml (tests, installeur, installation, essai de bout en bout, désinstallation) ;
+# 3. publication : la release <version> avec le .dmg et l'installeur, notes = docs/releases/<version>.md suivies de
+#    .github/release-pied.md (installation, empreintes SHA-256, licence). Relancé sur une release existante, il remplace
+#    ses fichiers et ses notes.
+# Une étape en échec arrête tout : aucune release partielle.
+name: release
+on:
+  push:
+    tags: ['[0-9]+.[0-9]+.[0-9]+']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref_name }}
+jobs:
+  controle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Étiquette, versions et notes
+        env:
+          ETIQUETTE: ${{ github.ref_name }}
+        run: |
+          for p in packages/*/package.json; do
+            v=$(node -p "require('./$p').version")
+            [ "$v" = "$ETIQUETTE" ] || { echo "::error::$p est en $v, l'étiquette en $ETIQUETTE."; exit 1; }
+          done
+          [ -s "docs/releases/$ETIQUETTE.md" ] || { echo "::error::Notes docs/releases/$ETIQUETTE.md absentes."; exit 1; }
+      - run: pnpm verifier-publication
+
+  macos:
+    needs: controle
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Dossier de modèles vide et existant : aucun test ne charge de modèle (comme verifier.yml).
+      - run: |
+          node -e "const d = require('node:path').join(process.env.RUNNER_TEMP, 'mnemo-modeles-vides'); require('node:fs').mkdirSync(d, { recursive: true }); require('node:fs').appendFileSync(process.env.GITHUB_ENV, 'MNEMO_MODELES=' + d + String.fromCharCode(10))"
+      - run: pnpm verifier
+      - run: pnpm test
+      - name: Construction de l'app et du .dmg
+        run: pnpm construire-app --dmg
+      - name: Image disque vérifiée
+        env:
+          ETIQUETTE: ${{ github.ref_name }}
+        run: |
+          dmg="packages/app/dist/Mnemo-$ETIQUETTE-arm64.dmg"
+          [ -f "$dmg" ] || { echo "::error::$dmg absent."; ls packages/app/dist; exit 1; }
+          hdiutil verify "$dmg"
+          codesign --verify --deep --strict packages/app/dist/Mnemo.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg
+          path: packages/app/dist/Mnemo-*.dmg
+          if-no-files-found: error
+
+  windows:
+    needs: controle
+    uses: ./.github/workflows/app-windows.yml
+
+  publier:
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dmg
+          path: fichiers
+      - uses: actions/download-artifact@v4
+        with:
+          name: installeur
+          path: fichiers
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ETIQUETTE: ${{ github.ref_name }}
+        run: |
+          dmg="fichiers/Mnemo-$ETIQUETTE-arm64.dmg"
+          exe="fichiers/Mnemo-Setup-$ETIQUETTE-x64.exe"
+          for f in "$dmg" "$exe"; do [ -f "$f" ] || { echo "::error::$f absent."; ls fichiers; exit 1; }; done
+          sha_mac=$(sha256sum "$dmg" | cut -d' ' -f1)
+          sha_windows=$(sha256sum "$exe" | cut -d' ' -f1)
+          {
+            cat "docs/releases/$ETIQUETTE.md"
+            echo
+            sed -e "s/{{version}}/$ETIQUETTE/g" -e "s/{{sha_mac}}/$sha_mac/g" -e "s/{{sha_windows}}/$sha_windows/g" .github/release-pied.md
+          } > notes.md
+          if gh release view "$ETIQUETTE" > /dev/null 2>&1; then
+            gh release upload "$ETIQUETTE" "$dmg" "$exe" --clobber
+            gh release edit "$ETIQUETTE" --title "Mnemo $ETIQUETTE" --notes-file notes.md
+          else
+            gh release create "$ETIQUETTE" "$dmg" "$exe" --title "Mnemo $ETIQUETTE" --notes-file notes.md --verify-tag
+          fi

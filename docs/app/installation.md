@@ -152,8 +152,9 @@ environment gives one (`packages/app/outils/signature.ts`), and `--dmg` also mak
 Windows, the app is not signed, and `--installeur` also makes the installer `packages/app/dist/Mnemo-Setup-<version>-x64.exe`
 with electron-builder (NSIS, with steps). Run the build through `pnpm construire-app`: on Windows it needs the pnpm that
 starts it. The `app-windows` workflow of the repository builds the installer on a Windows machine of GitHub at each
-change, installs it silently, starts the app, runs Mnemo from it and uninstalls it; on a version tag, it attaches the
-installer to the release.
+change, installs it silently, starts the app, runs Mnemo from it and uninstalls it. On a version tag, the `release`
+workflow runs the tests, builds the `.dmg` on a Mac of GitHub and the installer through `app-windows`, then publishes the
+release with both (see [Releases](#releases)).
 
 `pnpm installer-dev [<Mnemo folder>]` (development tool, macOS only) copies the built app to `~/Applications/Mnemo.app`
 and writes its configuration for that folder (by default the folder the command is run from, or its Mnemo parent), with
@@ -199,3 +200,24 @@ System Settings › General › Login Items), then `pnpm installer-dev --retirer
 `~/Library/Application Support/Mnemo/`. On Windows: quit it, uncheck its opening at login (or turn it off in Settings ›
 Apps › Startup), uninstall it from Settings › Apps › Installed apps (« … » next to Mnemo › Uninstall), and delete `%APPDATA%\Mnemo\`;
 the MCP declaration of Claude Code is removed with `claude mcp remove mnemo --scope user`. Then the steps of [Uninstall cleanly](../installation.md#uninstall-cleanly) of Mnemo, as for an installation from the sources.
+
+## Releases
+
+A release is published by one command, from an up-to-date `main` with a clean working copy:
+
+```sh
+pnpm publier patch      # 1.12.0 → 1.12.1: a fix, a small change
+pnpm publier feature    # 1.12.0 → 1.13.0: a large feature
+pnpm publier version    # 1.12.0 → 2.0.0: a breaking change, a redesign
+```
+
+Write the release notes first in `docs/releases/next.md`: in English, what changes for the user, without the
+installation part. The command checks the starting point (branch, working copy, `origin/main`, versions, tag, notes;
+`--essai` stops there), runs `pnpm verifier` and `pnpm test`, raises the version of the five packages and the
+« Version » line of the README, renames the notes to `docs/releases/<version>.md`, commits `chore: version x.y.z`, tags
+`x.y.z`, runs `pnpm verifier-publication` and pushes `main` with the tag. The tag starts the `release` workflow
+(`.github/workflows/release.yml`): it checks the tag against the versions, runs the tests and builds the `.dmg` on
+macOS, runs `app-windows` for the installer, then creates the release with both files. Its notes are
+`docs/releases/<version>.md` followed by `.github/release-pied.md` (installation, SHA-256 of both files, licence). If a
+step fails, no release is published; once fixed, run the workflow again (Re-run jobs), which also replaces the files and
+the notes of an existing release.

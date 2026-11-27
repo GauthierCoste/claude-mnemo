@@ -1,18 +1,17 @@
 # L'app de bureau sous Windows, validée de bout en bout sur une machine Windows de GitHub : types, tests de l'app,
 # construction de l'installeur, installation silencieuse par utilisateur, lancement en mode essai, essai avec le Node et le
 # Mnemo installés (init, service, santé, commit, terminal ConPTY), captures de l'assistant et de la fenêtre principale,
-# désinstallation. L'installeur et les captures sont gardés en artefacts ; sur une étiquette x.y.z, l'installeur est attaché
-# à la release de même nom (créée avant, avec le .dmg). Les essais sont des scripts Node (packages/app/outils/ci/) ; seule la
-# capture d'écran est en PowerShell.
+# désinstallation. L'installeur et les captures sont gardés en artefacts. Les essais sont des scripts Node
+# (packages/app/outils/ci/) ; seule la capture d'écran est en PowerShell.
 #
-# Lancé à chaque poussée de branche qui touche le code (packages/, verrou, ce fichier), à chaque étiquette (les filtres de
-# chemins ne s'appliquent pas aux étiquettes) et à la main.
+# Lancé à chaque poussée de branche qui touche le code (packages/, verrou, ce fichier), à la main, et par release.yml sur
+# une étiquette de version, qui reprend l'installeur en artefact pour la release.
 name: app-windows
 on:
   push:
     branches: ['**']
-    tags: ['**']
     paths: ['packages/**', 'pnpm-lock.yaml', '.github/workflows/app-windows.yml']
+  workflow_call:
   workflow_dispatch:
 permissions:
   contents: read
@@ -124,38 +123,3 @@ jobs:
           name: captures
           path: ${{ runner.temp }}/captures
           if-no-files-found: warn
-
-  # Sur une étiquette x.y.z : l'installeur est attaché à la release de même nom, qui doit déjà exister (créée avec le .dmg,
-  # construit sur un Mac) ; une étiquette d'une autre forme ne publie rien.
-  release:
-    needs: app
-    if: ${{ startsWith(github.ref, 'refs/tags/') }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: installeur
-          path: installeur
-      - name: Installeur attaché à la release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          ETIQUETTE: ${{ github.ref_name }}
-        run: |
-          if ! [[ "$ETIQUETTE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Étiquette $ETIQUETTE : pas une version x.y.z, rien n'est attaché."
-            exit 0
-          fi
-          installeur="installeur/Mnemo-Setup-$ETIQUETTE-x64.exe"
-          if [ ! -f "$installeur" ]; then
-            echo "::error::$installeur absent : la version de packages/app/package.json n'est pas celle de l'étiquette $ETIQUETTE ?"
-            ls installeur
-            exit 1
-          fi
-          if ! gh release view "$ETIQUETTE" > /dev/null; then
-            echo "::error::La release $ETIQUETTE n'existe pas : créez-la (gh release create $ETIQUETTE …, avec le .dmg), puis relancez ce workflow (Re-run jobs)."
-            exit 1
-          fi
-          gh release upload "$ETIQUETTE" "$installeur" --clobber
