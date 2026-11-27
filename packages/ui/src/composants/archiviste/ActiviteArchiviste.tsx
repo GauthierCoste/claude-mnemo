@@ -1,18 +1,18 @@
 import type { EntreeServieVue, SessionVue } from '@mnemo/contrat';
-import { useId, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { FilVue } from '@mnemo/contrat';
 import { PROFIL_ARCHIVISTE } from '@mnemo/commun';
 import { dernierClassement, pourcentage } from '../../sessions/classement.ts';
 import { fichesServies } from '../../sessions/servis.ts';
 import { heure, messageCourt } from '../../archiviste/commits.ts';
-import { DePlus, useToutPour } from '../commun/DePlus.tsx';
+import { Bouton } from '../commun/Bouton.tsx';
 import s from './ActiviteArchiviste.module.css';
 
 export const ACTIVITE_MAX = 20;
 
 export type LigneActivite = { cle: string; ms: number; titre: string; detail: string };
 
-/** Toutes les lignes, plus récentes d'abord ; l'affichage en montre `ACTIVITE_MAX`, puis `DePlus`. */
+/** Toutes les lignes, plus récentes d'abord ; l'affichage les montre par tranches de `ACTIVITE_MAX`. */
 export type Activite = { lignes: LigneActivite[] };
 
 function nomSession(id: string | null, sessions: readonly SessionVue[]): string {
@@ -53,11 +53,27 @@ export function activiteArchiviste(servis: readonly EntreeServieVue[], commits: 
 /** « Activité (N) », titre repliable du tiroir : N compté avant la coupure de l'affichage. */
 export const libelleActivite = (a: Activite): string => `Activité (${a.lignes.length})`;
 
-/** Activité de l'archiviste : heure, puis session et ce qui a été fait (le conteneur le fait défiler). */
-export function ActiviteArchiviste(p: { activite: Activite; libelle: string }): ReactNode {
-	// une clé propre à cette liste, stable tant qu'elle est affichée
-	const { tout, toutVoir } = useToutPour(useId());
-	const affichees = tout ? p.activite.lignes : p.activite.lignes.slice(0, ACTIVITE_MAX);
+/**
+ * Activité de l'archiviste : heure, puis session et ce qui a été fait (le conteneur le fait défiler). Montrée par tranches
+ * de `ACTIVITE_MAX` : la suivante paraît quand le bas de la liste devient visible (défilement), ou par « N de plus »
+ * (clavier, ou sans IntersectionObserver). Jamais tout d'un coup : un jour chargé compte des centaines de changements.
+ * `tronque` : le journal du jour a atteint sa limite, les plus anciens manquent (dit en bas de la liste).
+ */
+export function ActiviteArchiviste(p: { activite: Activite; libelle: string; tronque?: boolean }): ReactNode {
+	const [nombre, setNombre] = useState(ACTIVITE_MAX);
+	const affichees = p.activite.lignes.slice(0, nombre);
+	const reste = p.activite.lignes.length - affichees.length;
+	const suite = () => setNombre((n) => n + ACTIVITE_MAX);
+	const bas = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		const cible = bas.current;
+		if (cible === null || reste <= 0 || typeof IntersectionObserver === 'undefined') return;
+		const observateur = new IntersectionObserver((entrees) => {
+			if (entrees.some((e) => e.isIntersecting)) suite();
+		});
+		observateur.observe(cible);
+		return () => observateur.disconnect();
+	}, [reste]);
 	return (
 		<div className={s.activite}>
 			<ul className={s.liste} aria-label={p.libelle}>
@@ -72,7 +88,15 @@ export function ActiviteArchiviste(p: { activite: Activite; libelle: string }): 
 				))}
 			</ul>
 			{p.activite.lignes.length === 0 && <p className={s.vide}>Rien encore aujourd'hui.</p>}
-			<DePlus nombre={p.activite.lignes.length - affichees.length} surToutVoir={toutVoir} />
+			{reste > 0 && (
+				<div ref={bas} className={s.suite}>
+					<Bouton petit onClick={suite}>
+						{`${Math.min(reste, ACTIVITE_MAX)} de plus`}
+					</Bouton>
+					<span>{`${reste} restants`}</span>
+				</div>
+			)}
+			{p.tronque === true && reste <= 0 && <p className={s.vide}>Plus de 500 changements aujourd'hui : les plus anciens ne sont pas affichés.</p>}
 		</div>
 	);
 }

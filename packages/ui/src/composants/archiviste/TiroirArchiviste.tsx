@@ -144,7 +144,7 @@ export function TiroirArchiviste(): ReactNode {
 				)}
 				{!grand && depliee && (
 					<div id="activite-archiviste" className={s.defile} data-zone="activite">
-						<ActiviteArchiviste activite={activite} libelle="Changements de la mémoire aujourd’hui" />
+						<ActiviteArchiviste activite={activite} libelle="Changements de la mémoire aujourd’hui" tronque={fil.donnees?.tronque === true} />
 					</div>
 				)}
 				<CentreArchiviste
