@@ -171,7 +171,7 @@ tokens, private keys) are masked before anything is written or indexed. What the
 
 ## Status
 
-Version 1.11.0. Mnemo runs on macOS (Apple silicon and Intel) and on Windows (x64), where the desktop app is checked by
+Version 1.11.1. Mnemo runs on macOS (Apple silicon and Intel) and on Windows (x64), where the desktop app is checked by
 the CI but has not been tried in real use yet; Linux has not been used. The CI runs the type check and the tests at each push on Linux and
 Windows with Node.js 24, and on macOS with Node.js 26. The interface runs in the browser, or in its own window with the desktop app (macOS and Windows).
 
