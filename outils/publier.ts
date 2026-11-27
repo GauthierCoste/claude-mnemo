@@ -76,7 +76,7 @@ function monter(actuelle: string, nouvelle: string): void {
 	writeFileSync(join(RACINE, 'README.md'), avecVersionReadme(lire('README.md'), actuelle, nouvelle));
 	const notes = join('docs', 'releases', `${nouvelle}.md`);
 	renameSync(join(RACINE, NOTES), join(RACINE, notes));
-	git('add', '--all', '--', ...PAQUETS, 'README.md', NOTES, notes);
+	git('add', '--all', '--', ...PAQUETS, 'README.md', join('docs', 'releases'));
 	git('commit', '--quiet', '-m', `chore: version ${nouvelle}`);
 	git('tag', nouvelle);
 }
