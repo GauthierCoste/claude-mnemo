@@ -4,9 +4,10 @@
  * marquée dans le sommaire (`aria-current`) pendant le défilement. Le contenu vient de `reglages/documentation.ts` ; ce
  * composant ne fait que le mettre en forme (définitions, étapes, tableaux, tableau des capacités).
  */
-import { Fragment, useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { HOOKS_PROFIL } from '../../../profils/hooks.ts';
-import { SECTIONS_DOC, type BlocDoc, type SectionDoc } from '../../../reglages/documentation.ts';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useTextes } from '../../../langue/langue.tsx';
+import { hooksProfil } from '../../../profils/hooks.ts';
+import { sectionsDoc, type BlocDoc, type SectionDoc } from '../../../reglages/documentation.ts';
 import d from '../Panneau.module.css';
 import s from './Documentation.module.css';
 
@@ -61,6 +62,8 @@ function Tableau(p: { legende: string; colonnes: readonly string[]; lignes: read
 
 function Bloc(p: { bloc: BlocDoc }): ReactNode {
 	const b = p.bloc;
+	const textes = useTextes();
+	const t = textes.documentation.capacites;
 	switch (b.genre) {
 		case 'intertitre':
 			return <h3 className={s.intertitre}>{b.texte}</h3>;
@@ -90,9 +93,9 @@ function Bloc(p: { bloc: BlocDoc }): ReactNode {
 		case 'capacites':
 			return (
 				<Tableau
-					legende="Capacités et hooks, dans l’ordre de la session (Agents › Capacités)"
-					colonnes={['Capacité', 'Hook', 'Effet', 'Réglable']}
-					lignes={HOOKS_PROFIL.map((h) => [
+					legende={t.legende}
+					colonnes={t.colonnes}
+					lignes={hooksProfil(textes.agents.hooks).map((h) => [
 						<>
 							<span className={s.symbole} aria-hidden="true">
 								{h.symbole}
@@ -101,7 +104,7 @@ function Bloc(p: { bloc: BlocDoc }): ReactNode {
 						</>,
 						`\`${h.cle}\``,
 						b.effets[h.cle],
-						h.toujours ? 'non, toujours actif' : 'oui',
+						h.toujours ? t.toujours : t.reglable,
 					])}
 				/>
 			);
@@ -125,11 +128,11 @@ function Section(p: { section: SectionDoc }): ReactNode {
 const mouvementReduit = (): boolean => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Section visible : la dernière dont le haut a passé le haut de la page (la dernière tout court en bas de page). */
-function sectionVisible(page: HTMLElement): string {
-	if (page.scrollHeight > page.clientHeight && page.scrollTop + page.clientHeight >= page.scrollHeight - 2) return SECTIONS_DOC.at(-1)!.id;
+function sectionVisible(page: HTMLElement, sections: readonly SectionDoc[]): string {
+	if (page.scrollHeight > page.clientHeight && page.scrollTop + page.clientHeight >= page.scrollHeight - 2) return sections.at(-1)!.id;
 	const haut = page.getBoundingClientRect().top + MARGE_ACTIVE;
-	let active = SECTIONS_DOC[0]!.id;
-	for (const x of SECTIONS_DOC) {
+	let active = sections[0]!.id;
+	for (const x of sections) {
 		const el = document.getElementById(x.id);
 		if (el !== null && el.getBoundingClientRect().top <= haut) active = x.id;
 	}
@@ -137,7 +140,9 @@ function sectionVisible(page: HTMLElement): string {
 }
 
 export function Documentation(): ReactNode {
-	const [active, setActive] = useState(SECTIONS_DOC[0]!.id);
+	const t = useTextes().documentation;
+	const sections = useMemo(() => sectionsDoc(t), [t]);
+	const [active, setActive] = useState(sections[0]!.id);
 	const page = useRef<HTMLDivElement>(null);
 	// défilement demandé par le sommaire : la section choisie reste marquée jusqu'à ce qu'il s'arrête
 	const demande = useRef<number | null>(null);
@@ -149,8 +154,8 @@ export function Documentation(): ReactNode {
 			demande.current = window.setTimeout(() => (demande.current = null), FIN_DEFILEMENT_MS);
 			return;
 		}
-		setActive(sectionVisible(page.current));
-	}, []);
+		setActive(sectionVisible(page.current, sections));
+	}, [sections]);
 	useEffect(() => () => window.clearTimeout(demande.current ?? undefined), []);
 
 	const aller = (e: MouseEvent<HTMLButtonElement>, id: string) => {
@@ -165,10 +170,10 @@ export function Documentation(): ReactNode {
 	};
 
 	return (
-		<section className={d.page} aria-label="Documentation">
-			<nav className={d.liste} aria-label="Sommaire">
+		<section className={d.page} aria-label={t.page.titre}>
+			<nav className={d.liste} aria-label={t.page.sommaire}>
 				<ul className={d.lignes}>
-					{SECTIONS_DOC.map((x) => (
+					{sections.map((x) => (
 						<li key={x.id}>
 							<button type="button" className={`${d.ligne} ${s.lien}`} aria-controls={x.id} aria-current={x.id === active ? 'true' : undefined} onClick={(e) => aller(e, x.id)}>
 								<span className={d.nom}>{x.titre}</span>
@@ -178,7 +183,7 @@ export function Documentation(): ReactNode {
 				</ul>
 			</nav>
 			<div ref={page} className={s.contenu} onScroll={surDefilement}>
-				{SECTIONS_DOC.map((x) => (
+				{sections.map((x) => (
 					<Section key={x.id} section={x} />
 				))}
 			</div>
