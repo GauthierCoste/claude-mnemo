@@ -20,6 +20,8 @@ import { Puce } from '../commun/Puce.tsx';
 import { garder, lireGarde } from '../commun/taille-gardee.ts';
 import { Tiroir } from '../commun/Tiroir.tsx';
 import { raccourciAlt } from '../../raccourcis.ts';
+import { useTextes } from '../../langue/langue.tsx';
+import type { Textes } from '../../langue/textes.ts';
 import { activiteArchiviste, ActiviteArchiviste, libelleActivite } from './ActiviteArchiviste.tsx';
 import { archivisteVivant, CentreArchiviste, terminalDansLaPage } from './CentreArchiviste.tsx';
 import s from './TiroirArchiviste.module.css';
@@ -34,25 +36,27 @@ export const LARGEUR = { cle: 'mnemo.archiviste.largeur', defaut: 560, min: 360 
 /** Activité dépliée (`1`), gardée par visiteur ; repliée par défaut. */
 export const CLE_ACTIVITE_DEPLIEE = 'mnemo.archiviste.activite.depliee';
 
-function puceEtat(a: SessionVue | null): ReactNode {
-	if (a === null) return <Puce>arrêté</Puce>;
-	if (a.etat === 'travaille') return <Puce ton="succes">au travail</Puce>;
-	if (a.etat === 'en_pause') return <Puce>en pause</Puce>;
-	if (a.etat === 'attend') return a.dialogueOuvert ? <Puce ton="avertissement">attend une réponse</Puce> : <Puce ton="succes">à l'écoute</Puce>;
-	return <Puce>arrêté</Puce>;
+function puceEtat(a: SessionVue | null, t: Textes['archiviste']['tiroir']['etats']): ReactNode {
+	if (a === null) return <Puce>{t.arrete}</Puce>;
+	if (a.etat === 'travaille') return <Puce ton="succes">{t.auTravail}</Puce>;
+	if (a.etat === 'en_pause') return <Puce>{t.enPause}</Puce>;
+	if (a.etat === 'attend') return a.dialogueOuvert ? <Puce ton="avertissement">{t.attendReponse}</Puce> : <Puce ton="succes">{t.aLEcoute}</Puce>;
+	return <Puce>{t.arrete}</Puce>;
 }
 
 /** Vrai si le glisser porte des fichiers (pas un texte ni un lien tirés de la page). */
 const porteDesFichiers = (e: DragEvent) => [...(e.dataTransfer?.types ?? [])].includes('Files');
 
 export function TiroirArchiviste(): ReactNode {
+	const textes = useTextes().archiviste;
+	const t = textes.tiroir;
 	const nav = useNavigation();
 	const sessions = useSessions();
 	const archiviste = archivisteVivant(sessions);
 	const fil = useFil(useAujourdhui());
 	const aFaire = useAFaire();
 	const connues = useSessionsConnues();
-	const activite = useMemo(() => activiteArchiviste([], fil.donnees?.commits ?? [], connues), [fil.donnees, connues]);
+	const activite = useMemo(() => activiteArchiviste([], fil.donnees?.commits ?? [], connues, textes.activite), [fil.donnees, connues, textes]);
 	const ouvert = nav.tiroirOuvert;
 	const grand = nav.archivisteGrand;
 	const [depliee, setDepliee] = useState(() => lireGarde(CLE_ACTIVITE_DEPLIEE) === '1');
@@ -117,19 +121,19 @@ export function TiroirArchiviste(): ReactNode {
 
 	const actions = (
 		<>
-			<Bouton genre="icone" onClick={() => nav.ouvrirPageArchiviste()} title="Mémoire › Archiviste : à faire, dépôt, suggestions">
-				{aFaire.total} à faire
+			<Bouton genre="icone" onClick={() => nav.ouvrirPageArchiviste()} title={t.aFaireTitre}>
+				{t.aFaire(aFaire.total)}
 			</Bouton>
 			{(archiviste?.terminal || grand) && (
-				<Bouton genre="icone" onClick={() => nav.agrandirArchiviste()} aria-keyshortcuts="Alt+Shift+A" title={grand ? `Rendre au tiroir (${raccourciAlt('A', { maj: true })}, Échap)` : `Terminal en grand (${raccourciAlt('A', { maj: true })})`}>
-					{grand ? 'Réduire' : 'Agrandir'}
+				<Bouton genre="icone" onClick={() => nav.agrandirArchiviste()} aria-keyshortcuts="Alt+Shift+A" title={grand ? t.rendre(raccourciAlt('A', { maj: true })) : t.enGrand(raccourciAlt('A', { maj: true }))}>
+					{grand ? t.reduire : t.agrandir}
 				</Bouton>
 			)}
 		</>
 	);
 
 	return (
-		<Tiroir ouvert={ouvert} titre="Archiviste" puce={puceEtat(archiviste)} redimension={LARGEUR} agrandi={grand} actions={actions} surFermer={() => nav.ouvrirTiroir(false)}>
+		<Tiroir ouvert={ouvert} titre={t.titre} puce={puceEtat(archiviste, t.etats)} redimension={LARGEUR} agrandi={grand} actions={actions} surFermer={() => nav.ouvrirTiroir(false)}>
 			<div
 				ref={contenu}
 				className={s.contenu}
@@ -139,12 +143,12 @@ export function TiroirArchiviste(): ReactNode {
 			>
 				{!grand && (
 					<button type="button" className={s.enteteActivite} aria-expanded={depliee} aria-controls={depliee ? 'activite-archiviste' : undefined} onClick={basculerActivite}>
-						<span aria-hidden="true">{depliee ? '▾' : '▸'}</span> {libelleActivite(activite)}
+						<span aria-hidden="true">{depliee ? '▾' : '▸'}</span> {libelleActivite(activite, textes.activite)}
 					</button>
 				)}
 				{!grand && depliee && (
 					<div id="activite-archiviste" className={s.defile} data-zone="activite">
-						<ActiviteArchiviste activite={activite} libelle="Changements de la mémoire aujourd’hui" tronque={fil.donnees?.tronque === true} />
+						<ActiviteArchiviste activite={activite} libelle={t.changementsDuJour} tronque={fil.donnees?.tronque === true} />
 					</div>
 				)}
 				<CentreArchiviste

@@ -7,6 +7,7 @@ import { useState, type ReactNode } from 'react';
 import { ROUTES, type BilanAmorceVue } from '@mnemo/contrat';
 import { useClient } from '../../client/contexte.tsx';
 import { lignesAmorce, resumeAmorce } from '../../memoire/amorce.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
 import { useToast } from '../Toast.tsx';
 import s from './ImporterMemoireClaude.module.css';
@@ -14,6 +15,7 @@ import s from './ImporterMemoireClaude.module.css';
 export function ImporterMemoireClaude(): ReactNode {
 	const { api } = useClient();
 	const toast = useToast();
+	const t = useTextes().archiviste.import;
 	const [enCours, setEnCours] = useState(false);
 	const [bilan, setBilan] = useState<BilanAmorceVue | null>(null);
 	const [erreur, setErreur] = useState<string | null>(null);
@@ -26,9 +28,9 @@ export function ImporterMemoireClaude(): ReactNode {
 			setBilan(b);
 			toast(resumeAmorce(b));
 		} catch (e) {
-			const message = e instanceof Error ? e.message : 'erreur inconnue';
+			const message = e instanceof Error ? e.message : t.erreurInconnue;
 			setErreur(message);
-			toast(`Import impossible : ${message}`);
+			toast(t.impossible(message));
 		} finally {
 			setEnCours(false);
 		}
@@ -37,16 +39,16 @@ export function ImporterMemoireClaude(): ReactNode {
 	return (
 		<div className={s.import}>
 			<Bouton petit onClick={() => void importer()} disabled={enCours}>
-				{enCours ? 'Import en cours…' : 'Importer la mémoire de Claude Code'}
+				{enCours ? t.enCours : t.importer}
 			</Bouton>
 			{erreur !== null && (
 				<span role="alert" className={s.erreur}>
-					Import impossible : {erreur}
+					{t.impossible(erreur)}
 				</span>
 			)}
 			{bilan !== null && erreur === null && (
 				<details className={s.bilan}>
-					<summary>Bilan de l’import</summary>
+					<summary>{t.bilan}</summary>
 					<div className={s.detail}>
 						<ul>
 							{lignesAmorce(bilan).map((l) => (
@@ -55,7 +57,7 @@ export function ImporterMemoireClaude(): ReactNode {
 						</ul>
 						{bilan.ignores.length > 0 && (
 							<>
-								<p className={s.sousTitre}>Fichiers ignorés ({bilan.ignores.length})</p>
+								<p className={s.sousTitre}>{t.ignores(bilan.ignores.length)}</p>
 								<ul className={s.ignores}>
 									{bilan.ignores.map((i) => (
 										<li key={i.chemin}>

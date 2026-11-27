@@ -5,33 +5,39 @@
  */
 import type { DocumentVue } from '@mnemo/contrat';
 import type { ReactNode } from 'react';
+import { useTextes } from '../../langue/langue.tsx';
 import { DePlus } from '../commun/DePlus.tsx';
 import { Puce } from '../commun/Puce.tsx';
 import { useNavigationMemoire } from '../memoire/navigation-memoire.tsx';
 import s from './DocumentsRecents.module.css';
 import { allerALAction } from './SourcesATraiter.tsx';
 
-/** « 2026-11-21 » → « 21.11.2026 ». */
-const dateLisible = (date: string) => date.split('-').reverse().join('.');
+/** Date « 2026-11-21 » au format de la langue (minuit local) ; telle quelle si elle est mal formée. */
+function dateLisible(date: string, format: (ms: number) => string): string {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+	return m ? format(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime()) : date;
+}
 
 /** `total` : documents référencés, listés ou non (null tant que le service n'a pas répondu). */
 export function DocumentsRecents(p: { documents: readonly DocumentVue[] | undefined; total: number | null; erreur: string | null; surToutVoir(): void }): ReactNode {
+	const textes = useTextes();
+	const t = textes.archiviste.documents;
 	const memoire = useNavigationMemoire();
 	const liste = p.documents ?? [];
 	return (
 		<section aria-labelledby="titre-documents-recents">
 			<h3 id="titre-documents-recents" className={s.lbl}>
-				Documents récents
+				{t.titre}
 			</h3>
 			{p.erreur !== null && <p className={s.mu}>{p.erreur}</p>}
-			{p.erreur === null && liste.length === 0 && <p className={s.mu}>{p.documents === undefined ? 'Chargement…' : 'Aucun document référencé.'}</p>}
-			<ul className={s.liste} aria-label="Documents récents">
+			{p.erreur === null && liste.length === 0 && <p className={s.mu}>{p.documents === undefined ? t.chargement : t.aucun}</p>}
+			<ul className={s.liste} aria-label={t.titre}>
 				{liste.map((d) => (
 					<li key={d.chemin}>
 						<button
 							type="button"
 							className={s.document}
-							title={d.aTraiter ? `${d.chemin} — à traiter : aller à son action` : d.chemin}
+							title={d.aTraiter ? t.allerALAction(d.chemin) : d.chemin}
 							onClick={() => {
 								// sa ligne a pu disparaître de « À faire » (marquée traitée entre-temps) : sa fiche, alors
 								if (!d.aTraiter || !allerALAction(d.chemin)) memoire.ouvrirFiche(d.chemin);
@@ -41,8 +47,8 @@ export function DocumentsRecents(p: { documents: readonly DocumentVue[] | undefi
 								<bdi>{d.titre}</bdi>
 								<span className={s.fichier}>{d.document ?? d.chemin}</span>
 							</span>
-							<span className={s.date}>{dateLisible(d.date)}</span>
-							{d.aTraiter ? <Puce couleur="ambre">à traiter</Puce> : <Puce ton="succes">traité</Puce>}
+							<span className={s.date}>{dateLisible(d.date, textes.commun.formats.date)}</span>
+							{d.aTraiter ? <Puce couleur="ambre">{t.aTraiter}</Puce> : <Puce ton="succes">{t.traite}</Puce>}
 						</button>
 					</li>
 				))}

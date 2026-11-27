@@ -10,6 +10,7 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useAujourdhui, useDocuments, useFil, useSessions } from '../../client/hooks.ts';
 import type { AFaire } from '../../memoire/a-faire.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import { useNavigation } from '../../navigation.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
 import { Separateur } from '../commun/Separateur.tsx';
@@ -28,6 +29,7 @@ const LARGEUR_A_FAIRE = { cle: 'mnemo.archiviste.largeurAFaire', defaut: 340, mi
 const LARGEUR_ENRICHIR = { cle: 'mnemo.archiviste.largeurEnrichir', defaut: 380, min: 240 };
 
 export function PageArchiviste(p: { visible: boolean; aFaire: AFaire }): ReactNode {
+	const t = useTextes().archiviste.page;
 	const nav = useNavigation();
 	const largeurMax = largeurMaxPanneau(LARGEUR_ENRICHIR.min);
 	const largeurAFaire = useTailleGardee(LARGEUR_A_FAIRE, largeurMax);
@@ -47,7 +49,7 @@ export function PageArchiviste(p: { visible: boolean; aFaire: AFaire }): ReactNo
 		<div className={s.page} style={{ '--l-a-faire': `${largeurAFaire.valeur}px`, '--l-enrichir': `${largeurEnrichir.valeur}px` } as CSSProperties}>
 			<section className={s.colonne} aria-labelledby="titre-a-faire">
 				<h2 id="titre-a-faire" className={s.titre}>
-					À faire
+					{t.aFaire}
 				</h2>
 				{p.aFaire.avertissements.map((a) => (
 					<p key={a} role="note" className={s.avertissement}>
@@ -55,7 +57,7 @@ export function PageArchiviste(p: { visible: boolean; aFaire: AFaire }): ReactNo
 					</p>
 				))}
 				{p.aFaire.total === 0 && p.aFaire.avertissements.length === 0 ? (
-					<p className={s.vide}>Rien à faire.</p>
+					<p className={s.vide}>{t.rienAFaire}</p>
 				) : (
 					<div className={s.groupes}>
 						<Propositions propositions={p.aFaire.propositions} lots={p.aFaire.lots} rechargerLots={p.aFaire.rechargerLots} fil={fil.donnees} />
@@ -67,7 +69,7 @@ export function PageArchiviste(p: { visible: boolean; aFaire: AFaire }): ReactNo
 				bord
 				className={s.poignee}
 				orientation="vertical"
-				label="Largeur de la colonne À faire"
+				label={t.largeurAFaire}
 				valeur={largeurAFaire.valeur}
 				min={LARGEUR_A_FAIRE.min}
 				max={largeurMax}
@@ -75,7 +77,7 @@ export function PageArchiviste(p: { visible: boolean; aFaire: AFaire }): ReactNo
 				surChanger={largeurAFaire.regler}
 				surDefaut={largeurAFaire.reinitialiser}
 			/>
-			<section className={s.centre} aria-label="Terminal de l’archiviste">
+			<section className={s.centre} aria-label={t.terminal}>
 				<CentreArchiviste
 					archiviste={archiviste}
 					monter={ici}
@@ -83,9 +85,9 @@ export function PageArchiviste(p: { visible: boolean; aFaire: AFaire }): ReactNo
 					compact={false}
 					ailleurs={
 						<div className={s.ailleurs}>
-							<p>Le terminal de l’archiviste est ouvert dans le tiroir.</p>
+							<p>{t.terminalAilleurs}</p>
 							<Bouton petit onClick={() => nav.ouvrirTiroir(false)}>
-								L’afficher ici
+								{t.afficherIci}
 							</Bouton>
 						</div>
 					}
@@ -96,7 +98,7 @@ export function PageArchiviste(p: { visible: boolean; aFaire: AFaire }): ReactNo
 				bord
 				className={s.poignee}
 				orientation="vertical"
-				label="Largeur de la colonne Enrichir"
+				label={t.largeurEnrichir}
 				valeur={largeurEnrichir.valeur}
 				min={LARGEUR_ENRICHIR.min}
 				max={largeurMax}
@@ -107,7 +109,7 @@ export function PageArchiviste(p: { visible: boolean; aFaire: AFaire }): ReactNo
 			/>
 			<section className={s.colonne} aria-labelledby="titre-enrichir">
 				<h2 id="titre-enrichir" className={s.titre}>
-					Enrichir
+					{t.enrichir}
 				</h2>
 				<div className={s.groupes}>
 					<ZoneDepot />

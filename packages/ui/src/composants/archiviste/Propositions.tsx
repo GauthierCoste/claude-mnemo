@@ -2,7 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
 import { useClient } from '../../client/contexte.tsx';
 import { ROUTES, type FilVue, type LotVue, type ResultatEcriture } from '@mnemo/contrat';
-import { demandePour, type Choix, type Proposition } from '../../archiviste/propositions.ts';
+import { demandePour, libellesProposition, type Choix, type Proposition } from '../../archiviste/propositions.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import { titreFiche } from '../../sessions/servis.ts';
 import { Bouton } from '../commun/Bouton.tsx';
 import { cx } from '../commun/classes.ts';
@@ -15,12 +16,7 @@ import { avertissementsDe } from '@mnemo/commun';
 
 /** Résultat de `proposer` (application/commun.ts, jalon 6) ; `refuse` arrive en 400. */
 
-const FAIT: Record<string, string> = { confirmer: 'Confirmé', rejeter: 'Rejeté', corriger: 'Modifié' };
-const NIVEAU: Record<string, string> = { confirmer: 'Niveau appliqué', rejeter: 'Proposition rejetée' };
-const MODIFICATION: Record<string, string> = { confirmer: 'Modification appliquée', rejeter: 'Modification rejetée' };
-const TOASTS: Record<Proposition['genre'], Record<string, string>> = { a_confirmer: FAIT, montee: NIVEAU, modification: MODIFICATION };
 const CLASSES: Record<Proposition['genre'], string | undefined> = { a_confirmer: s.aConfirmer, montee: s.niveau, modification: s.modification };
-const ETIQUETTES: Record<Proposition['genre'], string> = { a_confirmer: 'À confirmer', montee: 'Niveau', modification: 'Modification' };
 
 /**
  * Groupe « À arbitrer » de Mémoire › Archiviste : Confirmer, Modifier (un fait : le texte corrigé
@@ -32,6 +28,7 @@ export function Propositions(p: { propositions: readonly Proposition[]; lots: re
 	const { api } = useClient();
 	const toast = useToast();
 	const annoncer = useAnnonceEcriture();
+	const t = useTextes().archiviste.propositions;
 	const [enCours, setEnCours] = useState<ReadonlySet<string>>(() => new Set());
 	/** Propositions tranchées, avec le fil affiché au moment du choix : grisées tant que ce fil est celui affiché. */
 	const [tranchees, setTranchees] = useState<ReadonlyMap<string, FilVue | undefined>>(() => new Map());
@@ -42,7 +39,7 @@ export function Propositions(p: { propositions: readonly Proposition[]; lots: re
 	async function trancher(prop: Proposition, choix: Choix): Promise<void> {
 		let corps: unknown;
 		try {
-			corps = demandePour(prop, choix);
+			corps = demandePour(prop, choix, t);
 		} catch (e) {
 			toast(e instanceof Error ? e.message : String(e));
 			return;
@@ -60,12 +57,12 @@ export function Propositions(p: { propositions: readonly Proposition[]; lots: re
 				setTranchees((x) => new Map(x).set(prop.cle, filAuChoix));
 				if (typeof choix === 'object') setCorrection(null);
 				const nom = typeof choix === 'object' ? 'corriger' : choix;
-				annoncer(TOASTS[prop.genre][nom] ?? 'Écrit', ...[r, confirmation].flatMap((x) => (x === null ? [] : [avertissementsDe(x)])));
-			} else if (statut === 'doublon') toast('Déjà en mémoire sous cette forme');
-			else if (statut === 'proches') toast('Des éléments très proches existent déjà : rien n’a été écrit.');
-			else toast(`Réponse inattendue du service : ${statut}`);
+				annoncer((t.toasts[prop.genre] as Partial<Record<string, string>>)[nom] ?? t.ecrit, ...[r, confirmation].flatMap((x) => (x === null ? [] : [avertissementsDe(x)])));
+			} else if (statut === 'doublon') toast(t.doublon);
+			else if (statut === 'proches') toast(t.proches);
+			else toast(t.inattendue(statut));
 		} catch (e) {
-			toast(e instanceof ErreurApi || e instanceof Error ? e.message : 'Écriture impossible.');
+			toast(e instanceof ErreurApi || e instanceof Error ? e.message : t.ecritureImpossible);
 		} finally {
 			setEnCours((x) => {
 				const suivant = new Set(x);
@@ -77,21 +74,22 @@ export function Propositions(p: { propositions: readonly Proposition[]; lots: re
 
 	if (p.propositions.length === 0 && p.lots.length === 0) return null;
 	return (
-		<section className={s.panneau} aria-label="À arbitrer">
+		<section className={s.panneau} aria-label={t.titre}>
 			<div className={s.entete}>
-				<span className={s.lbl}>À arbitrer</span>
+				<span className={s.lbl}>{t.titre}</span>
 				<Puce ton="avertissement">{p.propositions.length + p.lots.length}</Puce>
 			</div>
 			{p.propositions.map((prop) => {
 				const occupe = occupee(prop.cle);
 				const corrige = correction?.cle === prop.cle ? correction : null;
+				const { texte, detail } = libellesProposition(prop.origine, t);
 				return (
-					<article key={prop.cle} className={cx(s.proposition, occupe && s.off)} aria-busy={occupe} aria-label={prop.texte}>
+					<article key={prop.cle} className={cx(s.proposition, occupe && s.off)} aria-busy={occupe} aria-label={texte}>
 						<span className={cx(s.genre, CLASSES[prop.genre])}>
-							{ETIQUETTES[prop.genre]} | {titreFiche(prop.fiche)}
+							{t.etiquettes[prop.genre]} | {titreFiche(prop.fiche)}
 						</span>
-						<span className={s.texte}>{prop.texte}</span>
-						<span className={s.detail}>{prop.detail}</span>
+						<span className={s.texte}>{texte}</span>
+						<span className={s.detail}>{detail}</span>
 						{corrige ? (
 							<form
 								className={s.correction}
@@ -101,7 +99,7 @@ export function Propositions(p: { propositions: readonly Proposition[]; lots: re
 								}}
 							>
 								<textarea
-									aria-label="Correction"
+									aria-label={t.correction}
 									value={corrige.texte}
 									rows={3}
 									autoFocus
@@ -116,26 +114,26 @@ export function Propositions(p: { propositions: readonly Proposition[]; lots: re
 								/>
 								<div className={s.actions}>
 									<Bouton petit genre="primaire" type="submit" disabled={occupe || !corrige.texte.trim()}>
-										Enregistrer
+										{t.enregistrer}
 									</Bouton>
 									<Bouton petit onClick={() => setCorrection(null)} disabled={occupe}>
-										Annuler
+										{t.annuler}
 									</Bouton>
 								</div>
 							</form>
 						) : (
 							<div className={s.actions}>
 								<Bouton petit onClick={() => void trancher(prop, 'confirmer')} disabled={occupe}>
-									Confirmer
+									{t.confirmer}
 								</Bouton>
 								{prop.genre === 'a_confirmer' && (
 									<Bouton petit onClick={() => setCorrection({ cle: prop.cle, texte: prop.texte })} disabled={occupe}>
-										Modifier
+										{t.modifier}
 									</Bouton>
 								)}
 								{(prop.genre !== 'montee' || prop.vise?.proposee) && (
 									<Bouton petit onClick={() => void trancher(prop, 'rejeter')} disabled={occupe}>
-										Rejeter
+										{t.rejeter}
 									</Bouton>
 								)}
 							</div>

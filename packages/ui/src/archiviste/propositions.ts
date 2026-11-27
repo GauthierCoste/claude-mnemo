@@ -7,7 +7,10 @@
  * `appliquerProposition` ou `retirerProposition`.
  */
 import type { FilVue, NiveauVue, RegleVue } from '@mnemo/contrat';
+import { TEXTES, type Textes } from '../langue/textes.ts';
 import { titreFiche } from '../sessions/servis.ts';
+
+type TextesPropositions = Textes['archiviste']['propositions'];
 
 export type Proposition = {
 	cle: string;
@@ -27,17 +30,22 @@ export type Proposition = {
 	valideFin: string | null;
 	/** Montée : niveau et règle visés ; `proposee` vrai pour une proposition de session (rejetable). Fait : null. */
 	vise: { niveau: NiveauVue; regle?: RegleVue; proposee: boolean } | null;
+	/** Ce que la proposition reprend du fil : de quoi réécrire `texte` et `detail` dans la langue de l'interface. */
+	origine: OrigineProposition;
 };
+
+export type OrigineProposition =
+	| { genre: 'a_confirmer'; element: FilVue['aConfirmer'][number] }
+	| { genre: 'montee'; montee: FilVue['montees'][number] }
+	| { genre: 'modification'; modification: FilVue['modifications'][number] };
 
 export type Choix = 'confirmer' | 'rejeter' | { corriger: string };
 
 /** Source des demandes de l'interface : l'utilisateur (le service HTTP est un canal de l'utilisateur). */
 const SOURCE_UTILISATEUR = { type: 'utilisateur', ref: 'utilisateur' } as const;
 
-const LIBELLES_NIVEAU: Record<NiveauVue, string> = { rappelee: 'rappelée', toujours: 'toujours', verifiee: 'vérifiée' };
-
-export function libelleNiveau(n: NiveauVue): string {
-	return LIBELLES_NIVEAU[n] ?? n;
+export function libelleNiveau(n: NiveauVue, t: TextesPropositions = TEXTES.fr.archiviste.propositions): string {
+	return t.niveaux[n] ?? n;
 }
 
 /** Ancre d'un identifiant de fait `chemin#^f-0003` (ou `chemin#f-0003`) ; null sans `#`. */
@@ -54,65 +62,84 @@ function lendemain(date: string): string {
 	return d.toISOString().slice(0, 10);
 }
 
-function texteRegle(r: RegleVue): string {
-	const genre = r.type === 'commandes_interdites' ? 'commandes interdites' : 'chemins interdits';
-	return `${genre} : ${r.motifs.join(', ')}`;
+function texteRegle(r: RegleVue, t: TextesPropositions): string {
+	return t.regle(t.regles[r.type] ?? r.type, r.motifs);
 }
 
-export function propositionsDuFil(fil: FilVue): Proposition[] {
+/** Texte et détail d'une proposition dans la langue de l'interface ; le texte d'un fait ou d'une consigne est du contenu. */
+export function libellesProposition(o: OrigineProposition, t: TextesPropositions = TEXTES.fr.archiviste.propositions): { texte: string; detail: string } {
+	if (o.genre === 'a_confirmer') {
+		const e = o.element;
+		return { texte: e.texte.split('\n')[0]!, detail: t.detailFait(e.source, e.categorie, e.date) };
+	}
+	if (o.genre === 'montee') {
+		const m = o.montee;
+		const p = m.proposition;
+		const detail = p
+			? t.monteeProposee(p.source, p.date || null, libelleNiveau(p.niveau, t), p.regle ? texteRegle(p.regle, t) : null)
+			: t.consigneRepetee(libelleNiveau(m.niveau, t));
+		return { texte: m.texte, detail };
+	}
+	const m = o.modification;
+	return { texte: t.modifierCibles(m.cibles), detail: t.modificationProposee(m.source, m.date || null, m.changements) };
+}
+
+export function propositionsDuFil(fil: FilVue, t: TextesPropositions = TEXTES.fr.archiviste.propositions): Proposition[] {
 	const faits = fil.aConfirmer.map((e): Proposition => {
-		const morceaux = [e.source ?? 'source inconnue', e.categorie, e.date ? `appris le ${e.date}` : null].filter((x): x is string => !!x);
+		const origine = { genre: 'a_confirmer', element: e } as const;
 		return {
 			cle: e.id,
 			genre: 'a_confirmer',
 			fiche: e.chemin,
-			texte: e.texte.split('\n')[0]!,
-			detail: morceaux.join(' · '),
+			...libellesProposition(origine, t),
 			ancre: ancreDe(e.id),
 			categorie: e.categorie,
 			valideFin: e.valideFin ? (e.finIncluse ? lendemain(e.valideFin) : e.valideFin) : null,
 			vise: null,
+			origine,
 		};
 	});
 	const montees = fil.montees.map((m): Proposition => {
 		const p = m.proposition;
 		const regle = p?.regle;
-		const detail = p
-			? `Proposé par ${p.source}${p.date ? ` le ${p.date}` : ''} : niveau « ${libelleNiveau(p.niveau)} »${regle ? ` (${texteRegle(regle)})` : ''}`
-			: `Consigne répétée : passer au niveau « ${libelleNiveau(m.niveau)} »`;
+		const origine = { genre: 'montee', montee: m } as const;
 		return {
 			cle: `niveau:${m.fiche}`,
 			genre: 'montee',
 			fiche: m.fiche,
-			texte: m.texte,
-			detail,
+			...libellesProposition(origine, t),
 			ancre: null,
 			categorie: null,
 			valideFin: null,
 			vise: { niveau: p?.niveau ?? m.niveau, ...(regle ? { regle } : {}), proposee: p !== null },
+			origine,
 		};
 	});
-	const modifications = fil.modifications.map((m): Proposition => ({
-		cle: `modification:${m.fiche}`,
-		genre: 'modification',
-		fiche: m.fiche,
-		texte: `Modifier ${m.cibles.join(', ')}`,
-		detail: `Proposé par ${m.source}${m.date ? ` le ${m.date}` : ''}${m.changements.length > 0 ? ` : ${m.changements.join(' ; ')}` : ''}`,
-		ancre: null,
-		categorie: null,
-		valideFin: null,
-		vise: null,
-	}));
+	const modifications = fil.modifications.map((m): Proposition => {
+		const origine = { genre: 'modification', modification: m } as const;
+		return {
+			cle: `modification:${m.fiche}`,
+			genre: 'modification',
+			fiche: m.fiche,
+			...libellesProposition(origine, t),
+			ancre: null,
+			categorie: null,
+			valideFin: null,
+			vise: null,
+			origine,
+		};
+	});
 	return [...faits, ...montees, ...modifications];
 }
 
 /** Corps de `proposer` pour le choix de l'utilisateur ; erreur si le choix n'a pas de sens pour cette proposition. */
-export function demandePour(p: Proposition, choix: Choix): unknown {
+export function demandePour(p: Proposition, choix: Choix, t: TextesPropositions = TEXTES.fr.archiviste.propositions): unknown {
+	const erreurs = t.erreurs;
 	if (p.genre === 'a_confirmer') {
-		if (p.ancre === null) throw new Error(`Information sans ancre dans ${p.fiche}.`);
+		if (p.ancre === null) throw new Error(erreurs.sansAncre(p.fiche));
 		if (choix === 'confirmer' || choix === 'rejeter') return { genre: choix, fiche: p.fiche, ancre: p.ancre };
 		const texte = choix.corriger.trim();
-		if (!texte) throw new Error('La correction est vide.');
+		if (!texte) throw new Error(erreurs.correctionVide);
 		return {
 			genre: 'fait',
 			fiche: p.fiche,
@@ -127,14 +154,14 @@ export function demandePour(p: Proposition, choix: Choix): unknown {
 	if (p.genre === 'modification') {
 		if (choix === 'confirmer') return { genre: 'modification', fiche: p.fiche, appliquerProposition: true, source: { ...SOURCE_UTILISATEUR } };
 		if (choix === 'rejeter') return { genre: 'modification', fiche: p.fiche, retirerProposition: true, source: { ...SOURCE_UTILISATEUR } };
-		throw new Error('Une modification proposée se confirme ou se rejette, elle ne se corrige pas.');
+		throw new Error(erreurs.modificationNonCorrigible);
 	}
 	const vise = p.vise;
-	if (vise === null) throw new Error(`Montée sans niveau visé dans ${p.fiche}.`);
+	if (vise === null) throw new Error(erreurs.monteeSansNiveau(p.fiche));
 	if (choix === 'confirmer') return { genre: 'niveau', fiche: p.fiche, niveau: vise.niveau, ...(vise.regle ? { regle: vise.regle } : {}), source: { ...SOURCE_UTILISATEUR } };
 	if (choix === 'rejeter') {
-		if (!vise.proposee) throw new Error(`Aucune proposition de session à rejeter pour ${titreFiche(p.fiche)}.`);
+		if (!vise.proposee) throw new Error(erreurs.aucunePropositionDeSession(titreFiche(p.fiche)));
 		return { genre: 'niveau', fiche: p.fiche, retirerProposition: true, source: { ...SOURCE_UTILISATEUR } };
 	}
-	throw new Error('Une montée de niveau se confirme ou se rejette, elle ne se corrige pas.');
+	throw new Error(erreurs.monteeNonCorrigible);
 }

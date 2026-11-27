@@ -5,6 +5,8 @@ import { compteEnMots, compteLot, etiquetteLot, intituleLot, lireInformation, re
 import { ErreurApi } from '../../client/api.ts';
 import { useClient } from '../../client/contexte.tsx';
 import { avecId, useGraphe } from '../../client/hooks.ts';
+import { useTextes } from '../../langue/langue.tsx';
+import { TEXTES, type Textes } from '../../langue/textes.ts';
 import { rendreEnLigne } from '../../memoire/rendu-fiche.tsx';
 import { resoudreLien } from '../../memoire/resoudre-lien.ts';
 import { Bouton } from '../commun/Bouton.tsx';
@@ -15,19 +17,13 @@ import { useNavigationMemoire } from '../memoire/navigation-memoire.tsx';
 import { useToast } from '../Toast.tsx';
 import s from './Propositions.module.css';
 
-/** Refus 409 de `lotValider` : une information visée a changé depuis la proposition, le service a écarté le lot. */
-export const FICHE_CHANGEE = 'Une information visée a changé depuis la proposition : lot écarté, demander à l’archiviste de le reproposer.';
-/** Note d'une ligne déjà dans l'état visé : rien à appliquer, elle n'est pas envoyée à la validation. */
-const DEJA_APPLIQUEE: Record<GenreLotVue, string> = {
-	confirmer: 'Déjà confirmée : rien à faire.',
-	supprimer: 'Déjà retirée de la fiche : rien à faire.',
-	fusionner: 'Déjà fusionnée : rien à faire.',
-};
+/** Refus 409 de `lotValider` (une information visée a changé, le service a écarté le lot), en français : le texte des tests. */
+export const FICHE_CHANGEE = TEXTES.fr.archiviste.lots.ficheChangee;
 
-/** Note d'un lot périmé, encore en attente : rien ne le repropose seul. */
-export const LOT_PERIME = 'Une information visée a changé depuis la proposition : rejeter ce lot, puis demander à l’archiviste de le reproposer.';
+/** Note d'un lot périmé, encore en attente (rien ne le repropose seul), en français : le texte des tests. */
+export const LOT_PERIME = TEXTES.fr.archiviste.lots.perime;
 
-const pluriel = (n: number, un: string, plusieurs: string) => `${n} ${n === 1 ? un : plusieurs}`;
+type TextesLots = Textes['archiviste']['lots'];
 
 /**
  * Un lot d'informations proposé par l'archiviste, dans « À arbitrer » : intitulé (« 3 doublons proposés dans Module
@@ -41,6 +37,7 @@ export function LotAValider(p: { lot: LotVue; surDecide(): void }): ReactNode {
 	const { api } = useClient();
 	const toast = useToast();
 	const annoncer = useAnnonceEcriture();
+	const t = useTextes().archiviste.lots;
 	const idLignes = useId();
 	const [revoir, setRevoir] = useState(false);
 	const [decoches, setDecoches] = useState<ReadonlySet<number>>(() => new Set());
@@ -51,7 +48,7 @@ export function LotAValider(p: { lot: LotVue; surDecide(): void }): ReactNode {
 	// une ligne déjà appliquée (confirmée, supprimée, fusionnée sans le lot) n'a rien à valider : jamais envoyée
 	const aAppliquer = lot.lignes.filter((l) => !l.deja).map((l) => l.indice);
 	const cochees = aAppliquer.filter((i) => !decoches.has(i));
-	const intitule = intituleLot(lot);
+	const intitule = intituleLot(lot, t);
 
 	/** `action` rend le succès à annoncer et les avertissements de la réponse. */
 	async function decider(action: () => Promise<{ succes: string; avertissements: AvecAvertissements }>): Promise<void> {
@@ -63,8 +60,8 @@ export function LotAValider(p: { lot: LotVue; surDecide(): void }): ReactNode {
 		} catch (e) {
 			// 409 : lot écarté (une information a changé, à faire reproposer) ou retiré (déjà appliqué, fiche disparue : son motif
 			// le dit, « lot retiré », sans rien à reproposer)
-			if (e instanceof ErreurApi && e.statut === 409) toast(e.message.includes('lot retiré') ? e.message : FICHE_CHANGEE);
-			else toast(e instanceof Error ? e.message : 'Écriture impossible.');
+			if (e instanceof ErreurApi && e.statut === 409) toast(e.message.includes('lot retiré') ? e.message : t.ficheChangee);
+			else toast(e instanceof Error ? e.message : t.ecritureImpossible);
 		} finally {
 			setEnCours(false);
 		}
@@ -75,13 +72,13 @@ export function LotAValider(p: { lot: LotVue; surDecide(): void }): ReactNode {
 	const valider = (lignes: number[]) =>
 		decider(async () => {
 			const r = await api.envoyer<ReponseValidationLot>(avecId(ROUTES.lotValider, lot.id), { lignes } satisfies DemandeValidationLot);
-			return { succes: `Lot validé : ${pluriel(r.lignes.length, 'ligne appliquée', 'lignes appliquées')}`, avertissements: avertissementsDe(r) };
+			return { succes: t.valide(r.lignes.length), avertissements: avertissementsDe(r) };
 		});
 
 	const rejeter = () =>
 		decider(async () => {
 			await api.envoyer<ReponseRejetLot>(avecId(ROUTES.lotRejeter, lot.id), {});
-			return { succes: 'Lot rejeté', avertissements: {} };
+			return { succes: t.rejete, avertissements: {} };
 		});
 
 	const basculer = (indice: number, coche: boolean) =>
@@ -95,24 +92,24 @@ export function LotAValider(p: { lot: LotVue; surDecide(): void }): ReactNode {
 	return (
 		<article className={cx(s.proposition, occupe && s.off)} aria-busy={occupe} aria-label={intitule}>
 			<span className={cx(s.genre, s.lot)}>
-				{etiquetteLot(lot.genre)} | {titreDuLot(lot)}
+				{etiquetteLot(lot.genre, t)} | {titreDuLot(lot)}
 			</span>
 			<span className={s.texte}>{intitule}</span>
 			<span className={s.detail}>{lot.motif}</span>
 			{lot.perime && (
 				<span className={s.detail} role="note">
-					{LOT_PERIME}
+					{t.perime}
 				</span>
 			)}
 			<div className={s.actions}>
 				<Bouton petit genre="primaire" onClick={() => void valider(aAppliquer)} disabled={occupe || lot.perime || aAppliquer.length === 0}>
-					Tout valider
+					{t.toutValider}
 				</Bouton>
 				<Bouton petit onClick={() => setRevoir((x) => !x)} aria-expanded={revoir} aria-controls={idLignes}>
-					{revoir ? 'Replier' : 'Revoir'}
+					{revoir ? t.replier : t.revoir}
 				</Bouton>
 				<Bouton petit onClick={() => void rejeter()} disabled={occupe}>
-					Rejeter
+					{t.rejeter}
 				</Bouton>
 			</div>
 			{revoir && (
@@ -127,7 +124,7 @@ export function LotAValider(p: { lot: LotVue; surDecide(): void }): ReactNode {
 					<LignesDuLot lot={lot} decoches={decoches} desactive={occupe || lot.perime} surCocher={basculer} />
 					<div className={s.actions}>
 						<Bouton petit genre="primaire" type="submit" disabled={occupe || lot.perime || cochees.length === 0}>
-							{`Valider ${compteEnMots(lot.genre, compteLot(lot, cochees))}`}
+							{t.valider(compteEnMots(lot.genre, compteLot(lot, cochees), t))}
 						</Bouton>
 					</div>
 				</form>
@@ -137,18 +134,19 @@ export function LotAValider(p: { lot: LotVue; surDecide(): void }): ReactNode {
 }
 
 /** Rôle d'une information visée par une ligne, pour « Détail » : la gardée puis les absorbées d'une fusion ; la visée sinon. */
-function role(genre: GenreLotVue, i: number): string {
-	if (genre === 'fusionner') return i === 0 ? 'gardée' : 'absorbée';
-	return genre === 'supprimer' ? 'supprimée' : 'à confirmer';
+function role(genre: GenreLotVue, i: number, t: TextesLots): string {
+	if (genre === 'fusionner') return i === 0 ? t.roles.gardee : t.roles.absorbee;
+	return genre === 'supprimer' ? t.roles.supprimee : t.roles.aConfirmer;
 }
 
 /** Lignes écrites d'une information, telles quelles (« Détail »). */
 function Ecrit(p: { info: InformationDuLotVue; role: string }): ReactNode {
+	const t = useTextes().archiviste.lots;
 	return (
 		<div className={s.information}>
 			<span className={s.role}>{p.role}</span>
 			{p.info.lignes.length === 0 ? (
-				<span className={s.brut}>{p.info.ancre} : absente de la fiche</span>
+				<span className={s.brut}>{t.absenteDeLaFiche(p.info.ancre)}</span>
 			) : (
 				p.info.lignes.map((x, i) => (
 					<span key={i} className={s.brut}>
@@ -166,13 +164,14 @@ function Ecrit(p: { info: InformationDuLotVue; role: string }): ReactNode {
  * résolus sur le graphe (lu seulement quand « Revoir » est ouvert).
  */
 function LignesDuLot(p: { lot: LotVue; decoches: ReadonlySet<number>; desactive: boolean; surCocher(indice: number, coche: boolean): void }): ReactNode {
+	const t = useTextes().archiviste.lots;
 	const graphe = useGraphe();
 	const memoire = useNavigationMemoire();
 	const fiches = graphe.donnees?.fiches ?? [];
 	const enLigne = (texte: string) => rendreEnLigne(texte, (ecrit) => resoudreLien(ecrit, fiches), memoire.ouvrirFiche);
 	return (
 		<fieldset className={s.lignes}>
-			<legend className={s.legende}>Lignes à appliquer</legend>
+			<legend className={s.legende}>{t.lignesAAppliquer}</legend>
 			{p.lot.lignes.map((l) => (
 				<LigneDuLot key={l.indice} ligne={l} genre={p.lot.genre} cochee={!p.decoches.has(l.indice)} desactive={p.desactive} surCocher={(c) => p.surCocher(l.indice, c)} enLigne={enLigne} />
 			))}
@@ -182,9 +181,10 @@ function LignesDuLot(p: { lot: LotVue; decoches: ReadonlySet<number>; desactive:
 
 function LigneDuLot(p: { ligne: LigneDeLotVue; genre: GenreLotVue; cochee: boolean; desactive: boolean; surCocher(coche: boolean): void; enLigne(texte: string): ReactNode[] }): ReactNode {
 	const { ligne } = p;
+	const t = useTextes().archiviste.lots;
 	const idTexte = useId();
 	const visee = ligne.avant[0] ? lireInformation(ligne.avant[0]) : null;
-	const texte = visee?.texte ?? `${ligne.avant[0]?.ancre ?? `Ligne ${ligne.indice + 1}`} (absente)`;
+	const texte = visee?.texte ?? t.absente(ligne.avant[0]?.ancre ?? t.ligne(ligne.indice + 1));
 	return (
 		<div className={s.ligne}>
 			<div className={s.case}>
@@ -200,10 +200,10 @@ function LigneDuLot(p: { ligne: LigneDeLotVue; genre: GenreLotVue; cochee: boole
 			</div>
 			{ligne.deja && (
 				<span className={s.changement} role="note">
-					{DEJA_APPLIQUEE[p.genre]}
+					{t.deja[p.genre]}
 				</span>
 			)}
-			{!ligne.deja && resumeChangement(ligne, p.genre).map((x, i) => (
+			{!ligne.deja && resumeChangement(ligne, p.genre, t).map((x, i) => (
 				<span key={i} className={s.changement}>
 					{p.enLigne(x)}
 				</span>
@@ -214,13 +214,13 @@ function LigneDuLot(p: { ligne: LigneDeLotVue; genre: GenreLotVue; cochee: boole
 				</span>
 			)}
 			<details className={s.ecrit}>
-				<summary>Détail</summary>
-				<span className={s.etape}>Avant</span>
+				<summary>{t.detail}</summary>
+				<span className={s.etape}>{t.avant}</span>
 				{ligne.avant.map((info, i) => (
-					<Ecrit key={info.ancre} info={info} role={role(p.genre, i)} />
+					<Ecrit key={info.ancre} info={info} role={role(p.genre, i, t)} />
 				))}
-				<span className={s.etape}>Après</span>
-				{ligne.apres ? <Ecrit info={ligne.apres} role={p.genre === 'fusionner' ? 'gardée' : 'confirmée'} /> : <span className={s.role}>Information retirée de la fiche.</span>}
+				<span className={s.etape}>{t.apres}</span>
+				{ligne.apres ? <Ecrit info={ligne.apres} role={p.genre === 'fusionner' ? t.roles.gardee : t.roles.confirmee} /> : <span className={s.role}>{t.informationRetiree}</span>}
 			</details>
 		</div>
 	);

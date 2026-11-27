@@ -5,18 +5,10 @@
  */
 import type { GenreLotVue, InformationDuLotVue, LigneDeLotVue, LotVue } from '@mnemo/contrat';
 import { analyserCorroboration, analyserFait } from '../memoire/rendu-fiche.tsx';
+import { TEXTES, type Textes } from '../langue/textes.ts';
 import { titreFiche } from '../sessions/servis.ts';
 
-/** Nom de ce que compte un lot, au singulier et au pluriel, avec l'accord de « proposé ». */
-const NOMS: Record<GenreLotVue, { un: string; plusieurs: string; propose: string; proposes: string }> = {
-	fusionner: { un: 'doublon', plusieurs: 'doublons', propose: 'proposé', proposes: 'proposés' },
-	supprimer: { un: 'suppression', plusieurs: 'suppressions', propose: 'proposée', proposes: 'proposées' },
-	confirmer: { un: 'confirmation', plusieurs: 'confirmations', propose: 'proposée', proposes: 'proposées' },
-};
-
-const ETIQUETTES: Record<GenreLotVue, string> = { fusionner: 'Doublons', supprimer: 'Suppressions', confirmer: 'Confirmations' };
-
-const pluriel = (n: number, un: string, plusieurs: string) => `${n} ${n === 1 ? un : plusieurs}`;
+type TextesLots = Textes['archiviste']['lots'];
 
 /** Titre de la fiche du lot : celui que donne le service, sinon tiré du chemin. */
 export function titreDuLot(lot: LotVue): string {
@@ -24,8 +16,8 @@ export function titreDuLot(lot: LotVue): string {
 }
 
 /** Étiquette du genre, en tête de l'entrée (« Doublons | Module stocks »). */
-export function etiquetteLot(genre: GenreLotVue): string {
-	return ETIQUETTES[genre] ?? genre;
+export function etiquetteLot(genre: GenreLotVue, t: TextesLots = TEXTES.fr.archiviste.lots): string {
+	return t.etiquettes[genre] ?? genre;
 }
 
 /**
@@ -44,15 +36,13 @@ export function compteLot(lot: LotVue, indices?: readonly number[]): number {
 }
 
 /** « 3 doublons » (fusion : les absorbées), « 2 lignes » (sinon). */
-export function compteEnMots(genre: GenreLotVue, n: number): string {
-	return genre === 'fusionner' ? pluriel(n, 'doublon', 'doublons') : pluriel(n, 'ligne', 'lignes');
+export function compteEnMots(genre: GenreLotVue, n: number, t: TextesLots = TEXTES.fr.archiviste.lots): string {
+	return t.compte(genre, n);
 }
 
 /** « 11 doublons proposés dans Module stocks » (les absorbées), « 1 suppression proposée dans … » (les lignes). */
-export function intituleLot(lot: LotVue): string {
-	const n = compteLot(lot);
-	const nom = NOMS[lot.genre] ?? { un: lot.genre, plusieurs: lot.genre, propose: 'proposé', proposes: 'proposés' };
-	return n === 1 ? `1 ${nom.un} ${nom.propose} dans ${titreDuLot(lot)}` : `${n} ${nom.plusieurs} ${nom.proposes} dans ${titreDuLot(lot)}`;
+export function intituleLot(lot: LotVue, t: TextesLots = TEXTES.fr.archiviste.lots): string {
+	return t.intitule(lot.genre, compteLot(lot), titreDuLot(lot));
 }
 
 /** Une information lue de ses lignes écrites : énoncé, catégorie, barrée, confiance écrite (%), mentions de source. */
@@ -72,18 +62,16 @@ export function lireInformation(info: InformationDuLotVue): InformationLue | nul
 }
 
 /** Texte d'une information ; absente : son ancre, dite absente. */
-export function texteInformation(info: InformationDuLotVue): string {
-	return lireInformation(info)?.texte ?? `${info.ancre} (absente)`;
+export function texteInformation(info: InformationDuLotVue, t: TextesLots = TEXTES.fr.archiviste.lots): string {
+	return lireInformation(info)?.texte ?? t.absente(info.ancre);
 }
 
-const pourcent = (n: number) => `${n} %`;
-
 /** « confiance 30 % → 51 % » si elle change ; « confiance 51 % » si elle n'était pas écrite ; null sinon. */
-function changementDeConfiance(avant: InformationLue | null, apres: InformationLue | null): string | null {
+function changementDeConfiance(avant: InformationLue | null, apres: InformationLue | null, t: TextesLots): string | null {
 	const a = avant?.confiance ?? null;
 	const b = apres?.confiance ?? null;
 	if (b === null || a === b) return null;
-	return a === null ? `confiance ${pourcent(b)}` : `confiance ${pourcent(a)} → ${pourcent(b)}`;
+	return t.changement.confiance(a, b);
 }
 
 /**
@@ -91,16 +79,17 @@ function changementDeConfiance(avant: InformationLue | null, apres: InformationL
  * « … » » ; suppression → « supprimée » ; confirmation → « confirmée » (et la confiance si elle change). Différence entre
  * `avant` (la gardée ou la visée d'abord) et `apres`.
  */
-export function resumeChangement(ligne: LigneDeLotVue, genre: GenreLotVue): string[] {
+export function resumeChangement(ligne: LigneDeLotVue, genre: GenreLotVue, t: TextesLots = TEXTES.fr.archiviste.lots): string[] {
 	const visee = ligne.avant[0] ? lireInformation(ligne.avant[0]) : null;
 	const apres = ligne.apres ? lireInformation(ligne.apres) : null;
-	const confiance = changementDeConfiance(visee, apres);
-	if (genre === 'supprimer') return ['supprimée'];
-	if (genre === 'confirmer') return [['confirmée', confiance].filter((x) => x !== null).join(' · ')];
+	const confiance = changementDeConfiance(visee, apres, t);
+	const c = t.changement;
+	if (genre === 'supprimer') return [c.supprimee];
+	if (genre === 'confirmer') return [[c.confirmee, confiance].filter((x) => x !== null).join(c.separateur)];
 	const connues = new Set(visee?.sources ?? []);
 	const nouvelles = [...new Set((apres?.sources ?? []).filter((x) => !connues.has(x)))];
-	const versees = nouvelles.length === 0 ? null : `+ ${nouvelles.length === 1 ? 'source' : 'sources'} ${nouvelles.join(', ')}`;
-	const premiere = [versees, confiance].filter((x) => x !== null).join(' · ') || 'aucune source nouvelle';
-	const absorbees = ligne.avant.slice(1).map((i) => `« ${texteInformation(i)} »`);
-	return absorbees.length === 0 ? [premiere] : [premiere, `absorbe : ${absorbees.join(', ')}`];
+	const versees = nouvelles.length === 0 ? null : c.sources(nouvelles);
+	const premiere = [versees, confiance].filter((x) => x !== null).join(c.separateur) || c.aucuneSource;
+	const absorbees = ligne.avant.slice(1).map((i) => texteInformation(i, t));
+	return absorbees.length === 0 ? [premiere] : [premiere, c.absorbe(absorbees)];
 }

@@ -5,12 +5,14 @@
  */
 import { useMemo, useState, type ReactNode } from 'react';
 import { useAujourdhui, useFil, useServisRecus, useSessionsConnues } from '../../client/hooks.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import { activiteArchiviste, ActiviteArchiviste } from './ActiviteArchiviste.tsx';
 import s from './ApprisAujourdhui.module.css';
 import { CommitsDuJour } from './CommitsDuJour.tsx';
 import { DetailCommit } from './DetailCommit.tsx';
 
 export function ApprisAujourdhui(): ReactNode {
+	const t = useTextes().archiviste;
 	const aujourdhui = useAujourdhui();
 	// null : « aujourd'hui », qui suit la date après minuit.
 	const [jourChoisi, setJourChoisi] = useState<string | null>(null);
@@ -19,7 +21,7 @@ export function ApprisAujourdhui(): ReactNode {
 	const sessions = useSessionsConnues();
 	const servis = useServisRecus();
 	const commits = useMemo(() => [...(fil.donnees?.commits ?? [])].sort((a, b) => b.dateMs - a.dateMs), [fil.donnees]);
-	const activite = useMemo(() => activiteArchiviste(servis, [], sessions), [servis, sessions]);
+	const activite = useMemo(() => activiteArchiviste(servis, [], sessions, t.activite), [servis, sessions, t]);
 	const [choisi, setChoisi] = useState<string | null>(null);
 	const commit = commits.find((c) => c.hash === choisi) ?? commits[0] ?? null;
 
@@ -27,12 +29,12 @@ export function ApprisAujourdhui(): ReactNode {
 		<section className={s.appris} aria-labelledby="titre-appris">
 			<div className={s.entete}>
 				<h3 id="titre-appris" className={s.lbl}>
-					<label htmlFor="appris-jour">Appris le</label>
+					<label htmlFor="appris-jour">{t.appris.apprisLe}</label>
 				</h3>
 				<input
 					id="appris-jour"
 					type="date"
-					aria-label="Jour"
+					aria-label={t.appris.jour}
 					className={s.jour}
 					value={jour}
 					max={aujourdhui}
@@ -44,13 +46,13 @@ export function ApprisAujourdhui(): ReactNode {
 					}}
 				/>
 			</div>
-			{fil.donnees?.tronque === true && <p className={s.avis}>Plus de 500 changements ce jour-là : seuls les plus récents sont affichés</p>}
-			{fil.erreur && (fil.donnees ? <p className={s.avis}>Fil non rechargé : {fil.erreur}</p> : <p className={s.avis}>Fil illisible : {fil.erreur}</p>)}
-			{fil.donnees && commits.length === 0 && <p className={s.vide}>Aucun changement de la mémoire ce jour-là.</p>}
+			{fil.donnees?.tronque === true && <p className={s.avis}>{t.appris.tronque}</p>}
+			{fil.erreur && (fil.donnees ? <p className={s.avis}>{t.appris.filNonRecharge(fil.erreur)}</p> : <p className={s.avis}>{t.appris.filIllisible(fil.erreur)}</p>)}
+			{fil.donnees && commits.length === 0 && <p className={s.vide}>{t.appris.aucunChangement}</p>}
 			<CommitsDuJour commits={commits} choisi={commit?.hash ?? null} sessions={sessions} choisir={setChoisi} />
 			{commit && <DetailCommit commit={commit} sessions={sessions} />}
-			<h3 className={s.lbl}>Ce qu'il a fait pour les sessions</h3>
-			<ActiviteArchiviste activite={activite} libelle="Ce qu'il a fait pour les sessions" />
+			<h3 className={s.lbl}>{t.appris.pourLesSessions}</h3>
+			<ActiviteArchiviste activite={activite} libelle={t.appris.pourLesSessions} />
 		</section>
 	);
 }

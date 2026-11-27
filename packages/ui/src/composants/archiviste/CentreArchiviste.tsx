@@ -14,14 +14,13 @@ import { PROFIL_ARCHIVISTE } from '@mnemo/commun';
 import { ErreurApi } from '../../client/api.ts';
 import { useClient } from '../../client/contexte.tsx';
 import { avecId } from '../../client/hooks.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import type { Navigation } from '../../navigation.tsx';
 import { Terminal } from '../../terminal/Terminal.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
 import { copierTexte } from '../commun/copier.ts';
 import { useToast } from '../Toast.tsx';
 import s from './CentreArchiviste.module.css';
-
-export const SUGGESTIONS = ['Range les documents déposés', "Qu'as-tu appris aujourd'hui ?", 'Y a-t-il des contradictions à trancher ?'] as const;
 
 /** Session archiviste vivante (non terminée), la plus récemment active. */
 export function archivisteVivant(sessions: readonly SessionVue[]): SessionVue | null {
@@ -46,6 +45,7 @@ export function CentreArchiviste(p: {
 }): ReactNode {
 	const { api } = useClient();
 	const toast = useToast();
+	const t = useTextes().archiviste.centre;
 	const [lancement, setLancement] = useState(false);
 	const [manuel, setManuel] = useState<string | null>(null);
 	const a = p.archiviste;
@@ -62,7 +62,7 @@ export function CentreArchiviste(p: {
 			}
 		} catch (e) {
 			p.surLancement?.(false);
-			toast(e instanceof ErreurApi ? e.message : "Lancement de l'archiviste impossible.");
+			toast(e instanceof ErreurApi ? e.message : t.lancementImpossible);
 		} finally {
 			setLancement(false);
 		}
@@ -72,7 +72,7 @@ export function CentreArchiviste(p: {
 		try {
 			await api.envoyer(avecId(ROUTES.reprise, id), undefined);
 		} catch (e) {
-			toast(e instanceof ErreurApi ? e.message : 'Reprise impossible.');
+			toast(e instanceof ErreurApi ? e.message : t.repriseImpossible);
 		}
 	}
 
@@ -88,9 +88,9 @@ export function CentreArchiviste(p: {
 	if (a?.etat === 'en_pause' || a?.etat === 'a_relire') {
 		return (
 			<div className={s.absent}>
-				<p>{a.etat === 'en_pause' ? "L'archiviste est en pause." : "L'archiviste s'est arrêté."}</p>
+				<p>{a.etat === 'en_pause' ? t.enPause : t.arrete}</p>
 				<Bouton genre="primaire" data-focus-initial onClick={() => void reprendre(a.id)}>
-					Reprendre
+					{t.reprendre}
 				</Bouton>
 			</div>
 		);
@@ -98,22 +98,22 @@ export function CentreArchiviste(p: {
 	if (a) {
 		return (
 			<div className={s.absent}>
-				<p>L'archiviste tourne sans terminal dans Mnemo.</p>
+				<p>{t.sansTerminal}</p>
 			</div>
 		);
 	}
 	return (
 		<div className={s.absent}>
-			<p>Aucun archiviste ne tourne.</p>
+			<p>{t.aucun}</p>
 			<Bouton genre="primaire" data-focus-initial onClick={() => void lancer()} disabled={lancement}>
-				Lancer l'archiviste
+				{t.lancer}
 			</Bouton>
 			{manuel !== null && (
 				<div className={s.manuel}>
-					<span>Terminaux indisponibles : à lancer à la main.</span>
+					<span>{t.terminauxIndisponibles}</span>
 					<code>{manuel}</code>
-					<Bouton petit onClick={() => copierTexte(manuel, toast, 'Commande copiée')}>
-						Copier
+					<Bouton petit onClick={() => copierTexte(manuel, toast, t.commandeCopiee)}>
+						{t.copier}
 					</Bouton>
 				</div>
 			)}
@@ -125,20 +125,21 @@ export function CentreArchiviste(p: {
 export function Suggestions(p: { archiviste: SessionVue | null; surEnvoi?(): void }): ReactNode {
 	const { connexion } = useClient();
 	const toast = useToast();
+	const t = useTextes().archiviste.centre;
 	const a = p.archiviste;
 	function suggerer(texte: string): void {
 		if (!a?.terminal) return;
 		if (!connexion.envoyer({ type: 'entree', session: a.id, donnees: `${texte}\r` })) {
-			toast('Service injoignable : suggestion non envoyée.');
+			toast(t.suggestionNonEnvoyee);
 			return;
 		}
 		p.surEnvoi?.();
 	}
 	return (
 		<div className={s.suggestions}>
-			{SUGGESTIONS.map((t) => (
-				<Bouton key={t} className={s.suggestion} onClick={() => suggerer(t)} disabled={!a?.terminal}>
-					{t}
+			{Object.values(t.suggestions).map((texte) => (
+				<Bouton key={texte} className={s.suggestion} onClick={() => suggerer(texte)} disabled={!a?.terminal}>
+					{texte}
 				</Bouton>
 			))}
 		</div>

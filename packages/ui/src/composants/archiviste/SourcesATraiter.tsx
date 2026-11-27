@@ -11,6 +11,7 @@
 import { ROUTES, type DocumentVue, type DossierNonRattacheVue, type ReponseMarquerTraite, type ReponseTraiter } from '@mnemo/contrat';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useClient } from '../../client/contexte.tsx';
+import { useTextes } from '../../langue/langue.tsx';
 import { Bouton } from '../commun/Bouton.tsx';
 import { cx } from '../commun/classes.ts';
 import { DePlus } from '../commun/DePlus.tsx';
@@ -39,18 +40,12 @@ export function allerALAction(chemin: string): boolean {
 /** Délai au-delà duquel une ligne « en cours » sans nouvelles redevient actionnable. */
 export const EN_COURS_MS = 10 * 60_000;
 
-const ARCHIVISTE: Record<ReponseTraiter['archiviste'], string> = {
-	confie: 'Confié à l’archiviste',
-	repris: 'Archiviste repris : la consigne suit',
-	lance: 'Archiviste lancé avec la consigne',
-	manuel: 'Terminaux indisponibles : archiviste à lancer à la main',
-};
-
 /** `total` : fiches à traiter, listées ou non ; « Tout voir » (`surToutVoir`) demande la liste entière ; `dossiers` : les dossiers non rattachés. */
 export function SourcesATraiter(p: { documents: readonly DocumentVue[]; total: number; surToutVoir(): void; dossiers: readonly DossierNonRattacheVue[] }): ReactNode {
 	const { api } = useClient();
 	const toast = useToast();
 	const annoncer = useAnnonceEcriture();
+	const t = useTextes().archiviste.sources;
 	const memoire = useNavigationMemoire();
 	/** Envoyées à l'archiviste, avec l'heure d'envoi : « en cours » tant que la marque reste, `EN_COURS_MS` au plus. */
 	const [envois, setEnvois] = useState<ReadonlyMap<string, number>>(() => new Map());
@@ -98,9 +93,9 @@ export function SourcesATraiter(p: { documents: readonly DocumentVue[]; total: n
 			setEnvois((x) => new Map([...x, ...r.chemins.map((c) => [c, maintenant] as const)]));
 			const commande = r.archiviste === 'manuel' ? r.manuel : undefined;
 			if (commande !== undefined) setManuels((x) => [...x, commande]);
-			toast(ARCHIVISTE[r.archiviste]);
+			toast(t.archiviste[r.archiviste] ?? r.archiviste);
 		} catch (e) {
-			toast(e instanceof Error ? `Traitement impossible : ${e.message}` : 'Traitement impossible.');
+			toast(t.traitementImpossible(e instanceof Error ? e.message : null));
 		} finally {
 			setOccupees((x) => retirer(x, lignesOccupees));
 		}
@@ -123,9 +118,9 @@ export function SourcesATraiter(p: { documents: readonly DocumentVue[]; total: n
 		try {
 			const r = await api.envoyer<ReponseMarquerTraite>(ROUTES.sourcesMarquerTraite, { chemins: [chemin] });
 			setRetirees((x) => ajouter(x, [chemin]));
-			annoncer('Marqué traité', r);
+			annoncer(t.marque, r);
 		} catch (e) {
-			toast(e instanceof Error ? `Marque non retirée : ${e.message}` : 'Marque non retirée.');
+			toast(t.marqueNonRetiree(e instanceof Error ? e.message : null));
 		} finally {
 			setOccupees((x) => retirer(x, [chemin]));
 		}
@@ -151,24 +146,24 @@ export function SourcesATraiter(p: { documents: readonly DocumentVue[]; total: n
 		<section className={s.groupe} aria-labelledby="titre-a-traiter">
 			<div className={s.entete}>
 				<span id="titre-a-traiter" className={s.lbl}>
-					À traiter
+					{t.titre}
 				</span>
 				<Puce ton="avertissement">{p.total - (p.documents.length - lignes.length) + p.dossiers.length}</Puce>
 				<span className={s.espace} />
 				<Bouton petit onClick={() => geste(toutTraiter)} disabled={!fichesALancer && dossiersAEnvoyer.length === 0}>
-					Tout traiter
+					{t.toutTraiter}
 				</Bouton>
 			</div>
 			{manuels.map((manuel) => (
-				<div key={manuel} className={s.manuel} role="group" aria-label="Commande de l’archiviste">
-					<span>{ARCHIVISTE.manuel}.</span>
+				<div key={manuel} className={s.manuel} role="group" aria-label={t.commande}>
+					<span>{t.archiviste.manuel}.</span>
 					<code>{manuel}</code>
-					<Bouton petit onClick={() => copierTexte(manuel, toast, 'Commande copiée')}>
-						Copier
+					<Bouton petit onClick={() => copierTexte(manuel, toast, t.commandeCopiee)}>
+						{t.copier}
 					</Bouton>
 				</div>
 			))}
-			<ul className={s.liste} aria-label="À traiter">
+			<ul className={s.liste} aria-label={t.titre}>
 				{lignes.map((d) => {
 					const envoye = enCours.has(d.chemin);
 					const occupe = occupees.has(d.chemin);
@@ -178,15 +173,15 @@ export function SourcesATraiter(p: { documents: readonly DocumentVue[]; total: n
 								<bdi>{d.titre}</bdi>
 								<span className={s.fichier}>{d.document ?? d.chemin}</span>
 							</span>
-							{envoye && <Puce ton="succes">en cours</Puce>}
+							{envoye && <Puce ton="succes">{t.enCours}</Puce>}
 							<div className={s.actions}>
 								<Bouton petit genre="primaire" onClick={() => geste(() => traiterFiches([d.chemin]))} disabled={envoye || occupe}>
-									Traiter
+									{t.traiter}
 								</Bouton>
 								<Bouton petit onClick={() => void marquerTraite(d.chemin)} disabled={occupe}>
-									Marquer traité
+									{t.marquerTraite}
 								</Bouton>
-								<Bouton petit onClick={() => memoire.ouvrirFiche(d.chemin)}>Ouvrir</Bouton>
+								<Bouton petit onClick={() => memoire.ouvrirFiche(d.chemin)}>{t.ouvrir}</Bouton>
 							</div>
 						</li>
 					);
@@ -199,10 +194,10 @@ export function SourcesATraiter(p: { documents: readonly DocumentVue[]; total: n
 							<span className={s.titre} title={d.dossier}>
 								<bdi>{d.texte}</bdi>
 							</span>
-							{envoye && <Puce ton="succes">en cours</Puce>}
+							{envoye && <Puce ton="succes">{t.enCours}</Puce>}
 							<div className={s.actions}>
 								<Bouton petit genre="primaire" onClick={() => geste(() => traiterDossiers([d.dossier]))} disabled={envoye || occupe}>
-									Traiter
+									{t.traiter}
 								</Bouton>
 							</div>
 						</li>
