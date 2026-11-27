@@ -41,9 +41,11 @@ export type Lot = {
 
 /**
  * Sort d'un lot décidé : `valide` (`lignes` : indices appliqués, `commit`), `rejete` par l'utilisateur, `perime` (une
- * information visée a changé depuis la proposition, `lotPerime` : refusé à la validation, à reproposer).
+ * information visée a changé depuis la proposition, `lotPerime` : refusé à la validation, à reproposer), `deja_applique`
+ * (toutes ses lignes étaient déjà dans l'état visé, par exemple confirmées une à une : retiré, rien à écrire ni à reproposer),
+ * `fiche_absente` (sa fiche n'existe plus, supprimée ou déplacée : retiré, il n'a plus d'objet).
  */
-export type DecisionLot = { sort: 'valide'; lignes: number[]; commit: string } | { sort: 'rejete' } | { sort: 'perime' };
+export type DecisionLot = { sort: 'valide'; lignes: number[]; commit: string } | { sort: 'rejete' } | { sort: 'perime' } | { sort: 'deja_applique' } | { sort: 'fiche_absente' };
 export type LotDecide = Lot & { decision: DecisionLot; decideMs: number };
 
 /** Une source connue d'une information (clé d'indépendance, liens résolus par l'appelant ; type) — ordre de la fiche. */
@@ -86,16 +88,37 @@ export function empreintesDesInformations(lignes: readonly LigneDeLot[], faits: 
 }
 
 /**
+ * La ligne est-elle déjà dans l'état que le lot vise, sans lui ? `confirmer` : l'information est là, vivante et plus à
+ * confirmer ; `supprimer` : elle n'est plus dans la fiche ; `fusionner` : la gardée est là et les absorbées n'y sont plus.
+ */
+export function ligneDejaAppliquee(genre: GenreLot, ligne: LigneDeLot, faits: readonly LigneDeFait[]): boolean {
+	if ('ancre' in ligne) {
+		const fait = faitDe(faits, ligne.ancre);
+		return genre === 'supprimer' ? fait === undefined : fait !== undefined && !fait.barre && !fait.aConfirmer;
+	}
+	return faitDe(faits, ligne.garder) !== undefined && ligne.absorber.every((a) => faitDe(faits, a) === undefined);
+}
+
+/** Toutes les lignes du lot sont déjà dans l'état visé (`ligneDejaAppliquee`) : il n'a plus d'objet. Faux sans fiche lisible. */
+export function lotDejaApplique(lot: Pick<Lot, 'genre' | 'lignes'>, faits: readonly LigneDeFait[] | null): boolean {
+	return faits !== null && lot.lignes.every((l) => ligneDejaAppliquee(lot.genre, l, faits));
+}
+
+/**
  * Un lot est périmé quand ce qu'il vise a changé depuis sa proposition : fiche absente (`texte` null) ou illisible (`faits`
  * null), ou une information visée disparue ou réécrite (`empreintes`). Un ajout ou un changement ailleurs dans la fiche ne
- * le périme pas : les contrôles d'application (`appliquerLot`) se font de toute façon sur la fiche actuelle. Lot sans
- * `empreintes` (enregistré avant elles) : périmé dès que le texte de la fiche a changé.
+ * le périme pas : les contrôles d'application (`appliquerLot`) se font de toute façon sur la fiche actuelle. Une ligne déjà
+ * dans l'état visé (`ligneDejaAppliquee`, par exemple confirmée à la main) ne le périme pas : son information a changé
+ * comme le lot le voulait ; un lot dont toutes les lignes le sont n'est pas périmé mais déjà appliqué (`lotDejaApplique`).
+ * Lot sans `empreintes` (enregistré avant elles) : périmé dès que le texte de la fiche a changé.
  */
-export function lotPerime(lot: Pick<Lot, 'lignes' | 'empreinte' | 'empreintes'>, texte: string | null, faits: readonly LigneDeFait[] | null): boolean {
+export function lotPerime(lot: Pick<Lot, 'genre' | 'lignes' | 'empreinte' | 'empreintes'>, texte: string | null, faits: readonly LigneDeFait[] | null): boolean {
 	if (texte === null) return true;
+	if (lotDejaApplique(lot, faits)) return false;
 	if (lot.empreintes === undefined) return empreinte(texte) !== lot.empreinte;
 	if (faits === null) return true;
-	return lot.lignes.flatMap(ancresDeLigne).some((ancre) => {
+	const restantes = lot.lignes.filter((l) => !ligneDejaAppliquee(lot.genre, l, faits));
+	return restantes.flatMap(ancresDeLigne).some((ancre) => {
 		const avant = lot.empreintes![ancre];
 		return avant === undefined || empreinteDInformation(faits, ancre) !== avant;
 	});

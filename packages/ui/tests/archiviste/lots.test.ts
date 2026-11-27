@@ -8,8 +8,9 @@ const fusion = (indice: number, absorbees: number): LigneDeLotVue => ({
 	avant: [],
 	apres: null,
 	motif: null,
+	deja: false,
 });
-const simple = (indice: number): LigneDeLotVue => ({ indice, ligne: { ancre: 'f-0001' }, avant: [], apres: null, motif: null });
+const simple = (indice: number): LigneDeLotVue => ({ indice, ligne: { ancre: 'f-0001' }, avant: [], apres: null, motif: null, deja: false });
 
 const lot = (genre: GenreLotVue, lignes: LigneDeLotVue[], titre: string | null = 'Module stocks'): LotVue => ({
 	id: 'l',
@@ -34,7 +35,7 @@ describe('intitulé et compte d’un lot', () => {
 	});
 
 	it('fusion sans ligne proposée lisible : les visées moins la gardée', () => {
-		const ligne: LigneDeLotVue = { indice: 0, ligne: { ancre: 'f-0001' }, avant: [{ ancre: 'a', lignes: [] }, { ancre: 'b', lignes: [] }, { ancre: 'c', lignes: [] }], apres: null, motif: null };
+		const ligne: LigneDeLotVue = { indice: 0, ligne: { ancre: 'f-0001' }, avant: [{ ancre: 'a', lignes: [] }, { ancre: 'b', lignes: [] }, { ancre: 'c', lignes: [] }], apres: null, motif: null, deja: false };
 		expect(compteLot(lot('fusionner', [ligne]))).toBe(2);
 	});
 
@@ -89,6 +90,7 @@ describe('ce que change une ligne', () => {
 				lignes: [ecrit('Table stock_lot séparée.', '[[sources/cr]]', 'confiance 51 %'), '  + src: [[sources/cdc]] p.4 | corroboré 2026-11-24', '  + src: session 7f3a | corroboré 2026-11-24'],
 			},
 			motif: null,
+			deja: false,
 		};
 		expect(resumeChangement(ligne, 'fusionner')).toEqual(['+ sources [[sources/cdc]] p.4, session 7f3a · confiance 30 % → 51 %', 'absorbe : « Une table stock_lot porte les lots. », « stock_lot à part. »']);
 	});
@@ -96,7 +98,7 @@ describe('ce que change une ligne', () => {
 	it('fusion : une seule source nouvelle ; aucune (déjà présente) et confiance inchangée', () => {
 		const gardee = { ancre: 'f-0001', lignes: [ecrit('A.', '[[sources/cr]]', 'confiance 60 %')] };
 		const absorbee = { ancre: 'f-0002', lignes: [ecrit('A bis.', '[[sources/cdc]]', 'confiance 60 %')] };
-		const une: LigneDeLotVue = { indice: 0, ligne: { garder: 'f-0001', absorber: ['f-0002'] }, avant: [gardee, absorbee], apres: { ancre: 'f-0001', lignes: [ecrit('A.', '[[sources/cr]]', 'confiance 84 %'), '  + src: [[sources/cdc]] | corroboré 2026-11-24'] }, motif: null };
+		const une: LigneDeLotVue = { indice: 0, ligne: { garder: 'f-0001', absorber: ['f-0002'] }, avant: [gardee, absorbee], apres: { ancre: 'f-0001', lignes: [ecrit('A.', '[[sources/cr]]', 'confiance 84 %'), '  + src: [[sources/cdc]] | corroboré 2026-11-24'] }, motif: null, deja: false };
 		expect(resumeChangement(une, 'fusionner')[0]).toBe('+ source [[sources/cdc]] · confiance 60 % → 84 %');
 		const aucune: LigneDeLotVue = { ...une, apres: gardee };
 		expect(resumeChangement(aucune, 'fusionner')).toEqual(['aucune source nouvelle', 'absorbe : « A bis. »']);
@@ -104,9 +106,9 @@ describe('ce que change une ligne', () => {
 
 	it('suppression : « supprimée » ; confirmation : « confirmée », et la confiance si elle change', () => {
 		const avant = { ancre: 'f-0001', lignes: ['- [decision] D. | infere | src: session c21e | a confirmer ^f-0001'] };
-		expect(resumeChangement({ indice: 0, ligne: { ancre: 'f-0001' }, avant: [avant], apres: null, motif: null }, 'supprimer')).toEqual(['supprimée']);
+		expect(resumeChangement({ indice: 0, ligne: { ancre: 'f-0001' }, avant: [avant], apres: null, motif: null, deja: false }, 'supprimer')).toEqual(['supprimée']);
 		const confirmee = { ancre: 'f-0001', lignes: ['- [decision] D. | infere | src: session c21e | confiance 70 % ^f-0001'] };
-		expect(resumeChangement({ indice: 0, ligne: { ancre: 'f-0001' }, avant: [avant], apres: confirmee, motif: null }, 'confirmer')).toEqual(['confirmée · confiance 70 %']);
-		expect(resumeChangement({ indice: 0, ligne: { ancre: 'f-0001' }, avant: [confirmee], apres: confirmee, motif: null }, 'confirmer')).toEqual(['confirmée']);
+		expect(resumeChangement({ indice: 0, ligne: { ancre: 'f-0001' }, avant: [avant], apres: confirmee, motif: null, deja: false }, 'confirmer')).toEqual(['confirmée · confiance 70 %']);
+		expect(resumeChangement({ indice: 0, ligne: { ancre: 'f-0001' }, avant: [confirmee], apres: confirmee, motif: null, deja: false }, 'confirmer')).toEqual(['confirmée']);
 	});
 });

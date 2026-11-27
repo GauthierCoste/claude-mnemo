@@ -44,6 +44,8 @@ export function routesLots(dep: Dependances, diffuser: (m: MessageServeur) => vo
 					case 'refuse':
 						throw new ErreurHttp(400, `Refusé : ${resultat.motif}`);
 					case 'perime':
+					case 'deja_applique':
+					case 'fiche_absente':
 						await lotsChanges();
 						throw new ErreurHttp(409, resultat.motif);
 					case 'valide': {

@@ -4,7 +4,7 @@ import type { Fait } from '../domaine/fait.ts';
 import { lireFiche } from '../domaine/fiche.ts';
 import type { Fiche } from '../domaine/fiche.ts';
 import { reecrireLiens } from '../domaine/liens-ecrits.ts';
-import { ancresDeLigne, appliquerLot, empreintesDesInformations, lotPerime, MOTIF_MAX_LOT } from '../domaine/lot.ts';
+import { ancresDeLigne, appliquerLot, empreintesDesInformations, ligneDejaAppliquee, lotDejaApplique, lotPerime, MOTIF_MAX_LOT } from '../domaine/lot.ts';
 import type { ContexteLot, GenreLot, LigneDeLot, Lot, LotDecide, SourceConnue } from '../domaine/lot.ts';
 import { ancreDeSuite, lienRenumerote } from '../domaine/renumerotation.ts';
 import type { TypeSource } from '../domaine/regles.ts';
@@ -32,9 +32,10 @@ export type InformationDuLot = { ancre: string; lignes: string[] };
 /**
  * Une ligne d'un lot en attente, pour la revoir : `indice` (à renvoyer pour la valider), les informations visées telles
  * qu'elles sont (`avant`), et l'information qui reste une fois la ligne appliquée seule (`apres` : la gardée d'une fusion,
- * la confirmée ; null pour une suppression) ; `motif` : pourquoi elle ne s'appliquerait pas seule (null sinon).
+ * la confirmée ; null pour une suppression) ; `motif` : pourquoi elle ne s'appliquerait pas seule (null sinon) ; `deja` :
+ * elle est déjà dans l'état visé (confirmée, supprimée, fusionnée sans le lot) : rien à appliquer, la valider ne fait rien.
  */
-export type LigneDeLotDetaillee = { indice: number; ligne: LigneDeLot; avant: InformationDuLot[]; apres: InformationDuLot | null; motif: string | null };
+export type LigneDeLotDetaillee = { indice: number; ligne: LigneDeLot; avant: InformationDuLot[]; apres: InformationDuLot | null; motif: string | null; deja: boolean };
 /** Un lot en attente : `titre` de la fiche (null si illisible ou absente) ; `perime` : une information visée a changé depuis la proposition (`lotPerime`). */
 export type LotDetaille = Omit<Lot, 'lignes' | 'empreinte' | 'empreintes'> & { titre: string | null; perime: boolean; lignes: LigneDeLotDetaillee[] };
 
@@ -44,6 +45,10 @@ export type ResultatValidationLot =
 	| { statut: 'inconnu'; motif: string }
 	/** Une information visée a changé depuis la proposition (`lotPerime`) : le lot est écarté (sort `perime`), rien n'est écrit. */
 	| { statut: 'perime'; motif: string }
+	/** Sa fiche n'existe plus (supprimée ou déplacée) : le lot est retiré (sort `fiche_absente`), rien n'est écrit. */
+	| { statut: 'fiche_absente'; motif: string }
+	/** Toutes les lignes du lot étaient déjà dans l'état visé (`lotDejaApplique`) : le lot est retiré (sort `deja_applique`), rien n'est écrit. */
+	| { statut: 'deja_applique'; motif: string }
 	/** Choix de lignes invalide, ou lignes qui ne s'appliquent pas : le lot reste en attente, rien n'est écrit. */
 	| { statut: 'refuse'; motif: string };
 
@@ -52,6 +57,7 @@ const VERBES: Record<GenreLot, string> = { fusionner: 'fusionne', supprimer: 'su
 const DECIDES_RENDUS = 20;
 /** Lots en attente de l'utilisateur, au plus : au-delà, une proposition est refusée (qu'il décide d'abord). */
 export const LOTS_EN_ATTENTE_MAX = 50;
+const DEJA_APPLIQUE = (chemin: string) => `Toutes les lignes du lot sont déjà appliquées dans ${chemin} : lot retiré, rien à écrire ni à reproposer.`;
 const PERIME = (chemin: string) => `Une information visée par le lot a changé dans ${chemin} depuis sa proposition : lot écarté, demander à l'archiviste de le reproposer.`;
 
 const refus = (motif: string) => ({ statut: 'refuse' as const, motif });
@@ -99,7 +105,8 @@ const motifFiche = (chemin: string, fiche: Fiche): string | null => motifIntouch
  * telle qu'elle est (il doit s'appliquer en entier), empreinte de la fiche notée. Refusé : fiche absente, illisible, consigne,
  * profil, chemin fixe ; motif vide ou de plusieurs lignes ; ligne invalide ; information déjà visée par un lot en attente ;
  * `LOTS_EN_ATTENTE_MAX` lots déjà en attente. Un lot en attente sur la même fiche dont une information visée a changé depuis
- * sa proposition (`lotPerime`) est écarté (`perime`) : il ne bloque plus rien ; un lot dont les informations sont intactes
+ * sa proposition (`lotPerime`) est écarté (`perime`), un lot dont toutes les lignes sont déjà appliquées est retiré
+ * (`deja_applique`) : ni l'un ni l'autre ne bloque plus rien ; un lot dont les informations sont intactes
  * reste en attente (il garde ses ancres). Rend l'identifiant du lot et le sort des lots décidés depuis la proposition précédente.
  */
 export async function proposerLot(dep: Dependances, demande: DemandeLot): Promise<ResultatLotPropose | { statut: 'refuse'; motif: string }> {
@@ -130,7 +137,8 @@ export async function proposerLot(dep: Dependances, demande: DemandeLot): Promis
 	const faitsActuels = lireFiche(chemin, texte).faits;
 	const enAttente: Lot[] = [];
 	for (const autre of await dep.lots.enAttente()) {
-		if (autre.fiche === chemin && lotPerime(autre, texte, faitsActuels)) await dep.lots.decider(autre.id, { sort: 'perime' }, dep.systeme.maintenant().getTime());
+		if (autre.fiche === chemin && lotDejaApplique(autre, faitsActuels)) await dep.lots.decider(autre.id, { sort: 'deja_applique' }, dep.systeme.maintenant().getTime());
+		else if (autre.fiche === chemin && lotPerime(autre, texte, faitsActuels)) await dep.lots.decider(autre.id, { sort: 'perime' }, dep.systeme.maintenant().getTime());
 		else enAttente.push(autre);
 	}
 	if (enAttente.length >= LOTS_EN_ATTENTE_MAX) return refus(`${enAttente.length} lots attendent déjà l'utilisateur (${LOTS_EN_ATTENTE_MAX} au plus) : les lui signaler, et proposer la suite après ses décisions.`);
@@ -156,7 +164,9 @@ const informationDe = (fiche: Fiche, ancre: string): InformationDuLot => {
 
 /**
  * Les lots en attente, les plus anciens d'abord, chacun avec ses lignes à revoir (avant, après) sur la fiche telle qu'elle
- * est. La mémoire n'est lue en entier (résolution des liens des sources) que si un lot de fusion attend.
+ * est ; une ligne déjà dans l'état visé est marquée `deja`. Retirés au passage, ils n'ont plus rien à proposer : un lot dont
+ * toutes les lignes le sont (`deja_applique`), un lot dont la fiche n'existe plus (`fiche_absente`). La mémoire n'est lue en entier (résolution des liens des sources) que si
+ * un lot de fusion attend.
  */
 export async function lotsEnAttente(dep: Dependances): Promise<LotDetaille[]> {
 	const lots = await dep.lots.enAttente();
@@ -167,18 +177,28 @@ export async function lotsEnAttente(dep: Dependances): Promise<LotDetaille[]> {
 		const texte = memoire?.textes.get(lot.fiche) ?? (await dep.coffre.lire(lot.fiche));
 		const fiche = texte === null || texte === undefined ? null : lire(lot.fiche, texte);
 		const lue = typeof fiche === 'string' ? null : fiche;
+		// fiche supprimée ou déplacée : le lot n'a plus d'objet, il ne se validerait jamais
+		if (texte === null || texte === undefined) {
+			await dep.lots.decider(lot.id, { sort: 'fiche_absente' }, dep.systeme.maintenant().getTime());
+			continue;
+		}
+		if (lue !== null && lotDejaApplique(lot, lue.faits)) {
+			await dep.lots.decider(lot.id, { sort: 'deja_applique' }, dep.systeme.maintenant().getTime());
+			continue;
+		}
 		const contexte = lue === null ? null : await contexteDe(dep, lue, memoire?.designee);
 		detailles.push({
 			...reste,
 			titre: lue?.titre ?? null,
 			perime: lotPerime(lot, texte ?? null, lue?.faits ?? null),
 			lignes: lignes.map((ligne, indice) => {
-				if (lue === null || contexte === null) return { indice, ligne, avant: ancresDeLigne(ligne).map((ancre) => ({ ancre, lignes: [] })), apres: null, motif: `La fiche ${lot.fiche} est absente ou illisible.` };
+				if (lue === null || contexte === null) return { indice, ligne, avant: ancresDeLigne(ligne).map((ancre) => ({ ancre, lignes: [] })), apres: null, motif: `La fiche ${lot.fiche} est absente ou illisible.`, deja: false };
 				const avant = ancresDeLigne(ligne).map((ancre) => informationDe(lue, ancre));
+				if (ligneDejaAppliquee(lot.genre, ligne, lue.faits)) return { indice, ligne, avant, apres: lot.genre === 'supprimer' ? null : informationDe(lue, ancresDeLigne(ligne)[0]!), motif: null, deja: true };
 				const seule = lireFiche(lot.fiche, texte as string);
 				const r = appliquerLot(seule, lot.genre, [ligne], contexte);
-				if ('motif' in r) return { indice, ligne, avant, apres: null, motif: r.motif };
-				return { indice, ligne, avant, apres: lot.genre === 'supprimer' ? null : informationDe(seule, ancresDeLigne(ligne)[0]!), motif: null };
+				if ('motif' in r) return { indice, ligne, avant, apres: null, motif: r.motif, deja: false };
+				return { indice, ligne, avant, apres: lot.genre === 'supprimer' ? null : informationDe(seule, ancresDeLigne(ligne)[0]!), motif: null, deja: false };
 			}),
 		});
 	}
@@ -196,7 +216,8 @@ function motifDuChoix(indices: readonly number[], nombre: number): string | null
 /**
  * Valide un lot (utilisateur seulement, par le service) : applique les lignes `indices` (toutes ou une partie) en un commit
  * `mnemo: <verbe> <n> information(s) <fiche>`, sous verrou, puis réindexe. Refusé (lot gardé) : choix invalide, lignes qui
- * ne s'appliquent pas. Fiche absente ou illisible, ou information visée changée depuis la proposition (`lotPerime`) : le
+ * ne s'appliquent pas. Les lignes déjà dans l'état visé (`ligneDejaAppliquee`) sont laissées ; toutes : le lot est retiré
+ * (`deja_applique`), rien n'est écrit. Fiche absente ou illisible, ou information visée changée depuis la proposition (`lotPerime`) : le
  * lot est écarté (`perime`), à reproposer ; un ajout ou un changement ailleurs dans la fiche ne l'écarte pas (les lignes
  * s'appliquent à la fiche actuelle, avec ses contrôles). Les liens `[[fiche#^f-X]]` de toute la mémoire vers une absorbée visent la gardée ; vers une supprimée, ils perdent leur ancre ; une
  * relation devenue doublon d'une autre, ou relation de la fiche vers elle-même, est retirée (`relationsAssainies`).
@@ -214,14 +235,23 @@ export async function validerLot(dep: Dependances, id: string, indices: readonly
 			await dep.lots.decider(lot.id, { sort: 'perime' }, dep.systeme.maintenant().getTime());
 			return { statut: 'perime', motif };
 		};
-		if (texte === undefined) return perime(`La fiche ${chemin} n'existe plus : lot écarté.`);
+		if (texte === undefined) {
+			await dep.lots.decider(lot.id, { sort: 'fiche_absente' }, dep.systeme.maintenant().getTime());
+			return { statut: 'fiche_absente', motif: `La fiche ${chemin} n'existe plus (supprimée ou déplacée) : lot retiré, rien à écrire.` };
+		}
 		const fiche = lire(chemin, texte);
 		if (typeof fiche === 'string') return perime(`${fiche} Le lot est écarté.`);
+		if (lotDejaApplique(lot, fiche.faits)) {
+			await dep.lots.decider(lot.id, { sort: 'deja_applique' }, dep.systeme.maintenant().getTime());
+			return { statut: 'deja_applique', motif: DEJA_APPLIQUE(chemin) };
+		}
 		if (lotPerime(lot, texte, fiche.faits)) return perime(PERIME(chemin));
 		// la fiche est devenue consigne ou profil, ou a été rangée sous un chemin fixe : le lot n'a plus d'objet
 		const intouchable = motifFiche(chemin, fiche);
 		if (intouchable !== null) return perime(`${intouchable} Le lot est écarté.`);
-		const choisis = [...indices].sort((a, b) => a - b);
+		// une ligne déjà dans l'état visé ne s'applique pas (elle serait refusée : déjà confirmée, déjà retirée) : laissée
+		const choisis = [...indices].sort((a, b) => a - b).filter((i) => !ligneDejaAppliquee(lot.genre, lot.lignes[i]!, fiche.faits));
+		if (choisis.length === 0) return refus('Les lignes choisies sont déjà appliquées : choisir les autres lignes, ou rejeter le lot.');
 		const applique = appliquerLot(fiche, lot.genre, choisis.map((i) => lot.lignes[i]!), await contexteDe(dep, fiche, memoire.designee));
 		if ('motif' in applique) return refus(applique.motif);
 

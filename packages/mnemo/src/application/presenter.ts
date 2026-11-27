@@ -162,7 +162,13 @@ export function presenterListing(listing: Listing): string {
 	return assembler(entete, unites, LIMITE_SORTIE, 'entrées');
 }
 
-const SORTS = { valide: 'validé', rejete: 'rejeté', perime: "écarté (périmé : ce qu'il visait a changé, à reproposer)" } as const;
+const SORTS = {
+	valide: 'validé',
+	rejete: 'rejeté',
+	perime: "écarté (périmé : ce qu'il visait a changé, à reproposer)",
+	deja_applique: 'retiré (déjà appliqué : ses informations étaient déjà dans l’état visé, rien à reproposer)',
+	fiche_absente: 'retiré (sa fiche n’existe plus : supprimée ou déplacée)',
+} as const;
 
 /** Lot enregistré (`proposer_lot`), puis le sort des lots décidés depuis la proposition précédente. */
 export function presenterLotPropose(r: ResultatLotPropose): string {

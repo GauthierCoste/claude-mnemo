@@ -17,6 +17,13 @@ import s from './Propositions.module.css';
 
 /** Refus 409 de `lotValider` : une information visée a changé depuis la proposition, le service a écarté le lot. */
 export const FICHE_CHANGEE = 'Une information visée a changé depuis la proposition : lot écarté, demander à l’archiviste de le reproposer.';
+/** Note d'une ligne déjà dans l'état visé : rien à appliquer, elle n'est pas envoyée à la validation. */
+const DEJA_APPLIQUEE: Record<GenreLotVue, string> = {
+	confirmer: 'Déjà confirmée : rien à faire.',
+	supprimer: 'Déjà retirée de la fiche : rien à faire.',
+	fusionner: 'Déjà fusionnée : rien à faire.',
+};
+
 /** Note d'un lot périmé, encore en attente : rien ne le repropose seul. */
 export const LOT_PERIME = 'Une information visée a changé depuis la proposition : rejeter ce lot, puis demander à l’archiviste de le reproposer.';
 
@@ -41,7 +48,9 @@ export function LotAValider(p: { lot: LotVue; surDecide(): void }): ReactNode {
 	/** Le lot tranché, tel qu'affiché au moment du choix : grisé tant que c'est lui qui est affiché. */
 	const [tranche, setTranche] = useState<LotVue | null>(null);
 	const occupe = enCours || tranche === lot;
-	const cochees = lot.lignes.map((l) => l.indice).filter((i) => !decoches.has(i));
+	// une ligne déjà appliquée (confirmée, supprimée, fusionnée sans le lot) n'a rien à valider : jamais envoyée
+	const aAppliquer = lot.lignes.filter((l) => !l.deja).map((l) => l.indice);
+	const cochees = aAppliquer.filter((i) => !decoches.has(i));
 	const intitule = intituleLot(lot);
 
 	/** `action` rend le succès à annoncer et les avertissements de la réponse. */
@@ -52,7 +61,9 @@ export function LotAValider(p: { lot: LotVue; surDecide(): void }): ReactNode {
 			setTranche(lot);
 			annoncer(succes, avertissements);
 		} catch (e) {
-			if (e instanceof ErreurApi && e.statut === 409) toast(FICHE_CHANGEE);
+			// 409 : lot écarté (une information a changé, à faire reproposer) ou retiré (déjà appliqué, fiche disparue : son motif
+			// le dit, « lot retiré », sans rien à reproposer)
+			if (e instanceof ErreurApi && e.statut === 409) toast(e.message.includes('lot retiré') ? e.message : FICHE_CHANGEE);
 			else toast(e instanceof Error ? e.message : 'Écriture impossible.');
 		} finally {
 			setEnCours(false);
@@ -94,7 +105,7 @@ export function LotAValider(p: { lot: LotVue; surDecide(): void }): ReactNode {
 				</span>
 			)}
 			<div className={s.actions}>
-				<Bouton petit genre="primaire" onClick={() => void valider(lot.lignes.map((l) => l.indice))} disabled={occupe || lot.perime}>
+				<Bouton petit genre="primaire" onClick={() => void valider(aAppliquer)} disabled={occupe || lot.perime || aAppliquer.length === 0}>
 					Tout valider
 				</Bouton>
 				<Bouton petit onClick={() => setRevoir((x) => !x)} aria-expanded={revoir} aria-controls={idLignes}>
@@ -177,7 +188,7 @@ function LigneDuLot(p: { ligne: LigneDeLotVue; genre: GenreLotVue; cochee: boole
 	return (
 		<div className={s.ligne}>
 			<div className={s.case}>
-				<input type="checkbox" checked={p.cochee} disabled={p.desactive} aria-labelledby={idTexte} onChange={(e) => p.surCocher(e.target.checked)} />
+				<input type="checkbox" checked={p.cochee && !ligne.deja} disabled={p.desactive || ligne.deja} aria-labelledby={idTexte} onChange={(e) => p.surCocher(e.target.checked)} />
 				<span className={s.enonce}>
 					{visee?.categorie != null && (
 						<Puce className={s.categorie}>
@@ -187,7 +198,12 @@ function LigneDuLot(p: { ligne: LigneDeLotVue; genre: GenreLotVue; cochee: boole
 					<span id={idTexte}>{visee?.barre ? <s>{p.enLigne(texte)}</s> : p.enLigne(texte)}</span>
 				</span>
 			</div>
-			{resumeChangement(ligne, p.genre).map((x, i) => (
+			{ligne.deja && (
+				<span className={s.changement} role="note">
+					{DEJA_APPLIQUEE[p.genre]}
+				</span>
+			)}
+			{!ligne.deja && resumeChangement(ligne, p.genre).map((x, i) => (
 				<span key={i} className={s.changement}>
 					{p.enLigne(x)}
 				</span>

@@ -66,6 +66,7 @@ const DOUBLONS: LotVue = {
 			],
 			apres: { ancre: 'f-0001', lignes: [ligne('f-0001', 'Les lots sont portés par une table stock_lot.', 51), '  + src: [[sources/cdc]] | corroboré 2026-11-24'] },
 			motif: null,
+			deja: false,
 		},
 		{
 			indice: 1,
@@ -77,6 +78,7 @@ const DOUBLONS: LotVue = {
 			],
 			apres: { ancre: 'f-0002', lignes: [ligne('f-0002', 'Livraison au 15/12/2026.')] },
 			motif: null,
+			deja: false,
 		},
 		{
 			indice: 2,
@@ -87,6 +89,7 @@ const DOUBLONS: LotVue = {
 			],
 			apres: { ancre: 'f-0005', lignes: [ligne('f-0005', 'Inventaire tournant reporté.')] },
 			motif: null,
+			deja: false,
 		},
 	],
 };
@@ -98,7 +101,7 @@ const SUPPRESSION: LotVue = {
 	fiche: 'projets/api-facturation/Dépôt SFTP.md',
 	titre: null,
 	motif: 'Note de travail.',
-	lignes: [{ indice: 0, ligne: { ancre: 'f-0002' }, avant: [{ ancre: 'f-0002', lignes: [ligne('f-0002', 'Relancer le test.')] }], apres: null, motif: null }],
+	lignes: [{ indice: 0, ligne: { ancre: 'f-0002' }, avant: [{ ancre: 'f-0002', lignes: [ligne('f-0002', 'Relancer le test.')] }], apres: null, motif: null, deja: false }],
 };
 
 function monter(o: { lots?: LotVue[]; valider?: (corps: unknown) => unknown; rejeter?: (corps: unknown) => unknown } = {}) {
@@ -225,6 +228,26 @@ describe('Mémoire › Archiviste : lots d’informations à valider', () => {
 		await act(async () => fireEvent.click(within(carte).getByRole('button', { name: 'Valider 2 doublons' })));
 		expect(envois).toEqual([{ route: 'valider', corps: { lignes: [0, 2] } }]);
 		expect(await screen.findByText('Lot validé : 2 lignes appliquées')).toBeTruthy();
+	});
+
+	it('une ligne déjà appliquée (fusionnée sans le lot) : marquée, case inactive, jamais envoyée par « Tout valider »', async () => {
+		const deja: LotVue = { ...DOUBLONS, lignes: DOUBLONS.lignes.map((l) => (l.indice === 1 ? { ...l, deja: true } : l)) };
+		const { envois } = monter({ lots: [deja] });
+		const carte = await carteDuLot('4 doublons proposés dans Module stocks');
+		fireEvent.click(within(carte).getByRole('button', { name: 'Revoir' }));
+		expect(within(carte).getByText('Déjà fusionnée : rien à faire.')).toBeTruthy();
+		const caseDeja = within(carte).getByRole('checkbox', { name: 'Livraison au 15/12/2026.' }) as HTMLInputElement;
+		expect([caseDeja.checked, caseDeja.disabled]).toEqual([false, true]);
+		await act(async () => fireEvent.click(within(carte).getByRole('button', { name: 'Tout valider' })));
+		expect(envois).toEqual([{ route: 'valider', corps: { lignes: [0, 2] } }]);
+	});
+
+	it('refus 409 d’un lot retiré (déjà appliqué) : son motif en toast, pas « a changé »', async () => {
+		const motif = 'Toutes les lignes du lot sont déjà appliquées dans projets/erp-saas/Module stocks.md : lot retiré, rien à écrire ni à reproposer.';
+		monter({ valider: () => { throw new ErreurApi(motif, 409); } });
+		const carte = await carteDuLot('4 doublons proposés dans Module stocks');
+		await act(async () => fireEvent.click(within(carte).getByRole('button', { name: 'Tout valider' })));
+		expect(await screen.findByText(motif)).toBeTruthy();
 	});
 
 	it('« Revoir » d’une suppression : « supprimée », « Valider 1 ligne »', async () => {

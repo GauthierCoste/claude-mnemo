@@ -1023,9 +1023,10 @@ export type InformationDuLotVue = { ancre: string; lignes: string[] };
  * Une ligne d'un lot, pour « Revoir » : `indice` (à renvoyer dans `lignes` pour la valider), `avant` (les informations visées
  * telles qu'elles sont, la gardée d'abord pour une fusion), `apres` (l'information qui reste si cette ligne est appliquée
  * seule : la gardée avec les sources versées et sa confiance recalculée, ou la confirmée ; null pour une suppression),
- * `motif` (pourquoi elle ne s'appliquerait pas seule ; null sinon).
+ * `motif` (pourquoi elle ne s'appliquerait pas seule ; null sinon), `deja` (déjà dans l'état visé, par exemple confirmée une
+ * à une : rien à appliquer ; laissée à la validation).
  */
-export type LigneDeLotVue = { indice: number; ligne: LigneDeLotProposeeVue; avant: InformationDuLotVue[]; apres: InformationDuLotVue | null; motif: string | null };
+export type LigneDeLotVue = { indice: number; ligne: LigneDeLotProposeeVue; avant: InformationDuLotVue[]; apres: InformationDuLotVue | null; motif: string | null; deja: boolean };
 /**
  * Un lot d'informations proposé par l'archiviste, en attente de l'utilisateur : `fiche` (chemin) et son `titre` (null si
  * absente ou illisible), `motif` de l'archiviste, `proposeMs`, `session` qui l'a proposé (null : hors session Mnemo),
