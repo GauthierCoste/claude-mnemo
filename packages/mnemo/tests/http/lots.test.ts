@@ -49,8 +49,8 @@ describe('routes des lots d\'informations', () => {
 				session: null,
 				perime: false,
 				lignes: [
-					{ indice: 0, ligne: { ancre: 'f-0005' }, avant: [{ ancre: 'f-0005', lignes: [ligne(5)] }], apres: null, motif: null },
-					{ indice: 1, ligne: { ancre: 'f-0006' }, avant: [{ ancre: 'f-0006', lignes: [ligne(6)] }], apres: null, motif: null },
+					{ indice: 0, ligne: { ancre: 'f-0005' }, avant: [{ ancre: 'f-0005', lignes: [ligne(5)] }], apres: null, motif: null, deja: false },
+					{ indice: 1, ligne: { ancre: 'f-0006' }, avant: [{ ancre: 'f-0006', lignes: [ligne(6)] }], apres: null, motif: null, deja: false },
 				],
 			},
 		]);
