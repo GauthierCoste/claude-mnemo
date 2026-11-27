@@ -3,9 +3,10 @@
  * ses raccourcis servent), traduit du modèle du domaine (`domaine/menu-application.ts`) : les menus standard (édition pour
  * copier et coller dans le terminal, présentation, fenêtre), et « Quitter Mnemo » (⌘Q, Ctrl+Q) qui passe par la question
  * de l'arrêt du service, comme celui de la barre des menus. Quitter depuis le Dock ou à la fermeture de la session macOS
- * ne pose pas de question : le service continue.
+ * ne pose pas de question : le service continue. Réinstallé quand la langue change.
  */
 import { Menu, type MenuItemConstructorOptions } from 'electron';
+import type { TextesApp } from '../domaine/langue/textes.ts';
 import { type ElementMenuApplication, modeleMenuApplication } from '../domaine/menu-application.ts';
 import { plateformeApp } from '../domaine/plateforme.ts';
 
@@ -22,6 +23,6 @@ function traduire(e: ElementMenuApplication, quitter: () => void): MenuItemConst
 	}
 }
 
-export function installerMenuApplication(o: { quitter: () => void }): void {
-	Menu.setApplicationMenu(Menu.buildFromTemplate(modeleMenuApplication(plateformeApp(process.platform)).map((e) => traduire(e, o.quitter))));
+export function installerMenuApplication(o: { quitter: () => void; textes: TextesApp }): void {
+	Menu.setApplicationMenu(Menu.buildFromTemplate(modeleMenuApplication(plateformeApp(process.platform), o.textes).map((e) => traduire(e, o.quitter))));
 }

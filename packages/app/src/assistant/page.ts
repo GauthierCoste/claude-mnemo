@@ -1,24 +1,23 @@
 /**
  * Page de l'assistant d'installation : affiche l'état du domaine (`evoluer`, `domaine/assistant.ts`) et parle au processus
  * principal par `window.assistant` (le preload), rien d'autre. Aucun HTML assemblé en texte : les éléments sont créés un à
- * un, le texte venu d'ailleurs posé en `textContent`.
+ * un, le texte venu d'ailleurs posé en `textContent`. Premier écran : la langue (présélectionnée sur celle du processus
+ * principal) ; la page bascule aussitôt, sans rechargement, et le processus principal la retient.
  */
 import './assistant.css';
-import { tailleLisible } from '@mnemo/commun';
+import { LANGUES, type Langue } from '@mnemo/commun';
 import type { PosteVerifie } from '@mnemo/contrat';
-import { MESSAGE_PROVISOIRE } from '../domaine/assistant-demarrage.ts';
 import { ETAPES_ASSISTANT, etatInitial, evoluer, peutContinuer, peutReessayer, type EtapeAssistant, type EtatAssistant, type EvenementAssistant } from '../domaine/assistant.ts';
-import { fractionPiece, LIBELLES_ETAPES, type EtapeSuivie, type EtatInstallation, type PieceSuivie } from '../domaine/assistant-lignes.ts';
+import { fractionPiece, type EtapeSuivie, type EtatInstallation, type PieceSuivie } from '../domaine/assistant-lignes.ts';
 import { LIENS_EXTERNES, type ApiAssistant } from '../domaine/assistant-pont.ts';
 import { textesAssistant } from '../domaine/assistant-textes.ts';
+import { NOMS_LANGUES, textesApp, type TextesApp } from '../domaine/langue/textes.ts';
 
 declare global {
 	interface Window {
 		assistant?: ApiAssistant;
 	}
 }
-
-const NOMS_ETAPES: Record<EtapeAssistant, string> = { verifications: 'Vérifications', dossier: 'Dossier', choix: 'Choix', installation: 'Installation', termine: 'Prêt' };
 
 type Enfant = Node | string | null | false;
 type Attributs = Record<string, string | boolean | undefined>;
@@ -45,17 +44,26 @@ const lien = (libelle: string, url: string): HTMLElement => el('a', { href: url,
 const api = window.assistant;
 /** La plateforme vient du preload (macOS si la page est ouverte hors de l'app : elle ne fait alors rien). */
 const plateforme = api?.plateforme === 'win32' ? 'win32' : 'darwin';
-const textes = textesAssistant(plateforme);
 // barre de titre : les boutons de Windows sont à droite (`assistant.css`)
 if (plateforme === 'win32') document.documentElement.dataset['plateforme'] = 'windows';
-let etat: EtatAssistant = etatInitial(plateforme);
+let etat: EtatAssistant = etatInitial(plateforme, api?.langue ?? 'fr');
 /** `terminer` est en cours (configuration, ouverture de l'interface) ; `erreurFin` : ce qui l'a empêché. */
 let ouverture = false;
 let erreurFin: string | null = null;
 
+/** Les textes de la langue choisie. */
+const t = (): TextesApp => textesApp(etat.langue ?? 'fr');
+
 function envoyer(e: EvenementAssistant): void {
 	etat = evoluer(etat, e);
 	afficher();
+}
+
+function choisirLangue(langue: Langue): void {
+	if (etat.langue === langue) return;
+	envoyer({ type: 'langue', langue });
+	// le processus principal la retient (menus, préférences, `mnemo init --langue`) ; un échec n'empêche rien ici
+	void api?.choisirLangue(langue).catch(() => {});
 }
 
 async function verifier(): Promise<void> {
@@ -113,14 +121,38 @@ const texteErreur = (erreur: unknown): string => (erreur instanceof Error ? erre
 
 // --- Vues ---
 
+/** Les étapes du fil : sans celle de la langue si la page n'a pas commencé par elle. */
 function fil(): HTMLElement[] {
-	const courante = ETAPES_ASSISTANT.indexOf(etat.etape);
-	return ETAPES_ASSISTANT.filter((e) => e !== 'termine').map((e, i) =>
-		el('li', { class: i < courante ? 'passee' : i === courante ? 'courante' : undefined, 'aria-current': i === courante ? 'step' : undefined }, NOMS_ETAPES[e]),
+	const etapes = ETAPES_ASSISTANT.filter((e) => e !== 'termine' && (e !== 'langue' || etat.langue !== null));
+	const courante = etapes.indexOf(etat.etape as (typeof etapes)[number]);
+	return etapes.map((e, i) =>
+		el('li', { class: i < courante ? 'passee' : i === courante ? 'courante' : undefined, 'aria-current': i === courante ? 'step' : undefined }, t().assistant.etapes[e]),
 	);
 }
 
 const erreur = (texte: string | null): HTMLElement | null => (texte === null ? null : el('p', { class: 'erreur', role: 'alert' }, texte));
+
+/** Chaque langue écrite dans sa propre langue (et marquée comme telle pour les lecteurs d'écran). */
+function vueLangue(): Enfant[] {
+	const a = t().assistant;
+	return [
+		el('h1', {}, a.langue.titre),
+		el('p', { class: 'intro' }, a.langue.intro),
+		el(
+			'div',
+			{ class: 'choix', role: 'radiogroup', 'aria-label': a.etapes.langue },
+			...LANGUES.map((langue) => {
+				const id = `langue-${langue}`;
+				const r = el('input', { type: 'radio', name: 'langue', id, value: langue, checked: etat.langue === langue, 'data-cle': id }) as HTMLInputElement;
+				r.addEventListener('change', () => {
+					if (r.checked) choisirLangue(langue);
+				});
+				return el('label', { class: 'case', for: id }, r, el('span', { class: 'texte' }, el('span', { class: 'titre-case', lang: langue }, NOMS_LANGUES[langue])));
+			}),
+		),
+		el('div', { class: 'actions' }, bouton(a.actions.continuer, () => envoyer({ type: 'continuer' }), { primaire: true, desactive: !peutContinuer(etat), cle: 'continuer' })),
+	];
+}
 
 function lignePoste(nom: string, ok: boolean, detail: string, aide: Enfant): HTMLElement {
 	return el('li', { class: ok ? 'verif ok' : 'verif manque' }, el('span', { class: 'puce', 'aria-hidden': 'true' }), el('span', { class: 'nom' }, nom), el('span', { class: 'detail' }, detail), aide !== null && aide !== false ? el('span', { class: 'aide' }, aide) : null);
@@ -128,65 +160,74 @@ function lignePoste(nom: string, ok: boolean, detail: string, aide: Enfant): HTM
 
 /** macOS : la commande d'Apple, ou le lien ; Windows : le lien vers Git pour Windows seul. */
 function aideGit(): HTMLElement {
-	const { commande, libelleLien, lien: url } = textes.aideGit;
-	return commande === null ? lien(libelleLien, url) : el('span', {}, 'Dans un terminal : ', el('code', {}, commande), ' ; ou ', lien(libelleLien, url), '.');
+	const { commande, libelleLien, lien: url } = textesAssistant(plateforme, t()).aideGit;
+	const a = t().assistant.verifications.aideGit;
+	return commande === null ? lien(libelleLien, url) : el('span', {}, a.avant, el('code', {}, commande), a.entre, lien(libelleLien, url), a.apres);
 }
 
 function vuePoste(poste: PosteVerifie): HTMLElement {
+	const v = t().assistant.verifications;
 	return el(
 		'ul',
 		{ class: 'verifs' },
-		lignePoste('git', poste.git.ok, poste.git.ok ? (poste.git.version ?? '') : (poste.git.motif ?? 'absent'), !poste.git.ok && aideGit()),
-		lignePoste('Claude Code', poste.claude.ok, poste.claude.ok ? (poste.claude.chemin ?? '') : (poste.claude.motif ?? 'absent'), !poste.claude.ok && lien('Installer Claude Code', LIENS_EXTERNES.claude)),
+		lignePoste('git', poste.git.ok, poste.git.ok ? (poste.git.version ?? '') : (poste.git.motif ?? v.absent), !poste.git.ok && aideGit()),
+		lignePoste('Claude Code', poste.claude.ok, poste.claude.ok ? (poste.claude.chemin ?? '') : (poste.claude.motif ?? v.absent), !poste.claude.ok && lien(v.installerClaude, LIENS_EXTERNES.claude)),
 		lignePoste('Node', true, poste.node.version, null),
 	);
 }
 
+/** « Retour » vers la langue, si la page a commencé par elle. */
+const retourLangue = (): Enfant => etat.langue !== null && bouton(t().assistant.actions.retour, () => envoyer({ type: 'retour' }), { cle: 'retour' });
+
 function vueVerifications(): Enfant[] {
+	const a = t().assistant;
 	return [
-		el('h1', {}, 'Bienvenue dans Mnemo'),
-		el('p', { class: 'intro' }, textes.intro),
-		etat.verification ? el('p', { class: 'attente' }, 'Vérification…') : etat.poste !== null ? vuePoste(etat.poste) : null,
+		el('h1', {}, a.verifications.titre),
+		el('p', { class: 'intro' }, textesAssistant(plateforme, t()).intro),
+		etat.verification ? el('p', { class: 'attente' }, a.verifications.enCours) : etat.poste !== null ? vuePoste(etat.poste) : null,
 		erreur(etat.erreurPoste),
 		el(
 			'div',
 			{ class: 'actions' },
-			bouton('Vérifier à nouveau', () => void verifier(), { desactive: etat.verification, cle: 'reverifier' }),
-			bouton('Continuer', () => envoyer({ type: 'continuer' }), { primaire: true, desactive: !peutContinuer(etat), cle: 'continuer' }),
+			retourLangue(),
+			bouton(a.verifications.reverifier, () => void verifier(), { desactive: etat.verification, cle: 'reverifier' }),
+			bouton(a.actions.continuer, () => envoyer({ type: 'continuer' }), { primaire: true, desactive: !peutContinuer(etat), cle: 'continuer' }),
 		),
 	];
 }
 
 function vueDossier(): Enfant[] {
+	const a = t().assistant;
 	const d = etat.dossier;
 	return [
-		el('h1', {}, 'Où ranger la mémoire ?'),
-		el('p', { class: 'intro' }, 'Choisis le dossier qui contient tes projets : Mnemo y crée sa mémoire, dans ', el('code', {}, '_mnemo/'), '. Un dossier qui a déjà une mémoire Mnemo est repris tel quel.'),
+		el('h1', {}, a.dossier.titre),
+		el('p', { class: 'intro' }, a.dossier.intro.avant, el('code', {}, '_mnemo/'), a.dossier.intro.apres),
 		el(
 			'div',
 			{ class: 'dossier' },
-			d === null ? el('span', { class: 'vide' }, 'Aucun dossier choisi.') : el('code', { class: 'chemin' }, d.racine),
-			d !== null && el('span', { class: d.memoireExistante ? 'pastille existante' : 'pastille' }, d.memoireExistante ? 'Mémoire existante, reprise telle quelle' : 'Nouvelle mémoire'),
-			bouton(d === null ? 'Choisir un dossier…' : 'Changer…', () => void choisirDossier(), { cle: 'choisir' }),
+			d === null ? el('span', { class: 'vide' }, a.dossier.aucun) : el('code', { class: 'chemin' }, d.racine),
+			d !== null && el('span', { class: d.memoireExistante ? 'pastille existante' : 'pastille' }, d.memoireExistante ? a.dossier.existante : a.dossier.nouvelle),
+			bouton(d === null ? a.dossier.choisir : a.dossier.changer, () => void choisirDossier(), { cle: 'choisir' }),
 		),
 		erreur(etat.erreurDossier),
 		el(
 			'div',
 			{ class: 'actions' },
-			bouton('Retour', () => envoyer({ type: 'retour' }), { cle: 'retour' }),
-			bouton('Continuer', () => envoyer({ type: 'continuer' }), { primaire: true, desactive: !peutContinuer(etat), cle: 'continuer' }),
+			bouton(a.actions.retour, () => envoyer({ type: 'retour' }), { cle: 'retour' }),
+			bouton(a.actions.continuer, () => envoyer({ type: 'continuer' }), { primaire: true, desactive: !peutContinuer(etat), cle: 'continuer' }),
 		),
 	];
 }
 
 function vueChoix(): Enfant[] {
+	const a = t().assistant;
 	return [
-		el('h1', {}, 'Que faut-il installer ?'),
-		el('p', { class: 'intro' }, 'Dossier : ', el('code', {}, etat.dossier?.racine ?? '')),
+		el('h1', {}, a.choix.titre),
+		el('p', { class: 'intro' }, a.choix.dossier, el('code', {}, etat.dossier?.racine ?? '')),
 		el(
 			'div',
 			{ class: 'choix' },
-			...textes.cases.map(({ cle, titre, detail }) => {
+			...textesAssistant(plateforme, t()).cases.map(({ cle, titre, detail }) => {
 				const id = `choix-${cle}`;
 				const c = el('input', { type: 'checkbox', id, checked: etat.choix[cle], 'data-cle': id }) as HTMLInputElement;
 				c.addEventListener('change', () => envoyer({ type: 'choix', cle, valeur: c.checked }));
@@ -196,8 +237,8 @@ function vueChoix(): Enfant[] {
 		el(
 			'div',
 			{ class: 'actions' },
-			bouton('Retour', () => envoyer({ type: 'retour' }), { cle: 'retour' }),
-			bouton('Installer', () => void installer(), { primaire: true, cle: 'installer' }),
+			bouton(a.actions.retour, () => envoyer({ type: 'retour' }), { cle: 'retour' }),
+			bouton(a.choix.installer, () => void installer(), { primaire: true, cle: 'installer' }),
 		),
 	];
 }
@@ -205,14 +246,16 @@ function vueChoix(): Enfant[] {
 const SYMBOLES: Record<EtapeSuivie['etat'], string> = { attente: '', debut: '', fait: '✓', saute: '–', laisse: '–', echec: '✕' };
 
 function vuePiece(p: PieceSuivie): HTMLElement {
+	const { formats, assistant } = t();
 	const part = fractionPiece(p);
 	const barre = el('progress', { max: '1', 'aria-label': p.libelle });
 	if (part !== null) (barre as HTMLProgressElement).value = part;
-	const taille = p.finie ? (p.total === null ? tailleLisible(p.recu) : tailleLisible(p.total)) : `${tailleLisible(p.recu)}${p.total === null ? '' : ` sur ${tailleLisible(p.total)}`}`;
+	const taille = p.finie ? formats.taille(p.total ?? p.recu) : p.total === null ? formats.taille(p.recu) : assistant.installation.recu(formats.taille(p.recu), formats.taille(p.total));
 	return el('li', { class: 'piece' }, el('span', { class: 'libelle' }, p.libelle), barre, el('span', { class: 'taille' }, taille));
 }
 
 function vueEtapes(i: EtatInstallation): HTMLElement {
+	const libelles = t().assistant.installation.etapes;
 	return el(
 		'ul',
 		{ class: 'etapes' },
@@ -221,7 +264,7 @@ function vueEtapes(i: EtatInstallation): HTMLElement {
 				'li',
 				{ class: `etape ${e.etat}` },
 				el('span', { class: 'symbole', 'aria-hidden': 'true' }, SYMBOLES[e.etat]),
-				el('span', { class: 'texte' }, el('span', { class: 'titre-case' }, LIBELLES_ETAPES[e.etape]), e.message !== '' && el('span', { class: 'detail' }, e.message)),
+				el('span', { class: 'texte' }, el('span', { class: 'titre-case' }, libelles[e.etape]), e.message !== '' && el('span', { class: 'detail' }, e.message)),
 				e.etape === 'modeles' && i.pieces.length > 0 && e.etat !== 'saute' ? el('ul', { class: 'pieces' }, ...i.pieces.map(vuePiece)) : null,
 			),
 		),
@@ -229,40 +272,53 @@ function vueEtapes(i: EtatInstallation): HTMLElement {
 }
 
 function vueInstallation(): Enfant[] {
+	const a = t().assistant.installation;
 	const i = etat.installation;
 	if (i === null) return [];
 	return [
-		el('h1', {}, i.enCours ? 'Installation…' : 'Installation interrompue'),
+		el('h1', {}, i.enCours ? a.enCours : a.interrompue),
 		vueEtapes(i),
 		erreur(i.erreur),
-		peutReessayer(etat) && el('div', { class: 'actions' }, bouton('Revenir aux choix', () => envoyer({ type: 'retour' }), { cle: 'retour' })),
+		peutReessayer(etat) && el('div', { class: 'actions' }, bouton(a.revenir, () => envoyer({ type: 'retour' }), { cle: 'retour' })),
 	];
 }
 
 function vueTermine(): Enfant[] {
+	const a = t().assistant;
+	const relance = textesAssistant(plateforme, t()).relance;
 	const i = etat.installation;
 	const echecs = i?.etapes.filter((e) => e.etat === 'echec') ?? [];
 	return [
-		el('h1', {}, 'Mnemo est prêt'),
-		el('p', { class: 'intro' }, 'La mémoire est dans ', el('code', {}, etat.dossier?.racine ?? ''), '.'),
+		el('h1', {}, a.termine.titre),
+		el('p', { class: 'intro' }, a.termine.memoire.avant, el('code', {}, etat.dossier?.racine ?? ''), a.termine.memoire.apres),
 		i !== null ? vueEtapes(i) : null,
-		echecs.length > 0 ? el('p', { class: 'avertissement' }, `${echecs.map((e) => LIBELLES_ETAPES[e.etape]).join(', ')} : échec.${textes.relance === null ? '' : ` ${textes.relance}`}`) : null,
+		echecs.length > 0 ? el('p', { class: 'avertissement' }, `${a.termine.echecs(echecs.map((e) => a.installation.etapes[e.etape]).join(', '))}${relance === null ? '' : ` ${relance}`}`) : null,
 		erreur(erreurFin),
-		el('div', { class: 'actions' }, bouton(ouverture ? 'Ouverture…' : 'Ouvrir Mnemo', () => void terminer(), { primaire: true, desactive: ouverture, cle: 'ouvrir' })),
+		el('div', { class: 'actions' }, bouton(ouverture ? a.termine.ouverture : a.termine.ouvrir, () => void terminer(), { primaire: true, desactive: ouverture, cle: 'ouvrir' })),
 	];
 }
 
 /** App ouverte depuis l'image disque ou une translocation : rien ne s'installe d'ici. */
 function vueDeplacer(): Enfant[] {
-	return [el('h1', {}, 'Glisse Mnemo dans Applications'), el('p', { class: 'intro' }, MESSAGE_PROVISOIRE)];
+	const d = t().assistant.deplacer;
+	return [el('h1', {}, d.titre), el('p', { class: 'intro' }, d.message)];
 }
 
-const VUES: Record<EtapeAssistant, () => Enfant[]> = { verifications: vueVerifications, dossier: vueDossier, choix: vueChoix, installation: vueInstallation, termine: vueTermine };
+const VUES: Record<EtapeAssistant, () => Enfant[]> = { langue: vueLangue, verifications: vueVerifications, dossier: vueDossier, choix: vueChoix, installation: vueInstallation, termine: vueTermine };
+
+/** Langue du document, titre de la fenêtre et nom du fil : ceux de la langue choisie. */
+function poserLangue(): void {
+	const a = t().assistant;
+	document.documentElement.lang = etat.langue ?? 'fr';
+	document.title = a.titrePage;
+	document.getElementById('fil')?.setAttribute('aria-label', a.fil);
+}
 
 function afficher(): void {
 	const contenu = document.getElementById('contenu');
 	const filEtapes = document.getElementById('fil');
 	if (contenu === null || filEtapes === null) return;
+	poserLangue();
 	// le focus survit au nouvel affichage (même élément, par sa clé)
 	const cle = document.activeElement instanceof HTMLElement ? document.activeElement.dataset['cle'] : undefined;
 	filEtapes.replaceChildren(...(etat.deplacer ? [] : fil()));
@@ -271,7 +327,7 @@ function afficher(): void {
 }
 
 if (api === undefined) {
-	document.getElementById('contenu')?.replaceChildren(el('p', { class: 'erreur' }, 'Cette page ne s’ouvre que dans l’app Mnemo.'));
+	document.getElementById('contenu')?.replaceChildren(el('p', { class: 'erreur' }, t().assistant.horsApp));
 } else {
 	afficher();
 	void verifier();

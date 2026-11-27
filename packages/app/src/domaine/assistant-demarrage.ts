@@ -9,14 +9,15 @@
  */
 import type { ExecutableMnemo } from './assistant.ts';
 import type { Configuration, ResultatConfiguration } from './configuration.ts';
+import { TEXTES_FR } from './langue/textes.ts';
 
 /** `provisoire` : rien à lancer, l'assistant montre seulement `MESSAGE_PROVISOIRE`. */
 export type DecisionDemarrage =
 	| { assistant: false; configuration: Configuration }
 	| { assistant: true; raison: string; executable: ExecutableMnemo | null; port?: number; provisoire?: true };
 
-export const MESSAGE_PROVISOIRE =
-	'Mnemo est ouvert depuis son image disque (ou depuis une copie provisoire que macOS efface à la fermeture) : rien n’est installé d’ici. Glisse Mnemo dans le dossier Applications, puis rouvre-le depuis Applications (l’image disque peut alors être éjectée).';
+/** En français (dans une langue : `t.assistant.deplacer.message`). */
+export const MESSAGE_PROVISOIRE = TEXTES_FR.assistant.deplacer.message;
 
 /** `provisoire` : l'app empaquetée tourne depuis un emplacement provisoire (`emplacementProvisoire`). */
 export function decisionDemarrage(lue: ResultatConfiguration, memoirePresente: boolean, parDefaut: ExecutableMnemo | null, provisoire = false): DecisionDemarrage {

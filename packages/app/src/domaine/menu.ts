@@ -11,10 +11,11 @@
  * libellé.
  */
 import type { SessionVue } from '@mnemo/contrat';
+import { TEXTES_FR, type TextesApp } from './langue/textes.ts';
 import type { PlateformeApp } from './plateforme.ts';
 import type { EtatVie } from './vie-service.ts';
 import type { VersionPubliee } from './version.ts';
-import { dossierAffiche, LIBELLES_ETATS, libelleSession, sessionsActives } from './sessions.ts';
+import { dossierAffiche, libelleSession, sessionsActives } from './sessions.ts';
 
 /** Nombre de sessions listées dans le menu au plus ; au-delà, une ligne qui ouvre la fenêtre. */
 export const SESSIONS_MENU_MAX = 10;
@@ -57,68 +58,74 @@ export type EntreeMenu = {
 	/** Version publiée plus récente que celle de l'app, ou null. */
 	nouvelleVersion: VersionPubliee | null;
 	chercherVersions: boolean;
+	/** Langue des libellés ; par défaut le français. */
+	textes?: TextesApp;
 };
 
 const action = (libelle: string, a: ActionMenu, actif = true, detail: string | null = null): ElementMenu => ({ type: 'action', libelle, detail, actif, action: a });
 const SEPARATEUR: ElementMenu = { type: 'separateur' };
 
 export function modeleMenu(entree: EntreeMenu): ElementMenu[] {
+	const t = entree.textes ?? TEXTES_FR;
+	const m = t.menu;
 	const vivant = entree.vie === 'vivant';
 	return [
-		action('Ouvrir Mnemo', { type: 'ouvrir' }, vivant),
+		action(m.ouvrir, { type: 'ouvrir' }, vivant),
 		SEPARATEUR,
-		...partieSessions(entree),
+		...partieSessions(entree, t),
 		SEPARATEUR,
-		elementService(entree.vie),
-		{ type: 'case', libelle: 'Ouvrir à l’ouverture de session', coche: entree.ouvertureSession, action: { type: 'ouvertureSession', active: !entree.ouvertureSession } },
-		action('Journal du service', { type: 'journal' }),
-		...(entree.plateforme === 'win32' ? [] : [action('Reprendre le PATH du terminal', { type: 'reprendrePath' })]),
+		elementService(entree.vie, t),
+		{ type: 'case', libelle: m.ouvertureSession, coche: entree.ouvertureSession, action: { type: 'ouvertureSession', active: !entree.ouvertureSession } },
+		action(m.journal, { type: 'journal' }),
+		...(entree.plateforme === 'win32' ? [] : [action(m.reprendrePath, { type: 'reprendrePath' })]),
 		SEPARATEUR,
-		{ type: 'texte', libelle: `Mnemo ${entree.version}` },
-		...(entree.nouvelleVersion === null ? [] : [action(`Version ${entree.nouvelleVersion.version} disponible`, { type: 'nouvelleVersion', url: entree.nouvelleVersion.url })]),
-		{ type: 'case', libelle: 'Chercher les nouvelles versions', coche: entree.chercherVersions, action: { type: 'chercherVersions', active: !entree.chercherVersions } },
-		action('Désinstaller Mnemo…', { type: 'desinstaller' }),
+		{ type: 'texte', libelle: m.version(entree.version) },
+		...(entree.nouvelleVersion === null ? [] : [action(m.nouvelleVersion(entree.nouvelleVersion.version), { type: 'nouvelleVersion', url: entree.nouvelleVersion.url })]),
+		{ type: 'case', libelle: m.chercherVersions, coche: entree.chercherVersions, action: { type: 'chercherVersions', active: !entree.chercherVersions } },
+		action(m.desinstaller, { type: 'desinstaller' }),
 		SEPARATEUR,
-		action('Quitter Mnemo', { type: 'quitter' }),
+		action(m.quitter, { type: 'quitter' }),
 	];
 }
 
 /** Sessions actives (service vivant) ; sinon l'état du service en clair. */
-function partieSessions(entree: EntreeMenu): ElementMenu[] {
+function partieSessions(entree: EntreeMenu, t: TextesApp): ElementMenu[] {
+	const m = t.menu;
 	switch (entree.vie) {
 		case 'arrete':
-			return [{ type: 'texte', libelle: 'Service arrêté' }];
+			return [{ type: 'texte', libelle: m.serviceArrete }];
 		case 'demarrage':
-			return [{ type: 'texte', libelle: 'Démarrage du service…' }];
+			return [{ type: 'texte', libelle: m.demarrage }];
 		case 'arret':
-			return [{ type: 'texte', libelle: 'Arrêt du service…' }];
+			return [{ type: 'texte', libelle: m.arret }];
 		case 'erreur':
-			return [{ type: 'texte', libelle: entree.raison ?? 'Le service ne répond pas' }];
+			return [{ type: 'texte', libelle: entree.raison ?? m.erreur }];
 		case 'vivant': {
 			const actives = sessionsActives(entree.sessions);
-			if (actives.length === 0) return [{ type: 'texte', libelle: 'Aucune session active' }];
+			if (actives.length === 0) return [{ type: 'texte', libelle: m.aucuneSession }];
 			const listees = actives.slice(0, SESSIONS_MENU_MAX).map((s) => {
-				const detail = `${LIBELLES_ETATS[s.etat]} · ${dossierAffiche(s)}`;
+				const detail = m.detailSession(t.sessions.etats[s.etat], dossierAffiche(s, t));
 				const ouvrir: ActionMenu = { type: 'ouvrirSession', session: s.id };
-				return entree.plateforme === 'win32' ? action(`${libelleSession(s)} — ${detail}`, ouvrir) : action(libelleSession(s), ouvrir, true, detail);
+				return entree.plateforme === 'win32' ? action(m.sessionEnLigne(libelleSession(s, t), detail), ouvrir) : action(libelleSession(s, t), ouvrir, true, detail);
 			});
 			const reste = actives.length - listees.length;
-			return reste > 0 ? [...listees, action(`${reste} autre${reste > 1 ? 's' : ''} session${reste > 1 ? 's' : ''}…`, { type: 'ouvrir' })] : listees;
+			return reste > 0 ? [...listees, action(m.autresSessions(reste), { type: 'ouvrir' })] : listees;
 		}
 	}
 }
 
-function elementService(vie: EtatVie): ElementMenu {
+function elementService(vie: EtatVie, t: TextesApp): ElementMenu {
+	const m = t.menu;
 	switch (vie) {
 		case 'arrete':
-			return action('Démarrer le service', { type: 'demarrerService' });
+			return action(m.demarrer, { type: 'demarrerService' });
 		case 'demarrage':
-			return action('Démarrer le service', { type: 'demarrerService' }, false);
+			return action(m.demarrer, { type: 'demarrerService' }, false);
 		case 'erreur':
-			return action('Redémarrer le service', { type: 'demarrerService' });
+			return action(m.redemarrer, { type: 'demarrerService' });
 		case 'vivant':
-			return action('Arrêter le service', { type: 'arreterService' });
+			return action(m.arreter, { type: 'arreterService' });
 		case 'arret':
-			return action('Arrêter le service', { type: 'arreterService' }, false);
+			return action(m.arreter, { type: 'arreterService' }, false);
 	}
 }

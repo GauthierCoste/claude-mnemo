@@ -14,6 +14,7 @@
  * - Le WebSocket se reconnecte seul ; une coupure ne vide pas la liste des sessions (voir `domaine/suivi.ts`).
  */
 import type { SessionVue } from '@mnemo/contrat';
+import { TEXTES_FR, type TextesApp } from '../domaine/langue/textes.ts';
 import type { NotificationSession } from '../domaine/notifications.ts';
 import { type EtatSuivi, type EvenementSuivi, evoluerSuivi, SUIVI_APP_INITIAL } from '../domaine/suivi.ts';
 import type { VieService } from '../domaine/vie-service.ts';
@@ -74,6 +75,8 @@ export type OptionsSuivi = {
 	/** Par défaut celle du processus. */
 	plateforme?: NodeJS.Platform;
 	attenteAvantForceMs?: number;
+	/** La langue courante des notifications et des raisons d'échec ; par défaut le français. */
+	textes?: () => TextesApp;
 };
 
 const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -85,6 +88,7 @@ export function creerSuivi(o: OptionsSuivi): SuiviService {
 	const attenteArret = o.attenteArretMs ?? ATTENTE_ARRET_MS;
 	const windows = (o.plateforme ?? process.platform) === 'win32';
 	const attenteAvantForce = o.attenteAvantForceMs ?? ATTENTE_AVANT_FORCE_MS;
+	const textes = (): TextesApp => o.textes?.() ?? TEXTES_FR;
 	const surChangements = new Set<(i: InstantaneSuivi) => void>();
 	const surNotifications = new Set<(n: NotificationSession) => void>();
 
@@ -110,7 +114,7 @@ export function creerSuivi(o: OptionsSuivi): SuiviService {
 	/** Applique un événement du domaine ; vrai si l'état a changé (déjà annoncé). */
 	function appliquer(evenement: EvenementSuivi): boolean {
 		if (ferme) return false;
-		const r = evoluerSuivi(etat, evenement);
+		const r = evoluerSuivi(etat, evenement, textes());
 		const change = r.etat !== etat;
 		etat = r.etat;
 		for (const n of r.notifications) for (const f of [...surNotifications]) f(n);
@@ -151,7 +155,7 @@ export function creerSuivi(o: OptionsSuivi): SuiviService {
 		service = null;
 		demarrage = (async () => {
 			// un accès qui lève ne laisse ni l'état en « demarrage » ni une promesse rejetée que personne n'attend
-			const r = await acces.demarrer().catch((e: unknown): ResultatDemarrage => ({ ok: false, raison: `Le service n’a pas démarré : ${e instanceof Error ? e.message : String(e)}` }));
+			const r = await acces.demarrer().catch((e: unknown): ResultatDemarrage => ({ ok: false, raison: textes().service.pasDemarre(e instanceof Error ? e.message : String(e)) }));
 			if (ferme) return;
 			if (r.ok) attacher(r.service);
 			else appliquer({ type: 'echecDemarrage', raison: r.raison });
@@ -222,8 +226,8 @@ export function creerSuivi(o: OptionsSuivi): SuiviService {
 		const fin = maintenant() + attenteArret;
 		// suivi fermé pendant l'attente : plus rien ne la retient (le service, lui, continue de s'arrêter)
 		while (!ferme && acces.processusVivant(s.pid) && maintenant() < fin) await pause(PAS_ARRET_MS);
-		if (ferme) return { ok: false, raison: 'Suivi du service fermé pendant l’arrêt.' };
-		if (acces.processusVivant(s.pid)) return echec(`Le service (pid ${s.pid}) ne s’est pas arrêté en ${Math.round(attenteArret / 1000)} s.`);
+		if (ferme) return { ok: false, raison: textes().service.suiviFerme };
+		if (acces.processusVivant(s.pid)) return echec(textes().service.pasArrete(s.pid, Math.round(attenteArret / 1000)));
 		generation++;
 		fermerFlux();
 		if (service !== null && memeService(service, s)) service = null;
@@ -261,7 +265,7 @@ export function creerSuivi(o: OptionsSuivi): SuiviService {
 		arreter() {
 			if (arret !== null) return arret;
 			const s = service;
-			if (s === null || etat.vie.etat !== 'vivant') return Promise.resolve({ ok: false, raison: 'Aucun service vivant à arrêter.' });
+			if (s === null || etat.vie.etat !== 'vivant') return Promise.resolve({ ok: false, raison: textes().service.aucunVivant });
 			arret = arreterService(s).finally(() => {
 				arret = null;
 			});

@@ -5,6 +5,7 @@
  */
 import type { MessageServeur } from '@mnemo/contrat';
 import type { Configuration } from '../domaine/configuration.ts';
+import type { TextesApp } from '../domaine/langue/textes.ts';
 import { demanderArret, santeService, type Sante, type SuiteArret } from './api-service.ts';
 import { ouvrirClientWs } from './client-ws.ts';
 import { demarrerService, type ResultatDemarrage } from './demarrage.ts';
@@ -29,15 +30,18 @@ export type AccesService = {
 
 /**
  * Accès au vrai service de `configuration`. `environnement` : celui que reçoit `ouvrir` (par défaut celui de l'app, `PATH`
- * et `MNEMO_PORT` remplacés par ceux de la configuration).
+ * et `MNEMO_PORT` remplacés par ceux de la configuration) ; `textes` : la langue courante des raisons d'échec.
  */
-export function accesReel(configuration: Configuration, options: { environnement?: NodeJS.ProcessEnv; delaisReconnexionMs?: readonly number[] } = {}): AccesService {
+export function accesReel(
+	configuration: Configuration,
+	options: { environnement?: NodeJS.ProcessEnv; delaisReconnexionMs?: readonly number[]; textes?: () => TextesApp } = {},
+): AccesService {
 	return {
 		lireService: () => lireServiceJson(configuration.racine),
 		sante: (s) => santeService(s),
 		processusVivant,
-		demarrer: () => demarrerService(configuration, options.environnement ?? process.env),
-		demanderArret: (s) => demanderArret(s),
+		demarrer: () => demarrerService(configuration, options.environnement ?? process.env, options.textes?.()),
+		demanderArret: (s) => demanderArret(s, options.textes?.()),
 		signalerArret(pid) {
 			try {
 				process.kill(pid, 'SIGTERM');

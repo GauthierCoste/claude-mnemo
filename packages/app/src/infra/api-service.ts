@@ -5,6 +5,7 @@
  */
 import { request } from 'node:http';
 import { ROUTES } from '@mnemo/contrat';
+import { TEXTES_FR, type TextesApp } from '../domaine/langue/textes.ts';
 import type { ServiceLocal } from './service-local.ts';
 
 export type ReponseLocale = { statut: number } | { echec: 'refusee' | 'delai' | 'autre' };
@@ -61,13 +62,13 @@ export async function santeService(s: Pick<ServiceLocal, 'port' | 'jeton'>, dela
  */
 export type SuiteArret = 'accepte' | 'signal' | 'attendre' | { refus: string };
 
-export function suiteDeLaDemande(r: ReponseLocale): SuiteArret {
+export function suiteDeLaDemande(r: ReponseLocale, t: TextesApp = TEXTES_FR): SuiteArret {
 	if ('echec' in r) return r.echec === 'refusee' ? 'signal' : 'attendre';
 	if (r.statut === 202) return 'accepte';
 	if (r.statut === 404) return 'signal';
-	return { refus: `Le service a refusé l’arrêt (statut ${r.statut}).` };
+	return { refus: t.service.arretRefuse(r.statut) };
 }
 
-export async function demanderArret(s: Pick<ServiceLocal, 'port' | 'jeton'>): Promise<SuiteArret> {
-	return suiteDeLaDemande(await requeteLocale(s.port, 'POST', ROUTES.arret, s.jeton, DELAI_ARRET_MS, {}));
+export async function demanderArret(s: Pick<ServiceLocal, 'port' | 'jeton'>, t: TextesApp = TEXTES_FR): Promise<SuiteArret> {
+	return suiteDeLaDemande(await requeteLocale(s.port, 'POST', ROUTES.arret, s.jeton, DELAI_ARRET_MS, {}), t);
 }

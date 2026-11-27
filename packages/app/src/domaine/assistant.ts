@@ -3,11 +3,14 @@
  * `init` qu'il lance, la lecture de `mnemo verifier-poste --json`, et l'enchaînement des étapes vu par la page (une fonction
  * pure de la suite des événements).
  */
+import type { Langue } from '@mnemo/commun';
 import type { LigneInit, PosteVerifie } from '@mnemo/contrat';
 import { appliquerLigne, installationVide, peutTerminer, type EtatInstallation, type ResultatInstallation } from './assistant-lignes.ts';
+import { textesApp } from './langue/textes.ts';
 import type { PlateformeApp } from './plateforme.ts';
 
-export const ETAPES_ASSISTANT = ['verifications', 'dossier', 'choix', 'installation', 'termine'] as const;
+/** `langue` : le choix de la langue, premier écran de la page (absent d'un état créé sans langue). */
+export const ETAPES_ASSISTANT = ['langue', 'verifications', 'dossier', 'choix', 'installation', 'termine'] as const;
 export type EtapeAssistant = (typeof ETAPES_ASSISTANT)[number];
 
 /** Ce que l'assistant demande ; `ouvrirALaSession` ne regarde que l'app (`app.setLoginItemSettings`), pas `init`. */
@@ -31,9 +34,6 @@ export function choixPourPlateforme(choix: ChoixInstallation, plateforme: Platef
 	return plateforme === 'win32' ? { ...choix, commande: false } : choix;
 }
 
-/** Taille des modèles locaux à télécharger, comme la dit `mnemo init`. */
-export const TAILLE_MODELES = 'environ 1,3 Go';
-
 /** Dossier de la mémoire sous la racine (`DOSSIER_MEMOIRE` du service, dont l'app ne dépend pas). */
 export const DOSSIER_MEMOIRE = '_mnemo';
 
@@ -45,10 +45,12 @@ export type ExecutableMnemo = { node: string; main: string; path: string };
 
 /**
  * Arguments de `<node>` : `<main> init <racine> --json` et un choix explicite par étape (aucune question, aucun défaut
- * implicite) ; jamais le lanceur (l'app le remplace).
+ * implicite) ; jamais le lanceur (l'app le remplace). `langue` : la langue de l'interface à écrire dans les réglages du
+ * dossier (`--langue`).
  */
-export function argumentsInit(main: string, racine: string, choix: ChoixInstallation): string[] {
-	return [main, 'init', racine, '--json', choix.mcp ? '--mcp' : '--sans-mcp', choix.modeles ? '--modeles' : '--sans-modeles', choix.commande ? '--commande' : '--sans-commande', '--sans-lanceur'];
+export function argumentsInit(main: string, racine: string, choix: ChoixInstallation, langue?: Langue): string[] {
+	const args = [main, 'init', racine, '--json', choix.mcp ? '--mcp' : '--sans-mcp', choix.modeles ? '--modeles' : '--sans-modeles', choix.commande ? '--commande' : '--sans-commande', '--sans-lanceur'];
+	return langue === undefined ? args : [...args, '--langue', langue];
 }
 
 /** Arguments de `<node>` pour la vérification du poste. */
@@ -88,13 +90,15 @@ export function posteSuffisant(poste: PosteVerifie): boolean {
 }
 
 /**
- * État de la page. `poste` : null tant que rien n'est revenu ; `erreurPoste` : la vérification n'a pas pu se faire (Mnemo
+ * État de la page. `langue` : celle choisie au premier écran (null : la page commence aux vérifications, sans choix de
+ * langue) ; `poste` : null tant que rien n'est revenu ; `erreurPoste` : la vérification n'a pas pu se faire (Mnemo
  * introuvable, sortie illisible) ; `verification` : une vérification est en cours ; `deplacer` : l'app tourne depuis un
  * emplacement provisoire (image disque, translocation) : la page demande seulement de la glisser dans Applications, et
  * plus rien n'avance.
  */
 export type EtatAssistant = {
 	plateforme: PlateformeApp;
+	langue: Langue | null;
 	etape: EtapeAssistant;
 	verification: boolean;
 	deplacer: boolean;
@@ -107,6 +111,7 @@ export type EtatAssistant = {
 };
 
 export type EvenementAssistant =
+	| { type: 'langue'; langue: Langue }
 	| { type: 'verification' }
 	| { type: 'poste'; poste: PosteVerifie }
 	| { type: 'erreur-poste'; message: string }
@@ -120,13 +125,15 @@ export type EvenementAssistant =
 	| { type: 'ligne'; ligne: LigneInit }
 	| { type: 'fin-installation'; resultat: ResultatInstallation };
 
-export function etatInitial(plateforme: PlateformeApp): EtatAssistant {
-	return { plateforme, etape: 'verifications', verification: false, deplacer: false, poste: null, erreurPoste: null, dossier: null, erreurDossier: null, choix: choixParDefaut(plateforme), installation: null };
+/** `langue` : la langue présélectionnée du premier écran ; sans elle, la page commence aux vérifications. */
+export function etatInitial(plateforme: PlateformeApp, langue: Langue | null = null): EtatAssistant {
+	return { plateforme, langue, etape: langue === null ? 'verifications' : 'langue', verification: false, deplacer: false, poste: null, erreurPoste: null, dossier: null, erreurDossier: null, choix: choixParDefaut(plateforme), installation: null };
 }
 
 /** Peut-on passer à l'étape suivante (bouton « Continuer ») ? */
 export function peutContinuer(etat: EtatAssistant): boolean {
 	if (etat.deplacer) return false;
+	if (etat.etape === 'langue') return true;
 	if (etat.etape === 'verifications') return !etat.verification && etat.poste !== null && posteSuffisant(etat.poste);
 	if (etat.etape === 'dossier') return etat.dossier !== null;
 	return false;
@@ -142,8 +149,11 @@ export function peutReessayer(etat: EtatAssistant): boolean {
 export function evoluer(etat: EtatAssistant, e: EvenementAssistant): EtatAssistant {
 	if (etat.deplacer) return etat;
 	switch (e.type) {
+		case 'langue':
+			return etat.etape === 'langue' ? { ...etat, langue: e.langue } : etat;
 		case 'verification':
-			return etat.etape === 'verifications' ? { ...etat, verification: true, erreurPoste: null } : etat;
+			// lancée dès l'ouverture de la page, pendant le choix de la langue
+			return etat.etape === 'verifications' || etat.etape === 'langue' ? { ...etat, verification: true, erreurPoste: null } : etat;
 		case 'poste':
 			return { ...etat, verification: false, poste: e.poste, erreurPoste: null };
 		case 'erreur-poste':
@@ -158,8 +168,9 @@ export function evoluer(etat: EtatAssistant, e: EvenementAssistant): EtatAssista
 			return etat.etape === 'choix' ? { ...etat, choix: choixPourPlateforme({ ...etat.choix, [e.cle]: e.valeur }, etat.plateforme) } : etat;
 		case 'continuer':
 			if (!peutContinuer(etat)) return etat;
-			return { ...etat, etape: etat.etape === 'verifications' ? 'dossier' : 'choix' };
+			return { ...etat, etape: etat.etape === 'langue' ? 'verifications' : etat.etape === 'verifications' ? 'dossier' : 'choix' };
 		case 'retour':
+			if (etat.etape === 'verifications' && etat.langue !== null) return { ...etat, etape: 'langue' };
 			if (etat.etape === 'dossier') return { ...etat, etape: 'verifications' };
 			if (etat.etape === 'choix') return { ...etat, etape: 'dossier' };
 			if (peutReessayer(etat)) return { ...etat, etape: 'choix', installation: null };
@@ -170,15 +181,15 @@ export function evoluer(etat: EtatAssistant, e: EvenementAssistant): EtatAssista
 			return etat.etape === 'installation' && etat.installation !== null ? { ...etat, installation: appliquerLigne(etat.installation, e.ligne) } : etat;
 		case 'fin-installation': {
 			if (etat.etape !== 'installation' || etat.installation === null) return etat;
-			const installation = finirInstallation(etat.installation, e.resultat);
+			const installation = finirInstallation(etat.installation, e.resultat, etat.langue);
 			return { ...etat, installation, etape: peutTerminer(installation) ? 'termine' : 'installation' };
 		}
 	}
 }
 
 /** Fin du processus : la ligne `fin` reçue (ou celle du résultat, si la page a manqué une ligne), sinon l'erreur. */
-function finirInstallation(i: EtatInstallation, r: ResultatInstallation): EtatInstallation {
+function finirInstallation(i: EtatInstallation, r: ResultatInstallation, langue: Langue | null): EtatInstallation {
 	const fin = i.fin ?? r.fin;
-	const erreur = r.erreur ?? (fin === null ? 'L’installation s’est arrêtée sans finir.' : null);
+	const erreur = r.erreur ?? (fin === null ? textesApp(langue ?? 'fr').assistant.installation.sansFin : null);
 	return { ...i, fin, erreur, enCours: false };
 }

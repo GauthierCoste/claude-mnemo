@@ -5,7 +5,14 @@
  * port ou de jeton ; une session s'ouvre par `#session=<id>` sur la page déjà chargée (navigation dans la page, sans
  * rechargement). Créée cachée, elle se montre à sa première peinture. Fermer la cache (l'app reste dans la barre des
  * menus) ; taille et position retenues.
+ *
+ * Langue : l'interface pose `lang` sur `<html>` selon son réglage `interface.langue` (`systeme` déjà résolu). La fenêtre le
+ * relit toutes les `INTERVALLE_LANGUE_MS` tant qu'elle est visible (et une fois en se cachant), dans un monde isolé (les
+ * scripts de la page n'y substituent rien ; la valeur est relue par `estLangue`) ; une langue lue deux fois de suite,
+ * différente de la dernière annoncée, va à `surLanguePage`. Deux lectures : le `lang` d'avant la lecture du réglage
+ * (celui du fichier HTML, ou la dernière langue montrée) ne fait pas basculer l'app.
  */
+import { estLangue, type Langue } from '@mnemo/commun';
 import { app, BrowserWindow, screen, shell } from 'electron';
 import {
 	adresseFenetre,
@@ -43,12 +50,19 @@ export type OptionsFenetre = {
 	surVisibilite: (visible: boolean) => void;
 	/** Appelé quand la page change d'icône (adresses de `<link rel="icon">`) : l'interface la redessine à sa couleur. */
 	surIconePage: (adresses: readonly string[]) => void;
+	/** Appelé quand la langue de la page change (`lang` de `<html>`, stable sur deux lectures). */
+	surLanguePage: (langue: Langue) => void;
 };
 
 /** Permissions accordées à l'interface : écrire dans le presse-papiers (« Copier »), le plein écran. */
 const PERMISSIONS = new Set(['clipboard-sanitized-write', 'fullscreen']);
 
 const ATTENTE_PEINTURE_MS = 3000;
+
+/** Relecture de `lang` de la page, fenêtre visible. */
+export const INTERVALLE_LANGUE_MS = 2000;
+/** Monde isolé de la lecture de `lang` (le monde principal est 0). */
+const MONDE_LECTURE = 1001;
 
 const ouvrirAilleurs = (adresse: string, origine: string): void => {
 	if (decisionNavigation(adresse, origine) === 'externe') void shell.openExternal(adresse).catch(() => {});
@@ -62,6 +76,30 @@ export function creerFenetre(o: OptionsFenetre): Fenetre {
 	/** La fenêtre a été peinte une fois (`ready-to-show`) ; avant, la montrer attend (`ATTENTE_PEINTURE_MS` au plus). */
 	let pret = false;
 	const attentes: (() => void)[] = [];
+	/** Dernière langue annoncée, et la dernière lue (pas encore confirmée). */
+	let langueAnnoncee: Langue | null = null;
+	let langueLue: Langue | null = null;
+	let lectureLangue: ReturnType<typeof setInterval> | null = null;
+
+	function lireLangue(f: BrowserWindow): void {
+		if (f.isDestroyed() || charge === null || f.webContents.isLoadingMainFrame()) return;
+		f.webContents
+			.executeJavaScriptInIsolatedWorld(MONDE_LECTURE, [{ code: 'document.documentElement.lang' }])
+			.then((valeur: unknown) => {
+				if (!estLangue(valeur)) return;
+				const confirmee = valeur === langueLue;
+				langueLue = valeur;
+				if (!confirmee || valeur === langueAnnoncee) return;
+				langueAnnoncee = valeur;
+				o.surLanguePage(valeur);
+			})
+			.catch(() => {});
+	}
+
+	function suivreLangue(f: BrowserWindow, actif: boolean): void {
+		if (lectureLangue !== null) clearInterval(lectureLangue);
+		lectureLangue = actif ? setInterval(() => lireLangue(f), INTERVALLE_LANGUE_MS) : null;
+	}
 
 	const memePage = (a: ServiceLocal, b: ServiceLocal) => a.port === b.port && a.jeton === b.jeton;
 	const origine = () => (charge === null ? null : origineService(charge.port));
@@ -122,8 +160,19 @@ export function creerFenetre(o: OptionsFenetre): Fenetre {
 			} else f.hide();
 		});
 		contenu.on('page-favicon-updated', (_e, adresses) => o.surIconePage(adresses));
-		f.on('hide', () => o.surVisibilite(false));
-		f.on('show', () => o.surVisibilite(true));
+		f.on('hide', () => {
+			o.surVisibilite(false);
+			lireLangue(f);
+			suivreLangue(f, false);
+		});
+		f.on('show', () => {
+			o.surVisibilite(true);
+			suivreLangue(f, true);
+		});
+		// rechargée (autre service, autre jeton) : `lang` repart de celui du fichier HTML
+		contenu.on('did-start-navigation', (details) => {
+			if (details.isMainFrame && !details.isSameDocument) langueLue = null;
+		});
 		// première peinture : l'interface a posé sa marque de pleine fenêtre (pas de saut de marge à l'affichage)
 		f.once('ready-to-show', () => {
 			pret = true;
@@ -134,6 +183,7 @@ export function creerFenetre(o: OptionsFenetre): Fenetre {
 			charge = null;
 			pret = false;
 			attentes.length = 0;
+			suivreLangue(f, false);
 		});
 		return f;
 	}

@@ -4,7 +4,7 @@
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { lirePreferences, type Preferences } from '../domaine/preferences.ts';
+import { lirePreferences, PREFERENCES_DEFAUT, type Preferences } from '../domaine/preferences.ts';
 
 export const FICHIER_PREFERENCES = 'preferences.json';
 
@@ -28,4 +28,39 @@ export function ecrirePreferencesFichier(chemin: string, preferences: Preference
 	const temporaire = `${chemin}.${process.pid}.tmp`;
 	writeFileSync(temporaire, `${JSON.stringify(preferences, null, '\t')}\n`, { mode: 0o600 });
 	renameSync(temporaire, chemin);
+}
+
+/** Préférences tenues en mémoire pour tout le processus : chaque changement est retenu puis écrit (sauf après `figer`). */
+export type PreferencesRetenues = {
+	valeur(): Preferences;
+	/** Retient `p` (fusionné) ; l'écriture qui échoue est silencieuse : la préférence reviendra à sa valeur précédente. */
+	retenir(p: Partial<Preferences>): void;
+	/** Plus rien n'est écrit (après « Désinstaller Mnemo… ») ; la valeur en mémoire suit toujours. */
+	figer(): void;
+};
+
+/** Une seule copie des préférences pour tout le processus principal : deux écritures ne s'écrasent pas. */
+export function preferencesRetenues(chemin: string): PreferencesRetenues {
+	let preferences: Preferences = PREFERENCES_DEFAUT;
+	try {
+		preferences = lirePreferencesFichier(chemin);
+	} catch {
+		// lecture déjà tolérante : défauts
+	}
+	let fige = false;
+	return {
+		valeur: () => preferences,
+		retenir(p) {
+			preferences = { ...preferences, ...p };
+			if (fige) return;
+			try {
+				ecrirePreferencesFichier(chemin, preferences);
+			} catch {
+				// préférences non retenues : rien de grave
+			}
+		},
+		figer() {
+			fige = true;
+		},
+	};
 }

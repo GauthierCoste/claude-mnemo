@@ -9,13 +9,14 @@ import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve, sep } from 'node:path';
-import { avecVariable } from '@mnemo/commun';
+import { avecVariable, type Langue } from '@mnemo/commun';
 import type { EtapeInit, EvenementInit, FinInit, LigneInit } from '@mnemo/contrat';
 import { argumentsInit, argumentsVerifierPoste, choixPourPlateforme, DOSSIER_MEMOIRE, lirePoste, type ChoixInstallation, type DossierChoisi, type ExecutableMnemo } from '../domaine/assistant.ts';
 import { appliquerLigne, decoupeurLignes, installationVide, lireLigneInit, peutTerminer, type EtatInstallation, type ResultatInstallation } from '../domaine/assistant-lignes.ts';
 import { validerChoix, type ReponseDossier, type ReponsePoste, type ReponseTerminer } from '../domaine/assistant-pont.ts';
 import { estCheminAbsolu, type Configuration, type Lancement } from '../domaine/configuration.ts';
-import { decisionDemarrage, type DecisionDemarrage, MESSAGE_PROVISOIRE } from '../domaine/assistant-demarrage.ts';
+import { decisionDemarrage, type DecisionDemarrage } from '../domaine/assistant-demarrage.ts';
+import { TEXTES_FR, type TextesApp } from '../domaine/langue/textes.ts';
 import { declarationAReprendre, finApresReprise, ligneApresReprise, type ResultatDeclarer } from '../domaine/assistant-reprise.ts';
 import { plateformeApp } from '../domaine/plateforme.ts';
 import { declarer } from './commande-mnemo.ts';
@@ -27,8 +28,8 @@ export const DELAI_VERIFICATION_MS = 30_000;
 const ERREUR_MAX = 16 * 1024;
 const LIGNES_ERREUR = 5;
 
-export const MESSAGE_SANS_MNEMO =
-	'Cette app ne sait pas encore où est Mnemo. Depuis le dépôt de l’app, dans un terminal, lance « pnpm installer-dev <dossier Mnemo> » (il écrit sa configuration), puis rouvre Mnemo.';
+/** En français (dans une langue : `t.assistant.erreurs.sansMnemo`). */
+export const MESSAGE_SANS_MNEMO = TEXTES_FR.assistant.erreurs.sansMnemo;
 
 /**
  * Environnement de `mnemo` : celui de l'app, avec le `PATH` du terminal (sans lui, ni `git` ni `claude` ne sont trouvés) ;
@@ -65,16 +66,17 @@ const dernieresLignes = (texte: string): string => texte.trimEnd().split('\n').s
  * Dossier rendu par le sélecteur : chemin absolu d'un dossier existant. Le dossier `_mnemo` d'une mémoire désigne sa racine ;
  * un dossier dans `_mnemo` (ou un `_mnemo` sans `SCHEMA.md`) est refusé : la mémoire irait dans une autre mémoire.
  */
-export async function examinerDossier(chemin: unknown): Promise<{ ok: true; dossier: DossierChoisi } | { ok: false; erreur: string }> {
-	if (typeof chemin !== 'string' || chemin === '' || chemin.includes('\0') || !estCheminAbsolu(chemin)) return { ok: false, erreur: 'Chemin de dossier invalide.' };
+export async function examinerDossier(chemin: unknown, t: TextesApp = TEXTES_FR): Promise<{ ok: true; dossier: DossierChoisi } | { ok: false; erreur: string }> {
+	const e = t.assistant.erreurs;
+	if (typeof chemin !== 'string' || chemin === '' || chemin.includes('\0') || !estCheminAbsolu(chemin)) return { ok: false, erreur: e.cheminInvalide };
 	let racine = resolve(chemin);
 	try {
-		if (!(await stat(racine)).isDirectory()) return { ok: false, erreur: `Ce n’est pas un dossier : ${racine}` };
+		if (!(await stat(racine)).isDirectory()) return { ok: false, erreur: e.pasUnDossier(racine) };
 	} catch {
-		return { ok: false, erreur: `Dossier introuvable : ${racine}` };
+		return { ok: false, erreur: e.introuvable(racine) };
 	}
 	if (basename(racine) === DOSSIER_MEMOIRE && existsSync(join(racine, 'SCHEMA.md'))) racine = dirname(racine);
-	if (racine.split(sep).includes(DOSSIER_MEMOIRE)) return { ok: false, erreur: `Ce dossier est dans une mémoire Mnemo (${DOSSIER_MEMOIRE}) : choisis le dossier qui la contient.` };
+	if (racine.split(sep).includes(DOSSIER_MEMOIRE)) return { ok: false, erreur: e.dansMemoire(DOSSIER_MEMOIRE) };
 	return { ok: true, dossier: { racine, memoireExistante: memoirePresente(racine) } };
 }
 
@@ -82,9 +84,10 @@ export async function examinerDossier(chemin: unknown): Promise<{ ok: true; doss
  * `mnemo verifier-poste --json` ; depuis un emplacement provisoire, sans Mnemo à lancer, ou sortie illisible : l'erreur à
  * montrer, et sa cause.
  */
-export function verifierPoste(executable: ExecutableMnemo | null, base: NodeJS.ProcessEnv = process.env, provisoire = false): Promise<ReponsePoste> {
-	if (provisoire) return Promise.resolve({ ok: false, erreur: MESSAGE_PROVISOIRE, cause: 'provisoire' });
-	if (executable === null) return Promise.resolve({ ok: false, erreur: MESSAGE_SANS_MNEMO, cause: 'sansMnemo' });
+export function verifierPoste(executable: ExecutableMnemo | null, base: NodeJS.ProcessEnv = process.env, provisoire = false, t: TextesApp = TEXTES_FR): Promise<ReponsePoste> {
+	const e = t.assistant.erreurs;
+	if (provisoire) return Promise.resolve({ ok: false, erreur: t.assistant.deplacer.message, cause: 'provisoire' });
+	if (executable === null) return Promise.resolve({ ok: false, erreur: e.sansMnemo, cause: 'sansMnemo' });
 	return new Promise((resoudre) => {
 		execFile(
 			executable.node,
@@ -93,8 +96,8 @@ export function verifierPoste(executable: ExecutableMnemo | null, base: NodeJS.P
 			(erreur, sortie, erreurs) => {
 				const poste = erreur ? null : lirePoste(`${sortie}`);
 				if (poste !== null) return resoudre({ ok: true, poste });
-				const fin = dernieresLignes(`${erreurs}`) || (erreur ? erreur.message : 'réponse illisible.');
-				resoudre({ ok: false, erreur: `La vérification n’a pas pu se faire : ${fin}`, cause: 'echec' });
+				const fin = dernieresLignes(`${erreurs}`) || (erreur ? erreur.message : e.illisible);
+				resoudre({ ok: false, erreur: e.verification(fin), cause: 'echec' });
 			},
 		);
 	});
@@ -105,10 +108,20 @@ export type InitLance = { resultat: Promise<ResultatInstallation>; arreter(): vo
 
 /**
  * Lance `<node> <main> init <racine> --json …` sans shell ; chaque ligne valide va à `surLigne`, les autres sont ignorées.
- * Fin : la ligne `fin` si elle est venue ; sinon la fin de la sortie d'erreur (erreur d'usage, plantage).
+ * Fin : la ligne `fin` si elle est venue ; sinon la fin de la sortie d'erreur (erreur d'usage, plantage). `langue` : passée
+ * à `init` (`--langue`) ; `t` : la langue des erreurs.
  */
-export function lancerInit(executable: ExecutableMnemo, racine: string, choix: ChoixInstallation, surLigne: (ligne: LigneInit) => void, base: NodeJS.ProcessEnv = process.env): InitLance {
-	const enfant = spawn(executable.node, argumentsInit(executable.main, racine, choix), { cwd: racine, env: environnementMnemo(executable, base), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+export function lancerInit(
+	executable: ExecutableMnemo,
+	racine: string,
+	choix: ChoixInstallation,
+	surLigne: (ligne: LigneInit) => void,
+	base: NodeJS.ProcessEnv = process.env,
+	langue?: Langue,
+	t: TextesApp = TEXTES_FR,
+): InitLance {
+	const e = t.assistant.erreurs;
+	const enfant = spawn(executable.node, argumentsInit(executable.main, racine, choix, langue), { cwd: racine, env: environnementMnemo(executable, base), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
 	const decoupeur = decoupeurLignes();
 	let fin: Extract<LigneInit, { fin: true }> | null = null;
 	let erreurs = '';
@@ -131,15 +144,15 @@ export function lancerInit(executable: ExecutableMnemo, racine: string, choix: C
 		enfant.on('error', (erreur) => {
 			if (fini) return;
 			fini = true;
-			resoudre({ fin: null, erreur: `Mnemo ne se lance pas (${executable.node}) : ${erreur.message}` });
+			resoudre({ fin: null, erreur: e.lancement(executable.node, erreur.message) });
 		});
 		enfant.on('close', (code, signal) => {
 			if (fini) return;
 			fini = true;
 			lire(decoupeur.finir());
 			if (fin !== null) return resoudre({ fin, erreur: null });
-			const raison = dernieresLignes(erreurs) || (signal !== null ? `arrêté (${signal}).` : `code de sortie ${code}.`);
-			resoudre({ fin: null, erreur: `L’installation a échoué : ${raison}` });
+			const raison = dernieresLignes(erreurs) || (signal !== null ? e.signal(signal) : e.code(String(code)));
+			resoudre({ fin: null, erreur: e.echec(raison) });
 		});
 	});
 	return { resultat, arreter: () => void (enfant.exitCode === null && enfant.signalCode === null && enfant.kill()) };
@@ -168,6 +181,10 @@ export type DependancesAssistant = {
 	 * défaut `mnemo declarer --remplacer --json`, lancé comme `init`.
 	 */
 	reprendreDeclaration?(executable: ExecutableMnemo): Promise<ResultatDeclarer>;
+	/** La langue courante (relue à chaque demande : la page peut la changer) ; passée à `init`. Sans elle : pas de `--langue`. */
+	langue?(): Langue;
+	/** Les textes de la langue courante (erreurs rendues à la page) ; par défaut le français. */
+	textes?(): TextesApp;
 };
 
 export type ControleurAssistant = {
@@ -185,6 +202,7 @@ const refus = (erreur: string): ResultatInstallation => ({ fin: null, erreur });
 export function controleurAssistant(d: DependancesAssistant): ControleurAssistant {
 	const base = d.base ?? process.env;
 	const plateforme = plateformeApp(d.plateforme ?? process.platform);
+	const erreurs = () => (d.textes?.() ?? TEXTES_FR).assistant.erreurs;
 	let dossier: DossierChoisi | null = null;
 	let choix: ChoixInstallation | null = null;
 	let installation: EtatInstallation | null = null;
@@ -195,14 +213,14 @@ export function controleurAssistant(d: DependancesAssistant): ControleurAssistan
 	let ecrite: FinAssistant | null = null;
 	let termine = false;
 	return {
-		verifierPoste: () => verifierPoste(d.executable, base, d.provisoire === true),
+		verifierPoste: () => verifierPoste(d.executable, base, d.provisoire === true, d.textes?.()),
 		async choisirDossier() {
-			if (enCours !== null || ecrite !== null || terminaison) return { ok: false, annule: false, erreur: 'L’installation est en cours.' };
+			if (enCours !== null || ecrite !== null || terminaison) return { ok: false, annule: false, erreur: erreurs().enCours };
 			const chemin = await d.choisirDossierNatif();
 			if (chemin === null) return { ok: false, annule: true };
-			const r = await examinerDossier(chemin);
+			const r = await examinerDossier(chemin, d.textes?.());
 			// une installation lancée pendant que le sélecteur était ouvert garde son dossier
-			if (enCours !== null || ecrite !== null || terminaison) return { ok: false, annule: false, erreur: 'L’installation est en cours.' };
+			if (enCours !== null || ecrite !== null || terminaison) return { ok: false, annule: false, erreur: erreurs().enCours };
 			if (!r.ok) return { ok: false, annule: false, erreur: r.erreur };
 			dossier = r.dossier;
 			installation = null;
@@ -210,12 +228,14 @@ export function controleurAssistant(d: DependancesAssistant): ControleurAssistan
 		},
 		async installer(brut) {
 			const valides = validerChoix(brut);
-			if (valides === null) return refus('Choix invalides.');
+			const t = d.textes?.() ?? TEXTES_FR;
+			const e = t.assistant.erreurs;
+			if (valides === null) return refus(e.choixInvalides);
 			const lus = choixPourPlateforme(valides, plateforme);
-			if (d.provisoire === true) return refus(MESSAGE_PROVISOIRE);
-			if (d.executable === null) return refus(MESSAGE_SANS_MNEMO);
-			if (dossier === null) return refus('Aucun dossier choisi.');
-			if (enCours !== null || ecrite !== null || terminaison) return refus('L’installation est déjà lancée.');
+			if (d.provisoire === true) return refus(t.assistant.deplacer.message);
+			if (d.executable === null) return refus(e.sansMnemo);
+			if (dossier === null) return refus(e.aucunDossier);
+			if (enCours !== null || ecrite !== null || terminaison) return refus(e.dejaLancee);
 			choix = lus;
 			const executable = d.executable;
 			let etat = installationVide(plateforme);
@@ -234,13 +254,13 @@ export function controleurAssistant(d: DependancesAssistant): ControleurAssistan
 					if (!('fin' in ligne) && ligne.etat === 'echec') enEchec.add(ligne.etape);
 					transmettre(ligne);
 				}
-			}, base);
+			}, base, d.langue?.(), t);
 			enCours = lance;
 			let resultat = await lance.resultat;
 			if (retenu.echec !== null) {
 				const reprendre = d.reprendreDeclaration ?? ((e: ExecutableMnemo) => declarer(e, '--remplacer', e.path, base));
 				const r = await reprendre(executable).catch((e: unknown): ResultatDeclarer => ({ ok: false, raison: e instanceof Error ? e.message : String(e) }));
-				const ligne = ligneApresReprise(retenu.echec, r);
+				const ligne = ligneApresReprise(retenu.echec, r, t);
 				if (ligne.etat === 'echec') enEchec.add('mcp');
 				transmettre(ligne);
 				if (retenu.fin !== null) {
@@ -254,19 +274,20 @@ export function controleurAssistant(d: DependancesAssistant): ControleurAssistan
 			return resultat;
 		},
 		async terminer() {
-			if (termine) return { ok: false, erreur: 'Déjà terminé.' };
-			if (terminaison) return { ok: false, erreur: 'Ouverture déjà en cours.' };
+			const e = erreurs();
+			if (termine) return { ok: false, erreur: e.dejaTermine };
+			if (terminaison) return { ok: false, erreur: e.ouvertureEnCours };
 			terminaison = true;
 			try {
 				if (ecrite === null) {
-					if (d.executable === null || dossier === null || choix === null || installation === null || !peutTerminer(installation)) return { ok: false, erreur: 'L’installation n’est pas finie.' };
-					if (!memoirePresente(dossier.racine)) return { ok: false, erreur: `Pas de mémoire Mnemo dans ${dossier.racine}.` };
+					if (d.executable === null || dossier === null || choix === null || installation === null || !peutTerminer(installation)) return { ok: false, erreur: e.pasFinie };
+					if (!memoirePresente(dossier.racine)) return { ok: false, erreur: e.sansMemoire(dossier.racine) };
 					const configuration: Configuration = { racine: dossier.racine, node: d.executable.node, main: d.executable.main, path: d.executable.path };
 					if (d.port !== undefined) configuration.port = d.port;
 					try {
 						await ecrireConfiguration(d.home, configuration);
 					} catch (erreur) {
-						return { ok: false, erreur: `Configuration non écrite : ${erreur instanceof Error ? erreur.message : String(erreur)}` };
+						return { ok: false, erreur: e.configuration(erreur instanceof Error ? erreur.message : String(erreur)) };
 					}
 					ecrite = { configuration, ouvrirALaSession: choix.ouvrirALaSession };
 				}
@@ -274,7 +295,7 @@ export function controleurAssistant(d: DependancesAssistant): ControleurAssistan
 				try {
 					await d.surTermine(ecrite);
 				} catch (erreur) {
-					return { ok: false, erreur: `Mnemo ne s’ouvre pas : ${erreur instanceof Error ? erreur.message : String(erreur)}` };
+					return { ok: false, erreur: e.ouvrir(erreur instanceof Error ? erreur.message : String(erreur)) };
 				}
 				termine = true;
 				return { ok: true };

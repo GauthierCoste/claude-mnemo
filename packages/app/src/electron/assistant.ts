@@ -6,9 +6,11 @@
  */
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { estLangue, type Langue } from '@mnemo/commun';
 import { BrowserWindow, dialog, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron';
 import type { ExecutableMnemo } from '../domaine/assistant.ts';
-import { CANAUX_ASSISTANT as C, lienAutorise } from '../domaine/assistant-pont.ts';
+import { ARGUMENT_LANGUE, CANAUX_ASSISTANT as C, lienAutorise } from '../domaine/assistant-pont.ts';
+import type { TextesApp } from '../domaine/langue/textes.ts';
 import { barreDesMenusCachee, optionsBarreTitre } from '../domaine/fenetre.ts';
 import { NOM_APP } from '../domaine/identite-app.ts';
 import { plateformeApp } from '../domaine/plateforme.ts';
@@ -33,10 +35,15 @@ export type OptionsAssistant = {
 	surAbandon?(): void;
 	/** Dossier de `main.js` (qui contient `assistant/`) ; par défaut celui de ce module construit. */
 	dossierDist?: string;
+	/** La langue courante du processus principal (présélectionnée sur la page, passée à `mnemo init --langue`). */
+	langue(): Langue;
+	textes(): TextesApp;
+	/** La page a choisi une langue (déjà vérifiée) : à retenir (`preferences.json`, menus). */
+	surLangue(langue: Langue): void;
 };
 
 const PARTITION = 'mnemo-assistant';
-const CANAUX_INVOQUES = [C.verifierPoste, C.choisirDossier, C.installer, C.terminer] as const;
+const CANAUX_INVOQUES = [C.verifierPoste, C.choisirDossier, C.installer, C.terminer, C.langue] as const;
 
 let ouverte: BrowserWindow | null = null;
 
@@ -76,6 +83,8 @@ export function ouvrirAssistant(o: OptionsAssistant): BrowserWindow {
 			webSecurity: true,
 			spellcheck: false,
 			navigateOnDragDrop: false,
+			// la langue de départ de la page, lue par le preload
+			additionalArguments: [`${ARGUMENT_LANGUE}${o.langue()}`],
 		},
 	});
 	if (barreDesMenusCachee(plateformeApp(process.platform))) fenetre.setMenuBarVisibility(false);
@@ -98,8 +107,11 @@ export function ouvrirAssistant(o: OptionsAssistant): BrowserWindow {
 		...(o.provisoire === true ? { provisoire: true } : {}),
 		home: o.home,
 		...(o.port === undefined ? {} : { port: o.port }),
+		langue: () => o.langue(),
+		textes: () => o.textes(),
 		async choisirDossierNatif() {
-			const r = await dialog.showOpenDialog(fenetre, { title: 'Dossier Mnemo', buttonLabel: 'Choisir', properties: ['openDirectory', 'createDirectory'] });
+			const d = o.textes().assistant.dossier;
+			const r = await dialog.showOpenDialog(fenetre, { title: d.titreSelecteur, buttonLabel: d.boutonSelecteur, properties: ['openDirectory', 'createDirectory'] });
 			return r.canceled ? null : (r.filePaths[0] ?? null);
 		},
 		envoyerLigne(ligne) {
@@ -117,6 +129,11 @@ export function ouvrirAssistant(o: OptionsAssistant): BrowserWindow {
 			return traiter(...args);
 		});
 	};
+	gerer(C.langue, async (langue) => {
+		if (!estLangue(langue)) return false;
+		o.surLangue(langue);
+		return true;
+	});
 	gerer(C.verifierPoste, () => controleur.verifierPoste());
 	gerer(C.choisirDossier, () => controleur.choisirDossier());
 	gerer(C.installer, (choix) => controleur.installer(choix));

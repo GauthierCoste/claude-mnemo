@@ -6,6 +6,7 @@ import type { SessionVue } from '@mnemo/contrat';
 import { pastilleDock } from './dock.ts';
 import { type EtatAgrege, etatAgrege } from './etat.ts';
 import { infobulle } from './icone.ts';
+import { TEXTES_FR, type TextesApp } from './langue/textes.ts';
 import { type ElementMenu, type EntreeMenu, modeleMenu } from './menu.ts';
 import type { VieService } from './vie-service.ts';
 
@@ -15,13 +16,13 @@ export type VueApp = { etat: EtatAgrege; infobulle: string; menu: ElementMenu[];
 export type ReglagesMenu = Pick<EntreeMenu, 'plateforme' | 'ouvertureSession' | 'version' | 'nouvelleVersion' | 'chercherVersions'>;
 
 /** `sessions` null (aucune liste reçue) : aucune session. */
-export function vueApp(vie: VieService, sessions: readonly SessionVue[] | null, reglages: ReglagesMenu): VueApp {
+export function vueApp(vie: VieService, sessions: readonly SessionVue[] | null, reglages: ReglagesMenu, t: TextesApp = TEXTES_FR): VueApp {
 	const liste = sessions ?? [];
 	const etat = etatAgrege(vie.etat, liste);
 	return {
 		etat,
-		infobulle: infobulle(etat, liste, vie.raison),
-		menu: modeleMenu({ ...reglages, vie: vie.etat, raison: vie.raison, sessions: liste }),
+		infobulle: infobulle(etat, liste, vie.raison, t),
+		menu: modeleMenu({ ...reglages, vie: vie.etat, raison: vie.raison, sessions: liste, textes: t }),
 		pastille: pastilleDock(liste),
 	};
 }

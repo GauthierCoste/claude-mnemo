@@ -3,6 +3,7 @@
  * les réponses, et la validation de ce qui vient de la page (jamais cru sur parole : la page ne donne aucun chemin, et ses
  * choix sont relus ici).
  */
+import { estLangue, type Langue } from '@mnemo/commun';
 import type { LigneInit, PosteVerifie } from '@mnemo/contrat';
 import type { ChoixInstallation, DossierChoisi } from './assistant.ts';
 import type { ResultatInstallation } from './assistant-lignes.ts';
@@ -14,7 +15,20 @@ export const CANAUX_ASSISTANT = {
 	installer: 'assistant:installer',
 	ligne: 'assistant:ligne',
 	terminer: 'assistant:terminer',
+	langue: 'assistant:langue',
 } as const;
+
+/**
+ * Argument donné au rendu de la page (`additionalArguments`) : la langue courante du processus principal, présélectionnée
+ * au premier écran. Le preload la lit dans `process.argv`.
+ */
+export const ARGUMENT_LANGUE = '--mnemo-langue=';
+
+/** La langue passée par `ARGUMENT_LANGUE`, ou le français si elle manque ou ne se lit pas. */
+export function langueDesArguments(argv: readonly string[]): Langue {
+	const valeur = argv.find((a) => a.startsWith(ARGUMENT_LANGUE))?.slice(ARGUMENT_LANGUE.length);
+	return estLangue(valeur) ? valeur : 'fr';
+}
 
 /**
  * Échec de la vérification, et sa cause : `sansMnemo`, ni configuration ni Mnemo dans le paquet (l'erreur dit comment
@@ -30,6 +44,10 @@ export type ReponseTerminer = { ok: true } | { ok: false; erreur: string };
 export type ApiAssistant = {
 	/** La plateforme de l'app (textes, liens et choix de la page), en lecture seule. */
 	readonly plateforme: PlateformeApp;
+	/** La langue courante du processus principal à l'ouverture de la page, en lecture seule. */
+	readonly langue: Langue;
+	/** La langue choisie : le processus principal la retient (menus, `preferences.json`, `mnemo init --langue`). */
+	choisirLangue(langue: Langue): Promise<boolean>;
 	verifierPoste(): Promise<ReponsePoste>;
 	choisirDossier(): Promise<ReponseDossier>;
 	/** Lance `init` sur le dossier choisi ; `surLigne` reçoit chaque ligne validée ; rend la fin du processus. */

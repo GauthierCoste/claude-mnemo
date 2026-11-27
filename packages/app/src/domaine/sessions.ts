@@ -4,18 +4,13 @@
  */
 import { PROFIL_ARCHIVISTE } from '@mnemo/commun';
 import type { EtatSessionVue, MessageServeur, SessionVue } from '@mnemo/contrat';
+import { TEXTES_FR, type TextesApp } from './langue/textes.ts';
 
 /** Longueur au-delà de laquelle un libellé de session est abrégé (menu, notification). */
 export const LIBELLE_SESSION_MAX = 60;
 
-/** Libellés des états, comme ceux de l'interface. */
-export const LIBELLES_ETATS: Record<EtatSessionVue, string> = {
-	attend: 'Attend ta réponse',
-	travaille: 'Travaille',
-	a_relire: 'Terminée, à relire',
-	en_pause: 'En pause',
-	terminee: 'Terminée',
-};
+/** Libellés des états en français, comme ceux de l'interface (ceux d'une langue : `t.sessions.etats`). */
+export const LIBELLES_ETATS: Readonly<Record<EtatSessionVue, string>> = TEXTES_FR.sessions.etats;
 
 /**
  * Liste des sessions après un message du service : `sessions` la remplace, `session` remplace ou ajoute la session de même
@@ -54,16 +49,16 @@ export function abreger(texte: string, max: number = LIBELLE_SESSION_MAX): strin
 }
 
 /**
- * Nom d'une session : « Archiviste » pour l'archiviste (son objectif est sa consigne, et il tourne à la racine), comme
+ * Nom d'une session (dans la langue de `t`) : « Archiviste » pour l'archiviste (son objectif est sa consigne, et il tourne à la racine), comme
  * l'interface ; sinon son objectif (première ligne), sinon son dossier, sinon « Session à la racine » ; abrégé.
  */
-export function libelleSession(s: SessionVue): string {
-	if (s.profil === PROFIL_ARCHIVISTE) return 'Archiviste';
+export function libelleSession(s: SessionVue, t: TextesApp = TEXTES_FR): string {
+	if (s.profil === PROFIL_ARCHIVISTE) return t.sessions.archiviste;
 	const objectif = s.objectif?.split('\n')[0]?.trim() ?? '';
-	return abreger(objectif !== '' ? objectif : s.dossier !== '' ? s.dossier : 'Session à la racine');
+	return abreger(objectif !== '' ? objectif : s.dossier !== '' ? s.dossier : t.sessions.sansNom);
 }
 
 /** Dossier d'une session tel qu'on le montre : « racine » pour la racine du dossier Mnemo. */
-export function dossierAffiche(s: SessionVue): string {
-	return s.dossier === '' ? 'racine' : s.dossier;
+export function dossierAffiche(s: SessionVue, t: TextesApp = TEXTES_FR): string {
+	return s.dossier === '' ? t.sessions.racine : s.dossier;
 }

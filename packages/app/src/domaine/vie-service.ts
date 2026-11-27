@@ -4,6 +4,7 @@
  * nouveau. Un démarrage demandé par l'utilisateur remet le compte à zéro. Un arrêt demandé passe par `arret` jusqu'à la mort
  * confirmée du processus : pendant ce temps, ni réponse tardive du service ni chute ne changent l'état (pas de relance).
  */
+import { TEXTES_FR, type TextesApp } from './langue/textes.ts';
 
 export type EtatVie = 'arrete' | 'demarrage' | 'vivant' | 'arret' | 'erreur';
 
@@ -35,12 +36,13 @@ export type ActionService = 'demarrer' | null;
 /** Durée de vie après une relance automatique au-delà de laquelle une nouvelle chute est relancée de nouveau. */
 export const DUREE_STABLE_MS = 10 * 60_000;
 
-export const RAISON_TOMBE = 'Le service s’est arrêté et n’a pas pu être relancé.';
+/** Raison d'une chute sans relance, en français (celle d'une langue : `t.service.tombe`). */
+export const RAISON_TOMBE = TEXTES_FR.service.tombe;
 
 export const VIE_INITIALE: VieService = { etat: 'arrete', relanceMs: null, vivantDepuisMs: null, raison: null };
 
-/** Vie du service après un événement, et l'action qui en découle. */
-export function evoluerVie(vie: VieService, evenement: EvenementService): { vie: VieService; action: ActionService } {
+/** Vie du service après un événement, et l'action qui en découle ; `t` : la langue de la raison d'une chute. */
+export function evoluerVie(vie: VieService, evenement: EvenementService, t: TextesApp = TEXTES_FR): { vie: VieService; action: ActionService } {
 	switch (evenement.type) {
 		case 'demarrageDemande':
 			if (vie.etat === 'demarrage' || vie.etat === 'vivant' || vie.etat === 'arret') return { vie, action: null };
@@ -56,7 +58,7 @@ export function evoluerVie(vie: VieService, evenement: EvenementService): { vie:
 			if (relancePermise(vie, evenement.maintenantMs)) {
 				return { vie: { etat: 'demarrage', relanceMs: evenement.maintenantMs, vivantDepuisMs: null, raison: null }, action: 'demarrer' };
 			}
-			return { vie: { ...vie, etat: 'erreur', vivantDepuisMs: null, raison: RAISON_TOMBE }, action: null };
+			return { vie: { ...vie, etat: 'erreur', vivantDepuisMs: null, raison: t.service.tombe }, action: null };
 		}
 		case 'arretDemande':
 			if (vie.etat !== 'vivant') return { vie, action: null };

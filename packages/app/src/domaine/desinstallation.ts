@@ -9,6 +9,7 @@
  * à côté de `Mnemo.exe`), ouvert quand Mnemo quitte ; sans désinstalleur, Paramètres › Applications.
  */
 import type { EtatInstallation } from './installation.ts';
+import { TEXTES_FR, type TextesApp } from './langue/textes.ts';
 import type { PlateformeApp } from './plateforme.ts';
 
 export type EtapeDesinstallation = 'ouvertureSession' | 'commande' | 'claudeCode' | 'appClaude' | 'configuration' | 'service' | 'corbeille' | 'desinstalleur';
@@ -29,40 +30,43 @@ export type EntreeDesinstallation = {
 	chemins: { commande: string; app: string; dossierApp: string };
 };
 
-export type PlanDesinstallation = { etapes: EtapeDesinstallation[]; message: string; detail: string };
+/** `boutons` : « Désinstaller », « Annuler » (indices de la réponse). */
+export type PlanDesinstallation = { etapes: EtapeDesinstallation[]; message: string; detail: string; boutons: string[] };
 
 /** Ordre des retraits : le service s'arrête après les retraits qui n'en ont pas besoin, l'app part en dernier. */
 const ORDRE: readonly EtapeDesinstallation[] = ['ouvertureSession', 'commande', 'claudeCode', 'appClaude', 'configuration', 'service', 'corbeille', 'desinstalleur'];
 
-export const BOUTONS_DESINSTALLER = ['Désinstaller', 'Annuler'] as const;
 export const BOUTON_DESINSTALLER_ANNULER = 1;
 
 /** Un dossier de la racine, avec le séparateur de la plateforme. */
 const dansRacine = (e: EntreeDesinstallation, nom: string): string => `${e.racine}${e.plateforme === 'win32' ? '\\' : '/'}${nom}`;
 
-function libelle(etape: EtapeDesinstallation, e: EntreeDesinstallation): string {
+function libelle(etape: EtapeDesinstallation, e: EntreeDesinstallation, t: TextesApp): string {
+	const l = t.desinstallation.etapes;
 	switch (etape) {
 		case 'ouvertureSession':
-			return 'l’ouverture de Mnemo à l’ouverture de session';
+			return l.ouvertureSession;
 		case 'commande':
-			return `la commande « mnemo » (${e.chemins.commande})`;
+			return l.commande(e.chemins.commande);
 		case 'claudeCode':
-			return 'la déclaration de la mémoire à Claude Code (serveur MCP « mnemo »)';
+			return l.claudeCode;
 		case 'appClaude':
-			return 'l’entrée « mnemo » de l’app Claude';
+			return l.appClaude;
 		case 'configuration':
-			return `la configuration et les préférences de l’app (${e.chemins.dossierApp})`;
+			return l.configuration(e.chemins.dossierApp);
 		case 'service':
-			return 'le service, arrêté avec ses sessions';
+			return l.service;
 		case 'corbeille':
-			return `l’app elle-même (${e.chemins.app}), mise à la corbeille`;
+			return l.corbeille(e.chemins.app);
 		case 'desinstalleur':
-			return `l’app elle-même, par son désinstalleur (${e.chemins.app}), qui s’ouvre quand Mnemo quitte`;
+			return l.desinstalleur(e.chemins.app);
 	}
 }
 
 /** Les étapes à mener, la question et son détail : ce qui sera retiré, ce qui reste. */
-export function planDesinstallation(e: EntreeDesinstallation): PlanDesinstallation {
+export function planDesinstallation(e: EntreeDesinstallation, t: TextesApp = TEXTES_FR): PlanDesinstallation {
+	const d = t.desinstallation;
+	const r = d.restent;
 	const voulues = new Set<EtapeDesinstallation>(['configuration']);
 	if (e.ouvertureSession) voulues.add('ouvertureSession');
 	// la commande, la déclaration et l'entrée : seulement si elles lancent cette app
@@ -73,39 +77,36 @@ export function planDesinstallation(e: EntreeDesinstallation): PlanDesinstallati
 	if (e.empaquetee) voulues.add(e.plateforme === 'win32' ? 'desinstalleur' : 'corbeille');
 	const etapes = ORDRE.filter((x) => voulues.has(x));
 
-	const restent = [`ta mémoire (${dansRacine(e, '_mnemo')}) et le dossier local ${dansRacine(e, '.mnemo')} (index, journaux, réglages du dossier) : rien n’y est effacé`];
-	if (e.etat.commande === 'ailleurs') restent.push(`la commande « mnemo » (${e.chemins.commande}), qui lance une autre installation de Mnemo`);
-	if (e.etat.commande === 'autre') restent.push(`${e.chemins.commande}, qui n’a pas été écrit par Mnemo`);
-	if (e.etat.claudeCode === 'ailleurs') restent.push('la déclaration « mnemo » de Claude Code, qui lance une autre installation de Mnemo');
-	if (e.etat.claudeCode === 'autre') restent.push('la déclaration « mnemo » de Claude Code, qui ne lance pas Mnemo');
-	if (e.etat.appClaude === 'ailleurs') restent.push('l’entrée « mnemo » de l’app Claude, qui lance une autre installation de Mnemo');
-	if (e.etat.appClaude === 'autre') restent.push('l’entrée « mnemo » de l’app Claude, qui ne lance pas Mnemo');
-	if (!e.empaquetee && e.plateforme === 'win32') restent.push('l’app elle-même : à désinstaller depuis Paramètres › Applications (version de développement lancée depuis le dépôt : à retirer à la main)');
-	else if (!e.empaquetee) restent.push('l’app elle-même (version de développement lancée depuis le dépôt, ou app ouverte depuis l’image disque ou une copie provisoire de macOS : à retirer à la main)');
+	const restent = [r.memoire(dansRacine(e, '_mnemo'), dansRacine(e, '.mnemo'))];
+	if (e.etat.commande === 'ailleurs') restent.push(r.commandeAilleurs(e.chemins.commande));
+	if (e.etat.commande === 'autre') restent.push(r.commandeAutre(e.chemins.commande));
+	if (e.etat.claudeCode === 'ailleurs') restent.push(r.claudeCodeAilleurs);
+	if (e.etat.claudeCode === 'autre') restent.push(r.claudeCodeAutre);
+	if (e.etat.appClaude === 'ailleurs') restent.push(r.appClaudeAilleurs);
+	if (e.etat.appClaude === 'autre') restent.push(r.appClaudeAutre);
+	if (!e.empaquetee && e.plateforme === 'win32') restent.push(r.appWindows);
+	else if (!e.empaquetee) restent.push(r.app);
 
+	const puces = (lignes: readonly string[]): string => lignes.map((l) => `• ${l}`).join('\n');
 	return {
 		etapes,
-		message: 'Désinstaller Mnemo ?',
-		detail: `Seront retirés :\n${etapes.map((x) => `• ${libelle(x, e)}`).join('\n')}\n\nResteront :\n${restent.map((r) => `• ${r}`).join('\n')}\n\nPuis Mnemo quittera.`,
+		message: d.message,
+		detail: d.detail(puces(etapes.map((x) => libelle(x, e, t))), puces(restent)),
+		boutons: [d.desinstaller, d.annuler],
 	};
 }
 
 export type ResultatEtape = { etape: EtapeDesinstallation; ok: true; note?: string } | { etape: EtapeDesinstallation; ok: false; raison: string };
 
 /** Le bilan montré avant de quitter : chaque étape, réussie ou non (avec sa raison). */
-export function bilanDesinstallation(resultats: readonly ResultatEtape[], e: EntreeDesinstallation): { ok: boolean; message: string; detail: string } {
+export function bilanDesinstallation(resultats: readonly ResultatEtape[], e: EntreeDesinstallation, t: TextesApp = TEXTES_FR): { ok: boolean; message: string; detail: string } {
+	const b = t.desinstallation.bilan;
 	const ok = resultats.every((r) => r.ok);
 	const desinstalleur = resultats.some((r) => r.etape === 'desinstalleur' && r.ok);
-	const lignes = resultats.map((r) => (r.ok ? `✓ ${libelle(r.etape, e)}${r.note === undefined ? '' : ` (${r.note})`}` : `✗ ${libelle(r.etape, e)} : ${r.raison}`));
+	const lignes = resultats.map((r) => (r.ok ? `✓ ${libelle(r.etape, e, t)}${r.note === undefined ? '' : ` (${r.note})`}` : b.echec(libelle(r.etape, e, t), r.raison)));
 	return {
 		ok,
-		message: desinstalleur
-			? ok
-				? 'Mnemo est désinstallé ; son désinstalleur retire l’app quand tu quittes.'
-				: 'Mnemo est désinstallé, sauf ce qui n’a pas pu être retiré ; son désinstalleur retire l’app quand tu quittes.'
-			: ok
-				? 'Mnemo est désinstallé.'
-				: 'Mnemo est désinstallé, sauf ce qui n’a pas pu être retiré.',
-		detail: `${lignes.join('\n')}\n\nTa mémoire et ${dansRacine(e, '.mnemo')} sont restés en place.`,
+		message: desinstalleur ? (ok ? b.desinstalleurOk : b.desinstalleurPartiel) : ok ? b.ok : b.partiel,
+		detail: `${lignes.join('\n')}\n\n${b.reste(dansRacine(e, '.mnemo'))}`,
 	};
 }

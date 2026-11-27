@@ -5,6 +5,7 @@
  */
 import { execFile } from 'node:child_process';
 import type { Configuration } from '../domaine/configuration.ts';
+import { TEXTES_FR, type TextesApp } from '../domaine/langue/textes.ts';
 import { santeService } from './api-service.ts';
 import { environnementAvecPath } from './environnement.ts';
 import { lireServiceJson, type ServiceLocal } from './service-local.ts';
@@ -29,8 +30,8 @@ export function environnementOuvrir(configuration: Configuration, base: NodeJS.P
 
 const dernieresLignes = (texte: string): string => texte.trimEnd().split('\n').slice(-LIGNES_ERREUR).join('\n');
 
-/** Lance `ouvrir` et rend le service qui répond, ou la raison de l'échec (fin de la sortie de la commande). */
-export function demarrerService(configuration: Configuration, base: NodeJS.ProcessEnv = process.env): Promise<ResultatDemarrage> {
+/** Lance `ouvrir` et rend le service qui répond, ou la raison de l'échec (fin de la sortie de la commande), dans la langue de `t`. */
+export function demarrerService(configuration: Configuration, base: NodeJS.ProcessEnv = process.env, t: TextesApp = TEXTES_FR): Promise<ResultatDemarrage> {
 	return new Promise((resoudre) => {
 		execFile(
 			configuration.node,
@@ -39,16 +40,16 @@ export function demarrerService(configuration: Configuration, base: NodeJS.Proce
 			(erreur, sortie, erreurs) => {
 				if (erreur) {
 					const fin = dernieresLignes(`${erreurs}`) || dernieresLignes(`${sortie}`) || erreur.message;
-					resoudre({ ok: false, raison: `Le service n’a pas démarré : ${fin}` });
+					resoudre({ ok: false, raison: t.service.pasDemarre(fin) });
 					return;
 				}
 				const service = lireServiceJson(configuration.racine);
 				if (service === null) {
-					resoudre({ ok: false, raison: 'Le service n’a pas démarré : .mnemo/service.json absent.' });
+					resoudre({ ok: false, raison: t.service.serviceJsonAbsent });
 					return;
 				}
 				void santeService(service).then((sante) =>
-					resoudre(sante === 'ok' ? { ok: true, service } : { ok: false, raison: 'Le service a démarré mais ne répond pas.' }),
+					resoudre(sante === 'ok' ? { ok: true, service } : { ok: false, raison: t.service.neRepondPas }),
 				);
 			},
 		);

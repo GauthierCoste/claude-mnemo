@@ -9,6 +9,7 @@
  * d'un service neuf est un état initial, sans notification.
  */
 import type { MessageServeur, SessionVue } from '@mnemo/contrat';
+import { TEXTES_FR, type TextesApp } from './langue/textes.ts';
 import { type NotificationSession, notificationsAEmettre, SUIVI_INITIAL, type SuiviNotifications } from './notifications.ts';
 import { appliquerMessage } from './sessions.ts';
 import { type ActionService, type EvenementService, evoluerVie, VIE_INITIALE, type VieService } from './vie-service.ts';
@@ -28,16 +29,17 @@ export const SUIVI_APP_INITIAL: EtatSuivi = { vie: VIE_INITIALE, sessions: null,
 /** Le service est là (ses sessions valent encore) : vivant, ou en arrêt tant que son processus n'est pas mort. */
 const serviceLa = (vie: VieService): boolean => vie.etat === 'vivant' || vie.etat === 'arret';
 
-export function evoluerSuivi(etat: EtatSuivi, evenement: EvenementSuivi): ResultatSuivi {
+/** `t` : la langue des notifications et de la raison d'une chute. */
+export function evoluerSuivi(etat: EtatSuivi, evenement: EvenementSuivi, t: TextesApp = TEXTES_FR): ResultatSuivi {
 	if (evenement.type === 'message') {
 		// un message d'un service qu'on ne tient pas pour vivant (reste d'une connexion) est ignoré
 		if (etat.vie.etat !== 'vivant') return { etat, action: null, notifications: [] };
 		const sessions = appliquerMessage(etat.sessions, evenement.message);
 		if (sessions === etat.sessions || sessions === null) return { etat, action: null, notifications: [] };
-		const r = notificationsAEmettre(etat.notifications, sessions, evenement.fenetreAuFocus);
+		const r = notificationsAEmettre(etat.notifications, sessions, evenement.fenetreAuFocus, t);
 		return { etat: { ...etat, sessions, notifications: r.suivi }, action: null, notifications: r.notifications };
 	}
-	const { vie, action } = evoluerVie(etat.vie, evenement);
+	const { vie, action } = evoluerVie(etat.vie, evenement, t);
 	if (serviceLa(vie)) return { etat: { ...etat, vie }, action, notifications: [] };
 	return { etat: { vie, sessions: null, notifications: SUIVI_INITIAL }, action, notifications: [] };
 }

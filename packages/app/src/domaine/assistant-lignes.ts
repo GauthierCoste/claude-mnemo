@@ -4,6 +4,7 @@
  * étape, barre de chaque pièce de modèle).
  */
 import type { EtapeInit, FinInit, LigneInit } from '@mnemo/contrat';
+import { TEXTES_FR } from './langue/textes.ts';
 import type { PlateformeApp } from './plateforme.ts';
 
 /** Une ligne plus longue est ignorée (aucune ligne d'`init` n'en approche). */
@@ -83,12 +84,8 @@ export function etapesMontrees(plateforme: PlateformeApp): readonly EtapeMontree
 	return plateforme === 'win32' ? ETAPES_MONTREES.filter((e) => e !== 'commande') : ETAPES_MONTREES;
 }
 
-export const LIBELLES_ETAPES: Readonly<Record<EtapeMontree, string>> = {
-	memoire: 'Mémoire',
-	mcp: 'Déclaration à Claude Code',
-	modeles: 'Modèles locaux',
-	commande: 'Commande « mnemo »',
-};
+/** Libellés des étapes en français (ceux d'une langue : `t.assistant.installation.etapes`). */
+export const LIBELLES_ETAPES: Readonly<Record<EtapeMontree, string>> = TEXTES_FR.assistant.installation.etapes;
 
 export type EtatEtape = 'attente' | 'debut' | 'fait' | 'saute' | 'laisse' | 'echec';
 export type EtapeSuivie = { etape: EtapeMontree; etat: EtatEtape; message: string };

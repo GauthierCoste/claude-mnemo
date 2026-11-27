@@ -1,23 +1,24 @@
 /**
  * Boîtes natives de l'app : la question de « Quitter Mnemo », la désinstallation (question et bilan), le redémarrage après
- * « Reprendre le PATH du terminal », une information, une erreur.
+ * « Reprendre le PATH du terminal », une information, une erreur. Dans la langue des textes donnés.
  */
 import type { SessionVue } from '@mnemo/contrat';
 import { dialog } from 'electron';
-import { BOUTON_DESINSTALLER_ANNULER, BOUTONS_DESINSTALLER, type PlanDesinstallation } from '../domaine/desinstallation.ts';
-import { BOUTON_QUITTER_ANNULER, BOUTON_QUITTER_DEFAUT, BOUTONS_QUITTER, CASE_NE_PLUS_DEMANDER, questionQuitter, reponseQuitter } from '../domaine/quitter.ts';
+import { BOUTON_DESINSTALLER_ANNULER, type PlanDesinstallation } from '../domaine/desinstallation.ts';
+import type { TextesApp } from '../domaine/langue/textes.ts';
+import { BOUTON_QUITTER_ANNULER, BOUTON_QUITTER_DEFAUT, questionQuitter, reponseQuitter } from '../domaine/quitter.ts';
 
 /** La question de « Quitter Mnemo » ; rend la suite et le choix à retenir. */
-export async function demanderQuitter(sessions: readonly SessionVue[]): Promise<ReturnType<typeof reponseQuitter>> {
-	const q = questionQuitter(sessions);
+export async function demanderQuitter(sessions: readonly SessionVue[], t: TextesApp): Promise<ReturnType<typeof reponseQuitter>> {
+	const q = questionQuitter(sessions, t);
 	const r = await dialog.showMessageBox({
 		type: 'question',
 		message: q.message,
 		detail: q.detail,
-		buttons: [...BOUTONS_QUITTER],
+		buttons: q.boutons,
 		defaultId: BOUTON_QUITTER_DEFAUT,
 		cancelId: BOUTON_QUITTER_ANNULER,
-		checkboxLabel: CASE_NE_PLUS_DEMANDER,
+		checkboxLabel: q.case,
 		checkboxChecked: false,
 	});
 	return reponseQuitter(r.response, r.checkboxChecked);
@@ -29,7 +30,7 @@ export async function demanderDesinstaller(plan: PlanDesinstallation): Promise<b
 		type: 'warning',
 		message: plan.message,
 		detail: plan.detail,
-		buttons: [...BOUTONS_DESINSTALLER],
+		buttons: plan.boutons,
 		defaultId: BOUTON_DESINSTALLER_ANNULER,
 		cancelId: BOUTON_DESINSTALLER_ANNULER,
 	});
@@ -37,25 +38,26 @@ export async function demanderDesinstaller(plan: PlanDesinstallation): Promise<b
 }
 
 /** Le bilan de la désinstallation, avant de quitter. */
-export async function direBilan(bilan: { ok: boolean; message: string; detail: string }): Promise<void> {
-	await dialog.showMessageBox({ type: bilan.ok ? 'info' : 'warning', message: bilan.message, detail: bilan.detail, buttons: ['Quitter'] });
+export async function direBilan(bilan: { ok: boolean; message: string; detail: string }, t: TextesApp): Promise<void> {
+	await dialog.showMessageBox({ type: bilan.ok ? 'info' : 'warning', message: bilan.message, detail: bilan.detail, buttons: [t.boites.quitter] });
 }
 
-export async function direErreur(message: string, detail: string): Promise<void> {
-	await dialog.showMessageBox({ type: 'error', message, detail, buttons: ['OK'] });
+export async function direErreur(message: string, detail: string, t: TextesApp): Promise<void> {
+	await dialog.showMessageBox({ type: 'error', message, detail, buttons: [t.boites.ok] });
 }
 
-export async function direInformation(message: string, detail: string): Promise<void> {
-	await dialog.showMessageBox({ type: 'info', message, detail, buttons: ['OK'] });
+export async function direInformation(message: string, detail: string, t: TextesApp): Promise<void> {
+	await dialog.showMessageBox({ type: 'info', message, detail, buttons: [t.boites.ok] });
 }
 
 /** Après « Reprendre le PATH du terminal », service vivant : vrai pour « Redémarrer le service » (par défaut), faux pour « Plus tard ». */
-export async function demanderRedemarrer(path: string): Promise<boolean> {
+export async function demanderRedemarrer(path: string, t: TextesApp): Promise<boolean> {
+	const b = t.boites.redemarrer;
 	const r = await dialog.showMessageBox({
 		type: 'question',
-		message: 'PATH du terminal repris. Redémarrer le service ?',
-		detail: `Les nouvelles sessions Claude Code lancées par Mnemo le recevront une fois le service redémarré ; les sessions en cours s’arrêtent avec lui.\n\n${path}`,
-		buttons: ['Redémarrer le service', 'Plus tard'],
+		message: b.message,
+		detail: b.detail(path),
+		buttons: [b.redemarrer, b.plusTard],
 		defaultId: 0,
 		cancelId: 1,
 	});

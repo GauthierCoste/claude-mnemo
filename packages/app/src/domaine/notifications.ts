@@ -4,6 +4,7 @@
  * un passage). Le suivi retient, d'un instantané à l'autre, les sessions qui attendaient.
  */
 import type { SessionVue } from '@mnemo/contrat';
+import { TEXTES_FR, type TextesApp } from './langue/textes.ts';
 import { attendReponse, libelleSession } from './sessions.ts';
 
 /** Ids des sessions qui attendaient une réponse au dernier instantané ; null : aucun instantané reçu encore. */
@@ -21,10 +22,11 @@ export function notificationsAEmettre(
 	suivi: SuiviNotifications,
 	sessions: readonly SessionVue[],
 	fenetreAuFocus: boolean,
+	t: TextesApp = TEXTES_FR,
 ): { suivi: ReadonlySet<string>; notifications: NotificationSession[] } {
 	const attendent = sessions.filter(attendReponse);
 	const nouveau = new Set(attendent.map((s) => s.id));
 	if (suivi === null || fenetreAuFocus) return { suivi: nouveau, notifications: [] };
-	const notifications = attendent.filter((s) => !suivi.has(s.id)).map((s) => ({ session: s.id, titre: 'Mnemo', corps: `${libelleSession(s)} attend ta réponse` }));
+	const notifications = attendent.filter((s) => !suivi.has(s.id)).map((s) => ({ session: s.id, titre: t.notifications.titre, corps: t.notifications.attend(libelleSession(s, t)) }));
 	return { suivi: nouveau, notifications };
 }

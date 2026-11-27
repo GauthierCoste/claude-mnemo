@@ -2,9 +2,11 @@
  * Textes de l'assistant qui dépendent de la plateforme : l'ordinateur (« ce Mac », « cet ordinateur »), l'aide pour
  * installer git (outils en ligne de commande d'Apple, ou Git pour Windows), où vit l'icône de Mnemo (barre des menus, zone
  * de notification), les choix proposés et les renvois à la commande « mnemo » (sous Windows, ni l'une ni les autres).
+ * Dans la langue de `t` (par défaut le français).
  */
-import { choixProposes, type ChoixInstallation, TAILLE_MODELES } from './assistant.ts';
+import { choixProposes, type ChoixInstallation } from './assistant.ts';
 import { LIENS_EXTERNES } from './assistant-pont.ts';
+import { TEXTES_FR, type TextesApp } from './langue/textes.ts';
 import type { PlateformeApp } from './plateforme.ts';
 
 /** Aide quand git manque : une commande à lancer dans un terminal (ou rien), puis un lien. */
@@ -16,19 +18,23 @@ export type AideGit = { commande: string | null; libelleLien: string; lien: stri
  */
 export type TextesAssistant = { intro: string; aideGit: AideGit; cases: { cle: keyof ChoixInstallation; titre: string; detail: string }[]; relance: string | null };
 
-export function textesAssistant(plateforme: PlateformeApp): TextesAssistant {
+export function textesAssistant(plateforme: PlateformeApp, t: TextesApp = TEXTES_FR): TextesAssistant {
 	const windows = plateforme === 'win32';
-	const ordinateur = windows ? 'cet ordinateur' : 'ce Mac';
+	const a = t.assistant;
+	const c = a.choix;
+	const ordinateur = windows ? a.verifications.ordinateur : a.verifications.mac;
 	const cases: Record<keyof ChoixInstallation, { titre: string; detail: string }> = {
-		mcp: { titre: 'Déclarer Mnemo à Claude Code', detail: 'Toutes tes sessions Claude Code peuvent lire la mémoire et y proposer (serveur MCP).' },
-		commande: { titre: 'Installer la commande « mnemo »', detail: 'Pour le terminal : ~/.local/bin/mnemo.' },
-		modeles: { titre: 'Télécharger les modèles locaux', detail: `Recherche par le sens, sur ${ordinateur} ; ${TAILLE_MODELES} à télécharger. Sans eux, la recherche se fait par les mots${windows ? '.' : ' ; plus tard : mnemo modeles installer.'}` },
-		ouvrirALaSession: { titre: 'Ouvrir Mnemo à l’ouverture de session', detail: windows ? 'Mnemo reste dans la zone de notification.' : 'Mnemo reste dans la barre des menus.' },
+		mcp: { titre: c.mcp.titre, detail: c.mcp.detail },
+		commande: { titre: c.commande.titre, detail: c.commande.detail },
+		modeles: { titre: c.modeles.titre, detail: windows ? c.modeles.detailWindows(ordinateur, c.tailleModeles) : c.modeles.detail(ordinateur, c.tailleModeles) },
+		ouvrirALaSession: { titre: c.ouvrirALaSession.titre, detail: windows ? c.ouvrirALaSession.detailWindows : c.ouvrirALaSession.detail },
 	};
 	return {
-		intro: `Mnemo donne une mémoire à tes sessions Claude Code. Il lui faut git et Claude Code sur ${ordinateur}.`,
-		aideGit: windows ? { commande: null, libelleLien: 'Installer Git pour Windows', lien: LIENS_EXTERNES.gitWindows } : { commande: 'xcode-select --install', libelleLien: 'installer git', lien: LIENS_EXTERNES.git },
+		intro: a.verifications.intro(ordinateur),
+		aideGit: windows
+			? { commande: null, libelleLien: a.verifications.installerGitWindows, lien: LIENS_EXTERNES.gitWindows }
+			: { commande: 'xcode-select --install', libelleLien: a.verifications.installerGit, lien: LIENS_EXTERNES.git },
 		cases: choixProposes(plateforme).map((cle) => ({ cle, ...cases[cle] })),
-		relance: windows ? null : 'Tu pourras le refaire plus tard (mnemo init, dans ce dossier).',
+		relance: windows ? null : a.termine.relance,
 	};
 }

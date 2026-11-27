@@ -11,18 +11,23 @@
  * Sous Windows : identifiant de modèle d'application posé avant tout (notifications), icône dans la zone de notification,
  * élément d'ouverture de session lu et retiré avec les mêmes options qu'à l'inscription, et l'app retirée par son
  * désinstalleur, ouvert (par le shell de Windows, qui demande l'élévation s'il le faut) juste avant que Mnemo quitte.
+ *
+ * Langue : celle de `preferences.json` (la dernière connue), sinon celle du système. Elle suit celle de l'interface (`lang`
+ * de la page, lu par la fenêtre) et celle choisie dans l'assistant ; à chaque changement, elle est retenue et les deux
+ * menus sont refaits.
  */
 import { sep } from 'node:path';
+import type { Langue } from '@mnemo/commun';
 import { app, nativeImage, Notification, shell } from 'electron';
 import type { Configuration, Lancement } from '../domaine/configuration.ts';
 import { bilanDesinstallation, type EntreeDesinstallation, planDesinstallation } from '../domaine/desinstallation.ts';
 import { iconeDockDeLaPage } from '../domaine/dock.ts';
 import { toutesLesImages } from '../domaine/icone.ts';
 import { IDENTIFIANT_APP, NOM_APP } from '../domaine/identite-app.ts';
+import { langueDeLApp, TEXTES_FR, textesApp, type TextesApp } from '../domaine/langue/textes.ts';
 import type { ActionMenu } from '../domaine/menu.ts';
 import { optionsOuvertureSession, ouverteParLaSession } from '../domaine/ouverture-session.ts';
 import { plateformeApp } from '../domaine/plateforme.ts';
-import type { Preferences } from '../domaine/preferences.ts';
 import { suiteQuitter } from '../domaine/quitter.ts';
 import { estPageDeVersion, verificationDue, versionAAnnoncer } from '../domaine/version.ts';
 import { vueApp } from '../domaine/vue.ts';
@@ -36,7 +41,7 @@ import { dossierImages, lireImagesBarre } from '../infra/images-barre.ts';
 import { cheminsInstallation, lireEtatInstallation } from '../infra/installation-fichiers.ts';
 import { cheminJournalApp, journalFichier } from '../infra/journal-app.ts';
 import { lirePathTerminal } from '../infra/path-terminal.ts';
-import { cheminPreferences as cheminPreferencesDe, ecrirePreferencesFichier, lirePreferencesFichier } from '../infra/preferences-fichier.ts';
+import { cheminPreferences as cheminPreferencesDe, lirePreferencesFichier, preferencesRetenues, type PreferencesRetenues } from '../infra/preferences-fichier.ts';
 import { cheminJournal } from '../infra/service-local.ts';
 import { creerSuivi, type InstantaneSuivi, type SuiviService } from '../infra/suivi-service.ts';
 import { verifierInstallation } from '../infra/verification-installation.ts';
@@ -93,9 +98,64 @@ export function demarrerApplication(options: { essai: boolean; dossierMain: stri
 		.then(() => lancer(home, images))
 		.catch(async (e: unknown) => {
 			// sans quoi l'app resterait ouverte sans barre des menus ni fenêtre, Dock caché, et garderait l'instance unique
-			await direErreur('Mnemo ne s’est pas ouvert.', e instanceof Error ? e.message : String(e)).catch(() => {});
+			const t = textesAuDemarrage();
+			await direErreur(t.erreurs.ouverture, e instanceof Error ? e.message : String(e), t).catch(() => {});
 			app.exit(1);
 		});
+}
+
+/** Textes d'une erreur au démarrage, avant que la langue soit tenue : celle des préférences, sinon celle du système. */
+function textesAuDemarrage(): TextesApp {
+	try {
+		return textesApp(langueDeLApp(lirePreferencesFichier(cheminPreferencesDe(app.getPath('userData'))).langue, app.getLocale()));
+	} catch {
+		return TEXTES_FR;
+	}
+}
+
+/**
+ * Ce que l'assistant et l'interface partagent : les préférences (une seule copie : deux écritures ne s'écrasent pas), la
+ * langue et ses textes, le menu de l'application.
+ */
+type ContexteApp = {
+	preferences: PreferencesRetenues;
+	langue(): Langue;
+	textes(): TextesApp;
+	/** La langue de l'interface ou de l'assistant : retenue ; si elle change, les menus sont refaits. */
+	changerLangue(langue: Langue): void;
+	/** Ce que fait « Quitter Mnemo » du menu de l'application (le menu est réinstallé). */
+	quitterParLeMenu(quitter: () => void): void;
+	/** Appelé après chaque changement de langue (la barre des menus de l'interface). */
+	surLangue(f: () => void): void;
+};
+
+function contexteApp(dossier: string): ContexteApp {
+	const preferences = preferencesRetenues(cheminPreferencesDe(dossier));
+	const langue = (): Langue => langueDeLApp(preferences.valeur().langue, app.getLocale());
+	const textes = (): TextesApp => textesApp(langue());
+	let quitter: () => void = () => app.quit();
+	let apresChangement: () => void = () => {};
+	const installerMenu = (): void => installerMenuApplication({ quitter: () => quitter(), textes: textes() });
+	return {
+		preferences,
+		langue,
+		textes,
+		changerLangue(nouvelle) {
+			if (preferences.valeur().langue === nouvelle) return;
+			const avant = langue();
+			preferences.retenir({ langue: nouvelle });
+			if (langue() === avant) return;
+			installerMenu();
+			apresChangement();
+		},
+		quitterParLeMenu(f) {
+			quitter = f;
+			installerMenu();
+		},
+		surLangue(f) {
+			apresChangement = f;
+		},
+	};
 }
 
 /**
@@ -122,17 +182,21 @@ async function lancer(home: string, images: string): Promise<void> {
 	// sans configuration, l'assistant lance `mnemo` (et écrit la configuration) avec le `PATH` du terminal : le shell de
 	// connexion n'est lu que dans ce cas (repli au journal de l'app)
 	const journal = journalFichier(cheminJournalApp(app.getPath('userData')));
+	const contexte = contexteApp(app.getPath('userData'));
 	const decision = await decisionAuLancement(home, paquet, async () => (await lirePathTerminal({ home, journal })).path, provisoire);
 	// une seconde ouverture montre l'assistant tant qu'il est là, puis l'interface
 	let secondeOuverture = (): void => {};
 	app.on('second-instance', () => secondeOuverture());
 	if (!decision.assistant) {
-		secondeOuverture = await demarrerInterface(home, images, decision.configuration, paquet, false);
+		secondeOuverture = await demarrerInterface(contexte, home, images, decision.configuration, paquet, false);
 		return;
 	}
 	// l'assistant seul : ni barre des menus ni suivi du service tant qu'il n'a pas fini ; Dock visible
-	installerMenuApplication({ quitter: () => app.quit() });
+	contexte.quitterParLeMenu(() => app.quit());
 	const options: Parameters<typeof ouvrirAssistant>[0] = {
+		langue: contexte.langue,
+		textes: contexte.textes,
+		surLangue: (langue) => contexte.changerLangue(langue),
 		executable: decision.executable,
 		...(decision.provisoire === true ? { provisoire: true } : {}),
 		home,
@@ -141,7 +205,7 @@ async function lancer(home: string, images: string): Promise<void> {
 			reglerOuvertureSession(ouvrirALaSession);
 			// l'assistant fini ne se rouvre plus ; l'interface répond dès qu'elle est prête
 			secondeOuverture = () => {};
-			secondeOuverture = await demarrerInterface(home, images, configuration, paquet, true);
+			secondeOuverture = await demarrerInterface(contexte, home, images, configuration, paquet, true);
 		},
 		surAbandon: () => app.quit(),
 	};
@@ -153,7 +217,15 @@ async function lancer(home: string, images: string): Promise<void> {
  * L'interface : suivi du service, barre des menus, fenêtre. `apresAssistant` : la fenêtre s'ouvre toujours (l'app n'a pas
  * été ouverte par l'ouverture de session). Rend la réponse à une seconde ouverture.
  */
-async function demarrerInterface(home: string, images: string, configurationLue: Configuration, paquet: Lancement | undefined, apresAssistant: boolean): Promise<() => void> {
+async function demarrerInterface(
+	contexte: ContexteApp,
+	home: string,
+	images: string,
+	configurationLue: Configuration,
+	paquet: Lancement | undefined,
+	apresAssistant: boolean,
+): Promise<() => void> {
+	const { textes } = contexte;
 	const configuration: Configuration = paquet === undefined ? configurationLue : { ...configurationLue, ...paquet };
 	const lancement: Lancement = { node: configuration.node, main: configuration.main };
 	const { racine } = configuration;
@@ -161,18 +233,8 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 	const journal = journalFichier(cheminJournalApp(dossier));
 	app.dock?.hide();
 	const cheminPreferences = cheminPreferencesDe(dossier);
-	let preferences: Preferences = lirePreferencesFichier(cheminPreferences);
-	/** Après « Désinstaller Mnemo… » : plus rien n'est écrit dans le dossier de l'app. */
-	let desinstallee = false;
-	const retenir = (p: Partial<Preferences>): void => {
-		preferences = { ...preferences, ...p };
-		if (desinstallee) return;
-		try {
-			ecrirePreferencesFichier(cheminPreferences, preferences);
-		} catch {
-			// préférences non retenues : rien de grave, la question reviendra
-		}
-	};
+	const preferences = () => contexte.preferences.valeur();
+	const retenir = (p: Parameters<PreferencesRetenues['retenir']>[0]): void => contexte.preferences.retenir(p);
 
 	let quitteEnCours = false;
 	/** La vérification au lancement (app empaquetée), tant qu'elle tourne : « Désinstaller Mnemo… » l'attend. */
@@ -180,7 +242,7 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 	/** L'app quitte (`before-quit`) : plus aucune boîte. */
 	let enFermeture = false;
 	const fenetre = creerFenetre({
-		bornesRetenues: preferences.fenetre,
+		bornesRetenues: preferences().fenetre,
 		retenirBornes: (b) => retenir({ fenetre: b }),
 		surVisibilite(visible) {
 			if (visible) void app.dock?.show();
@@ -193,8 +255,9 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 			const image = nativeImage.createFromDataURL(adresse);
 			if (!image.isEmpty()) app.dock.setIcon(image);
 		},
+		surLanguePage: (langue) => contexte.changerLangue(langue),
 	});
-	const suivi: SuiviService = creerSuivi({ acces: accesReel(configuration), fenetreAuFocus: () => fenetre.auFocus() });
+	const suivi: SuiviService = creerSuivi({ acces: accesReel(configuration, { textes }), fenetreAuFocus: () => fenetre.auFocus(), textes });
 	const notifications = new Set<Notification>();
 
 	/** Montre la fenêtre (sur la session donnée) ; sans service, le démarre d'abord. */
@@ -213,9 +276,9 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 		if (quitteEnCours) return;
 		quitteEnCours = true;
 		const i = suivi.instantane();
-		let suite = suiteQuitter(preferences.quitter, i.vie.etat);
+		let suite = suiteQuitter(preferences().quitter, i.vie.etat);
 		if (suite === 'demander') {
-			const r = await demanderQuitter(i.sessions ?? []);
+			const r = await demanderQuitter(i.sessions ?? [], textes());
 			if (r.retenir !== null) retenir({ quitter: r.retenir });
 			if (r.suite === 'annuler') {
 				quitteEnCours = false;
@@ -229,7 +292,8 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 			if (enFermeture) return;
 			if (!r.ok) {
 				quitteEnCours = false;
-				await direErreur('Le service ne s’est pas arrêté.', `${r.raison}\nMnemo reste ouvert ; « Journal du service » dit pourquoi.`);
+				const t = textes();
+				await direErreur(t.erreurs.arretService, t.erreurs.arretServiceQuitter(r.raison), t);
 				return;
 			}
 		}
@@ -239,7 +303,7 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 	/** Une fois par jour au plus (réglage actif) : la dernière version publiée, retenue pour le menu ; échec silencieux. */
 	let rechercheEnCours = false;
 	async function chercherVersion(): Promise<void> {
-		if (rechercheEnCours || !verificationDue(preferences.chercherVersions, preferences.verificationVersionsMs, Date.now())) return;
+		if (rechercheEnCours || !verificationDue(preferences().chercherVersions, preferences().verificationVersionsMs, Date.now())) return;
 		rechercheEnCours = true;
 		try {
 			const publiee = await derniereVersionPubliee();
@@ -272,48 +336,51 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 			racine,
 			chemins: { commande: abreger(chemins.commande), app: cheminApp ?? '', dossierApp: abreger(dossier) },
 		};
-		const plan = planDesinstallation(entree);
+		const t = textes();
+		const notes = t.desinstallation.notes;
+		const plan = planDesinstallation(entree, t);
 		if (!(await demanderDesinstaller(plan))) {
 			quitteEnCours = false;
 			return;
 		}
-		const fichiers = actionsFichiers({ home, lancement, path: configuration.path, fichiersApp: [cheminConfiguration(home), cheminPreferences, cheminJournalApp(dossier)] });
+		const fichiers = actionsFichiers({ home, lancement, path: configuration.path, fichiersApp: [cheminConfiguration(home), cheminPreferences, cheminJournalApp(dossier)], textes: t });
 		const resultats = await executerEtapes(plan.etapes, {
 			...fichiers,
 			async ouvertureSession() {
 				reglerOuvertureSession(false);
 			},
 			async configuration() {
-				desinstallee = true;
+				// plus rien n'est écrit dans le dossier de l'app
+				contexte.preferences.figer();
 				return fichiers.configuration();
 			},
 			async service() {
 				const r = await suivi.arreter();
 				if (!r.ok) throw new Error(r.raison);
-				if (r.force === true) return 'arrêté de force : ses sessions n’ont pas été fermées proprement';
+				if (r.force === true) return notes.arreteDeForce;
 			},
 			async corbeille() {
-				if (cheminApp === null) throw new Error('emplacement de l’app inconnu : laissée en place.');
+				if (cheminApp === null) throw new Error(notes.emplacementInconnu);
 				// le service lancé depuis l'app (son Node) doit être arrêté avant qu'elle parte
 				const vie = suivi.instantane().vie.etat;
-				if (vie !== 'arrete' && vie !== 'erreur') throw new Error('le service, lancé depuis l’app, tourne encore : l’app est laissée en place.');
+				if (vie !== 'arrete' && vie !== 'erreur') throw new Error(notes.serviceCorbeille);
 				await shell.trashItem(cheminApp);
 			},
 			async desinstalleur() {
-				if (cheminApp === null) throw new Error('désinstalleur introuvable : désinstalle Mnemo depuis Paramètres › Applications.');
+				if (cheminApp === null) throw new Error(notes.desinstalleurIntrouvable);
 				// le service lancé depuis l'app (son Node) tient ses fichiers ouverts : il doit être arrêté avant
 				const vie = suivi.instantane().vie.etat;
-				if (vie !== 'arrete' && vie !== 'erreur') throw new Error('le service, lancé depuis l’app, tourne encore : désinstalle Mnemo depuis Paramètres › Applications une fois le service arrêté.');
+				if (vie !== 'arrete' && vie !== 'erreur') throw new Error(notes.serviceDesinstalleur);
 				desinstalleurALancer = cheminApp;
 			},
 		});
-		await direBilan(bilanDesinstallation(resultats, entree));
+		await direBilan(bilanDesinstallation(resultats, entree, t), t);
 		// Windows : le désinstalleur s'ouvre par le shell (`ShellExecute` : l'élévation demandée s'il le faut ; un échec rendu
 		// en texte, jamais une exception), puis l'app quitte aussitôt pour qu'il la trouve fermée
 		if (desinstalleurALancer !== null) {
 			const chemin = desinstalleurALancer;
 			const erreur = await shell.openPath(chemin).catch((e: unknown) => (e instanceof Error ? e.message : String(e)));
-			if (erreur !== '') await direErreur('Le désinstalleur de Mnemo ne s’est pas ouvert.', `${chemin} : ${erreur}\nDésinstalle Mnemo depuis Paramètres › Applications.`).catch(() => {});
+			if (erreur !== '') await direErreur(t.erreurs.desinstalleur, t.erreurs.desinstalleurDetail(chemin, erreur), t).catch(() => {});
 		}
 		app.quit();
 	}
@@ -329,22 +396,23 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 		reprisePathEnCours = true;
 		try {
 			const lu = await lirePathTerminal({ home, journal });
-			if (lu.origine === 'defaut') return await direErreur('Le PATH du terminal n’a pas pu être lu.', `${lu.raison}\nLa configuration est laissée telle quelle.`);
-			if (lu.path === configuration.path) return await direInformation('Le PATH de Mnemo est déjà celui du terminal.', lu.path);
+			const t = textes();
+			if (lu.origine === 'defaut') return await direErreur(t.erreurs.pathIllisible, t.erreurs.pathIllisibleDetail(lu.raison), t);
+			if (lu.path === configuration.path) return await direInformation(t.erreurs.pathDeja, lu.path, t);
 			try {
 				await remplacerPathConfiguration(home, lu.path, paquet);
 			} catch (e) {
-				return await direErreur('La configuration n’a pas été modifiée.', e instanceof Error ? e.message : String(e));
+				return await direErreur(t.erreurs.configurationNonModifiee, e instanceof Error ? e.message : String(e), t);
 			}
 			// l'objet que lit le démarrage du service (`accesReel`), la vérification et la désinstallation
 			configuration.path = lu.path;
 			journal(`PATH du terminal repris dans la configuration : ${lu.path}`);
 			if (quitteEnCours || suivi.instantane().vie.etat !== 'vivant') return;
-			if (!(await demanderRedemarrer(lu.path))) return;
+			if (!(await demanderRedemarrer(lu.path, textes()))) return;
 			// pendant la question, le service a pu être arrêté depuis le menu, ou l'app commencer à quitter : rien n'est relancé
 			if (quitteEnCours || suivi.instantane().vie.etat !== 'vivant') return;
 			const r = await suivi.arreter();
-			if (!r.ok) return await direErreur('Le service ne s’est pas arrêté.', r.raison);
+			if (!r.ok) return await direErreur(textes().erreurs.arretService, r.raison, textes());
 			// quitter ou désinstaller lancé pendant l'arrêt : le service ne repart pas
 			if (quitteEnCours) return;
 			await suivi.demarrer();
@@ -363,10 +431,11 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 				return suivi.demarrer();
 			case 'arreterService': {
 				const r = await suivi.arreter();
-				if (!r.ok) await direErreur('Le service ne s’est pas arrêté.', r.raison);
+				const t = textes();
+				if (!r.ok) await direErreur(t.erreurs.arretService, r.raison, t);
 				else if (r.force === true) {
 					journal('Service arrêté de force : la demande d’arrêt ne lui parvenait pas et il ne s’est pas arrêté seul (ses sessions n’ont pas été fermées proprement).');
-					await direInformation('Le service a été arrêté de force.', 'Il ne répondait plus à la demande d’arrêt et ne s’est pas arrêté seul : ses sessions n’ont pas été fermées proprement.');
+					await direInformation(t.erreurs.arretForce, t.erreurs.arretForceDetail, t);
 				}
 				return;
 			}
@@ -376,7 +445,7 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 				return;
 			case 'journal': {
 				const erreur = await shell.openPath(cheminJournal(racine));
-				if (erreur !== '') await direErreur('Le journal du service ne s’ouvre pas.', erreur);
+				if (erreur !== '') await direErreur(textes().erreurs.journal, erreur, textes());
 				return;
 			}
 			case 'reprendrePath':
@@ -401,14 +470,20 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 	const version = app.getVersion();
 
 	function afficher(i: InstantaneSuivi): void {
-		const v = vueApp(i.vie, i.sessions, {
-			plateforme: PLATEFORME,
-			ouvertureSession: lireOuvertureSession().openAtLogin,
-			version,
-			// réglage coupé : plus rien n'est annoncé
-			nouvelleVersion: preferences.chercherVersions ? versionAAnnoncer(version, preferences.versionPubliee) : null,
-			chercherVersions: preferences.chercherVersions,
-		});
+		const p = preferences();
+		const v = vueApp(
+			i.vie,
+			i.sessions,
+			{
+				plateforme: PLATEFORME,
+				ouvertureSession: lireOuvertureSession().openAtLogin,
+				version,
+				// réglage coupé : plus rien n'est annoncé
+				nouvelleVersion: p.chercherVersions ? versionAAnnoncer(version, p.versionPubliee) : null,
+				chercherVersions: p.chercherVersions,
+			},
+			textes(),
+		);
 		barre.afficher(v.etat, v.infobulle, v.menu);
 		app.dock?.setBadge(v.pastille);
 	}
@@ -430,7 +505,9 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 		notification.show();
 	});
 
-	installerMenuApplication({ quitter: () => void quitter() });
+	contexte.quitterParLeMenu(() => void quitter());
+	// langue changée (interface, ou assistant juste avant) : la barre des menus est refaite
+	contexte.surLangue(() => afficher(suivi.instantane()));
 	app.on('activate', () => void ouvrir());
 	// quitter autrement que par « Quitter Mnemo » (Dock, fermeture de la session macOS) : sans question, le service continue
 	const examenVersion = setInterval(() => void chercherVersion(), INTERVALLE_EXAMEN_VERSION_MS);

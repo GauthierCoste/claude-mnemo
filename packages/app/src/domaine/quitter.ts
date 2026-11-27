@@ -4,6 +4,7 @@
  * vivant à arrêter.
  */
 import type { SessionVue } from '@mnemo/contrat';
+import { TEXTES_FR, type TextesApp } from './langue/textes.ts';
 import type { ChoixQuitter } from './preferences.ts';
 import { sessionsActives } from './sessions.ts';
 import type { EtatVie } from './vie-service.ts';
@@ -18,22 +19,23 @@ export function suiteQuitter(choix: ChoixQuitter, vie: EtatVie): SuiteQuitter {
 	return 'demander';
 }
 
-/** Boutons de la boîte, dans l'ordre (indices de la réponse). */
-export const BOUTONS_QUITTER = ['Arrêter le service et ses sessions', 'Laisser tourner', 'Annuler'] as const;
+/** Boutons de la boîte dans une langue, dans l'ordre (indices de la réponse). */
+export function boutonsQuitter(t: TextesApp = TEXTES_FR): string[] {
+	return [t.quitter.arreter, t.quitter.laisser, t.quitter.annuler];
+}
+/** Les boutons en français. */
+export const BOUTONS_QUITTER = boutonsQuitter();
 export const BOUTON_QUITTER_DEFAUT = 1;
 export const BOUTON_QUITTER_ANNULER = 2;
-export const CASE_NE_PLUS_DEMANDER = 'Ne plus demander';
+export const CASE_NE_PLUS_DEMANDER = TEXTES_FR.quitter.nePlusDemander;
 
-export type QuestionQuitter = { message: string; detail: string };
+/** `case` : le libellé de « Ne plus demander ». */
+export type QuestionQuitter = { message: string; detail: string; boutons: string[]; case: string };
 
 /** Texte de la boîte : ce qu'arrêter le service emporte (les sessions actives). */
-export function questionQuitter(sessions: readonly SessionVue[]): QuestionQuitter {
-	const n = sessionsActives(sessions).length;
-	const sessionsTexte = n === 0 ? 'Aucune session n’est active.' : n === 1 ? 'Une session est active : elle s’arrêtera avec lui.' : `${n} sessions sont actives : elles s’arrêteront avec lui.`;
-	return {
-		message: 'Arrêter aussi le service Mnemo ?',
-		detail: `${sessionsTexte} Laissé tournant, le service les garde, et l’app s’y rattachera à sa prochaine ouverture.`,
-	};
+export function questionQuitter(sessions: readonly SessionVue[], t: TextesApp = TEXTES_FR): QuestionQuitter {
+	const q = t.quitter;
+	return { message: q.message, detail: q.detail(q.sessions(sessionsActives(sessions).length)), boutons: boutonsQuitter(t), case: q.nePlusDemander };
 }
 
 /** Suite donnée à la réponse de la boîte, et le choix à retenir (« Ne plus demander » cochée, sauf pour Annuler). */

@@ -6,6 +6,7 @@
  */
 import type { SessionVue } from '@mnemo/contrat';
 import type { EtatAgrege } from './etat.ts';
+import { TEXTES_FR, type TextesApp } from './langue/textes.ts';
 import type { PlateformeApp } from './plateforme.ts';
 import { attendReponse } from './sessions.ts';
 
@@ -47,20 +48,17 @@ export function imageIcone(etat: EtatAgrege, pas: number, plateforme: Plateforme
 	return plateforme === 'win32' ? imageWindows(nom, barreSombre) : nom;
 }
 
-const pluriel = (n: number, singulier: string, plurielle: string): string => `${n} ${n > 1 ? plurielle : singulier}`;
-
 /** Infobulle de l'icône : « Mnemo — » puis l'état en clair ; en erreur, la raison si elle est connue. */
-export function infobulle(etat: EtatAgrege, sessions: readonly SessionVue[], raison: string | null): string {
-	const attendent = sessions.filter(attendReponse).length;
-	const travaillent = sessions.filter((s) => s.etat === 'travaille').length;
-	const textes: Record<EtatAgrege, string> = {
-		arrete: 'service arrêté',
-		demarrage: 'démarrage du service…',
-		arret: 'arrêt du service…',
-		erreur: raison ?? 'le service ne répond pas',
-		attend: pluriel(attendent, 'session attend ta réponse', 'sessions attendent ta réponse'),
-		travaille: pluriel(travaillent, 'session travaille', 'sessions travaillent'),
-		repos: 'aucune session active',
+export function infobulle(etat: EtatAgrege, sessions: readonly SessionVue[], raison: string | null, t: TextesApp = TEXTES_FR): string {
+	const i = t.infobulle;
+	const textes: Record<EtatAgrege, () => string> = {
+		arrete: () => i.arrete,
+		demarrage: () => i.demarrage,
+		arret: () => i.arret,
+		erreur: () => raison ?? i.erreur,
+		attend: () => i.attend(sessions.filter(attendReponse).length),
+		travaille: () => i.travaille(sessions.filter((s) => s.etat === 'travaille').length),
+		repos: () => i.repos,
 	};
-	return `Mnemo — ${textes[etat]}`;
+	return i.ligne(textes[etat]());
 }
