@@ -708,7 +708,7 @@ aside a note Mnemo injected counts as an error for the watch above.
 - Finding a note: the magnifier at the right of « Injecté dans la session » (or `/` in the panel) opens « Chercher une
   fiche… » (find a note) just under the separator (at the top of what the session has not seen when nothing is
   injected). From two characters, a targeted search of the memory (the same search as the palette, notes only) replaces
-  the list below it (the ◆ stay above), one line per note, without %; ➤ injects it, a click on the title opens it, a note
+  the list below it (the ◆ stay above), one line per note, without %; ➤ injects it, a click on the title shows its preview, a note
   already injected is marked ◆, without ➤, and a note set aside says so. ↑/↓ move through the results; Escape empties
   the field, then closes it. The magnifier stays lit while a search has text.
 - The ranking of the last meaningful message: on the left the calibrated score in %; in « ordre seul », the uncalibrated
@@ -724,7 +724,19 @@ aside a note Mnemo injected counts as an error for the watch above.
 - Then the suggestion of the 3 sessions, « Sous le seuil (N) » (notes scored under 5 %) and « Écartées (N) ».
 
 On hover, a line offers ➤ and ✗; a note that was only read has ➤ alone, since only what Mnemo proposed can be set aside.
-A mute message shows its reason under the list. Clicking a title opens the note. The list scrolls on its own and stays
+A mute message shows its reason under the list.
+
+**Preview of a note.** Clicking the title of any line of the panel (injected, ranked, earlier, or found by the search)
+unfolds a preview under it, to judge whether the note fits without leaving the session: its type and folder, its
+summary (the text before its first section, four lines at most), its first three facts not struck out (two lines each;
+the fact the line points to comes first), and how many others it has. The title and the reason of the line, above,
+wrap instead of being cut. Under the preview, « Ouvrir la fiche » (open the note) goes to the note in Mémoire, and the
+gestures of the line move there as text buttons: « Injecter » (lit while the injection is pending; a click cancels it)
+and « Écarter ▾ ». One preview at a time; clicking the title again, or Escape, folds it back. The note is read when the
+preview opens, with a placeholder meanwhile; when it cannot be read, the preview says so and « Ouvrir la fiche »
+remains. ⌥M still opens the last injected note directly.
+
+The list scrolls on its own and stays
 anchored where the injected notes and the ranking meet. The models button of the session, at the right of the panel
 title, always shows a plain text at the left of its icon, which stays in place (no frame; the whole button opens the
 menu). At rest, dimmed: the state of the ranking, « ordre seul » (no accepted score; the reason in its tooltip),

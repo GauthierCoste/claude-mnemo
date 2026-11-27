@@ -17,6 +17,9 @@
  *   d'abord, sans % ;
  * - puis la suggestion des 3 sessions (« écartée dans 3 sessions : ne plus la suggérer ? »), « Sous le seuil (N) » et
  *   « Écartées (N) ».
+ * Un clic sur le titre d'une ligne (toutes les listes) déplie sous elle l'aperçu de la fiche (`ApercuFiche` : type, dossier,
+ * synthèse, premières informations, « Ouvrir la fiche » et les gestes de la ligne) ; un seul à la fois, Échap ou un nouveau
+ * clic le replie. Déplié, le titre et la raison passent à la ligne au lieu d'être coupés.
  * Au survol d'une ligne : ➤ « Injecter dans la session » (la fiche entière, au prochain message ; allumé jusque-là, un clic
  * l'annule) et ✗, un menu : « Pas pour cette session » (rétablie depuis « Écartées ») ou « Ne plus jamais suggérer » (rétablie
  * depuis la fiche, page Mémoire). Une fiche injectée par Mnemo a aussi ✗ : l'écarter compte comme une erreur au suivi.
@@ -26,12 +29,13 @@
  */
 import { libelleRaison, niveauEffectif, type NiveauModeles } from '@mnemo/commun';
 import type { ClassementVue, CoupureInjectionVue, EntreeServieVue, InjectionVue, LueVue, RaisonCarteVue, SuggestionEcarteeToujoursVue } from '@mnemo/contrat';
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
 import { useAServir, useEcartes, useEcarteesToujours, useModeles, useReactiverInjection, useReglages } from '../../client/hooks.ts';
 import { dernierClassement, derniereEntree, estCalibre, estEcarte, modesDInjection, pourcentage, seuilInjection, sousLeSeuil, type ModeInjection } from '../../sessions/classement.ts';
 import { cartesProposees, cartesRecentes, fichesServies, LIBELLES_MUET, titreFiche, titresConnus } from '../../sessions/servis.ts';
 import { Bouton } from '../commun/Bouton.tsx';
+import b from '../commun/Bouton.module.css';
 import { ItemMenu, MenuModeles } from '../modeles/MenuModeles.tsx';
 import sm from '../modeles/Modeles.module.css';
 import { avisModeles } from '../modeles/avis-modeles.ts';
@@ -39,6 +43,7 @@ import { ModelesSession } from '../modeles/ModelesSession.tsx';
 import { cx } from '../commun/classes.ts';
 import { useToast } from '../Toast.tsx';
 import { origineDeLaTouche } from '../../raccourcis.ts';
+import { ApercuFiche } from './ApercuFiche.tsx';
 import { BoutonLoupe, RechercheFiche, rechercheActive, type FicheTrouvee } from './RechercheFiche.tsx';
 import s from './ClassementEnDirect.module.css';
 
@@ -244,6 +249,10 @@ export function ClassementEnDirect(p: {
 	const [ecartsTrouvees, setEcartsTrouvees] = useState(0);
 	const suggestion = (p.suggestions ?? []).find((x) => !suggestionsGardees.has(`${p.session}|${x.chemin}`) && !jamais.has(x.chemin)) ?? null;
 
+	/** La ligne dont l'aperçu est déplié (`servie:`, `classee:`, `plustot:` ou `trouvee:` puis l'id) : une seule à la fois. */
+	const [apercuOuvert, setApercuOuvert] = useState<string | null>(null);
+	const idApercu = `${useId()}apercu`;
+
 	const titreSection = useRef<HTMLSpanElement>(null);
 	/** Après un écart : la ligne qui prend le focus ('' : le titre de la section). */
 	const focusApres = useRef<string | null>(null);
@@ -385,6 +394,15 @@ export function ClassementEnDirect(p: {
 	};
 	/** `/` dans le panneau (hors champ, terminal et modificateurs) ouvre la recherche ; ↑/↓ parcourent les résultats, Échap revient au champ. */
 	const clavier = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+		// Échap dans une ligne dépliée (hors d'un menu d'écart ouvert) replie son aperçu, le focus revient à son titre
+		const deplie = e.target instanceof Element ? e.target.closest<HTMLLIElement>('li[data-apercu]') : null;
+		if (e.key === 'Escape' && deplie !== null && !(e.target instanceof Element && e.target.closest('[role="menu"]'))) {
+			e.preventDefault();
+			e.stopPropagation();
+			setApercuOuvert(null);
+			deplie.querySelector<HTMLButtonElement>('button')?.focus();
+			return;
+		}
 		if (!p.modifiable) return;
 		if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && origineDeLaTouche(e.target) === 'page') {
 			e.preventDefault();
@@ -420,30 +438,49 @@ export function ClassementEnDirect(p: {
 		);
 	};
 
-	/** ➤ (sauf une fiche déjà injectée) et ✗, le menu d'écart : pour cette session, ou pour toujours. */
-	const gestes = (o: { id: string; titre: string; ecartableIci: boolean; motifIci: string; resume: string; injecter: boolean; trouvee?: boolean }): ReactNode => {
+	/**
+	 * ➤ « Injecter dans la session » : au survol de la ligne (`ligne`), ou en bouton texte dans l'aperçu déplié (`apercu`) ;
+	 * allumé tant que l'injection est demandée, un clic l'annule.
+	 */
+	const boutonInjecter = (c: string, t: string, forme: 'ligne' | 'apercu'): ReactNode => {
+		const attend = aServir.chemins.includes(c);
+		const bulle = attend ? 'Sera injectée au prochain message de la session ; cliquer pour annuler' : 'Injecter dans la session : la fiche entière, au prochain message';
+		const clic = () => void agir(() => (attend ? aServir.annuler(c) : aServir.servir(c)));
+		return forme === 'apercu' ? (
+			<Bouton petit className={s.injecterApercu} aria-pressed={attend} title={bulle} onClick={clic}>
+				Injecter
+			</Bouton>
+		) : (
+			<button type="button" className={`${s.croix} ${s.servir}`} aria-pressed={attend} aria-label={`Injecter ${t} dans la session`} title={bulle} onClick={clic}>
+				➤
+			</button>
+		);
+	};
+
+	/**
+	 * ➤ (sauf une fiche déjà injectée) et ✗, le menu d'écart : pour cette session, ou pour toujours. Au survol de la ligne
+	 * (`ligne`), ou en boutons texte, « Injecter » et « Écarter ▾ », dans l'aperçu déplié (`apercu`).
+	 */
+	const gestes = (o: { id: string; titre: string; ecartableIci: boolean; motifIci: string; resume: string; injecter: boolean; trouvee?: boolean }, forme: 'ligne' | 'apercu' = 'ligne'): ReactNode => {
 		if (!p.modifiable) return null;
 		const c = chemin(o.id);
 		const attend = aServir.chemins.includes(c);
-		return (
-			<span className={s.gestes} data-force={attend ? 'true' : undefined}>
-				{o.injecter && (
-					<button
-						type="button"
-						className={`${s.croix} ${s.servir}`}
-						aria-pressed={attend}
-						aria-label={`Injecter ${o.titre} dans la session`}
-						title={attend ? 'Sera injectée au prochain message de la session ; cliquer pour annuler' : 'Injecter dans la session : la fiche entière, au prochain message'}
-						onClick={() => void agir(() => (attend ? aServir.annuler(c) : aServir.servir(c)))}
-					>
-						➤
-					</button>
-				)}
+		const contenu = (
+			<>
+				{o.injecter && boutonInjecter(c, o.titre, forme)}
 				<MenuModeles
 					libelle={`Écarter ${o.titre}`}
 					titre="Écarter : de cette session, ou pour toujours"
-					classeBouton={s.croix ?? ''}
-					contenuBouton="✗"
+					classeBouton={forme === 'apercu' ? cx(b.bouton, b.petit) : (s.croix ?? '')}
+					contenuBouton={
+						forme === 'apercu' ? (
+							<>
+								Écarter <span aria-hidden="true">▾</span>
+							</>
+						) : (
+							'✗'
+						)
+					}
 					alignement="droite"
 					entete={
 						<>
@@ -474,9 +511,28 @@ export function ClassementEnDirect(p: {
 						</>
 					)}
 				</MenuModeles>
+			</>
+		);
+		return forme === 'apercu' ? (
+			contenu
+		) : (
+			<span className={s.gestes} data-force={attend ? 'true' : undefined}>
+				{contenu}
 			</span>
 		);
 	};
+
+	/** Le titre d'une ligne : un clic déplie (ou replie) l'aperçu de la fiche sous la ligne. */
+	const titreDeLigne = (cle: string, t: string, bulle: string): ReactNode => (
+		<button type="button" className={s.fiche} title={bulle} aria-expanded={apercuOuvert === cle} aria-controls={apercuOuvert === cle ? idApercu : undefined} onClick={() => setApercuOuvert((o) => (o === cle ? null : cle))}>
+			<i aria-hidden="true" />
+			<span className={s.titre}>{t}</span>
+		</button>
+	);
+
+	/** L'aperçu de la ligne `cle` s'il est déplié : la fiche de `id`, « Ouvrir la fiche » et `actions`. */
+	const apercu = (cle: string, id: string, t: string, actions: ReactNode): ReactNode =>
+		apercuOuvert === cle && <ApercuFiche id={idApercu} cible={id} titre={t} actions={actions} surOuvrir={() => p.surOuvrirFiche(chemin(id))} />;
 
 	const ligneInjectee = (c: string): ReactNode => {
 		const m = modes.get(c) ?? (demandees.current.has(c) ? { mode: 'main' as const, horodatageMs: derniere?.horodatageMs ?? 0 } : undefined);
@@ -484,22 +540,17 @@ export function ClassementEnDirect(p: {
 		const { libelle, bulle, auto } = modeAffiche(m, duDossier, seuil);
 		const lueMs = lueA.get(c);
 		const t = titre(c);
+		const cle = `servie:${c}`;
+		const deplie = apercuOuvert === cle;
+		const ecart = { id: c, titre: t, ecartableIci: true, motifIci: '', resume: `${libelle} – injectée par Mnemo`, injecter: false };
 		return (
-			<li key={c} ref={refFiche(c)} className={s.ligne} data-id={c} data-servie="true" data-nouvelle={marques.nouvelles.has(c) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
+			<li key={c} ref={refFiche(c)} className={s.ligne} data-id={c} data-servie="true" data-apercu={deplie ? '' : undefined} data-nouvelle={marques.nouvelles.has(c) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
 				<span className={`${s.note} ${s.injectee}`} role="img" aria-label="Injectée dans la session" title={bulle}>
 					◆
 				</span>
 				<span className={s.corps}>
-					<button
-						type="button"
-						className={s.fiche}
-						title={`${bulle}${lueMs === undefined ? '' : `, lue aussi à ${heure(lueMs)}`}\n${c}`}
-						aria-keyshortcuts={c === ordreServies[ordreServies.length - 1] ? 'Alt+M' : undefined}
-						onClick={() => p.surOuvrirFiche(c)}
-					>
-						<i aria-hidden="true" />
-						<span className={s.titre}>{t}</span>
-					</button>
+					{titreDeLigne(cle, t, `${bulle}${lueMs === undefined ? '' : `, lue aussi à ${heure(lueMs)}`}\n${c}`)}
+					{apercu(cle, c, t, auto && gestes(ecart, 'apercu'))}
 				</span>
 				{delta(c)}
 				{libelle !== null && (
@@ -507,7 +558,7 @@ export function ClassementEnDirect(p: {
 						{libelle}
 					</span>
 				)}
-				{auto && gestes({ id: c, titre: t, ecartableIci: true, motifIci: '', resume: `${libelle} – injectée par Mnemo`, injecter: false })}
+				{auto && !deplie && gestes(ecart)}
 			</li>
 		);
 	};
@@ -530,16 +581,16 @@ export function ClassementEnDirect(p: {
 		const noteBulle =
 			note !== null ? `${note} : chance que la fiche soit utile à ce message (note apprise sur les jugements)` : k.nonCalibree !== undefined ? BULLES_NON_CALIBREES[k.nonCalibree.origine] : `Rang ${k.rang} : ordre seul, sans note calibrée`;
 		const resume = `${note ?? grise ?? `rang ${k.rang}`}${raison === null ? '' : ` – ${raison}`}${k.piste ? ' – piste' : ''}`;
+		const cle = `classee:${l.id}`;
+		const deplie = apercuOuvert === cle;
+		const ecart = { id: l.id, titre: l.titre, ecartableIci: true, motifIci: '', resume, injecter: true };
 		return (
-			<li key={l.id} ref={refFiche(l.id)} className={s.ligne} data-id={l.id} data-servie="false" data-nouvelle={marques.nouvelles.has(l.id) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
+			<li key={l.id} ref={refFiche(l.id)} className={s.ligne} data-id={l.id} data-servie="false" data-apercu={deplie ? '' : undefined} data-nouvelle={marques.nouvelles.has(l.id) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
 				<span className={`${s.note} ${auDessus ? s.haute : ''} ${grise !== null ? s.nonCalibree : ''}`} title={noteBulle}>
 					{note ?? grise ?? '◇'}
 				</span>
 				<span className={s.corps}>
-					<button type="button" className={s.fiche} title={bulle} onClick={() => p.surOuvrirFiche(c)}>
-						<i aria-hidden="true" />
-						<span className={s.titre}>{l.titre}</span>
-					</button>
+					{titreDeLigne(cle, l.titre, bulle)}
 					{(attend || raison !== null || k.piste) && (
 						<span className={s.sous}>
 							{attend ? (
@@ -552,9 +603,10 @@ export function ClassementEnDirect(p: {
 							)}
 						</span>
 					)}
+					{apercu(cle, l.id, l.titre, gestes(ecart, 'apercu'))}
 				</span>
 				{delta(l.id)}
-				{gestes({ id: l.id, titre: l.titre, ecartableIci: true, motifIci: '', resume, injecter: true })}
+				{!deplie && gestes(ecart)}
 			</li>
 		);
 	};
@@ -565,8 +617,18 @@ export function ClassementEnDirect(p: {
 		const c = chemin(l.id);
 		const attend = aServir.chemins.includes(c);
 		const quoi = lue ? `lue par la session à ${heure(t.heureMs)}` : `piste du message de ${heure(t.heureMs)}`;
+		const cle = `plustot:${l.id}`;
+		const deplie = apercuOuvert === cle;
+		const ecart = {
+			id: l.id,
+			titre: l.titre,
+			ecartableIci: l.ecartable,
+			motifIci: lue ? "Indisponible : la session l'a lue d'elle-même, Mnemo ne l'a pas proposée." : 'Indisponible : proposée trop tôt dans la session pour être écartée ici.',
+			resume: quoi,
+			injecter: true,
+		};
 		return (
-			<li key={l.id} ref={refFiche(l.id)} className={s.ligne} data-id={l.id} data-servie="false" data-nouvelle={marques.nouvelles.has(l.id) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
+			<li key={l.id} ref={refFiche(l.id)} className={s.ligne} data-id={l.id} data-servie="false" data-apercu={deplie ? '' : undefined} data-nouvelle={marques.nouvelles.has(l.id) ? 'true' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
 				<span
 					className={`${s.note} ${lue ? s.lue : ''}`}
 					role={lue ? 'img' : undefined}
@@ -576,43 +638,22 @@ export function ClassementEnDirect(p: {
 					{lue ? '◈' : ''}
 				</span>
 				<span className={s.corps}>
-					<button type="button" className={s.fiche} title={`${quoi}${l.raison === undefined ? '' : ` – ${libelleRaison(l.raison)}`}\n${c}`} onClick={() => p.surOuvrirFiche(c)}>
-						<i aria-hidden="true" />
-						<span className={s.titre}>{l.titre}</span>
-					</button>
+					{titreDeLigne(cle, l.titre, `${quoi}${l.raison === undefined ? '' : ` – ${libelleRaison(l.raison)}`}\n${c}`)}
 					<span className={s.sous}>{attend ? <span className={s.attend}>injectée au prochain message</span> : quoi}</span>
+					{apercu(cle, l.id, l.titre, gestes(ecart, 'apercu'))}
 				</span>
 				{delta(l.id)}
-				{gestes({
-					id: l.id,
-					titre: l.titre,
-					ecartableIci: l.ecartable,
-					motifIci: lue ? "Indisponible : la session l'a lue d'elle-même, Mnemo ne l'a pas proposée." : 'Indisponible : proposée trop tôt dans la session pour être écartée ici.',
-					resume: quoi,
-					injecter: true,
-				})}
+				{!deplie && gestes(ecart)}
 			</li>
 		);
 	};
 
 	/** ➤ seul : une fiche trouvée déjà écartée s'injecte encore à la main, sans ✗ (elle l'est déjà). */
-	const gestesSansEcart = (c: string, t: string): ReactNode => {
-		const attend = aServir.chemins.includes(c);
-		return (
-			<span className={s.gestes} data-force={attend ? 'true' : undefined}>
-				<button
-					type="button"
-					className={`${s.croix} ${s.servir}`}
-					aria-pressed={attend}
-					aria-label={`Injecter ${t} dans la session`}
-					title={attend ? 'Sera injectée au prochain message de la session ; cliquer pour annuler' : 'Injecter dans la session : la fiche entière, au prochain message'}
-					onClick={() => void agir(() => (attend ? aServir.annuler(c) : aServir.servir(c)))}
-				>
-					➤
-				</button>
-			</span>
-		);
-	};
+	const gestesSansEcart = (c: string, t: string): ReactNode => (
+		<span className={s.gestes} data-force={aServir.chemins.includes(c) ? 'true' : undefined}>
+			{boutonInjecter(c, t, 'ligne')}
+		</span>
+	);
 
 	/** Une fiche trouvée par la recherche : sans % ; déjà injectée, ◆ et pas de ➤ ; écartée, dit, sans ✗. */
 	const ligneTrouvee = (f: FicheTrouvee): ReactNode => {
@@ -623,30 +664,30 @@ export function ClassementEnDirect(p: {
 		const jamaisSuggeree = jamais.has(c);
 		const ecarteeIci = !jamaisSuggeree && estEcarte(c, idsEcartes);
 		const quoi = injectee ? 'déjà injectée dans la session' : attend ? null : jamaisSuggeree ? 'plus jamais suggérée' : ecarteeIci ? 'écartée de cette session' : 'trouvée par la recherche';
+		const cle = `trouvee:${c}`;
+		const deplie = apercuOuvert === cle;
+		const ecart = {
+			id: c,
+			titre: t,
+			ecartableIci: classees.some((l) => chemin(l.id) === c),
+			motifIci: "Indisponible : trouvée par la recherche, Mnemo ne l'a pas proposée à ce message.",
+			resume: 'trouvée par la recherche',
+			injecter: true,
+			trouvee: true,
+		};
+		const sansEcart = jamaisSuggeree || ecarteeIci;
+		const actions = injectee || !p.modifiable ? null : sansEcart ? boutonInjecter(c, t, 'apercu') : gestes(ecart, 'apercu');
 		return (
-			<li key={`trouvee:${c}`} className={s.ligne} data-id={c} data-trouvee="true" data-servie={injectee ? 'true' : 'false'} style={{ '--c': p.couleur(c) } as CSSProperties}>
+			<li key={cle} className={s.ligne} data-id={c} data-trouvee="true" data-servie={injectee ? 'true' : 'false'} data-apercu={deplie ? '' : undefined} style={{ '--c': p.couleur(c) } as CSSProperties}>
 				<span className={`${s.note} ${s.injectee}`} role={injectee ? 'img' : undefined} aria-label={injectee ? 'Injectée dans la session' : undefined} title={injectee ? 'Déjà injectée dans la session' : undefined}>
 					{injectee ? '◆' : ''}
 				</span>
 				<span className={s.corps}>
-					<button type="button" className={s.fiche} title={`${injectee ? 'Déjà injectée dans la session' : 'Trouvée par la recherche'}\n${c}`} onClick={() => p.surOuvrirFiche(c)}>
-						<i aria-hidden="true" />
-						<span className={s.titre}>{t}</span>
-					</button>
+					{titreDeLigne(cle, t, `${injectee ? 'Déjà injectée dans la session' : 'Trouvée par la recherche'}\n${c}`)}
 					<span className={s.sous}>{quoi === null ? <span className={s.attend}>injectée au prochain message</span> : quoi}</span>
+					{apercu(cle, c, t, actions)}
 				</span>
-				{!injectee &&
-					(jamaisSuggeree || ecarteeIci
-						? gestesSansEcart(c, t)
-						: gestes({
-						id: c,
-						titre: t,
-						ecartableIci: classees.some((l) => chemin(l.id) === c),
-						motifIci: "Indisponible : trouvée par la recherche, Mnemo ne l'a pas proposée à ce message.",
-						resume: 'trouvée par la recherche',
-						injecter: true,
-						trouvee: true,
-					}))}
+				{!injectee && !deplie && (sansEcart ? gestesSansEcart(c, t) : gestes(ecart))}
 			</li>
 		);
 	};

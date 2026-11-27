@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import type { EtapeCalcul } from '@mnemo/commun';
-import type { ClassementVue, CoupureInjectionVue, EcarteVue, EcarteeToujoursVue, EntreeServieVue, EtatModelesVue, InjectionVue, LueVue, SuggestionEcarteeToujoursVue, TrouveRechercheVue } from '@mnemo/contrat';
+import type { ClassementVue, CoupureInjectionVue, EcarteVue, EcarteeToujoursVue, EntreeServieVue, EtatModelesVue, FicheVue, InjectionVue, LueVue, SuggestionEcarteeToujoursVue, TrouveRechercheVue } from '@mnemo/contrat';
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -62,6 +62,38 @@ type Options = {
 	reactiver?: () => unknown;
 };
 
+/** Delta : une synthèse avec un lien, quatre informations dont une barrée et une catégorisée. */
+const CORPS_DELTA = [
+	'# Delta',
+	'',
+	'Module de facturation, voir [[projets/alpha/Export.md|l’export]] et **les règles**.',
+	'',
+	'## Informations',
+	'- [montant] Le forfait est de 1 200 € | declare | src: utilisateur ^f-0001',
+	'- ~~Ancienne règle~~ | declare ^f-0002',
+	'- Le dépôt se fait chaque lundi | observe ^f-0003',
+	'- La TVA est à 20 % ^f-0004',
+	'- Les avoirs passent par la comptabilité ^f-0005',
+	'',
+	'## Relations',
+	'- precise [[Alpha]]',
+].join('\n');
+
+const ficheVue = (chemin: string, titre: string, corps: string): FicheVue => ({
+	chemin,
+	titre,
+	type: 'module',
+	proprietes: [['type', 'module']],
+	corps,
+	brut: corps,
+	empreinte: 'e',
+	liens: { sortants: [], entrants: [] },
+	sessions: [],
+	sessionsTotal: 0,
+	avertissements: [],
+	projet: null,
+});
+
 /** Le composant, avec des entrées qu'on remplace comme le ferait un nouveau `servi`. */
 /** La vue et l'onglet de Mémoire, lus par les tests qui naviguent. */
 function Ou() {
@@ -97,6 +129,12 @@ function monter(o: Options = {}) {
 			return { ecarteesToujours: toujours };
 		},
 		'/api/injection-automatique': o.reactiver ?? { coupures: [] },
+		'/api/memoire/fiche': (params: Record<string, string> | undefined) => {
+			const c = params?.['chemin'] ?? '';
+			if (c === 'e.md') throw new ErreurApi('Fiche illisible', 500);
+			if (c === 'z.md') return ficheVue(c, 'Zêta', '# Zêta\n');
+			return ficheVue(c, 'Delta', CORPS_DELTA);
+		},
 		'/api/recherche': (params: Record<string, string> | undefined) => {
 			if (params?.['q'] === 'panne') throw new ErreurApi('Service injoignable', 500);
 			return { trouves: params?.['q'] === 'zeta' ? TROUVES_ZETA : [], avis: {} };
@@ -566,10 +604,90 @@ describe('ClassementEnDirect : classement vivant', () => {
 		expect(sous.textContent).toContain('3 %');
 	});
 
-	it('clic sur une ligne : ouvre sa fiche', async () => {
-		const { ouvrir } = monter();
-		await act(async () => within(lignes()[3]!).getByRole('button', { name: 'Delta' }).click());
+	it('clic sur un titre : déplie l’aperçu sous la ligne (type, dossier, synthèse, premières informations), « Ouvrir la fiche » ouvre la fiche', async () => {
+		const { ouvrir, faux } = monter();
+		await act(async () => {});
+		const delta = lignes()[3]!;
+		const titre = within(delta).getByRole('button', { name: 'Delta' });
+		expect(titre.getAttribute('aria-expanded')).toBe('false');
+		expect(titre.getAttribute('aria-controls')).toBeNull();
+		await act(async () => titre.click());
+		expect(ouvrir).not.toHaveBeenCalled();
+		expect(titre.getAttribute('aria-expanded')).toBe('true');
+		const apercu = within(delta).getByRole('region', { name: 'Aperçu de Delta' });
+		expect(titre.getAttribute('aria-controls')).toBe(apercu.id);
+		expect(faux.api.lire).toHaveBeenCalledWith('/api/memoire/fiche', { chemin: 'd.md' });
+		await within(apercu).findByText(/Module de facturation/u);
+		expect(apercu.textContent).toContain('module');
+		expect(apercu.textContent).toContain('racine de la mémoire');
+		// texte brut : un lien devient son alias, le gras perd ses marques
+		expect(within(apercu).getByText('Module de facturation, voir l’export et les règles.')).toBeTruthy();
+		// les trois premières informations non barrées, la catégorie en tête ; les autres comptées
+		const infos = within(within(apercu).getByRole('list', { name: 'Premières informations' })).getAllByRole('listitem');
+		expect(infos.map((i) => i.textContent)).toEqual(['montantLe forfait est de 1 200 €', 'Le dépôt se fait chaque lundi', 'La TVA est à 20 %']);
+		expect(apercu.textContent).toContain('+ 1 information');
+		expect(apercu.textContent).not.toContain('Ancienne règle');
+		// les gestes de la ligne passent dans l'aperçu
+		expect(within(apercu).getByRole('button', { name: 'Injecter' })).toBeTruthy();
+		expect(within(apercu).getByRole('button', { name: 'Écarter Delta' })).toBeTruthy();
+		expect(within(delta).queryByRole('button', { name: 'Injecter Delta dans la session' })).toBeNull();
+		await act(async () => within(apercu).getByRole('button', { name: 'Ouvrir la fiche' }).click());
 		expect(ouvrir).toHaveBeenCalledWith('d.md');
+	});
+
+	it('aperçu : squelette pendant la lecture, erreur dite ; « Injecter » de l’aperçu demande l’injection', async () => {
+		let repondre!: () => void;
+		const { faux } = monter();
+		await act(async () => {});
+		const lire = faux.api.lire.getMockImplementation()!;
+		faux.api.lire.mockImplementation((chemin: string, params?: Record<string, string>) =>
+			chemin === '/api/memoire/fiche' && params?.['chemin'] === 'b.md' ? new Promise((r) => (repondre = () => r(lire(chemin, params)))) : lire(chemin, params),
+		);
+		const beta = lignes()[2]!;
+		await act(async () => within(beta).getByRole('button', { name: 'Bêta' }).click());
+		const apercu = within(beta).getByRole('region', { name: 'Aperçu de Bêta' });
+		expect(within(apercu).getByRole('status', { name: 'Lecture de la fiche…' })).toBeTruthy();
+		await act(async () => repondre());
+		expect(within(apercu).queryByRole('status')).toBeNull();
+		await act(async () => within(apercu).getByRole('button', { name: 'Injecter' }).click());
+		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions/s1/a-servir', { chemin: 'b.md' });
+		expect(within(apercu).getByRole('button', { name: 'Injecter' }).getAttribute('aria-pressed')).toBe('true');
+		// une fiche illisible : l'aperçu le dit, « Ouvrir la fiche » reste
+		const epsilon = lignes().find((l) => l.dataset['id'] === 'e.md')!;
+		await act(async () => within(epsilon).getByRole('button', { name: 'Epsilon' }).click());
+		const autre = within(epsilon).getByRole('region', { name: 'Aperçu de Epsilon' });
+		expect(await within(autre).findByText('Aperçu indisponible : Fiche illisible')).toBeTruthy();
+		expect(within(autre).getByRole('button', { name: 'Ouvrir la fiche' })).toBeTruthy();
+	});
+
+	it('un seul aperçu à la fois ; re-clic ou Échap le replie, le focus revient au titre', async () => {
+		monter();
+		await act(async () => {});
+		const beta = () => within(liste()).getByRole('button', { name: 'Bêta' });
+		const delta = () => within(liste()).getByRole('button', { name: 'Delta' });
+		await act(async () => beta().click());
+		await act(async () => delta().click());
+		expect(beta().getAttribute('aria-expanded')).toBe('false');
+		expect(screen.getAllByRole('region', { name: /^Aperçu de/u })).toHaveLength(1);
+		await act(async () => delta().click());
+		expect(screen.queryByRole('region', { name: /^Aperçu de/u })).toBeNull();
+		await act(async () => delta().click());
+		const ouvrirLaFiche = await screen.findByRole('button', { name: 'Ouvrir la fiche' });
+		ouvrirLaFiche.focus();
+		await act(async () => fireEvent.keyDown(ouvrirLaFiche, { key: 'Escape' }));
+		expect(screen.queryByRole('region', { name: /^Aperçu de/u })).toBeNull();
+		expect(document.activeElement).toBe(delta());
+		expect(delta().getAttribute('aria-expanded')).toBe('false');
+	});
+
+	it('aperçu d’une fiche injectée à la main : « Ouvrir la fiche » seul, sans geste ; session terminée : sans geste non plus', async () => {
+		monter({ modifiable: false });
+		await act(async () => {});
+		await act(async () => within(lignes()[0]!).getByRole('button', { name: 'Alpha' }).click());
+		const apercu = screen.getByRole('region', { name: 'Aperçu de Alpha' });
+		await within(apercu).findByText(/Module de facturation/u);
+		expect(apercu.textContent).toContain('projets/alpha');
+		expect(within(apercu).getAllByRole('button').map((b) => b.textContent)).toEqual(['Ouvrir la fiche']);
 	});
 
 	it('calcul sans le sens, modèles arrêtés : une ligne et « Démarrer » ; avec le sens : rien', async () => {
@@ -694,7 +812,7 @@ describe('ClassementEnDirect : recherche ciblée de fiche', () => {
 		expect(champ().closest('li')!.dataset['perimees']).toBeUndefined();
 	});
 
-	it('➤ sur un résultat injecte la fiche ; un clic sur le titre l’ouvre', async () => {
+	it('➤ sur un résultat injecte la fiche ; un clic sur le titre déplie son aperçu, « Ouvrir la fiche » l’ouvre', async () => {
 		const { faux, ouvrir: ouvrirFiche } = monter();
 		await act(async () => {});
 		await ouvrir();
@@ -704,6 +822,14 @@ describe('ClassementEnDirect : recherche ciblée de fiche', () => {
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions/s1/a-servir', { chemin: 'z.md' });
 		expect(await screen.findByText('injectée au prochain message')).toBeTruthy();
 		await act(async () => screen.getByText('Zêta').click());
+		const apercu = screen.getByRole('region', { name: 'Aperçu de Zêta' });
+		expect(await within(apercu).findByText('Ni synthèse ni information.')).toBeTruthy();
+		// Échap dans l'aperçu le replie (le champ de recherche ne prend pas le focus)
+		await act(async () => fireEvent.keyDown(within(apercu).getByRole('button', { name: 'Ouvrir la fiche' }), { key: 'Escape' }));
+		expect(screen.queryByRole('region', { name: 'Aperçu de Zêta' })).toBeNull();
+		expect(document.activeElement).toBe(screen.getByText('Zêta').closest('button'));
+		await act(async () => screen.getByText('Zêta').click());
+		await act(async () => screen.getByRole('button', { name: 'Ouvrir la fiche' }).click());
 		expect(ouvrirFiche).toHaveBeenCalledWith('z.md');
 	});
 
