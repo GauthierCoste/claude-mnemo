@@ -125,8 +125,8 @@ export function PanneauContexte(p: {
 			/>
 			<div className={s.actions}>
 				{actif && (
-					<Bouton petit disabled={enCours} onClick={() => void agir('pause')} {...bloque}>
-						Mettre en pause
+					<Bouton petit disabled={enCours} onClick={() => void agir('pause')} title="Mettre la session en pause" {...bloque}>
+						Pause
 					</Bouton>
 				)}
 				{x.etat === 'en_pause' && (
@@ -139,9 +139,9 @@ export function PanneauContexte(p: {
 						petit
 						disabled={enCours || x.bilanDemandeMs !== null}
 						onClick={() => void agir('bilan')}
-						{...(x.bilanDemandeMs !== null ? { title: 'Bilan demandé' } : bloque)}
+						{...(x.bilanDemandeMs !== null ? { title: 'Bilan demandé' } : { title: 'Terminer la session avec un bilan', ...bloque })}
 					>
-						Terminer avec bilan
+						Bilan
 					</Bouton>
 				)}
 				{x.etat === 'a_relire' && (
@@ -160,7 +160,7 @@ export function PanneauContexte(p: {
 							</Bouton>
 						</span>
 					) : (
-						<Bouton petit disabled={enCours} onClick={() => setConfirmation(x.id)}>
+						<Bouton petit disabled={enCours} onClick={() => setConfirmation(x.id)} title="Abandonner la session, sans bilan">
 							Abandonner
 						</Bouton>
 					))}

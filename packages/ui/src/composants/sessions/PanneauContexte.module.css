@@ -67,6 +67,11 @@
 	gap: 6px;
 }
 
+/* des libellés courts, jamais coupés : un bouton passe à la ligne entier, pas son texte */
+.actions button {
+	white-space: nowrap;
+}
+
 .danger {
 	color: var(--red);
 	border-color: color-mix(in srgb, var(--red) 45%, transparent);

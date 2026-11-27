@@ -252,11 +252,11 @@ describe('vue Sessions', () => {
 		expect(within(contexte).getByRole('note').textContent).toBe(texte);
 	});
 
-	it('« Mettre en pause » → POST pause de la session choisie', async () => {
+	it('« Pause » → POST pause de la session choisie', async () => {
 		const faux = await monter();
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
 		expect(within(contexte).getByText('Attend une réponse')).toBeTruthy();
-		await act(async () => within(contexte).getByRole('button', { name: 'Mettre en pause' }).click());
+		await act(async () => within(contexte).getByRole('button', { name: 'Pause' }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions/s1/pause', undefined);
 	});
 
@@ -269,7 +269,7 @@ describe('vue Sessions', () => {
 		await act(async () => faux.connexion.emettre({ type: 'session', session: { ...SESSIONS[0]!, moteur: 'codex', modele: 'gpt-a', sansReprise: raison } }));
 		expect(within(contexte).getByText('Codex (gpt-a)')).toBeTruthy();
 		expect(within(carte('s1')).getByTitle('Moteur : Codex (gpt-a)').textContent).toBe('Codex (gpt-a)');
-		const pause = within(contexte).getByRole('button', { name: 'Mettre en pause' }) as HTMLButtonElement;
+		const pause = within(contexte).getByRole('button', { name: 'Pause' }) as HTMLButtonElement;
 		expect(pause.disabled).toBe(false);
 		expect(pause.getAttribute('aria-disabled')).toBe('true');
 		const note = document.getElementById(pause.getAttribute('aria-describedby')!)!;
@@ -278,7 +278,7 @@ describe('vue Sessions', () => {
 		expect(document.activeElement).toBe(pause);
 		await act(async () => pause.click());
 		expect(faux.api.envoyer).not.toHaveBeenCalled();
-		expect(within(contexte).getByRole('button', { name: 'Terminer avec bilan' }).getAttribute('aria-disabled')).toBe('true');
+		expect(within(contexte).getByRole('button', { name: 'Bilan' }).getAttribute('aria-disabled')).toBe('true');
 		expect(within(contexte).getByRole('button', { name: 'Abandonner' }).getAttribute('aria-disabled')).toBeNull();
 		await act(async () => within(carte('s1')).getByRole('button', { name: 'Fermer la session' }).click());
 		const bilan = within(carte('s1')).getByRole('menuitem', { name: /^Terminer avec bilan/u }) as HTMLButtonElement;
@@ -363,21 +363,18 @@ describe('vue Sessions', () => {
 		expect(screen.getByText('consignes / Tests.md')).toBeTruthy();
 	});
 
-	it('barre des états : un avatar par agent en cours (l’archiviste compris), juste à gauche des bascules ; clic → sa session la plus urgente, ou le tiroir de l’archiviste', async () => {
+	it('barre des états : un avatar par agent en cours (sans l’archiviste, montré sur son bouton), juste à gauche des bascules ; clic → sa session la plus urgente', async () => {
 		await monter();
 		const rangee = await screen.findByRole('list', { name: 'Agents en cours' });
-		const [travail, archiviste] = within(rangee).getAllByRole('button') as [HTMLElement, HTMLElement];
+		const agents = within(rangee).getAllByRole('button');
+		expect(agents).toHaveLength(1);
+		const travail = agents[0]!;
 		expect(travail.getAttribute('aria-label')).toBe('travail : 4 sessions, 1 travaille, 1 attend une réponse, 2 au repos');
-		expect(archiviste.getAttribute('aria-label')).toBe('archiviste : 1 session, 1 travaille');
 		expect(rangee.nextElementSibling).toBe(screen.getByRole('switch', { name: 'Dossier' }).closest('label') ?? screen.getByRole('switch', { name: 'Dossier' }));
 		await act(async () => within(ligneDossier('api')).getByRole('button', { name: /^api/ }).click());
 		expect(screen.getByLabelText('terminal s3').getAttribute('data-actif')).toBe('true');
 		await act(async () => travail.click());
 		expect(screen.getByLabelText('terminal s1').getAttribute('data-actif')).toBe('true');
-		const tiroir = document.querySelector<HTMLElement>('aside[data-ouvert][aria-label="Archiviste"]')!;
-		expect(tiroir.getAttribute('data-ouvert')).toBe('false');
-		await act(async () => archiviste.click());
-		expect(tiroir.getAttribute('data-ouvert')).toBe('true');
 	});
 
 	it('panneau Dossier : puce git, clic sur un dossier → sa première session choisie', async () => {
@@ -1041,12 +1038,12 @@ describe('vue Sessions', () => {
 		expect(within(panneau()).getByRole('button', { name: /^A/ })).toBeTruthy();
 	});
 
-	it('session en pause : « Reprendre » et « Terminer avec bilan »', async () => {
+	it('session en pause : « Reprendre » et « Bilan »', async () => {
 		const faux = await monter({ '/api/sessions/s3/bilan': { statut: 'ok' } });
 		await act(async () => within(screen.getByRole('complementary', { name: 'Dossier' })).getByRole('button', { name: /api/ }).click());
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
 		expect(within(contexte).getByRole('button', { name: 'Reprendre' })).toBeTruthy();
-		await act(async () => within(contexte).getByRole('button', { name: 'Terminer avec bilan' }).click());
+		await act(async () => within(contexte).getByRole('button', { name: 'Bilan' }).click());
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions/s3/bilan', undefined);
 	});
 });
