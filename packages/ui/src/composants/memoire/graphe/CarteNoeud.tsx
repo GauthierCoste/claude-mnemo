@@ -4,7 +4,8 @@
  */
 import type { ReactNode } from 'react';
 import { useFiche } from '../../../client/hooks.ts';
-import { ETATS, LIEN_CASSE, RACINE, type Noeud } from '../../../graphe/donnees.ts';
+import { nomDEtat, type Noeud } from '../../../graphe/donnees.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
 import { DePlus, useToutPour } from '../../commun/DePlus.tsx';
 import s from './CarteNoeud.module.css';
@@ -41,24 +42,27 @@ export function CarteNoeud(p: {
 	surOuvrir(noeud: Noeud): void;
 	surChoisir(noeud: Noeud): void;
 }): ReactNode {
+	const textes = useTextes();
+	const t = textes.memoire.graphe.carte;
+	const tg = textes.memoire.graphe;
 	const { noeud } = p;
 	const liensVus = useToutPour(noeud);
 	const fiche = useFiche(noeud?.chemin && !noeud.fantome ? noeud.chemin : null, false);
 	if (!noeud) {
 		return (
-			<aside className={s.carte} aria-label="Fiche choisie" onWheel={(e) => e.stopPropagation()}>
-				<span className={s.lbl}>Fiche</span>
-				<p className={s.mu}>Un clic sur un point montre la fiche.</p>
+			<aside className={s.carte} aria-label={t.titre} onWheel={(e) => e.stopPropagation()}>
+				<span className={s.lbl}>{t.fiche}</span>
+				<p className={s.mu}>{t.vide}</p>
 			</aside>
 		);
 	}
-	const chemin = noeud.fantome ? LIEN_CASSE : noeud.branche === '' ? RACINE : noeud.branche.split('/').join(' / ');
-	const synthese = noeud.fantome ? 'Fiche citée mais absente de la mémoire.' : fiche.donnees?.chemin === noeud.chemin ? syntheseDe(fiche.donnees.corps) : '';
+	const chemin = noeud.fantome ? tg.legende.lienCasse : noeud.branche === '' ? tg.legende.racine : noeud.branche.split('/').join(' / ');
+	const synthese = noeud.fantome ? t.absente : fiche.donnees?.chemin === noeud.chemin ? syntheseDe(fiche.donnees.corps) : '';
 	const relies = [...p.relies].sort((a, b) => a.titre.localeCompare(b.titre));
-	const etats = noeud.etats.map((etat) => ETATS[etat]?.libelle ?? etat);
+	const etats = noeud.etats.map((etat) => nomDEtat(etat, tg));
 
 	return (
-		<aside className={s.carte} aria-label="Fiche choisie" onWheel={(e) => e.stopPropagation()}>
+		<aside className={s.carte} aria-label={t.titre} onWheel={(e) => e.stopPropagation()}>
 			<span className={s.lbl} style={{ color: noeud.couleur }}>
 				{chemin}
 			</span>
@@ -66,20 +70,20 @@ export function CarteNoeud(p: {
 			{synthese && <p className={s.mu}>{synthese}</p>}
 			{etats.length > 0 && <p className={s.etats}>{etats.join(', ')}</p>}
 			<div className={s.outils}>
-				<select aria-label="Voisinage" value={p.profondeur} onChange={(e) => p.surProfondeur(Number(e.target.value))}>
-					<option value={1}>Liens directs</option>
-					<option value={2}>Jusqu'à 2 liens</option>
-					<option value={3}>Jusqu'à 3 liens</option>
+				<select aria-label={t.voisinage} value={p.profondeur} onChange={(e) => p.surProfondeur(Number(e.target.value))}>
+					<option value={1}>{t.liensDirects}</option>
+					<option value={2}>{t.jusquA(2)}</option>
+					<option value={3}>{t.jusquA(3)}</option>
 				</select>
 				<Bouton petit onClick={p.surCentrer}>
-					Centrer
+					{t.centrer}
 				</Bouton>
-				<Bouton petit onClick={p.surFermer} aria-label="Fermer la fiche">
-					Fermer
+				<Bouton petit onClick={p.surFermer} aria-label={t.fermerFiche}>
+					{textes.commun.actions.fermer}
 				</Bouton>
 			</div>
 			<div className={s.sec}>
-				<span className={s.lbl}>{`Relié à (${relies.length})`}</span>
+				<span className={s.lbl}>{t.reliesA(relies.length)}</span>
 				<div className={s.liste}>
 					{relies.slice(0, liensVus.tout ? relies.length : LIENS_AFFICHES).map((autre) => (
 						<button key={autre.id} type="button" className={s.ml} onClick={() => p.surChoisir(autre)}>
@@ -93,7 +97,7 @@ export function CarteNoeud(p: {
 			{!noeud.fantome && noeud.chemin && (
 				<div className={s.sec}>
 					<Bouton genre="primaire" petit onClick={() => p.surOuvrir(noeud)}>
-						Ouvrir la fiche
+						{t.ouvrir}
 					</Bouton>
 				</div>
 			)}

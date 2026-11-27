@@ -12,6 +12,7 @@ import {
 	construireLegende,
 	correspondAuxFiltres,
 	cranDeDensite,
+	nomDeRelation,
 	dansLaBranche,
 	DENSITES_ETIQUETTES,
 	filtrerParTitre,
@@ -34,6 +35,8 @@ import {
 } from '../../../graphe/donnees.ts';
 import { brancheContenant, brancheDeDepart, depasseLePlafond, PLAFOND_FICHES } from '../../../graphe/plafond.ts';
 import { creerSceneGraphe, type SceneGraphe } from '../../../graphe/scene.ts';
+import { useTextes } from '../../../langue/langue.tsx';
+import type { Textes } from '../../../langue/textes.ts';
 import { useSurAction } from '../../../navigation.tsx';
 import { origineDeLaTouche } from '../../../raccourcis.ts';
 import { useNavigationMemoire } from '../navigation-memoire.tsx';
@@ -46,7 +49,6 @@ import type { FiltresRecherche, Recherche } from './RechercheGraphe.tsx';
 export const CLE_DENSITE = 'mnemo.graphe.densite';
 /** Attente de la recherche par mots après la dernière frappe. */
 export const DELAI_RECHERCHE_MS = 300;
-export const MESSAGE_WEBGL = 'La vue 3D demande WebGL, indisponible dans ce navigateur.';
 
 function lireDensite(): number {
 	try {
@@ -69,6 +71,10 @@ function toucheLibre(e: KeyboardEvent): boolean {
 const AUCUN_FILTRE: FiltresRecherche = { etat: '', categorie: '', liens: '' };
 
 export function Graphe3D(p: { visible: boolean }): ReactNode {
+	const t = useTextes().memoire.graphe;
+	// lu par la bulle des liens, posée une fois avec la scène
+	const textesCourants = useRef(t);
+	textesCourants.current = t;
 	const memoire = useNavigationMemoire();
 	const donnees = useGraphe();
 	const vue = useRef<HTMLDivElement>(null);
@@ -77,7 +83,8 @@ export function Graphe3D(p: { visible: boolean }): ReactNode {
 	const saisie = useRef<HTMLInputElement>(null);
 
 	const [scene, setScene] = useState<SceneGraphe | null>(null);
-	const [panne, setPanne] = useState<string | null>(null);
+	/** `webgl` : WebGL absent (le message suit la langue) ; sinon le message d'un jeton de couleur illisible. */
+	const [panne, setPanne] = useState<'webgl' | { message: string } | null>(null);
 	const [couleurs, setCouleurs] = useState<CouleursGraphe | null>(null);
 	const [graphe, setGraphe] = useState<GraphePrepare | null>(null);
 
@@ -111,7 +118,7 @@ export function Graphe3D(p: { visible: boolean }): ReactNode {
 		try {
 			lues = lireCouleursGraphe(getComputedStyle(document.documentElement));
 		} catch (erreur) {
-			setPanne(erreur instanceof Error ? erreur.message : String(erreur));
+			setPanne({ message: erreur instanceof Error ? erreur.message : String(erreur) });
 			return;
 		}
 		let creee: SceneGraphe;
@@ -123,14 +130,14 @@ export function Graphe3D(p: { visible: boolean }): ReactNode {
 				mouvementReduit,
 				rappels: {
 					survol: (n) => rappels.current.survol(n),
-					lienSurvole: (lien, x, y) => montrerLien(bulle.current, lien, x, y),
+					lienSurvole: (lien, x, y) => montrerLien(bulle.current, lien, x, y, textesCourants.current),
 					clic: (n) => rappels.current.clic(n),
 					doubleClic: (n) => rappels.current.doubleClic(n),
 					epingles: setEpingles,
 				},
 			});
 		} catch {
-			setPanne(MESSAGE_WEBGL);
+			setPanne('webgl');
 			return;
 		}
 		setPanne(null);
@@ -190,7 +197,14 @@ export function Graphe3D(p: { visible: boolean }): ReactNode {
 	const lecture = useMemo(() => {
 		if (!graphe) return null;
 		const parLesNotions: Choix = { legende: new Set(), notions: choix.notions };
-		const legende = construireLegende(graphe.noeuds, modeCouleur, Date.now(), graphe.couleurs, (noeud) => dansLaBranche(noeud, branche) && retenueParLesChoix(noeud, parLesNotions));
+		const legende = construireLegende(
+			graphe.noeuds,
+			modeCouleur,
+			Date.now(),
+			graphe.couleurs,
+			(noeud) => dansLaBranche(noeud, branche) && retenueParLesChoix(noeud, parLesNotions),
+			t,
+		);
 		for (const noeud of graphe.noeuds) {
 			if (noeud.notion) continue;
 			noeud.taille = tailleDuNoeud(noeud, modeTaille);
@@ -207,7 +221,7 @@ export function Graphe3D(p: { visible: boolean }): ReactNode {
 		const liensVisibles = liensSuivis.filter((lien) => lien.type === 'personnalise');
 		const parentesVisibles = liensSuivis.filter((lien) => lien.type === 'parente');
 		return { legende, liensSuivis, liensVisibles, parentesVisibles };
-	}, [graphe, modeCouleur, modeTaille, branche, liensCasses, typesCoches, choix, relationsMasquees]);
+	}, [graphe, modeCouleur, modeTaille, branche, liensCasses, typesCoches, choix, relationsMasquees, t]);
 
 	// « Relié à » : les liens des types cochés, filtres et branche mis à part (une fiche d'une autre branche y reste).
 	const relies = useMemo(() => (graphe && selection ? voisinsDirects(selection, liensDesTypes(graphe, typesCoches)) : []), [graphe, selection, typesCoches]);
@@ -288,9 +302,9 @@ export function Graphe3D(p: { visible: boolean }): ReactNode {
 		const dans = new Set(simules);
 		const liens = [...graphe.liens, ...graphe.parentes].filter((lien) => dans.has(lien.source) && dans.has(lien.cible));
 		const racines = [...new Set(simules.filter((noeud) => !noeud.fantome).map((noeud) => noeud.racine))].sort();
-		const axe = cibler(simules, disposition, { racines, notions: graphe.notions.map((notion) => notion.notionId!) });
+		const axe = cibler(simules, disposition, { racines, notions: graphe.notions.map((notion) => notion.notionId!), textes: t.axe });
 		scene.disposer(creerSimulation(simules, liens, disposition), axe, !relecture || disposition === 'temps');
-	}, [scene, graphe, disposition, brancheSimulee]);
+	}, [scene, graphe, disposition, brancheSimulee, t]);
 
 	// --- Densité, rotation (coupée quand l'onglet est caché) ---
 	useEffect(() => {
@@ -398,19 +412,19 @@ export function Graphe3D(p: { visible: boolean }): ReactNode {
 	});
 
 	const nombreDeFiches = graphe?.compteurs.fiches ?? 0;
-	const avis = grande
-		? `Mémoire de ${nombreDeFiches.toLocaleString('fr-FR')} fiches : le graphe montre une branche à la fois (2 500 fiches au plus).` +
-			(graphe && depasseLePlafond(graphe.branches, branche) ? ' Aucune branche ne tient sous ce plafond : celle-ci reste grande.' : '')
-		: null;
+	const avis = grande ? t.grandeMemoire(nombreDeFiches, graphe !== null && depasseLePlafond(graphe.branches, branche)) : null;
 	const message =
-		panne ??
-		(graphe
-			? nombreDeFiches === 0
-				? 'La mémoire ne contient encore aucune fiche.'
-				: null
-			: donnees.erreur
-				? `Le graphe n'a pas pu être lu : ${donnees.erreur}`
-				: 'Lecture de la mémoire…');
+		panne === 'webgl'
+			? t.webgl
+			: panne !== null
+				? panne.message
+				: graphe
+					? nombreDeFiches === 0
+						? t.vide
+						: null
+					: donnees.erreur
+						? t.illisible(donnees.erreur)
+						: t.lecture;
 
 	return (
 		<div className={s.graphe}>
@@ -489,19 +503,19 @@ export function Graphe3D(p: { visible: boolean }): ReactNode {
 					/>
 				</>
 			)}
-			<p className={s.aide}>glisser pour tourner | molette pour zoomer | clic pour choisir | glisser un point pour le déplacer</p>
+			<p className={s.aide}>{t.aide}</p>
 		</div>
 	);
 }
 
 /** Bulle d'un lien survolé, écrite directement (elle suit le pointeur à chaque image). */
-function montrerLien(bulle: HTMLParagraphElement | null, lien: LienNoeud | null, x: number, y: number): void {
+function montrerLien(bulle: HTMLParagraphElement | null, lien: LienNoeud | null, x: number, y: number, t: Textes['memoire']['graphe']): void {
 	if (!bulle) return;
 	if (!lien) {
 		bulle.hidden = true;
 		return;
 	}
-	const texte = `${lien.source.titre} : ${lien.relation} → ${lien.cible.titre}`;
+	const texte = t.bulleLien(lien.source.titre, lien.relation === null ? '' : nomDeRelation(lien.relation, t), lien.cible.titre);
 	if (bulle.textContent !== texte) bulle.textContent = texte;
 	bulle.style.transform = `translate(${Math.round(x + 12)}px, ${Math.round(y + 12)}px)`;
 	bulle.hidden = false;

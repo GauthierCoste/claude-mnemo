@@ -7,6 +7,10 @@ import type { FicheGraphe, LienGraphe } from '@mnemo/contrat';
 import { plier } from '@mnemo/commun';
 import type { CouleursGraphe } from './couleurs.ts';
 import { rangsDesBranches } from './branches.ts';
+import { TEXTES, type Textes } from '../langue/textes.ts';
+
+/** Textes du graphe (légende, états, types de lien) ; le français par défaut pour un appelant sans langue. */
+export type TextesGraphe = Textes['memoire']['graphe'];
 
 /** Une notion du sens ; Mnemo n'en envoie jamais. */
 export type NotionGraphe = { id: string; nom: string; mots?: string[]; faits?: number; fiches?: number };
@@ -23,7 +27,6 @@ export type EntreeGraphe = {
 /** Types de lien que l'utilisateur choisit de voir et de suivre : la parenté de l'arbre, les liens `[[…]]` écrits dans les fiches. */
 export const TYPES_DE_LIEN = ['parente', 'personnalise'] as const;
 export type TypeDeLien = (typeof TYPES_DE_LIEN)[number];
-export const LIBELLES_TYPES_DE_LIEN: Record<TypeDeLien, string> = { parente: 'Parenté', personnalise: 'Lien personnalisé' };
 
 /** `notion` : fiche vers une notion de ses faits, jamais choisi ni suivi dans Mnemo. */
 export type LienNoeud = { id: number; type: TypeDeLien | 'notion'; source: Noeud; cible: Noeud; relation: string | null; casse?: boolean; faits?: number };
@@ -91,24 +94,33 @@ export type GraphePrepare = {
 	couleurs: CouleursGraphe;
 };
 
-export const ETATS: Record<string, { libelle: string }> = {
-	a_confirmer: { libelle: 'À confirmer' },
-	a_reprendre: { libelle: 'À reprendre' },
-	illisible: { libelle: 'Illisible' },
-};
+/** États mémoire connus d'une fiche, dans l'ordre de la légende et du filtre. */
+export const ETATS = ['a_confirmer', 'a_reprendre', 'illisible'] as const;
+export type EtatMemoire = (typeof ETATS)[number];
+const estEtatConnu = (etat: string): etat is EtatMemoire => (ETATS as readonly string[]).includes(etat);
 
-export const LIEN_CASSE = 'Lien cassé';
-export const SANS_NOTION = 'Sans notion';
-export const NOTION = 'Notion';
-export const SANS_REMARQUE = 'Sans remarque';
-export const SANS_DATE = 'Sans date de validité';
+/** Nom d'un état mémoire ; un état inconnu tel quel. */
+export const nomDEtat = (etat: string, t: TextesGraphe = TEXTES.fr.memoire.graphe): string => (estEtatConnu(etat) ? t.etats[etat] : etat);
+
+// Clés des catégories de légende réservées : entre crochets, elles ne se confondent pas avec un chemin de branche.
+export const LIEN_CASSE = '[lien-casse]';
+export const SANS_NOTION = '[sans-notion]';
+export const NOTION = '[notion]';
+export const SANS_REMARQUE = '[sans-remarque]';
+export const SANS_DATE = '[sans-date]';
+export const RACINE = '[racine]';
+const cleDEtat = (etat: EtatMemoire): string => `[etat:${etat}]`;
+/** Relation d'un lien écrit dans une information, sans relation nommée (une clé : `nomDeRelation` l'affiche). */
 export const RELATION_DANS_UN_FAIT = 'cité dans une information';
-export const RACINE = 'Racine du coffre';
+
+/** Nom affiché d'une relation : celle d'une information traduite, les autres (données de la mémoire) telles quelles. */
+export const nomDeRelation = (relation: string, t: TextesGraphe = TEXTES.fr.memoire.graphe): string => (relation === RELATION_DANS_UN_FAIT ? t.relationDansUnFait : relation);
 
 export type ModeCouleur = 'branche' | 'sousdossier' | 'etat' | 'periode' | 'notion';
 export type ModeTaille = 'relations' | 'faits' | 'uniforme';
 
-export type Densite = { nom: string; maximum: number; chevauchements: boolean };
+/** `nom` : clé du cran (son nom affiché : `t.memoire.graphe.densites`). */
+export type Densite = { nom: 'Aucune' | 'Peu' | 'Normale' | 'Beaucoup' | 'Toutes'; maximum: number; chevauchements: boolean };
 
 // Crans de densité des étiquettes ; « Toutes » ne masque plus les étiquettes qui se chevauchent.
 export const DENSITES_ETIQUETTES: Densite[] = [
@@ -131,12 +143,15 @@ export function cranDeDensite(valeur: unknown): number {
 const JOUR_MS = 86400000;
 // Périodes de validité (or, accent, confirmation, information) ; leurs couleurs sont prises dans la palette des branches
 // au même rang.
-const PERIODES: { libelle: string; rangCouleur: number }[] = [
-	{ libelle: "Valide à partir d'une date à venir", rangCouleur: 1 },
-	{ libelle: "Moins d'un an", rangCouleur: 0 },
-	{ libelle: '1 à 3 ans', rangCouleur: 2 },
-	{ libelle: 'Plus de 3 ans', rangCouleur: 4 },
-];
+type Periode = 'avenir' | 'moinsDUnAn' | 'unATroisAns' | 'plusDeTroisAns';
+const PERIODES: { periode: Periode; cle: string; rangCouleur: number }[] = (
+	[
+		['avenir', 1],
+		['moinsDUnAn', 0],
+		['unATroisAns', 2],
+		['plusDeTroisAns', 4],
+	] as const
+).map(([periode, rangCouleur]) => ({ periode, cle: `[periode:${periode}]`, rangCouleur }));
 
 const couleurDeRang = (couleurs: CouleursGraphe, rang: number): string => couleurs.branches[rang % couleurs.branches.length] ?? couleurs.texteSecondaire;
 
@@ -370,8 +385,8 @@ function periode(noeud: Noeud, maintenant: number): string {
 	const date = dateMediane(noeud);
 	if (date === null) return SANS_DATE;
 	const jours = (maintenant - date) / JOUR_MS;
-	if (jours < 0) return PERIODES[0]!.libelle;
-	return jours < 365 ? PERIODES[1]!.libelle : jours < 3 * 365 ? PERIODES[2]!.libelle : PERIODES[3]!.libelle;
+	if (jours < 0) return PERIODES[0]!.cle;
+	return jours < 365 ? PERIODES[1]!.cle : jours < 3 * 365 ? PERIODES[2]!.cle : PERIODES[3]!.cle;
 }
 
 /**
@@ -382,7 +397,10 @@ export function categorieDeLegende(noeud: Noeud, mode: string, maintenant: numbe
 	if (noeud.fantome) return LIEN_CASSE;
 	if (noeud.notion) return NOTION;
 	if (mode === 'notion') return noeud.notionPrincipale?.cle ?? SANS_NOTION;
-	if (mode === 'etat') return ETATS[noeud.etats[0] ?? '']?.libelle ?? SANS_REMARQUE;
+	if (mode === 'etat') {
+		const etat = noeud.etats[0];
+		return etat !== undefined && estEtatConnu(etat) ? cleDEtat(etat) : SANS_REMARQUE;
+	}
 	if (mode === 'periode') return periode(noeud, maintenant);
 	if (mode === 'sousdossier') return noeud.branche || RACINE;
 	return noeud.racine || RACINE;
@@ -449,12 +467,27 @@ export function couleursDesBranches(noeuds: Noeud[], couleurs: CouleursGraphe, n
 function couleurDeLegende(nom: string, parNom: Map<string, string>, couleurs: CouleursGraphe): string {
 	const connue = parNom.get(nom);
 	if (connue) return connue;
-	for (const [etat, { libelle }] of Object.entries(ETATS)) if (libelle === nom && couleurs.etats[etat]) return couleurs.etats[etat];
-	for (const entree of PERIODES) if (entree.libelle === nom) return couleurDeRang(couleurs, entree.rangCouleur);
+	for (const etat of ETATS) if (cleDEtat(etat) === nom && couleurs.etats[etat]) return couleurs.etats[etat];
+	for (const entree of PERIODES) if (entree.cle === nom) return couleurDeRang(couleurs, entree.rangCouleur);
 	return nom === LIEN_CASSE ? couleurs.discret : couleurs.texteSecondaire;
 }
 
 export type EntreeLegende = { cle: string; nom: string; nombre: number; couleur: string };
+
+/** Nom affiché d'une catégorie de légende : une clé réservée traduite, sinon la clé (chemin de branche). */
+export function nomDeLegende(cle: string, t: TextesGraphe = TEXTES.fr.memoire.graphe): string {
+	const reservees: Record<string, string> = {
+		[LIEN_CASSE]: t.legende.lienCasse,
+		[NOTION]: t.legende.notion,
+		[SANS_NOTION]: t.legende.sansNotion,
+		[SANS_REMARQUE]: t.legende.sansRemarque,
+		[SANS_DATE]: t.legende.sansDate,
+		[RACINE]: t.legende.racine,
+	};
+	for (const etat of ETATS) reservees[cleDEtat(etat)] = t.etats[etat];
+	for (const entree of PERIODES) reservees[entree.cle] = t.legende.periodes[entree.periode];
+	return reservees[cle] ?? cle;
+}
 
 /**
  * Légende du mode de couleur, dans l'ordre de ses catégories : chaque nœud reçoit `legende` (clé de sa catégorie) et
@@ -467,6 +500,7 @@ export function construireLegende(
 	maintenant: number,
 	couleurs: CouleursGraphe,
 	retenue: (noeud: Noeud) => boolean = () => true,
+	textes: TextesGraphe = TEXTES.fr.memoire.graphe,
 ): EntreeLegende[] {
 	const nombres = new Map<string, number>();
 	const notions = noeuds.filter((noeud) => noeud.notion);
@@ -484,15 +518,15 @@ export function construireLegende(
 	}
 	const ordre =
 		mode === 'etat'
-			? [...new Set(Object.values(ETATS).map((etat) => etat.libelle)), SANS_REMARQUE]
+			? [...ETATS.map(cleDEtat), SANS_REMARQUE]
 			: mode === 'periode'
-				? [...PERIODES.map((entree) => entree.libelle), SANS_DATE]
+				? [...PERIODES.map((entree) => entree.cle), SANS_DATE]
 				: mode === 'notion'
 					? [...notions.map((notion) => notion.cle!), SANS_NOTION]
 					: [...parNom.keys()];
 	const cles = [...ordre.filter((cle) => nombres.has(cle)), ...[...nombres.keys()].filter((cle) => !ordre.includes(cle))];
 
-	return cles.map((cle) => ({ cle, nom: noms.get(cle) ?? cle, nombre: nombres.get(cle)!, couleur: couleurDeLegende(cle, parNom, couleurs) }));
+	return cles.map((cle) => ({ cle, nom: noms.get(cle) ?? nomDeLegende(cle, textes), nombre: nombres.get(cle)!, couleur: couleurDeLegende(cle, parNom, couleurs) }));
 }
 
 /**

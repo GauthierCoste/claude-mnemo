@@ -321,7 +321,7 @@ export function creerSceneGraphe({
 			etiquette.hidden = false;
 		}
 		if (axe && donneesAxe) {
-			const graduations = [...donneesAxe.graduations, { z: donneesAxe.planSansDate, texte: 'Sans date' }];
+			const graduations = [...donneesAxe.graduations, { z: donneesAxe.planSansDate, texte: donneesAxe.sansDate }];
 			for (const graduation of graduations) {
 				if (!projeter(14, axe.position.y, graduation.z, projete)) continue;
 				const etiquette = etiquetteDeRang(rang++);

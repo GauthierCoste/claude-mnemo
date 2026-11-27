@@ -2,6 +2,7 @@
  * Disposition du graphe de la mémoire, sans three.js : simulation de forces en 3D, calculée par tranches puis arrêtée.
  * Les positions de départ dépendent du chemin de chaque fiche : la même mémoire donne la même figure à chaque visite.
  */
+import { TEXTES, type Textes } from '../langue/textes.ts';
 import { cleDuNoeud, dateMediane, type Noeud } from './donnees.ts';
 
 export const DISPOSITIONS = ['forces', 'constellations', 'notions', 'temps'] as const;
@@ -16,7 +17,11 @@ const DISTANCE_MAXIMALE_REPULSION = 700;
 const PLAN_SANS_DATE = 1.35;
 const JOUR_MS = 86400000;
 
-export type AxeDuTemps = { longueur: number; planSansDate: number; graduations: { z: number; texte: string }[] };
+/** `sansDate` : l'étiquette du plan des fiches sans date. */
+export type AxeDuTemps = { longueur: number; planSansDate: number; sansDate: string; graduations: { z: number; texte: string }[] };
+
+/** Textes de l'axe du temps : graduation « mois année » (UTC) et plan sans date. */
+export type TextesAxe = Textes['memoire']['graphe']['axe'];
 
 /** Ressort de la simulation : relation, parenté ou lien de notion. */
 export type LienSimule = { source: Noeud; cible: Noeud };
@@ -69,7 +74,11 @@ export function placerAuDepart(noeuds: Noeud[]): void {
  * notion (`notions`, identifiants dans leur ordre) : chaque fiche rejoint sa notion principale, une fiche sans notion
  * reste au centre.
  */
-export function cibler(noeuds: Noeud[], disposition: string, { racines = [], notions = [] }: { racines?: string[]; notions?: string[] } = {}): AxeDuTemps | null {
+export function cibler(
+	noeuds: Noeud[],
+	disposition: string,
+	{ racines = [], notions = [], textes = TEXTES.fr.memoire.graphe.axe }: { racines?: string[]; notions?: string[]; textes?: TextesAxe } = {},
+): AxeDuTemps | null {
 	const rayonConstellations = 30 * Math.cbrt(noeuds.length) + 60;
 	const longueurAxe = 52 * Math.cbrt(noeuds.length) + 40;
 	const dates = new Map<Noeud, number | null>();
@@ -130,13 +139,13 @@ export function cibler(noeuds: Noeud[], disposition: string, { racines = [], not
 	return {
 		longueur: longueurAxe,
 		planSansDate: longueurAxe * PLAN_SANS_DATE,
-		graduations: graduations(minimum, maximum, position),
+		sansDate: textes.sansDate,
+		graduations: graduations(minimum, maximum, position, textes.moisAnnee),
 	};
 }
 
-function graduations(minimum: number, maximum: number, position: (date: number) => number): { z: number; texte: string }[] {
-	const format: Intl.DateTimeFormatOptions = { month: 'short', year: 'numeric', timeZone: 'UTC' };
-	if (maximum === minimum) return [{ z: 0, texte: new Date(minimum).toLocaleDateString('fr-FR', format) }];
+function graduations(minimum: number, maximum: number, position: (date: number) => number, moisAnnee: (ms: number) => string): { z: number; texte: string }[] {
+	if (maximum === minimum) return [{ z: 0, texte: moisAnnee(minimum) }];
 	const jours = (maximum - minimum) / JOUR_MS;
 	const pasMois = jours > 3650 ? 24 : jours > 1500 ? 12 : jours > 700 ? 6 : jours > 300 ? 3 : 1;
 	const date = new Date(minimum);
@@ -145,7 +154,7 @@ function graduations(minimum: number, maximum: number, position: (date: number) 
 	date.setUTCMonth(date.getUTCMonth() + 1);
 	const resultat: { z: number; texte: string }[] = [];
 	while (date.getTime() <= maximum && resultat.length < 40) {
-		if (date.getUTCMonth() % pasMois === 0) resultat.push({ z: position(date.getTime()), texte: date.toLocaleDateString('fr-FR', format) });
+		if (date.getUTCMonth() % pasMois === 0) resultat.push({ z: position(date.getTime()), texte: moisAnnee(date.getTime()) });
 		date.setUTCMonth(date.getUTCMonth() + 1);
 	}
 	return resultat;

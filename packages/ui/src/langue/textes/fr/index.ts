@@ -3,7 +3,7 @@ import { archiviste } from './archiviste.ts';
 import { commun } from './commun.ts';
 import { coquille } from './coquille.tsx';
 import { documentation } from './documentation.ts';
-import { memoire } from './memoire.ts';
+import { memoire } from './memoire.tsx';
 import { modeles } from './modeles.ts';
 import { reglages } from './reglages.tsx';
 import { sessions } from './sessions.tsx';

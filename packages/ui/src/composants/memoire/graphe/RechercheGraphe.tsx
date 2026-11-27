@@ -4,7 +4,8 @@
  */
 import { useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import type { TrouveVue } from '@mnemo/contrat';
-import { ETATS, filtresActifs, RACINE, type Noeud } from '../../../graphe/donnees.ts';
+import { ETATS, filtresActifs, type Noeud } from '../../../graphe/donnees.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
 import { DePlus, useToutPour } from '../../commun/DePlus.tsx';
 import { cx } from '../../commun/classes.ts';
@@ -24,8 +25,6 @@ export type Recherche = {
 	erreur: string | null;
 };
 
-const nombre = (n: number) => n.toLocaleString('fr-FR');
-
 export function RechercheGraphe(p: {
 	categories: [string, number][];
 	recherche: Recherche | null;
@@ -39,6 +38,8 @@ export function RechercheGraphe(p: {
 	/** Branche choisie dans l'Arbre : un filtre de plus. */
 	branche: string;
 }): ReactNode {
+	const tg = useTextes().memoire.graphe;
+	const t = tg.recherche;
 	const [ouverte, setOuverte] = useState(false);
 	const [filtresOuverts, setFiltresOuverts] = useState(false);
 	const [actif, setActif] = useState(-1);
@@ -51,11 +52,11 @@ export function RechercheGraphe(p: {
 	let trouves = 0;
 	if (recherche) {
 		for (const noeud of recherche.parTitre.slice(0, limite)) {
-			resultats.push({ noeud, extrait: noeud.alias.length ? `alias : ${noeud.alias.join(', ')}` : (noeud.chemin ?? '') });
+			resultats.push({ noeud, extrait: noeud.alias.length ? t.alias(noeud.alias.join(', ')) : (noeud.chemin ?? '') });
 		}
 		const faits = recherche.parMots.filter(({ trouve, noeud }) => trouve.genre === 'fait' || !recherche.parTitre.includes(noeud));
 		faits.slice(0, limite).forEach(({ trouve, noeud }, rang) => {
-			resultats.push({ noeud, extrait: trouve.texte, ...(rang === 0 ? { section: 'Dans les informations et le texte des fiches' } : {}) });
+			resultats.push({ noeud, extrait: trouve.texte, ...(rang === 0 ? { section: t.dansLesInformations } : {}) });
 		});
 		trouves = recherche.parTitre.length + faits.length;
 	}
@@ -102,48 +103,48 @@ export function RechercheGraphe(p: {
 						setActif(-1);
 					}}
 					onKeyDown={clavier}
-					placeholder="Titre, alias, informations ( / )"
-					aria-label="Chercher dans la mémoire"
+					placeholder={t.indication}
+					aria-label={t.chercher}
 					aria-keyshortcuts="/"
 					autoComplete="off"
 					maxLength={500}
 				/>
 				<Bouton petit aria-expanded={filtresOuverts} onClick={() => setFiltresOuverts((o) => !o)}>
-					{nombreFiltres ? `Filtres (${nombreFiltres})` : 'Filtres'}
+					{t.filtres(nombreFiltres)}
 				</Bouton>
 			</div>
 			{filtresOuverts && (
 				<div className={s.filtres}>
 					<label className={s.champ}>
-						<span className={s.lbl}>État</span>
+						<span className={s.lbl}>{t.etat}</span>
 						<select value={p.filtres.etat} onChange={(e) => p.surFiltres({ ...p.filtres, etat: e.target.value })}>
-							<option value="">Tous les états</option>
-							{Object.entries(ETATS).map(([cle, { libelle }]) => (
-								<option key={cle} value={cle}>
-									{libelle}
+							<option value="">{t.tousLesEtats}</option>
+							{ETATS.map((etat) => (
+								<option key={etat} value={etat}>
+									{tg.etats[etat]}
 								</option>
 							))}
-							<option value="aucun">Sans remarque</option>
+							<option value="aucun">{tg.legende.sansRemarque}</option>
 						</select>
 					</label>
 					<label className={s.champ}>
-						<span className={s.lbl}>Catégorie</span>
+						<span className={s.lbl}>{t.categorie}</span>
 						<select value={p.filtres.categorie} onChange={(e) => p.surFiltres({ ...p.filtres, categorie: e.target.value })}>
-							<option value="">Toutes les catégories</option>
+							<option value="">{t.toutesLesCategories}</option>
 							{p.categories.map(([categorie, fiches]) => (
 								<option key={categorie} value={categorie}>
-									{`${categorie} (${nombre(fiches)})`}
+									{t.optionCategorie(categorie, fiches)}
 								</option>
 							))}
 						</select>
 					</label>
 					<label className={s.champ}>
-						<span className={s.lbl}>Liens</span>
+						<span className={s.lbl}>{t.liens}</span>
 						<select value={p.filtres.liens} onChange={(e) => p.surFiltres({ ...p.filtres, liens: e.target.value })}>
-							<option value="">Indifférent</option>
-							<option value="aucun">Sans relation</option>
-							<option value="nombreux">5 relations et plus</option>
-							<option value="casses">Cite une fiche absente</option>
+							<option value="">{t.indifferent}</option>
+							<option value="aucun">{t.sansRelation}</option>
+							<option value="nombreux">{t.nombreux}</option>
+							<option value="casses">{t.casses}</option>
 						</select>
 					</label>
 				</div>
@@ -151,10 +152,10 @@ export function RechercheGraphe(p: {
 			{recherche && (
 				<div className={s.etatRecherche}>
 					<span role="status">
-						{`${nombre(recherche.ordre.length)} fiche${recherche.ordre.length > 1 ? 's' : ''}${recherche.enCours ? ', recherche dans les informations…' : ''}`}
+						{t.etatRecherche(recherche.ordre.length, recherche.enCours)}
 					</span>
 					<Bouton petit onClick={effacer}>
-						Effacer
+						{t.effacer}
 					</Bouton>
 				</div>
 			)}
@@ -174,15 +175,15 @@ export function RechercheGraphe(p: {
 								<span className={s.resultatTitre}>
 									<Pastille couleur={noeud.couleur} />
 									<span>{noeud.titre}</span>
-									<span className={s.nombre}>{noeud.branche || RACINE}</span>
+									<span className={s.nombre}>{noeud.branche || tg.legende.racine}</span>
 								</span>
 								<span className={s.extrait}>{extrait}</span>
 							</button>
 						</div>
 					))}
 					<DePlus nombre={trouves - resultats.length} surToutVoir={resultatsVus.toutVoir} />
-					{recherche.erreur && <p className={cx(s.note, s.erreur)}>La recherche dans les informations n'a pas pu être faite.</p>}
-					{!recherche.erreur && resultats.length === 0 && !recherche.enCours && <p className={s.note}>Aucune fiche ne correspond.</p>}
+					{recherche.erreur && <p className={cx(s.note, s.erreur)}>{t.erreur}</p>}
+					{!recherche.erreur && resultats.length === 0 && !recherche.enCours && <p className={s.note}>{t.aucune}</p>}
 				</div>
 			)}
 		</div>
