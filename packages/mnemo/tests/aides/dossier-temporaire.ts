@@ -7,7 +7,9 @@ const crees: string[] = [];
 
 afterEach(async () => {
 	while (crees.length > 0) {
-		await rm(crees.pop() as string, { recursive: true, force: true });
+		// maxRetries : sous Windows, un fichier tenu un instant de plus (processus git qui finit, antivirus) refuse d'abord
+		// d'être supprimé (EBUSY, EPERM) ; un fichier gardé ouvert par le test échoue quand même
+		await rm(crees.pop() as string, { recursive: true, force: true, maxRetries: 5 });
 	}
 });
 

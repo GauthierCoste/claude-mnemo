@@ -122,7 +122,8 @@ describe('traiterEvenement : outil', () => {
 		lent.index.elements = () => new Promise(() => {});
 		const echeance = Date.now() + 50 + MARGE_SORTIE_MS;
 		expect(await traiterEvenement(lent, { etat, depot: DEPOT_ABSENT }, entree(bash('git push')), { ...reglages, echeance })).toEqual({ refus: texteDuRefus({ refus: true, cause: 'delai_depasse', detail: null }) });
-		expect(Date.now()).toBeGreaterThanOrEqual(echeance - MARGE_SORTIE_MS);
+		// 1 ms de tolérance : le minuteur suit l'horloge monotone, Date.now() arrondit à la milliseconde
+		expect(Date.now()).toBeGreaterThanOrEqual(echeance - MARGE_SORTIE_MS - 1);
 		// même lenteur, mémoire sans consigne vérifiée notée : accord, avec un avis pour le journal
 		await lent.indicateur.noter(false, 1);
 		expect(await traiterEvenement(lent, { etat, depot: DEPOT_ABSENT }, entree(bash('git push --force')), { ...reglages, echeance: Date.now() + 50 + MARGE_SORTIE_MS })).toEqual(reponseDe({ refus: false, cause: 'delai_depasse', detail: null }));
