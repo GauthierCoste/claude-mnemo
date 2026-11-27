@@ -9,6 +9,7 @@
  * l'étiquette ensemble (`--atomic`). La poussée de l'étiquette lance `.github/workflows/release.yml`, qui construit le
  * `.dmg` et l'installeur Windows et crée la release.
  *
+ * Les tests tournent avec `CI=1`, comme dans la CI : les sondes qui peuvent abattre le processus de test y sont sautées.
  * `--essai` : les vérifications seulement, sans tests, sans rien écrire ni pousser.
  * Une erreur arrête tout ; après le commit, rien n'est défait automatiquement : le message dit quoi faire.
  */
@@ -31,10 +32,10 @@ function git(...args: string[]): string {
 	return execFileSync('git', args, { cwd: RACINE, encoding: 'utf8' }).trim();
 }
 
-function lancer(commande: string, args: string[]): void {
+function lancer(commande: string, args: string[], env: NodeJS.ProcessEnv = process.env): void {
 	console.log(`\n$ ${commande} ${args.join(' ')}`);
 	try {
-		execFileSync(commande, args, { cwd: RACINE, stdio: 'inherit' });
+		execFileSync(commande, args, { cwd: RACINE, stdio: 'inherit', env });
 	} catch {
 		sortir(`« ${commande} ${args.join(' ')} » a échoué.`);
 	}
@@ -89,7 +90,9 @@ function principal(): void {
 		return;
 	}
 	lancer('pnpm', ['verifier']);
-	lancer('pnpm', ['test']);
+	// Tests dans les conditions de la CI (`CI=1`) : les sondes de mémoire d'extraction-isolee, que V8 peut faire tomber avec
+	// tout le processus, y sont sautées, comme dans release.yml (voir le risque dans decisions.md).
+	lancer('pnpm', ['test'], { ...process.env, CI: '1' });
 	monter(actuelle, nouvelle);
 	try {
 		execFileSync('pnpm', ['verifier-publication'], { cwd: RACINE, stdio: 'inherit' });
