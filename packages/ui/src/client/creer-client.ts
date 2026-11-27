@@ -3,10 +3,18 @@
  * pour l'API, sous-protocole `mnemo.jeton.<jeton>` pour le WebSocket (jamais dans une adresse).
  */
 import { PREFIXE_JETON_WS, PROTOCOLE_WS, ROUTES } from '@mnemo/contrat';
+import { estLangue, type Langue } from '@mnemo/commun';
+import { TEXTES } from '../langue/textes.ts';
 import { creerApi } from './api.ts';
 import { creerConnexion } from './connexion.ts';
 import type { Client } from './contexte.tsx';
 import { oublierJeton } from './jeton.ts';
+
+/** Langue montrée par l'interface : `LangueFournie` la pose sur `<html lang>` ; le français hors navigateur. */
+function langueMontree(): Langue {
+	const lang = typeof document === 'undefined' ? undefined : document.documentElement.lang;
+	return estLangue(lang) ? lang : 'fr';
+}
 
 export function creerClientReel(o: {
 	jeton: string;
@@ -27,7 +35,7 @@ export function creerClientReel(o: {
 		for (const f of [...refus]) f();
 	};
 
-	const api = creerApi({ base: '', jeton: o.jeton, fetch: o.fetch, surJetonRefuse: signalerRefus });
+	const api = creerApi({ base: '', jeton: o.jeton, fetch: o.fetch, surJetonRefuse: signalerRefus, textes: () => TEXTES[langueMontree()].coquille.client });
 	const ws = new URL(ROUTES.ws, o.origine);
 	ws.protocol = ws.protocol === 'https:' ? 'wss:' : 'ws:';
 

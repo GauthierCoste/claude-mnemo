@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useTextes } from '../langue/langue.tsx';
 import s from './EcranJeton.module.css';
 
 /**
@@ -6,16 +7,14 @@ import s from './EcranJeton.module.css';
  * jamais de nouvelle tentative, jamais le jeton à l'écran.
  */
 export function EcranJeton(): ReactNode {
+	const t = useTextes();
 	return (
 		<div className={s.ecran}>
 			<div className={s.carte} role="alert">
 				<div className={s.marque}>
 					mnemo<b>_</b>
 				</div>
-				<p>
-					Jeton absent ou périmé. Ouvrir une fois l'adresse avec jeton affichée par <code>mnemo</code> (ou par <code>mnemo jeton</code>) dans le
-					terminal : ce navigateur sera reconnu, l'adresse sans jeton suffira ensuite.
-				</p>
+				<p>{t.coquille.ecranJeton(<code>mnemo</code>, <code>mnemo jeton</code>)}</p>
 			</div>
 		</div>
 	);

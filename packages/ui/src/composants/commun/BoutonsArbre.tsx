@@ -4,6 +4,7 @@
  * par l'arbre (`pliageArbre`) et annoncés selon la plateforme.
  */
 import type { ReactNode } from 'react';
+import { useTextes } from '../../langue/langue.tsx';
 import { raccourciAlt, toucheCommande } from '../../raccourcis.ts';
 import s from './BoutonsArbre.module.css';
 
@@ -31,14 +32,15 @@ function Cible(): ReactNode {
 
 export function BoutonsArbre(p: { surReplier(): void; surDeplier(): void; localiser?: { possible: boolean; surLocaliser(): void } }): ReactNode {
 	const { libelle: affiche, aria: touche } = toucheCommande();
+	const t = useTextes().coquille.arbre;
 	return (
 		<span className={s.boutons}>
 			{p.localiser && (
 				<button
 					type="button"
 					className={s.bouton}
-					title={`Localiser la fiche ouverte (${raccourciAlt('L')})`}
-					aria-label="Localiser la fiche ouverte"
+					title={t.localiserBulle(raccourciAlt('L'))}
+					aria-label={t.localiser}
 					aria-keyshortcuts="Alt+L"
 					disabled={!p.localiser.possible}
 					onClick={p.localiser.surLocaliser}
@@ -46,10 +48,10 @@ export function BoutonsArbre(p: { surReplier(): void; surDeplier(): void; locali
 					<Cible />
 				</button>
 			)}
-			<button type="button" className={s.bouton} title={`Tout replier (${affiche}-)`} aria-label="Tout replier" aria-keyshortcuts={`${touche}+-`} onClick={p.surReplier}>
+			<button type="button" className={s.bouton} title={t.toutReplierBulle(`${affiche}-`)} aria-label={t.toutReplier} aria-keyshortcuts={`${touche}+-`} onClick={p.surReplier}>
 				<Chevrons vers="dedans" />
 			</button>
-			<button type="button" className={s.bouton} title={`Tout déplier (${affiche}+)`} aria-label="Tout déplier" aria-keyshortcuts={`${touche}+=`} onClick={p.surDeplier}>
+			<button type="button" className={s.bouton} title={t.toutDeplierBulle(`${affiche}+`)} aria-label={t.toutDeplier} aria-keyshortcuts={`${touche}+=`} onClick={p.surDeplier}>
 				<Chevrons vers="dehors" />
 			</button>
 		</span>

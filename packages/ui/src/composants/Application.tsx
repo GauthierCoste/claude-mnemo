@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import type { EtatConnexion } from '../client/connexion.ts';
 import { FournisseurClient, useClient, type Client } from '../client/contexte.tsx';
 import { useGraphe, useReglages, useSante, useSessions } from '../client/hooks.ts';
-import { LangueFournie } from '../langue/langue.tsx';
+import { LangueFournie, useTextes } from '../langue/langue.tsx';
 import { useAFaire } from '../memoire/a-faire.ts';
 import { FournisseurNavigation, useNavigation, type OngletMemoire, type Vue } from '../navigation.tsx';
 import { appliquerAccent } from '../reglages/accent.ts';
@@ -128,6 +128,7 @@ function Coquille(p: { depart: Depart | undefined; session: string | null }): Re
 	const depart = p.depart;
 	const client = useClient();
 	const nav = useNavigation();
+	const t = useTextes();
 	// La vue Mémoire reste montée après sa première ouverture : le graphe garde ses positions.
 	const [memoireOuverte, setMemoireOuverte] = useState(nav.vue === 'memoire');
 	if (nav.vue === 'memoire' && !memoireOuverte) setMemoireOuverte(true);
@@ -163,7 +164,7 @@ function Coquille(p: { depart: Depart | undefined; session: string | null }): Re
 			<div className={s.corps}>
 				<Navigation vue={nav.vue} pastilles={pastilles} surChoix={nav.aller} />
 				{/* Sessions reste montée (terminaux, zoom et poids gardés) ; Mémoire après sa première ouverture. */}
-				<main className={s.vue} aria-label={TITRES[nav.vue]} data-vue={nav.vue}>
+				<main className={s.vue} aria-label={t.coquille.vues[nav.vue]} data-vue={nav.vue}>
 					<Sessions visible={nav.vue === 'sessions'} {...(depart?.zoom ? { zoomInitial: depart.zoom } : {})} />
 					{memoireOuverte && (
 						<Memoire
@@ -181,5 +182,3 @@ function Coquille(p: { depart: Depart | undefined; session: string | null }): Re
 		</div>
 	);
 }
-
-const TITRES: Record<Vue, string> = { sessions: 'Sessions', memoire: 'Mémoire', reglages: 'Réglages' };

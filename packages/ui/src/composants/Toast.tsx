@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useTextes } from '../langue/langue.tsx';
 import { cx } from './commun/classes.ts';
 import s from './Toast.module.css';
 
@@ -27,6 +28,7 @@ export function FournisseurToast(p: { children: ReactNode }): ReactNode {
 	const [persistants, setPersistants] = useState<Persistant[]>([]);
 	const minuteur = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const suivante = useRef(0);
+	const t = useTextes().coquille.toast;
 
 	const afficher = useCallback<Afficher>((m, genre = 'information') => {
 		const duree = dureeAffichage(genre);
@@ -54,12 +56,12 @@ export function FournisseurToast(p: { children: ReactNode }): ReactNode {
 	return (
 		<ContexteToast.Provider value={afficher}>
 			{p.children}
-			<ul className={s.pile} aria-label="Avertissements" aria-live="polite">
+			<ul className={s.pile} aria-label={t.avertissements} aria-live="polite">
 				{persistants.map((x) => (
 					<li key={x.cle} className={s.avertissement}>
 						<span>{x.message}</span>
 						{x.nombre > 1 && <span className={s.nombre}>{`×${x.nombre}`}</span>}
-						<button type="button" className={s.fermer} aria-label="Fermer l’avertissement" onClick={() => fermer(x.cle)}>
+						<button type="button" className={s.fermer} aria-label={t.fermerAvertissement} onClick={() => fermer(x.cle)}>
 							×
 						</button>
 					</li>

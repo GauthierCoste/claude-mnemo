@@ -4,6 +4,7 @@
  */
 import type { TrouveRechercheVue } from '@mnemo/contrat';
 import { plier } from '@mnemo/commun';
+import { TEXTES, type Textes } from '../langue/textes.ts';
 import { estDocument } from './resultats.ts';
 
 export type Segment = { texte: string; surligne: boolean };
@@ -14,9 +15,9 @@ const AVANT_EXTRAIT = 40;
 const SEPARATEUR_CONTEXTE = ' › ';
 
 /** Libellé du genre d'un résultat (lu aussi par les lecteurs d'écran). */
-export function libelleGenre(t: Pick<TrouveRechercheVue, 'genre' | 'chemin' | 'typeFiche'>): string {
-	if (estDocument(t.typeFiche)) return t.genre === 'fiche' ? 'Document' : 'Passage de document';
-	return { fiche: 'Fiche', fait: 'Information', consigne: 'Consigne', passage: 'Passage' }[t.genre];
+export function libelleGenre(t: Pick<TrouveRechercheVue, 'genre' | 'chemin' | 'typeFiche'>, genres: Textes['coquille']['palette']['genres'] = TEXTES.fr.coquille.palette.genres): string {
+	if (estDocument(t.typeFiche)) return t.genre === 'fiche' ? genres.document : genres.passageDocument;
+	return genres[t.genre];
 }
 
 /** Titre de la fiche du résultat : sa première ligne pour une fiche, sinon le titre tiré du contexte, ou le nom du fichier. */
@@ -35,9 +36,9 @@ export function corpsDe(t: Pick<TrouveRechercheVue, 'genre' | 'texte'>): string 
 const nomDe = (chemin: string) => chemin.replace(/\.md$/u, '').split('/').pop() ?? chemin;
 
 /** Dossier de la fiche, court : « racine », ou les deux derniers dossiers précédés de « …/ » au-delà de trois. */
-export function cheminCourt(chemin: string): string {
+export function cheminCourt(chemin: string, racine: string = TEXTES.fr.coquille.arbre.racine): string {
 	const dossiers = chemin.split('#')[0]!.split('/').slice(0, -1);
-	if (dossiers.length === 0) return 'racine';
+	if (dossiers.length === 0) return racine;
 	return dossiers.length > 3 ? `…/${dossiers.slice(-2).join('/')}` : dossiers.join('/');
 }
 

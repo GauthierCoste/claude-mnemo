@@ -6,6 +6,7 @@
  * terminaux attendent la fin pour se réajuster.
  */
 import { useRef, type ReactNode } from 'react';
+import { useTextes } from '../../langue/langue.tsx';
 import { cx } from './classes.ts';
 import { useGestesSeparateur } from './gestes-separateur.ts';
 import s from './Separateur.module.css';
@@ -26,6 +27,7 @@ export function Separateur(p: {
 	className?: string;
 }): ReactNode {
 	const vertical = p.orientation === 'vertical';
+	const t = useTextes();
 	const borne = (px: number) => Math.round(Math.min(p.max, Math.max(p.min, px)));
 	const depart = useRef(p.valeur);
 	const { glisse, gestes } = useGestesSeparateur({
@@ -49,7 +51,7 @@ export function Separateur(p: {
 			aria-valuemin={p.min}
 			aria-valuemax={p.max}
 			tabIndex={0}
-			title={`Glisser pour ${vertical ? 'élargir' : 'agrandir'} · double-clic : taille par défaut`}
+			title={t.coquille.partage.separateur(vertical)}
 			data-glisse={String(glisse)}
 			{...gestes}
 			onDoubleClick={p.surDefaut}

@@ -1,5 +1,6 @@
 /** Client HTTP du service : JSON, jeton en `Authorization: Bearer`, erreurs `{ erreur }` en `ErreurApi`. */
 import { ENTETE_REMPLACEMENT, ROUTES, type ReponseDepot } from '@mnemo/contrat';
+import { TEXTES, type Textes } from '../langue/textes.ts';
 
 export class ErreurApi extends Error {
 	readonly statut: number;
@@ -48,7 +49,13 @@ export function creerApi(o: {
 	surJetonRefuse: () => void;
 	/** Fabrique de requête d'envoi (dépôt) ; par défaut `new XMLHttpRequest()`. */
 	requeteEnvoi?: () => RequeteEnvoi;
+	/**
+	 * Textes des erreurs nées dans le client (service injoignable, statut sans motif), relus à chaque erreur : la langue de
+	 * l'interface peut changer après la création du client. Par défaut, le français.
+	 */
+	textes?: () => Textes['coquille']['client'];
 }): Api {
+	const textes = o.textes ?? (() => TEXTES.fr.coquille.client);
 	const onglet = crypto.randomUUID();
 	const adresse = (chemin: string, params?: Record<string, string>) => {
 		const requete = params && Object.keys(params).length > 0 ? `?${new URLSearchParams(params).toString()}` : '';
@@ -64,7 +71,7 @@ export function creerApi(o: {
 			reponse = await o.fetch(url, { ...init, headers: entetes });
 		} catch (e) {
 			if (init.signal?.aborted) throw e;
-			throw new ErreurApi('Service injoignable.', 0);
+			throw new ErreurApi(textes().injoignable, 0);
 		}
 		return interpreter<T>(reponse.status, await reponse.text(), remplacement);
 	}
@@ -82,7 +89,7 @@ export function creerApi(o: {
 			if (statut === 409 && remplacement !== undefined) throw new DOMException('Requête remplacée par une plus récente.', 'AbortError');
 			if (statut === 401) o.surJetonRefuse();
 			const motif = corps && typeof corps === 'object' && typeof (corps as { erreur?: unknown }).erreur === 'string' ? (corps as { erreur: string }).erreur : null;
-			throw new ErreurApi(motif ?? (statut === 401 ? 'Jeton refusé.' : `Erreur du service (${statut}).`), statut);
+			throw new ErreurApi(motif ?? (statut === 401 ? textes().jetonRefuse : textes().erreurService(statut)), statut);
 		}
 		return corps as T;
 	}
@@ -106,7 +113,7 @@ export function creerApi(o: {
 			// statut 0 : connexion refusée ou coupée (service arrêté, refus avant lecture du corps)
 			requete.onerror = () => {
 				finir();
-				rejeter(new ErreurApi('Service injoignable.', 0));
+				rejeter(new ErreurApi(textes().injoignable, 0));
 			};
 			requete.onload = () => {
 				finir();

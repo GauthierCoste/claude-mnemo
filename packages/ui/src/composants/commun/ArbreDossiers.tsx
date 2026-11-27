@@ -3,6 +3,8 @@ import type { GitDossierVue, SessionVue } from '@mnemo/contrat';
 import { useEffect, type ReactNode } from 'react';
 import { useGitDossier, useNiveauxDossiers, useNomRacine, useSessions } from '../../client/hooks.ts';
 import { basculer, lignesArbre, toutDeplier, toutReplier, type LigneArbre, type Pliage } from '../../dossiers/arbre.ts';
+import { useTextes } from '../../langue/langue.tsx';
+import { TEXTES, type Textes } from '../../langue/textes.ts';
 import { pliageArbre } from '../../raccourcis.ts';
 import { sessionsVisibles } from '../../sessions/groupes.ts';
 import { Point } from '../sessions/Point.tsx';
@@ -15,9 +17,9 @@ import { ChevronArbre, GuidesArbre, IconeDossier, margeArbre, RETRAIT_ARBRE } fr
  * Puce git : « branche | n modif. » ou « branche | à jour », sans branche si la tête est détachée ; rien pendant le
  * chargement ni hors dépôt. Aucune branche n'est supposée par défaut : toutes sont nommées.
  */
-export function texteGit(git: GitDossierVue | undefined): string | null {
+export function texteGit(git: GitDossierVue | undefined, t: Textes['coquille']['arbre'] = TEXTES.fr.coquille.arbre): string | null {
 	if (git === undefined || git === null) return null;
-	const etat = git.modifies === 0 ? 'à jour' : `${git.modifies} modif.`;
+	const etat = git.modifies === 0 ? t.gitAJour : t.gitModifies(git.modifies);
 	return git.branche === null ? etat : `${git.branche} | ${etat}`;
 }
 
@@ -103,7 +105,8 @@ function LigneDossier(p: {
 }): ReactNode {
 	const { ligne: l } = p;
 	const git = useGitDossier(l.dossier?.git === true && (p.choisi || p.sessions.length > 0) ? l.chemin : null);
-	const puce = texteGit(git.donnees);
+	const t = useTextes().coquille.arbre;
+	const puce = texteGit(git.donnees, t);
 	const marge = margeArbre(l.profondeur);
 	// le contenu du dossier choisi (fichiers modifiés, actions) est au niveau de ses enfants
 	const retrait = (l.profondeur + 1) * RETRAIT_ARBRE;
@@ -118,7 +121,7 @@ function LigneDossier(p: {
 						type="button"
 						className={s.replier}
 						style={{ left: marge - 22 }}
-						aria-label={`${l.deplie ? 'Replier' : 'Déplier'} ${l.chemin || l.nom}`}
+						aria-label={t.basculer(l.deplie, l.chemin || l.nom)}
 						aria-expanded={l.deplie}
 						onClick={() => p.surBasculer(l.deplie === true)}
 					>
@@ -129,7 +132,7 @@ function LigneDossier(p: {
 					<IconeDossier ouvert={ouvert} />
 					<b className={cx(!ouvert && s.ferme)}>{l.nom}</b>
 					{l.dossier?.marque === true && (
-						<span className={s.marque} title="Projet" aria-hidden="true">
+						<span className={s.marque} title={t.projet} aria-hidden="true">
 							◆
 						</span>
 					)}
@@ -140,7 +143,7 @@ function LigneDossier(p: {
 					</span>
 					<span className={s.espace} />
 					{puce && (
-						<span className={s.git} title={git.donnees ? `branche ${git.donnees.branche ?? '(détachée)'}, ${git.donnees.modifies} fichiers modifiés` : undefined}>
+						<span className={s.git} title={git.donnees ? t.gitBulle(git.donnees.branche, git.donnees.modifies) : undefined}>
 							{puce}
 						</span>
 					)}

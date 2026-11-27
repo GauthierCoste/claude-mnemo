@@ -6,6 +6,8 @@
  * Les raccourcis ⌥ ne valent pas dans un champ de saisie ni dans un terminal : sur un Mac AZERTY, ⌥( écrit `{`, ⌥7 `«`, ⌥, `…`.
  */
 
+import { TEXTES, type Textes } from './langue/textes.ts';
+
 type Plateforme = { platform?: string; userAgentData?: { platform?: string } };
 
 /** Vrai sous macOS (ou iPadOS) : `userAgentData.platform` quand le navigateur le donne, sinon `navigator.platform`. */
@@ -21,11 +23,12 @@ export function toucheCommande(mac: boolean = plateformeMac()): { libelle: strin
 
 /**
  * Libellé affiché d'un raccourci avec Alt (les raccourcis ⌥ de l'en-tête) : `⌥A`, `⌥⇧A` sous macOS ; ailleurs `Alt+A`,
- * `Alt+Maj+A`. `aria-keyshortcuts` dit déjà `Alt+…` partout.
+ * `Alt+Maj+A` (`textes` : ceux de la langue de l'appelant, le français par défaut). `aria-keyshortcuts` dit déjà `Alt+…` partout.
  */
-export function raccourciAlt(touche: string, o: { maj?: boolean; mac?: boolean } = {}): string {
+export function raccourciAlt(touche: string, o: { maj?: boolean; mac?: boolean; textes?: Textes['coquille']['raccourcis'] } = {}): string {
 	const mac = o.mac ?? plateformeMac();
-	return mac ? `⌥${o.maj === true ? '⇧' : ''}${touche}` : `Alt+${o.maj === true ? 'Maj+' : ''}${touche}`;
+	const maj = (o.textes ?? TEXTES.fr.coquille.raccourcis).maj;
+	return mac ? `⌥${o.maj === true ? '⇧' : ''}${touche}` : `Alt+${o.maj === true ? `${maj}+` : ''}${touche}`;
 }
 
 export type Action =

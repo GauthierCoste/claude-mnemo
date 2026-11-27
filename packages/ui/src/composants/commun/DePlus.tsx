@@ -1,15 +1,17 @@
 /** Sous une liste coupée : « N de plus » et « Tout voir », qui demande la liste entière. Rien quand rien n'est caché. */
 import { useState, type ReactNode } from 'react';
+import { useTextes } from '../../langue/langue.tsx';
 import { Bouton } from './Bouton.tsx';
 import s from './DePlus.module.css';
 
 export function DePlus(p: { nombre: number; surToutVoir(): void }): ReactNode {
+	const t = useTextes().coquille.partage;
 	if (p.nombre <= 0) return null;
 	return (
 		<p className={s.dePlus}>
-			<span>{p.nombre} de plus</span>
+			<span>{t.dePlus(p.nombre)}</span>
 			<Bouton petit onClick={p.surToutVoir}>
-				Tout voir
+				{t.toutVoir}
 			</Bouton>
 		</p>
 	);

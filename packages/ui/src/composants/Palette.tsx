@@ -12,6 +12,8 @@ import type { TrouveRechercheVue } from '@mnemo/contrat';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { PROFIL_ARCHIVISTE } from '@mnemo/commun';
 import { useGraphe, useModeles, useSessionsConnues } from '../client/hooks.ts';
+import { useTextes } from '../langue/langue.tsx';
+import type { Textes } from '../langue/textes.ts';
 import { useNavigation } from '../navigation.tsx';
 import { positionMenu, useRectAncre } from '../palette/ancrage.ts';
 import { cheminCourt, corpsDe, extrait, libelleGenre, surligner, titreDe, type Segment } from '../palette/presentation.ts';
@@ -38,6 +40,9 @@ export function Palette(p: { texteInitial?: string; ancre?: RefObject<HTMLElemen
 
 function PaletteOuverte(p: { texteInitial: string; surOuverture(): void; ancre: RefObject<HTMLElement | null> | undefined }): ReactNode {
 	const nav = useNavigation();
+	const textes = useTextes();
+	const t = textes.coquille.palette;
+	const racine = textes.coquille.arbre.racine;
 	const ouvrirSession = useOuvrirSession();
 	// les terminées de l'historique aussi : elles se trouvent par leur objectif, après les vivantes
 	const connues = useSessionsConnues();
@@ -129,19 +134,19 @@ function PaletteOuverte(p: { texteInitial: string; surOuverture(): void; ancre: 
 	return (
 		<>
 			<div className={s.fond} onMouseDown={() => nav.ouvrirPalette(false)} aria-hidden="true" />
-			<div className={s.palette} role="dialog" aria-modal="true" aria-label="Palette de commandes" onKeyDown={garderLeFocus}>
+			<div className={s.palette} role="dialog" aria-modal="true" aria-label={t.nom} onKeyDown={garderLeFocus}>
 				<div className={s.cadreChamp} data-champ-palette="" style={position ? px(position.champ) : undefined}>
 					<input
 						ref={champ}
 						className={s.champ}
 						type="text"
 						role="combobox"
-						aria-label="Palette"
+						aria-label={t.champ}
 						aria-expanded={resultats.length > 0}
 						aria-controls="palette-resultats"
 						aria-activedescendant={resultats.length ? `palette-${courant}` : undefined}
 						aria-autocomplete="list"
-						placeholder="Chercher une session, un fichier, une fiche..."
+						placeholder={textes.coquille.barreTitre.chercher}
 						value={q}
 						onChange={(e) => {
 							setQ(e.target.value);
@@ -161,10 +166,10 @@ function PaletteOuverte(p: { texteInitial: string; surOuverture(): void; ancre: 
 					/>
 				</div>
 				<div className={s.menu} data-menu-palette="" style={position ? px(position.menu) : undefined}>
-					<div className={s.filtres} role="group" aria-label="Filtres" onKeyDown={parcourirFiltres}>
+					<div className={s.filtres} role="group" aria-label={t.filtresNom} onKeyDown={parcourirFiltres}>
 						{FILTRES.map((f) => (
-							<button key={f.valeur} type="button" className={s.filtre} data-filtre={f.valeur} aria-pressed={filtre === f.valeur} onClick={() => choisirFiltre(f.valeur)}>
-								{f.libelle}
+							<button key={f} type="button" className={s.filtre} data-filtre={f} aria-pressed={filtre === f} onClick={() => choisirFiltre(f)}>
+								{t.filtres[f]}
 							</button>
 						))}
 						{projetDisponible && (
@@ -173,18 +178,18 @@ function PaletteOuverte(p: { texteInitial: string; surOuverture(): void; ancre: 
 								className={cx(s.filtre, s.projet)}
 								aria-pressed={ceProjet && projetUtilisable(filtre)}
 								disabled={!projetUtilisable(filtre)}
-								title={projetUtilisable(filtre) ? `${projetDisponible.projet} : ${projetDisponible.position}` : 'Sans objet avec « Documents » : les documents ne se filtrent pas par projet.'}
+								title={projetUtilisable(filtre) ? `${projetDisponible.projet} : ${projetDisponible.position}` : t.ceProjetSansObjet}
 								onClick={() => {
 									setCeProjet((c) => !c);
 									setChoisie(null);
 								}}
 							>
-								<span>Ce projet</span>
+								<span>{t.ceProjet}</span>
 								<span className={s.nomProjet}>{projetDisponible.projet}</span>
 							</button>
 						)}
 					</div>
-					<ul className={s.liste} role="listbox" id="palette-resultats" aria-label="Résultats">
+					<ul className={s.liste} role="listbox" id="palette-resultats" aria-label={t.resultats}>
 						{resultats.map((r, i) => (
 							<li
 								key={r.cle}
@@ -196,20 +201,20 @@ function PaletteOuverte(p: { texteInitial: string; surOuverture(): void; ancre: 
 								onMouseDown={(e) => e.preventDefault()}
 								onClick={() => ouvrir(r)}
 							>
-								<Ligne r={r} mots={mots} />
+								<Ligne r={r} mots={mots} t={t} racine={racine} />
 							</li>
 						))}
 					</ul>
 					<DePlus nombre={enPlus} surToutVoir={toutVoir} />
-					{rien && moteur.enCours && <p className={s.etat}>Recherche…</p>}
-					{rien && !moteur.enCours && !moteur.erreur && <p className={s.etat}>Rien ne correspond à « {texte} ».</p>}
-					{moteur.erreur && <p className={s.etat}>Recherche indisponible : {moteur.erreur}</p>}
+					{rien && moteur.enCours && <p className={s.etat}>{t.recherche}</p>}
+					{rien && !moteur.enCours && !moteur.erreur && <p className={s.etat}>{t.rien(texte)}</p>}
+					{moteur.erreur && <p className={s.etat}>{t.indisponible(moteur.erreur)}</p>}
 					{sansNotes &&
 						(demarrage === 'demarres' ? (
-							<p className={s.modeles}>Modèles démarrés : les notes viendront à la prochaine recherche.</p>
+							<p className={s.modeles}>{t.modeles.demarres}</p>
 						) : avis?.motif === 'arretes' ? (
 							<p className={s.modeles}>
-								Mots seulement : modèles arrêtés.
+								{t.modeles.arretes}
 								<button
 									type="button"
 									className={s.demarrer}
@@ -220,18 +225,18 @@ function PaletteOuverte(p: { texteInitial: string; surOuverture(): void; ancre: 
 										)
 									}
 								>
-									Démarrer les modèles
+									{t.modeles.demarrer}
 								</button>
-								{demarrage === 'echec' && ' Démarrage impossible.'}
+								{demarrage === 'echec' && t.modeles.echec}
 							</p>
 						) : avis?.motif === 'absents' ? (
-							<p className={s.modeles}>Mots seulement : modèles non installés.</p>
+							<p className={s.modeles}>{t.modeles.absents}</p>
 						) : avis?.motif === 'chargement' ? (
-							<p className={s.modeles}>Modèles en chargement : les notes viendront à la prochaine recherche.</p>
+							<p className={s.modeles}>{t.modeles.chargement}</p>
 						) : avis?.motif === 'coupes' ? (
-							<p className={s.modeles}>Mots seulement : modèles coupés.</p>
+							<p className={s.modeles}>{t.modeles.coupes}</p>
 						) : avis?.motif === 'sens' ? (
-							<p className={s.modeles}>Sans notes : sens seul, pas de reclassement.</p>
+							<p className={s.modeles}>{t.modeles.sens}</p>
 						) : null)}
 				</div>
 			</div>
@@ -241,25 +246,28 @@ function PaletteOuverte(p: { texteInitial: string; surOuverture(): void; ancre: 
 
 const px = (o: Record<string, number>): CSSProperties => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, `${v}px`]));
 
-function Ligne(p: { r: Resultat; mots: readonly string[] }): ReactNode {
+type TextesPalette = Textes['coquille']['palette'];
+
+function Ligne(p: { r: Resultat; mots: readonly string[]; t: TextesPalette; racine: string }): ReactNode {
 	const r = p.r;
-	if (r.genre === 'trouve') return <LigneTrouve t={r.trouve} rattaches={r.rattaches} mots={p.mots} />;
+	const g = p.t.genres;
+	if (r.genre === 'trouve') return <LigneTrouve t={r.trouve} rattaches={r.rattaches} mots={p.mots} textes={p.t} racine={p.racine} />;
 	if (r.genre === 'session') {
 		const x = r.session;
 		const archiviste = x.profil === PROFIL_ARCHIVISTE;
 		return (
 			<>
 				<span className={s.note} />
-				<Icone genre={archiviste ? 'archiviste' : 'session'} libelle={archiviste ? 'Archiviste' : 'Session'} />
+				<Icone genre={archiviste ? 'archiviste' : 'session'} libelle={archiviste ? g.archiviste : g.session} />
 				<span className={s.texte}>
 					<span className={s.ligne1}>
 						<Point etat={x.etat} petit />
 						<span className={s.titre}>
-							<Segments segments={surligner(x.objectif ?? `Session ${x.id.slice(0, 4)}`, p.mots)} />
+							<Segments segments={surligner(x.objectif ?? p.t.session(x.id.slice(0, 4)), p.mots)} />
 						</span>
 					</span>
 					<span className={s.ligne2}>
-						<span className={s.chemin}>{x.dossier || 'racine'}</span>
+						<span className={s.chemin}>{x.dossier || p.racine}</span>
 					</span>
 				</span>
 			</>
@@ -270,7 +278,7 @@ function Ligne(p: { r: Resultat; mots: readonly string[] }): ReactNode {
 	return (
 		<>
 			<span className={s.note} />
-			<Icone genre={document ? 'document' : 'fiche'} libelle={document ? 'Document' : 'Fiche'} />
+			<Icone genre={document ? 'document' : 'fiche'} libelle={document ? g.document : g.fiche} />
 			<span className={s.texte}>
 				<span className={s.ligne1}>
 					<span className={s.titre}>
@@ -278,23 +286,23 @@ function Ligne(p: { r: Resultat; mots: readonly string[] }): ReactNode {
 					</span>
 				</span>
 				<span className={s.ligne2}>
-					<span className={s.chemin}>{cheminCourt(f.chemin)}</span>
+					<span className={s.chemin}>{cheminCourt(f.chemin, p.racine)}</span>
 				</span>
 			</span>
 		</>
 	);
 }
 
-function LigneTrouve(p: { t: TrouveRechercheVue; rattaches: readonly TrouveRechercheVue[]; mots: readonly string[] }): ReactNode {
+function LigneTrouve(p: { t: TrouveRechercheVue; rattaches: readonly TrouveRechercheVue[]; mots: readonly string[]; textes: TextesPalette; racine: string }): ReactNode {
 	const t = p.t;
 	const note = pourcentage(t.note);
 	const morceaux = extrait(corpsDe(t), p.mots);
 	return (
 		<>
-			<span className={s.note} title={note === null ? undefined : 'Note du reranker'}>
+			<span className={s.note} title={note === null ? undefined : p.textes.noteReranker}>
 				{note}
 			</span>
-			<Icone genre={iconeDe(t)} libelle={libelleGenre(t)} />
+			<Icone genre={iconeDe(t)} libelle={libelleGenre(t, p.textes.genres)} />
 			<span className={s.texte}>
 				<span className={s.ligne1}>
 					<span className={s.titre}>
@@ -303,8 +311,8 @@ function LigneTrouve(p: { t: TrouveRechercheVue; rattaches: readonly TrouveReche
 				</span>
 				<span className={s.ligne2}>
 					<span className={s.chemin}>
-						{cheminCourt(t.chemin)}
-						{t.page != null && `, p. ${t.page}`}
+						{cheminCourt(t.chemin, p.racine)}
+						{t.page != null && p.textes.page(t.page)}
 					</span>
 					{morceaux.length > 0 && (
 						<span className={s.extrait}>
@@ -313,7 +321,7 @@ function LigneTrouve(p: { t: TrouveRechercheVue; rattaches: readonly TrouveReche
 					)}
 				</span>
 				{p.rattaches.map((x) => (
-					<SousLigne key={x.id} t={x} mots={p.mots} />
+					<SousLigne key={x.id} t={x} mots={p.mots} textes={p.textes} />
 				))}
 			</span>
 		</>
@@ -321,16 +329,16 @@ function LigneTrouve(p: { t: TrouveRechercheVue; rattaches: readonly TrouveReche
 }
 
 /** Un autre élément de la même fiche (information, passage…), sous elle : son genre, sa note, son extrait. */
-function SousLigne(p: { t: TrouveRechercheVue; mots: readonly string[] }): ReactNode {
+function SousLigne(p: { t: TrouveRechercheVue; mots: readonly string[]; textes: TextesPalette }): ReactNode {
 	const note = pourcentage(p.t.note);
 	return (
 		<span className={s.sousLigne}>
-			<Icone genre={iconeDe(p.t)} libelle={libelleGenre(p.t)} />
+			<Icone genre={iconeDe(p.t)} libelle={libelleGenre(p.t, p.textes.genres)} />
 			<span className={s.extrait}>
 				<Segments segments={extrait(corpsDe(p.t), p.mots)} />
 			</span>
 			{note !== null && (
-				<span className={s.noteSous} title="Note du reranker">
+				<span className={s.noteSous} title={p.textes.noteReranker}>
 					{note}
 				</span>
 			)}

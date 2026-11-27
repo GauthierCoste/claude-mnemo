@@ -55,6 +55,8 @@ import {
 } from '@mnemo/contrat';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { Niveau } from '../dossiers/arbre.ts';
+import { useTextes } from '../langue/langue.tsx';
+import { TEXTES } from '../langue/textes.ts';
 import { estAbandon } from './api.ts';
 import type { Client } from './contexte.tsx';
 import { useCacheRessources, useClient } from './contexte.tsx';
@@ -71,12 +73,13 @@ export function useSante(): Ressource<SanteVue> {
 }
 
 /** Nom affiché de la racine du dossier Mnemo : le dernier segment de son chemin, rendu avec le séparateur du poste (`\\` sous Windows). */
-export function nomDeRacine(racine: string): string {
-	return racine.split(/[\\/]/u).filter(Boolean).pop() ?? 'racine';
+export function nomDeRacine(racine: string, defaut: string = TEXTES.fr.coquille.arbre.racine): string {
+	return racine.split(/[\\/]/u).filter(Boolean).pop() ?? defaut;
 }
 
 export function useNomRacine(): string {
-	return nomDeRacine(useSante().donnees?.racine ?? '');
+	const t = useTextes();
+	return nomDeRacine(useSante().donnees?.racine ?? '', t.coquille.arbre.racine);
 }
 
 /** Réglages du dossier (`.mnemo/reglages.json`), lus à l'ouverture de la vue Réglages. */

@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Vue } from '../navigation.tsx';
+import { useTextes } from '../langue/langue.tsx';
+import type { Textes } from '../langue/textes.ts';
 import { cx } from './commun/classes.ts';
 import s from './Navigation.module.css';
 
@@ -27,10 +29,10 @@ const ICONES: Record<Vue, ReactNode> = {
 };
 
 /** `bas` : poussée en bas du rail (Réglages, sous les vues). */
-const VUES: { cle: Vue; libelle: string; infoPastille: string; raccourci?: string; bas?: boolean }[] = [
-	{ cle: 'sessions', libelle: 'Sessions', infoPastille: 'sessions attendent une réponse', raccourci: 'Alt+0' },
-	{ cle: 'memoire', libelle: 'Mémoire', infoPastille: 'éléments à faire (Mémoire › Archiviste)' },
-	{ cle: 'reglages', libelle: 'Réglages', infoPastille: '', raccourci: 'Alt+Comma', bas: true },
+const VUES: { cle: Vue; infoPastille?(t: Textes['coquille']['vues'], n: number): string; raccourci?: string; bas?: boolean }[] = [
+	{ cle: 'sessions', infoPastille: (t, n) => t.pastilleSessions(n), raccourci: 'Alt+0' },
+	{ cle: 'memoire', infoPastille: (t, n) => t.pastilleMemoire(n) },
+	{ cle: 'reglages', raccourci: 'Alt+Comma', bas: true },
 ];
 
 /**
@@ -38,16 +40,17 @@ const VUES: { cle: Vue; libelle: string; infoPastille: string; raccourci?: strin
  * roue dentée des Réglages en bas du rail (⌥,).
  */
 export function Navigation(p: { vue: Vue; pastilles: Partial<Record<Vue, number>>; surChoix(v: Vue): void }): ReactNode {
+	const t = useTextes().coquille.vues;
 	return (
-		<nav className={s.cote} aria-label="Vues">
+		<nav className={s.cote} aria-label={t.navigation}>
 			{VUES.map((v) => {
 				const n = p.pastilles[v.cle] ?? 0;
 				return (
 					<button key={v.cle} type="button" className={cx(s.entree, v.bas && s.bas, p.vue === v.cle && s.on)} aria-current={p.vue === v.cle ? 'page' : undefined} aria-keyshortcuts={v.raccourci} onClick={() => p.surChoix(v.cle)}>
 						{ICONES[v.cle]}
-						{v.libelle}
+						{t[v.cle]}
 						{n > 0 && (
-							<span className={s.pastille} title={`${n} ${v.infoPastille}`}>
+							<span className={s.pastille} title={v.infoPastille?.(t, n)}>
 								{n}
 							</span>
 						)}

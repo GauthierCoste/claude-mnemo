@@ -10,6 +10,8 @@ import type { IdMoteur } from '@mnemo/commun';
 import type { QuotaVue, QuotasDesMoteursVue, QuotasVue } from '@mnemo/contrat';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useQuotas } from '../client/hooks.ts';
+import { useTextes } from '../langue/langue.tsx';
+import { TEXTES, type Textes } from '../langue/textes.ts';
 import s from './Quotas.module.css';
 
 /** Seuils (pourcentage consommé) où un quota passe à l'ambre, puis au rouge. */
@@ -19,13 +21,13 @@ const CLE_DEPLIE = 'mnemo.quotas.deplie';
 /** Une fenêtre passée sa remise à zéro n'est plus connue : relu chaque minute. */
 const RAFRAICHIR_MS = 60_000;
 
+type TextesQuotas = Textes['coquille']['quotas'];
+
 const couleur = (p: number): string => (p >= SEUIL_ROUGE ? 'var(--red)' : p >= SEUIL_AMBRE ? 'var(--amber)' : 'var(--ac)');
 
 /** « 18:00 » le jour même, sinon « lun. 09:00 ». */
-export function remiseLisible(remiseMs: number, maintenant: number): string {
-	const date = new Date(remiseMs);
-	const heure = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-	return date.toDateString() === new Date(maintenant).toDateString() ? heure : `${date.toLocaleDateString('fr-FR', { weekday: 'short' })} ${heure}`;
+export function remiseLisible(remiseMs: number, maintenant: number, t: TextesQuotas = TEXTES.fr.coquille.quotas): string {
+	return new Date(remiseMs).toDateString() === new Date(maintenant).toDateString() ? t.heure(remiseMs) : t.jourHeure(remiseMs);
 }
 
 /** Les fenêtres encore valables : une fenêtre passée sa remise à zéro est retirée. */
@@ -58,10 +60,10 @@ export function abonnementsEnCours(moteurs: QuotasDesMoteursVue, maintenant: num
 }
 
 /** « Claude : 5 heures : 42 % (remise 18:00) · semaine : 61 % (remise lun. 09:00) ». */
-function detailDe(a: AbonnementEnCours, maintenant: number): string {
+function detailDe(a: AbonnementEnCours, maintenant: number, t: TextesQuotas): string {
 	const { cinqHeures, semaine } = a.quotas;
-	const fenetres = [cinqHeures && `5 heures : ${cinqHeures.pourcentage} % (remise ${remiseLisible(cinqHeures.remiseMs, maintenant)})`, semaine && `semaine : ${semaine.pourcentage} % (remise ${remiseLisible(semaine.remiseMs, maintenant)})`].filter(Boolean).join(' · ');
-	return `${a.libelle} : ${fenetres}`;
+	const fenetres = [cinqHeures && t.cinqHeures(cinqHeures.pourcentage, remiseLisible(cinqHeures.remiseMs, maintenant, t)), semaine && t.semaine(semaine.pourcentage, remiseLisible(semaine.remiseMs, maintenant, t))].filter(Boolean).join(' · ');
+	return t.detail(a.libelle, fenetres);
 }
 
 function deplieRetenu(): boolean {
@@ -90,7 +92,7 @@ function Anneau(p: { rayon: number; quota: QuotaVue | undefined }): ReactNode {
 	);
 }
 
-function Ligne(p: { nom: string; quota: QuotaVue; maintenant: number }): ReactNode {
+function Ligne(p: { nom: string; quota: QuotaVue; maintenant: number; t: TextesQuotas }): ReactNode {
 	const c = couleur(p.quota.pourcentage);
 	return (
 		<span className={s.ligne}>
@@ -98,14 +100,15 @@ function Ligne(p: { nom: string; quota: QuotaVue; maintenant: number }): ReactNo
 			<span className={s.barre}>
 				<span className={s.rempli} style={{ '--part': p.quota.pourcentage / 100, '--c': c } as CSSProperties} />
 			</span>
-			<span className={s.valeur}>{p.quota.pourcentage} %</span>
-			<span className={s.remise}>↻ {remiseLisible(p.quota.remiseMs, p.maintenant)}</span>
+			<span className={s.valeur}>{p.t.pourcentage(p.quota.pourcentage)}</span>
+			<span className={s.remise}>↻ {remiseLisible(p.quota.remiseMs, p.maintenant, p.t)}</span>
 		</span>
 	);
 }
 
 export function Quotas(): ReactNode {
 	const recus = useQuotas();
+	const t = useTextes().coquille.quotas;
 	const [maintenant, setMaintenant] = useState(() => Date.now());
 	const [deplie, setDeplie] = useState(deplieRetenu);
 	useEffect(() => {
@@ -116,21 +119,21 @@ export function Quotas(): ReactNode {
 	useEffect(() => setMaintenant(Date.now()), [recus]);
 	const abonnements = abonnementsEnCours(recus, maintenant);
 	if (abonnements.length === 0) return null;
-	const detail = abonnements.map((a) => detailDe(a, maintenant)).join(' ; ');
+	const detail = abonnements.map((a) => detailDe(a, maintenant, t)).join(t.entreAbonnements);
 	const basculer = () => {
 		setDeplie(!deplie);
 		retenirDeplie(!deplie);
 	};
 	return (
-		<button type="button" className={s.quotas} aria-expanded={deplie} aria-label={`Quotas des abonnements, ${detail}. ${deplie ? 'Replier' : 'Déplier'}`} title={`Quotas des abonnements, ${detail}`} onClick={basculer}>
+		<button type="button" className={s.quotas} aria-expanded={deplie} aria-label={t.nom(detail, deplie)} title={t.titre(detail)} onClick={basculer}>
 			<span className={s.abonnements}>
 				{abonnements.map(({ moteur, libelle, quotas: { cinqHeures, semaine } }) => (
 					<span key={moteur} className={s.abonnement} data-moteur={moteur}>
 						<span className={s.libelle}>{libelle}</span>
 						{deplie ? (
 							<span className={s.detail}>
-								{cinqHeures && <Ligne nom="5 h" quota={cinqHeures} maintenant={maintenant} />}
-								{semaine && <Ligne nom="sem." quota={semaine} maintenant={maintenant} />}
+								{cinqHeures && <Ligne nom={t.cinqHeuresCourt} quota={cinqHeures} maintenant={maintenant} t={t} />}
+								{semaine && <Ligne nom={t.semaineCourt} quota={semaine} maintenant={maintenant} t={t} />}
 							</span>
 						) : (
 							<svg className={s.anneaux} viewBox="0 0 22 22" aria-hidden="true">

@@ -7,6 +7,7 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { cx } from '../composants/commun/classes.ts';
+import { useTextes } from '../langue/langue.tsx';
 import { surChangementAccent } from '../reglages/accent.ts';
 import { actionDuRaccourci } from '../raccourcis.ts';
 import s from './Terminal.module.css';
@@ -149,6 +150,7 @@ function creerEcranXterm(element: HTMLElement, taillePolice: number): EcranXterm
 }
 
 export function Terminal(p: { session: string; actif: boolean; compact: boolean; surFocus(): void }): JSX.Element {
+	const t = useTextes();
 	const [element, setElement] = useState<HTMLDivElement | null>(null);
 	const [ecran, setEcran] = useState<EcranXterm | null>(null);
 	const police = p.compact ? POLICE_COMPACTE_PX : POLICE_PX;
@@ -188,7 +190,7 @@ export function Terminal(p: { session: string; actif: boolean; compact: boolean;
 	return (
 		<div className={cx(s.terminal, p.compact && s.compact)}>
 			<div ref={setElement} className={s.ecran} data-ecran />
-			{horsLigne && <span className={s.horsLigne}>Hors ligne</span>}
+			{horsLigne && <span className={s.horsLigne}>{t.coquille.terminal.horsLigne}</span>}
 		</div>
 	);
 }

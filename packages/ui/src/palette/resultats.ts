@@ -13,12 +13,8 @@ export const PROVISOIRES_MAX = 8;
 export const TROUVES_MAX = 12;
 
 export type Filtre = 'tout' | 'sessions' | 'fiches' | 'documents';
-export const FILTRES: readonly { valeur: Filtre; libelle: string }[] = [
-	{ valeur: 'tout', libelle: 'Tout' },
-	{ valeur: 'sessions', libelle: 'Sessions' },
-	{ valeur: 'fiches', libelle: 'Fiches' },
-	{ valeur: 'documents', libelle: 'Documents' },
-];
+/** Dans l'ordre affiché ; leurs libellés sont dans les textes (`coquille.palette.filtres`). */
+export const FILTRES: readonly Filtre[] = ['tout', 'sessions', 'fiches', 'documents'];
 
 /** Projet au premier plan (« Ce projet ») : le dossier d'épisodes des sessions, et la position de la mémoire. */
 export type Projet = ProjetVue;

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useTextes } from '../../langue/langue.tsx';
 import { Bouton } from './Bouton.tsx';
 import { cx } from './classes.ts';
 import { Separateur } from './Separateur.tsx';
@@ -37,13 +38,14 @@ export function Tiroir(p: Props): ReactNode {
 
 function TiroirReglable(p: Props & { redimension: TailleGardee }): ReactNode {
 	const r = p.redimension;
+	const t = useTextes();
 	const max = largeurMax(r.min);
 	const largeur = useTailleGardee(r, max);
 	const poignee = p.agrandi ? null : (
 		<Separateur
 			className={s.poignee}
 			orientation="vertical"
-			label={`Largeur du panneau ${p.titre}`}
+			label={t.coquille.partage.largeurPanneau(p.titre)}
 			valeur={largeur.valeur}
 			min={r.min}
 			max={max}
@@ -57,6 +59,7 @@ function TiroirReglable(p: Props & { redimension: TailleGardee }): ReactNode {
 }
 
 function Coque(p: Props & { largeur: number | null; poignee: ReactNode }): ReactNode {
+	const t = useTextes();
 	return (
 		<aside
 			className={cx(s.tiroir, p.ouvert && s.on, p.agrandi && s.agrandi)}
@@ -75,7 +78,7 @@ function Coque(p: Props & { largeur: number | null; poignee: ReactNode }): React
 				<span className={s.espace} />
 				{p.actions}
 				<Bouton genre="icone" onClick={p.surFermer} aria-keyshortcuts="Escape">
-					Fermer
+					{t.commun.actions.fermer}
 				</Bouton>
 			</div>
 			{p.children}
