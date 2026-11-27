@@ -295,7 +295,7 @@ falls back to its default with a warning, never a crash.
 | Note types whose proposed information needs confirmation (`archiviste.typesAConfirmer`; in the interface, the types the archivist writes alone are switched on) | none (all switched on) | immediately |
 | Service port (`service.port`) | 4747 | **service restart** |
 | Launcher browser (`service.navigateur`) | automatic (Chrome, then Edge, then the default browser) | next opening |
-| Main colour of the interface, `#rrggbb` (`interface.accent`): active items, links, titles, focus; the logo does not change. The text on it turns light on a dark colour | `#7df0c6` (green) | immediately |
+| Main colour of the interface, `#rrggbb` (`interface.accent`): active items, links, titles, focus and the logo (title bar, browser tab, Dock icon of the desktop app). The text on it turns light on a dark colour | `#7df0c6` (green) | immediately |
 
 Some settings of the **Mémoire** section are rules of the memory, which live in the header of `_mnemo/SCHEMA.md`
 (versioned with the memory) rather than in `.mnemo/reglages.json`: in **Recherche**, the recall threshold (`seuil_rappel`,

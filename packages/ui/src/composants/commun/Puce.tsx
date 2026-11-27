@@ -9,7 +9,7 @@ const COULEURS = {
 	a_relire: 'var(--etat-a-relire)',
 	en_pause: 'var(--etat-en-pause)',
 	terminee: 'var(--etat-terminee)',
-	accent: 'var(--vert)',
+	accent: 'var(--ac)',
 	violet: 'var(--violet)',
 	bleu: 'var(--blue)',
 	ambre: 'var(--amber)',

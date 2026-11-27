@@ -30,7 +30,9 @@ describe('Application', () => {
 		expect(titre.querySelectorAll('i')).toHaveLength(0);
 		const logo = within(titre).getByRole('img', { name: 'Mnemo' });
 		expect(titre.firstElementChild).toBe(logo);
-		expect(logo.getAttribute('src')).toMatch(/icone\.svg$/u);
+		// logo en ligne, son trait à la couleur principale : il suit le réglage `interface.accent`
+		expect(logo.tagName.toLowerCase()).toBe('svg');
+		expect(logo.querySelector('g')!.getAttribute('stroke')).toBe('var(--ac)');
 	});
 
 	it('sans jeton → écran du jeton', () => {

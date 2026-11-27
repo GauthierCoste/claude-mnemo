@@ -89,8 +89,9 @@
 	}
 }
 
+/* prêts : vert fixe, comme « En marche » du service et « prêt » d'un moteur (couleur de sens, pas la couleur principale) */
 .pret {
-	background: var(--ac);
+	background: var(--vert);
 }
 
 .veille {

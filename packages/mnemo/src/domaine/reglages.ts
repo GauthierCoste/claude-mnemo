@@ -324,7 +324,7 @@ export const CHAMPS_REGLAGES: readonly ChampReglage[] = [
 		cle: 'interface.accent',
 		groupe: 'interface',
 		libelle: 'Couleur principale de l’interface',
-		explication: 'Couleur des éléments actifs, des liens, des titres et du focus ; le logo ne change pas.',
+		explication: 'Couleur des éléments actifs, des liens, des titres, du focus et du logo.',
 		genre: 'couleur',
 		defaut: ACCENT_PAR_DEFAUT,
 		effet: 'immediat',
@@ -332,10 +332,28 @@ export const CHAMPS_REGLAGES: readonly ChampReglage[] = [
 ];
 
 /**
- * Réglages retirés : ignorés sans avertissement à la lecture (un ancien fichier reste muet), refusés à la modification.
- * `contexte.cartesPerimetre` : remplacé par les pistes (`contexte.pistesParMessage`).
+ * Réglages retirés au fil des versions : ignorés sans avertissement à la lecture (un ancien fichier reste muet), refusés à
+ * la modification, effacés du fichier à sa prochaine écriture. Une entrée sans point (`<groupe>`) retire un groupe entier.
+ * - 1.5.0 : `contexte.fichesMax`, `fichesMin`, `caracteres`, `fichesListees`, `scoreMin`, `reranker` (fiches entières
+ *   choisies par score, remplacées par des cartes) ; `contexte.messages`, `reponses` (sujet courant tiré de la transcription).
+ * - `contexte.cartesPerimetre` : remplacé par les pistes (`contexte.pistesParMessage`).
  */
-export const REGLAGES_RETIRES: readonly string[] = ['contexte.cartesPerimetre'];
+export const REGLAGES_RETIRES: readonly string[] = [
+	'contexte.fichesMax',
+	'contexte.fichesMin',
+	'contexte.caracteres',
+	'contexte.fichesListees',
+	'contexte.scoreMin',
+	'contexte.reranker',
+	'contexte.messages',
+	'contexte.reponses',
+	'contexte.cartesPerimetre',
+];
+
+/** Vrai si `cle` (`<groupe>.<nom>` ou `<groupe>`) est un réglage retiré, ou appartient à un groupe retiré. */
+export function estReglageRetire(cle: string): boolean {
+	return REGLAGES_RETIRES.includes(cle) || REGLAGES_RETIRES.includes(cle.split('.')[0]!);
+}
 
 const MARQUEURS_MAX = 50;
 const MARQUEUR_LONGUEUR_MAX = 100;
@@ -428,6 +446,7 @@ export function lireReglages(brut: unknown): { reglages: Reglages; avertissement
 	}
 	for (const [groupe, contenu] of Object.entries(brut)) {
 		if (!(GROUPES_REGLAGES as readonly string[]).includes(groupe)) {
+			if (estReglageRetire(groupe)) continue;
 			avertissements.push(`Réglage inconnu « ${groupe} » : ignoré.`);
 			continue;
 		}
@@ -437,7 +456,7 @@ export function lireReglages(brut: unknown): { reglages: Reglages; avertissement
 		}
 		for (const nom of Object.keys(contenu)) {
 			const cle = `${groupe}.${nom}`;
-			if (!CHAMPS_REGLAGES.some((c) => c.cle === cle) && !REGLAGES_RETIRES.includes(cle)) avertissements.push(`Réglage inconnu « ${groupe}.${nom} » : ignoré.`);
+			if (!CHAMPS_REGLAGES.some((c) => c.cle === cle) && !estReglageRetire(cle)) avertissements.push(`Réglage inconnu « ${groupe}.${nom} » : ignoré.`);
 		}
 	}
 	const { seuilPiste, seuilInjection } = reglages.contexte;
@@ -459,7 +478,7 @@ export function modifierReglages(r: Reglages, valeurs: Record<string, unknown>):
 	for (const [cle, v] of Object.entries(valeurs)) {
 		const champ = CHAMPS_REGLAGES.find((c) => c.cle === cle);
 		if (champ === undefined) {
-			motifs.push(REGLAGES_RETIRES.includes(cle) ? `Réglage retiré « ${cle} ».` : `Réglage inconnu « ${cle} ».`);
+			motifs.push(estReglageRetire(cle) ? `Réglage retiré « ${cle} ».` : `Réglage inconnu « ${cle} ».`);
 			continue;
 		}
 		if (v === null) {
@@ -483,11 +502,20 @@ export function reglagesEnFichier(r: Reglages): Record<string, unknown> {
 
 /**
  * Contenu du fichier après une modification : celui lu (`brut`, non modifié), où seuls les réglages `cles` prennent leur
- * valeur de `r` (retirés s'ils valent leur défaut). Le reste est gardé tel quel : réglages d'une version plus récente,
- * entrées invalides que l'on n'a pas touchées (elles restent signalées).
+ * valeur de `r` (retirés s'ils valent leur défaut), et d'où les réglages retirés (`REGLAGES_RETIRES`) sont effacés. Le reste
+ * est gardé tel quel : réglages d'une version plus récente, entrées invalides que l'on n'a pas touchées (elles restent signalées).
  */
 export function fusionnerFichier(brut: unknown, r: Reglages, cles: readonly string[]): Record<string, unknown> {
 	const sortie: Record<string, unknown> = estObjet(brut) ? structuredClone(brut) : {};
+	for (const [groupe, contenu] of Object.entries(sortie)) {
+		if (estReglageRetire(groupe)) {
+			delete sortie[groupe];
+			continue;
+		}
+		if (!estObjet(contenu)) continue;
+		for (const nom of Object.keys(contenu)) if (estReglageRetire(`${groupe}.${nom}`)) delete contenu[nom];
+		if (Object.keys(contenu).length === 0) delete sortie[groupe];
+	}
 	for (const champ of CHAMPS_REGLAGES) {
 		if (!cles.includes(champ.cle)) continue;
 		const nom = champ.cle.split('.')[1]!;

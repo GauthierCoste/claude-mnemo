@@ -1,6 +1,5 @@
 /**
- * Icône de Mnemo : un « m » en deux arches et ses échos (n puis m, décalés et pâlis : « m n m »), à l'accent de l'interface sur son fond. Une seule
- * description géométrique donne le SVG source (`public/icone.svg`) et les PNG de l'application installable et du lanceur
+ * Icône de Mnemo : le dessin de `src/reglages/logo.ts`, à l'accent d'origine de l'interface sur son fond. Il donne le SVG source (`public/icone.svg`) et les PNG de l'application installable et du lanceur
  * macOS (`public/icones/`), dessinés ici sans dépendance (suréchantillonnage 4 × 4, PNG écrit à la main). Les couleurs sont
  * lues dans `src/styles/jetons.css`.
  *
@@ -10,9 +9,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { crc32, deflateSync } from 'node:zlib';
+import { BAS, COTE, COUCHES, FOND, HAUT, RAYON, REDUCTION, svgLogo, TRAIT, type Lettre, type Variante } from '../src/reglages/logo.ts';
 
-/** `standard` : carré arrondi avec une marge (fenêtre, Dock) ; `masquable` : fond plein, le dessin dans la zone sûre (80 %). */
-export type Variante = 'standard' | 'masquable';
+export type { Variante };
 
 /** Fichiers produits (dans `public/icones/`). 256, 512 et 1024 servent aussi à l'icône du lanceur macOS (`.icns`). */
 export const ICONES: readonly { fichier: string; taille: number; variante: Variante }[] = [
@@ -33,59 +32,11 @@ function couleur(nom: string): string {
 	return valeur.toLowerCase();
 }
 
-/** Repère 512 × 512. */
-const COTE = 512;
-const FOND = { marge: 40, rayon: 96 };
-/** Le dessin est conçu pour une tuile pleine de 512 ; réduit autour du centre pour tenir dans le fond à marge. */
-const REDUCTION = (COTE - 2 * FOND.marge) / COTE;
-const TRAIT = 40;
-
-/** Une arche : jambage gauche éventuel, demi-cercle de rayon 53 posé à y = 232, jambage droit jusqu'à y = 380. */
-const HAUT = 232;
-const BAS = 380;
-const RAYON = 53;
-type Lettre = readonly number[]; // abscisses gauches de ses arches
-const M: Lettre = [150, 256];
-const N: Lettre = [256];
-
-/** Trois couches dans l'ordre m, n, m : le m devant, opaque ; le n puis le m en échos décalés de 20 vers le haut à droite. */
-const PAS = 20;
-/** Recentrage vertical : l'ensemble (échos compris) occupe 115 à 396, centré sur 256. */
-const RECENTRAGE = -24;
-const COUCHES: readonly { lettre: Lettre; dx: number; dy: number; opacite: number }[] = [
-	{ lettre: M, dx: PAS, dy: -PAS + RECENTRAGE, opacite: 0.18 },
-	{ lettre: N, dx: 0, dy: RECENTRAGE, opacite: 0.4 },
-	{ lettre: M, dx: -PAS, dy: PAS + RECENTRAGE, opacite: 1 },
-];
-
 const couleurs = () => ({ fond: couleur('--s1'), trait: couleur('--ac') });
 
-/** Chemin SVG d'une lettre (repère de la tuile pleine, avant décalage). */
-function cheminLettre(lettre: Lettre): string {
-	return lettre
-		.map((x, i) => `${i === 0 ? `M${x} ${BAS} V${HAUT}` : `M${x} ${HAUT}`} A${RAYON} ${RAYON} 0 0 1 ${x + 2 * RAYON} ${HAUT} V${BAS}`)
-		.join(' ');
-}
-
-/** Le SVG source. */
+/** Le SVG source, aux couleurs d'origine (l'interface le redessine à la couleur choisie : `src/reglages/icone-page.ts`). */
 export function svgIcone(variante: Variante): string {
-	const c = couleurs();
-	const fond =
-		variante === 'standard'
-			? `<rect x="${FOND.marge}" y="${FOND.marge}" width="${COTE - 2 * FOND.marge}" height="${COTE - 2 * FOND.marge}" rx="${FOND.rayon}" fill="${c.fond}"/>`
-			: `<rect width="${COTE}" height="${COTE}" fill="${c.fond}"/>`;
-	const couches = COUCHES.map(
-		(k) =>
-			`<path d="${cheminLettre(k.lettre)}" transform="translate(${k.dx} ${k.dy})"${k.opacite < 1 ? ` opacity="${k.opacite}"` : ''}/>`,
-	).join('\n    ');
-	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${COTE} ${COTE}">
-  <title>Mnemo</title>
-  ${fond}
-  <g transform="translate(${COTE / 2} ${COTE / 2}) scale(${REDUCTION}) translate(${-COTE / 2} ${-COTE / 2})" fill="none" stroke="${c.trait}" stroke-width="${TRAIT}" stroke-linecap="round" stroke-linejoin="round">
-    ${couches}
-  </g>
-</svg>
-`;
+	return svgLogo(variante, couleurs());
 }
 
 type Rvb = [number, number, number];

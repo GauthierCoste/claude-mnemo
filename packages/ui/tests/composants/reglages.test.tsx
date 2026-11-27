@@ -414,7 +414,7 @@ describe('couleur principale', () => {
 		await waitFor(() => expect(racine().getPropertyValue('--ac')).toBe('#ff8800'));
 	});
 
-	it('pastilles : le vert d’origine et les couleurs des agents lues dans les jetons ; une couleur à la main dans « Autre couleur »', async () => {
+	it('pastilles : le vert d’origine et les couleurs des agents lues dans les jetons ; le choix libre « Personnalisée » montre la couleur choisie à la main, le code hexadécimal la couleur en vigueur', async () => {
 		racine().setProperty('--violet', '#a394ff');
 		const { faux, nuancier } = await ouvrirCouleur({ 'PUT /api/reglages': { ...vue, champs: [{ ...ACCENT, valeur: '#a394ff' }] } });
 		// les jetons absents (ici, tous sauf --violet) ne donnent pas de pastille
@@ -422,17 +422,22 @@ describe('couleur principale', () => {
 			['Vert d’origine', 'false'],
 			['Violet', 'false'],
 		]);
-		expect((within(nuancier).getByLabelText('Autre couleur') as HTMLInputElement).value).toBe('#ff8800');
+		expect((within(nuancier).getByLabelText('Couleur personnalisée') as HTMLInputElement).value).toBe('#ff8800');
+		// choix libre libellé en clair, pas une pastille muette
+		expect(within(nuancier).getByText('Personnalisée')).toBeTruthy();
+		const code = within(nuancier).getByRole('textbox', { name: 'Code hexadécimal de la couleur' }) as HTMLInputElement;
+		expect(code.value).toBe('#ff8800');
 		await act(async () => within(nuancier).getByRole('button', { name: 'Violet' }).click());
+		expect(code.value).toBe('#a394ff');
 		expect(racine().getPropertyValue('--ac')).toBe('#a394ff');
 		expect(within(nuancier).getByRole('button', { name: 'Violet' }).getAttribute('aria-pressed')).toBe('true');
 		await act(async () => screen.getByRole('button', { name: 'Enregistrer' }).click());
 		expect(faux.api.remplacer).toHaveBeenCalledWith('/api/reglages', { valeurs: { 'interface.accent': '#a394ff' } });
 	});
 
-	it('autre couleur : appliquée tout de suite, texte clair sur un accent foncé ; « Rétablir » rend le vert d’origine', async () => {
+	it('couleur personnalisée : appliquée tout de suite, texte clair sur un accent foncé ; « Rétablir » rend le vert d’origine', async () => {
 		const { nuancier } = await ouvrirCouleur({});
-		await act(async () => fireEvent.change(within(nuancier).getByLabelText('Autre couleur'), { target: { value: '#1d3557' } }));
+		await act(async () => fireEvent.change(within(nuancier).getByLabelText('Couleur personnalisée'), { target: { value: '#1d3557' } }));
 		expect(racine().getPropertyValue('--ac')).toBe('#1d3557');
 		expect(racine().getPropertyValue('--sur-accent')).toBe('var(--sur-accent-clair)');
 		await act(async () => screen.getByRole('button', { name: /Rétablir/u }).click());
@@ -440,14 +445,36 @@ describe('couleur principale', () => {
 		expect(racine().getPropertyValue('--ac')).toBe('#7df0c6');
 	});
 
+	it('code hexadécimal : un code valide s’applique dès la frappe (# facultatif, forme courte) ; un code incomplet ne change rien et est signalé une fois le champ quitté', async () => {
+		const { faux, nuancier } = await ouvrirCouleur({ 'PUT /api/reglages': { ...vue, champs: [{ ...ACCENT, valeur: '#3a7bd5' }] } });
+		const code = within(nuancier).getByRole('textbox', { name: 'Code hexadécimal de la couleur' }) as HTMLInputElement;
+		await act(async () => fireEvent.change(code, { target: { value: '3A7BD5' } }));
+		expect(racine().getPropertyValue('--ac')).toBe('#3a7bd5');
+		// incomplet : la couleur reste, rien n'est signalé pendant la frappe
+		await act(async () => fireEvent.focus(code));
+		await act(async () => fireEvent.change(code, { target: { value: '#12' } }));
+		expect(racine().getPropertyValue('--ac')).toBe('#3a7bd5');
+		expect(within(nuancier.parentElement!).queryByRole('alert')).toBeNull();
+		await act(async () => fireEvent.blur(code));
+		expect(within(nuancier.parentElement!).getByRole('alert').textContent).toMatch(/Code attendu/u);
+		expect(code.getAttribute('aria-invalid')).toBe('true');
+		// forme courte : dépliée
+		await act(async () => fireEvent.change(code, { target: { value: '#f80' } }));
+		expect(racine().getPropertyValue('--ac')).toBe('#ff8800');
+		expect(within(nuancier.parentElement!).queryByRole('alert')).toBeNull();
+		await act(async () => fireEvent.change(code, { target: { value: '#3a7bd5' } }));
+		await act(async () => screen.getByRole('button', { name: 'Enregistrer' }).click());
+		expect(faux.api.remplacer).toHaveBeenCalledWith('/api/reglages', { valeurs: { 'interface.accent': '#3a7bd5' } });
+	});
+
 	it('avertit sous le nuancier quand la couleur se lit mal sur le fond (contraste sous 3:1), pas autrement', async () => {
 		racine().setProperty('--bg', '#09090b');
 		const { nuancier } = await ouvrirCouleur({});
 		const bloc = nuancier.parentElement!;
 		expect(within(bloc).queryByRole('status')).toBeNull();
-		await act(async () => fireEvent.change(within(nuancier).getByLabelText('Autre couleur'), { target: { value: '#1d3557' } }));
+		await act(async () => fireEvent.change(within(nuancier).getByLabelText('Couleur personnalisée'), { target: { value: '#1d3557' } }));
 		expect(within(bloc).getByRole('status').textContent).toMatch(/se lit mal sur le fond/);
-		await act(async () => fireEvent.change(within(nuancier).getByLabelText('Autre couleur'), { target: { value: '#ffd23f' } }));
+		await act(async () => fireEvent.change(within(nuancier).getByLabelText('Couleur personnalisée'), { target: { value: '#ffd23f' } }));
 		expect(within(bloc).queryByRole('status')).toBeNull();
 	});
 });

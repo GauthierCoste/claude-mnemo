@@ -1,13 +1,14 @@
 /**
  * Couleur principale de l'interface en pastilles : le vert d'origine et les couleurs des agents (jetons du thème, lus sur la
- * page à l'exécution : aucune couleur écrite hors de jetons.css), puis « Autre couleur » (le sélecteur du système), qui montre
- * aussi une couleur choisie à la main. Chaque pastille est un bouton, enfoncé quand sa couleur est la couleur choisie. Sous
- * le nuancier, l'avertissement quand la couleur se lit mal sur le fond.
+ * page à l'exécution : aucune couleur écrite hors de jetons.css), puis le choix libre : « Personnalisée » (le sélecteur de
+ * couleur du système, sa pastille montre la couleur choisie à la main, un arc-en-ciel sinon) et le code hexadécimal,
+ * saisissable, qui montre toujours la couleur en vigueur. Chaque pastille est un bouton, enfoncé quand sa couleur est la
+ * couleur choisie. Sous le nuancier, l'erreur de code puis l'avertissement quand la couleur se lit mal sur le fond.
  */
 import type { ChampReglageVue } from '@mnemo/contrat';
 import { ACCENT_PAR_DEFAUT, estCouleurHex } from '@mnemo/commun';
-import { useMemo, type CSSProperties, type ReactNode } from 'react';
-import { CONTRASTE_MINIMAL, contraste } from '../../../reglages/accent.ts';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { CONTRASTE_MINIMAL, contraste, normaliserHex } from '../../../reglages/accent.ts';
 import type { Saisie } from '../../../reglages/brouillon.ts';
 import type { ChampDispose } from '../../../reglages/disposition.ts';
 import c from '../Cartes.module.css';
@@ -20,6 +21,8 @@ const PASTILLES = [
 	{ nom: 'Ambre', fond: 'var(--amber)', jeton: '--amber' },
 	{ nom: 'Rouge', fond: 'var(--red)', jeton: '--red' },
 ] as const;
+
+const ID_CODE_INVALIDE = 'nuancier-code-invalide';
 
 /** Valeur `#rrggbb` d'un jeton de la page ; null si elle n'en est pas une (jeton absent). */
 function lireJeton(jeton: string): string | null {
@@ -39,7 +42,8 @@ export function Nuancier(p: { champ: ChampReglageVue; dispose: ChampDispose; sai
 		[],
 	);
 	const choisie = typeof p.saisie === 'string' ? p.saisie.toLowerCase() : '';
-	const autre = !pastilles.some((x) => x.hex === choisie);
+	const autre = estCouleurHex(choisie) && !pastilles.some((x) => x.hex === choisie);
+	const [codeInvalide, poserCodeInvalide] = useState(false);
 	return (
 		<div>
 			<BadgeEffet champ={p.champ} />
@@ -50,18 +54,70 @@ export function Nuancier(p: { champ: ChampReglageVue; dispose: ChampDispose; sai
 						type="button"
 						aria-pressed={x.hex === choisie}
 						aria-label={x.nom}
+						title={x.nom}
 						className={c.nuance}
 						style={{ '--c': x.fond } as CSSProperties}
 						onClick={() => p.surSaisie(x.hex)}
 					/>
 				))}
-				<label className={c.autre} data-choisie={autre || undefined} style={autre && estCouleurHex(choisie) ? ({ '--c': choisie } as CSSProperties) : undefined} title="Autre couleur">
-					<input type="color" aria-label="Autre couleur" value={estCouleurHex(choisie) ? choisie : ACCENT_PAR_DEFAUT} onChange={(e) => p.surSaisie(e.target.value)} />
-				</label>
+				<span className={c.libre}>
+					<label className={c.autre} data-choisie={autre || undefined} title="Ouvrir le sélecteur de couleur du système">
+						<span className={c.temoin} data-couleur={autre || undefined} style={autre ? ({ '--c': choisie } as CSSProperties) : undefined} aria-hidden="true" />
+						Personnalisée
+						<input type="color" aria-label="Couleur personnalisée" value={estCouleurHex(choisie) ? choisie : ACCENT_PAR_DEFAUT} onChange={(e) => p.surSaisie(e.target.value)} />
+					</label>
+					<CodeHex couleur={choisie} surSaisie={p.surSaisie} surInvalide={poserCodeInvalide} />
+				</span>
 			</div>
+			{codeInvalide && (
+				<p id={ID_CODE_INVALIDE} className={c.erreurHex} role="alert">
+					Code attendu : # puis 6 caractères (0 à 9, a à f)
+				</p>
+			)}
 			<AvertissementContraste couleur={choisie} />
 			<Defaut champ={p.champ} saisie={p.saisie} surSaisie={p.surSaisie} />
 		</div>
+	);
+}
+
+/**
+ * Code hexadécimal de la couleur, saisissable : un code valide (`#` facultatif, forme courte acceptée) s'applique dès la
+ * frappe ; un code incomplet ne change rien et, une fois le champ quitté, est signalé sous le nuancier. Le champ reprend la
+ * couleur en vigueur quand elle change ailleurs (pastille, sélecteur du système, Rétablir).
+ */
+function CodeHex(p: { couleur: string; surSaisie(v: Saisie): void; surInvalide(signale: boolean): void }): ReactNode {
+	const [texte, poserTexte] = useState(p.couleur);
+	const [quitte, poserQuitte] = useState(true);
+	useEffect(() => {
+		poserTexte((t) => (normaliserHex(t) === p.couleur ? t : p.couleur));
+	}, [p.couleur]);
+	const invalide = normaliserHex(texte) === null;
+	const signale = invalide && quitte && texte !== p.couleur;
+	const { surInvalide } = p;
+	useEffect(() => surInvalide(signale), [signale, surInvalide]);
+	return (
+		<input
+			className={c.hex}
+			type="text"
+			aria-label="Code hexadécimal de la couleur"
+			aria-invalid={signale || undefined}
+			aria-describedby={signale ? ID_CODE_INVALIDE : undefined}
+			placeholder="#rrggbb"
+			maxLength={7}
+			spellCheck={false}
+			autoComplete="off"
+			value={texte}
+			onFocus={() => poserQuitte(false)}
+			onBlur={() => poserQuitte(true)}
+			onChange={(e) => {
+				poserTexte(e.target.value);
+				const hex = normaliserHex(e.target.value);
+				if (hex !== null && hex !== p.couleur) p.surSaisie(hex);
+			}}
+			onKeyDown={(e) => {
+				if (e.key === 'Escape') poserTexte(p.couleur);
+			}}
+		/>
 	);
 }
 

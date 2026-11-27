@@ -15,10 +15,11 @@
 	background: color-mix(in srgb, var(--amber) 7%, transparent);
 }
 
+/* succès : vert fixe (couleur de sens), il ne suit pas la couleur principale */
 .succes {
-	color: var(--ac);
-	border-color: color-mix(in srgb, var(--ac) 35%, transparent);
-	background: color-mix(in srgb, var(--ac) 6%, transparent);
+	color: var(--vert);
+	border-color: color-mix(in srgb, var(--vert) 35%, transparent);
+	background: color-mix(in srgb, var(--vert) 6%, transparent);
 }
 
 .coloree {
