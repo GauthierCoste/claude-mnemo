@@ -3,14 +3,14 @@
 Reference for the command line, the service, sessions and the interface. Installation, requirements and uninstalling are
 in [installation.md](installation.md); the file format of the memory is in [format-coffre.md](format-coffre.md).
 
-Commands, messages and the interface are in French; this page gives their meaning in English.
+The interface is in French or English (see [Language](#language)); this page quotes its English labels. Commands and their messages are in French; this page gives their meaning in English.
 
 ## Command line
 
 Node 24 or later is required. The `mnemo` command (see [installation.md](installation.md) to make it available):
 
 - `mnemo init [folder] [--oui] [--json] [--mcp | --sans-mcp] [--codex] [--mistral] [--modeles | --sans-modeles]
-  [--commande | --sans-commande] [--lanceur | --sans-lanceur]`: creates the memory (`_mnemo/`, with `SCHEMA.md`, the note of the `travail`
+  [--commande | --sans-commande] [--lanceur | --sans-lanceur] [--langue fr|en]`: creates the memory (`_mnemo/`, with `SCHEMA.md`, the note of the `travail`
   profile and a first git commit; no folder is imposed); does nothing if it already exists. In a terminal, on a fresh folder, it guides you step by step:
   folder (`~/…` accepted; absolute path shown and confirmed before creation), declaration to Claude Code, local models
   (no by default), the `mnemo` command and the macOS launcher (yes by default). `--oui` (yes): no question, MCP
@@ -21,7 +21,7 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   Explicit options decide a step without any question, with or without a terminal, and override the defaults:
   `--mcp` / `--sans-mcp` (declare to Claude Code or not; `MNEMO_SANS_MCP=1` wins over `--mcp`), `--modeles` /
   `--sans-modeles` (install the local models or not; `--modeles` also applies to an existing memory), `--commande` /
-  `--sans-commande` (the `mnemo` command in `~/.local/bin`), `--lanceur` / `--sans-lanceur` (the macOS launcher). Giving
+  `--sans-commande` (the `mnemo` command in `~/.local/bin`), `--lanceur` / `--sans-lanceur` (the macOS launcher). `--langue fr|en` writes the interface language (`interface.langue`, see [Language](#language)) into the folder's `.mnemo/reglages.json` along with the memory, and leaves the other settings as they are; without it, the language stays `systeme`. Giving
   both options of a pair is a usage error (exit code 2). `--codex` also declares the MCP server to Codex and installs
   the Mnemo hooks in `~/.codex/hooks.json` (or `$CODEX_HOME`); without it Codex is never touched, and
   `MNEMO_SANS_MCP=1` skips both (see [installation.md](installation.md#codex)). `--mistral` does the same
@@ -62,8 +62,7 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
 - `mnemo declarer (--lier | --remplacer | --retirer) [--moteur claude-code|codex|mistral-vibe] [--json]` (declare):
   the MCP declaration of Mnemo to Claude Code (default) or another engine, of user scope, and, for Codex and Mistral
   Vibe, the Mnemo hooks installed for the whole machine (`~/.codex/hooks.json`, `~/.vibe/hooks.toml`).
-  - `--lier` (link): links the engine to Mnemo without asking anything, from any folder, exactly like the « Lier à
-    Mnemo » button (see [Engines](#engines)): a missing MCP declaration is made, a Mnemo declaration that runs another
+  - `--lier` (link): links the engine to Mnemo without asking anything, from any folder, exactly like the « Link to Mnemo » button (see [Engines](#engines)): a missing MCP declaration is made, a Mnemo declaration that runs another
     Node.js or another copy of Mnemo is made again with this one; missing hooks are installed, out-of-date ones
     rewritten. A declaration of yours (turned off, of another scope, or named `mnemo` but not running Mnemo) is left
     alone and the message says so. Nothing else is touched (no memory, models, command or launcher). It is the command
@@ -77,7 +76,7 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
 
   A declaration named `mnemo` that does not run Mnemo, or of another scope, is never rewritten, nor one that is turned
   off or carries your own settings: the message says what to change by hand. Without `--json`, one line per step (and,
-  with `--lier`, « <engine> lié à Mnemo. » when everything is linked). With `--json`, one line:
+  with `--lier`, « <engine> linked to Mnemo. » when everything is linked). With `--json`, one line:
   - `--remplacer`, `--retirer`: `{"resultat":"…","message":"…"}` (plus `"hooks":{"resultat":"…","message":"…"}` for an
     engine with hooks), `resultat` being `absent` (nothing declared), `deja` (already up to date), `remplace`, `retire`,
     `autre` (left alone) or `echec` (type `SortieDeclarer` in `@mnemo/contrat`);
@@ -94,7 +93,7 @@ Node 24 or later is required. The `mnemo` command (see [installation.md](install
   invalidated information; `--contexte` returns each result in full, a passage with its section or its neighbours (like
   the hooks and the `chercher` tool).
 - `mnemo index [--reconstruire]`: updates the search index, or deletes and rebuilds it.
-- `mnemo amorce [--dossier-claude <path>]` (or the "Importer la mémoire de Claude Code" button of Mémoire › Archiviste): imports
+- `mnemo amorce [--dossier-claude <path>]` (or the "Import Claude Code memory" button of Memory › Archivist): imports
   the native memory of Claude Code (all `.md` files of `projects/*/memory/`, subfolders and `MEMORY.md` included, and the
   global `CLAUDE.md`, in `CLAUDE_CONFIG_DIR` or `~/.claude`) as source notes under `sources/claude-code/`, attached to
   their project when it is inside the folder, and references the `CLAUDE.md`, `CLAUDE.local.md` and `.claude/*.md` files
@@ -119,16 +118,16 @@ opened is remembered in this browser:
 
 - **Agents**: the session profiles, one line each in the panel, edited on the right in a character creator: see
   [Managing profiles](#managing-profiles).
-- **Réglages** (settings), in three sections: **Branchements** (connections: the engines and their link to Mnemo, then
-  the Claude app: see [Engines](#engines) and [Connecting the Claude app](#connecting-the-claude-app)), **Mémoire**
-  (memory: three cards side by side, *Rappel* for what is injected into sessions and proposed as leads, with the background
-  learning of the confidence score (« Note de confiance ») and the project markers, *Recherche* for what the `chercher` tool and the search of the interface bring up and in which order,
-  *Confiance* for source reliability, fact weights, the repetitions before a rule is proposed as permanent and the note
-  types the archivist writes without asking) and **Système** (system: service state, port and launcher browser, local
-  model shutdown after inactivity, main colour). Main sliders show their value on the right and a sentence saying what
-  it does; « Défaut : x · Rétablir » appears only when the value differs from the default; finer settings are folded
-  under « Réglages fins · N ». Mémoire and Système share one Cancel / Save footer; leaving the tab or the view with
-  unsaved changes asks first. An engine waiting for a gesture puts an amber dot on the Réglages tab and on Branchements.
+- **Settings**, in three sections: **Connections** (the engines and their link to Mnemo, then
+  the Claude app: see [Engines](#engines) and [Connecting the Claude app](#connecting-the-claude-app)), **Memory**
+  (three cards side by side, *Recall* for what is injected into sessions and proposed as leads, with the background
+  learning of the confidence score (« Confidence score ») and the project markers, *Search* for what the `chercher` tool and the search of the interface bring up and in which order,
+  *Confidence* for source reliability, fact weights, the repetitions before a rule is proposed as permanent and the note
+  types the archivist writes without asking) and **System** (service state, port and launcher browser, local
+  model shutdown after inactivity, main colour, interface language). Main sliders show their value on the right and a sentence saying what
+  it does; « Default: x · Restore » appears only when the value differs from the default; finer settings are folded
+  under « Fine-tuning · N ». Memory and System share one Cancel / Save footer; leaving the tab or the view with
+  unsaved changes asks first. An engine waiting for a gesture puts an amber dot on the Settings tab and on Connections.
 - **Documentation**: a technical reference on one scrolling page (principle, session, agents, recall, search,
   confidence, archivist): definitions and tables (capability → hook → effect, setting → effect → default, source →
   reliability), checked against the code. The panel is a table of contents: a link scrolls to its section and the
@@ -140,44 +139,50 @@ cover project markers (◆ in the folder tree), the injected context (thresholds
 notes injected and leads per message), minimum similarity of search, model shutdown after inactivity, note types whose
 proposed information needs a confirmation, service port, launcher browser and the main colour of the interface (green by
 default). The table of settings and defaults is in [installation.md](installation.md#settings).
-The main colour is picked among preset swatches (the original green and the agent colours) or freely: « Personnalisée »
+The main colour is picked among preset swatches (the original green and the agent colours) or freely: « Custom »
 opens the system colour picker, and the hexadecimal code field (`#rrggbb`, `#` optional, short `#rgb` accepted) takes a
 typed or pasted colour. It is applied as soon as it is picked, logo included (title bar, browser tab, Dock icon of the
 desktop app); a warning appears when a colour is hard to read on the dark background (contrast under 3:1). Colours that
 carry a meaning keep their own: session states, success and errors, agent colours.
 
+### Language
+
+The interface and the desktop app are available in French and English. The setting is in **Settings › System › Interface**, field « Interface language », with three choices: « System language » (the default: the language of the system, English when it is neither French nor English), « Français » and « English ». The key is `interface.langue` in `.mnemo/reglages.json`, with the values `systeme` (default), `fr` and `en`. The change applies to the whole interface as soon as it is saved (System shares the Save footer of the Memory card), and to the menus, dialogs and notifications of the desktop app.
+
+Only the interface is translated. The content of the memory (notes, facts, profiles), the text injected into the sessions and the `mnemo` command with its messages stay as they are, in French. `mnemo init --langue fr|en` sets the language when the memory is created, and the installation assistant of the desktop app asks for it first (see [the app](app/installation.md#the-installation-assistant)).
+
 ### Engines
 
-**Settings › Réglages › Branchements** shows one line per engine the service knows (Claude Code, Codex, Mistral
+**Settings › Settings › Connections** shows one line per engine the service knows (Claude Code, Codex, Mistral
 Vibe), each with its provider's logo and name (Anthropic, OpenAI, Mistral) and a one-word status:
 
-- « Prêt » (ready): linked and usable;
-- « À lier » (to link): the MCP declaration or the hooks are missing or out of date, « Lier à Mnemo » fixes it;
-- « À approuver » (to approve): the hooks are installed but not yet approved in the engine (Codex);
-- « À vérifier » (to check): whether the hooks are approved cannot be read;
-- « À mettre à jour » (to update): the engine's version is too old for Mnemo;
-- « À régler » (to set): a declaration of yours (turned off, of another scope, or not running Mnemo) or an unreadable
+- « Ready »: linked and usable;
+- « To link »: the MCP declaration or the hooks are missing or out of date, « Link to Mnemo » fixes it;
+- « To approve »: the hooks are installed but not yet approved in the engine (Codex);
+- « To check »: whether the hooks are approved cannot be read;
+- « To update »: the engine's version is too old for Mnemo;
+- « To set up »: a declaration of yours (turned off, of another scope, or not running Mnemo) or an unreadable
   file, to fix by hand;
-- « Introuvable » (not found): the command the service started with has disappeared since;
-- « Pas installé » (not installed): no command found on this computer.
+- « Not found »: the command the service started with has disappeared since;
+- « Not installed »: no command found on this computer.
 
-A ready engine shows « ● prêt ». Otherwise, the line says below what is missing and what it means, and offers the
+A ready engine shows « ● ready ». Otherwise, the line says below what is missing and what it means, and offers the
 gesture that fixes it:
 
-- **« Lier à Mnemo »** (link to Mnemo) when the MCP declaration or the hooks are missing or out of date. It calls
+- **« Link to Mnemo »** when the MCP declaration or the hooks are missing or out of date. It calls
   `POST /api/moteurs/:id/lier` (no body), which does for this engine only what `mnemo declarer --moteur <id> --lier`
-  does, then reads the machine again; the line turns « prêt » and a toast says « <engine> lié à Mnemo. ». A failure is
+  does, then reads the machine again; the line turns « ready » and a toast says « <engine> linked to Mnemo. ». A failure is
   shown below the line. The same command is offered below, to copy, for a terminal. The route answers 404 for an engine
   the service does not know, 409 when the engine's command cannot be found, when `MNEMO_SANS_MCP=1` is set in the
   service's environment, or while a link of the same engine is already running; its answer carries the steps of the link
   and every engine read again (like `GET /api/moteurs?poste=1`), types `ReponseLiaisonMoteur` and `LiaisonMoteurVue` in
   `@mnemo/contrat`.
-- **« Copier »** copies the command to type in the engine (`/hooks` in Codex) when the hooks wait for an approval.
+- **« Copy »** copies the command to type in the engine (`/hooks` in Codex) when the hooks wait for an approval.
 
-An engine that waits for one of these gestures puts an amber dot on the Réglages tab and on Branchements; an engine not
+An engine that waits for one of these gestures puts an amber dot on the Settings tab and on Connections; an engine not
 installed does not.
 
-**« Relire »** (read again, with the time of the last check) checks the machine again. An engine installed or moved
+**« Reload »** (with the time of the last check) checks the machine again. An engine installed or moved
 after the service started is picked up there: the service adopts the command it finds now, new sessions start it, and
 its version is read again; running sessions keep their process. No restart of the service is needed. A command that has
 disappeared is not adopted: the line says it can no longer be found. The light reading of the engines (Settings ›
@@ -200,7 +205,7 @@ Once a source is processed, `proposer` genre `modification` with `traitee: true`
 flagged: a meeting or a thread usually teaches something about the client's trade, its organisation, the people, the
 product or the practices too.
 
-A file dropped in the drop zone of the interface (Mémoire › Archiviste) is written into the folder and gets a `source`
+A file dropped in the drop zone of the interface (Memory › Archivist) is written into the folder and gets a `source`
 note marked "à traiter" (to process) for the archivist, whatever its format. A scanned PDF (pages without text), an
 image, a spreadsheet or any other binary file without an extractor is kept, but it is not searchable: Mnemo does no
 text recognition and has no spreadsheet extractor, and says so when the file is dropped or referenced.
@@ -265,45 +270,44 @@ Three levels set which models run. The bench counts the questions whose right so
 
 | Level | Words | Meaning | Reranker | RAM | Bench |
 | --- | --- | --- | --- | --- | --- |
-| « Complets » (default) | yes | yes | yes | about 1.6 GB | 30 of 42, the best search |
-| « Sens seul » (meaning only) | yes | yes | no | about 0.8 GB | 27 of 42 |
-| « Coupés » (off) | yes | no | no | none | 20 of 42: no answer worded differently |
+| « Full » (default) | yes | yes | yes | about 1.6 GB | 30 of 42, the best search |
+| « Semantic only » | yes | yes | no | about 0.8 GB | 27 of 42 |
+| « Off » | yes | no | no | none | 20 of 42: no answer worded differently |
 
 - **Everywhere.** The level of the machine is kept in the models cache (`serveurs/niveau.json`) and applies to every
   folder. A model it excludes is never started nor called. A change that removes a model stops the servers at once; a
   change that adds one starts nothing at once: the running guardian stops within 30 seconds, and the next use starts
-  the servers again with every allowed model. « Démarrer maintenant » restarts them at once.
+  the servers again with every allowed model. « Start now » restarts them at once.
 - **For one session.** A session can have its own level. It is kept when the session is resumed. The more restrictive of
   the two levels applies: a session cannot use a model the machine excludes. Its tools and hooks then neither call nor
   start the excluded models. This frees no memory: the servers are shared and keep running for the other sessions.
-- **Injected context.** The confidence score has one model per level: « Complets » scores the notes the reranker saw,
-  « Sens seul » the others. At « Coupés », without meaning, there is no score: no %, no automatic injection, the ranking
+- **Injected context.** The confidence score has one model per level: « Full » scores the notes the reranker saw,
+  « Semantic only » the others. At « Off », without meaning, there is no score: no %, no automatic injection, the ranking
   follows the words (see "Injected context").
-- **Vectors.** At « Coupés », new notes are not vectorised. When meaning comes back, the missing vectors are computed
+- **Vectors.** At « Off », new notes are not vectorised. When meaning comes back, the missing vectors are computed
   again (`mnemo index`, or a search, within its budget).
 
-### The Modèles button
+### The Local models button
 
-The **Modèles** button sits in the title bar, between the quotas and the Archiviste button. It is absent while the
-models are not installed. Its text follows the state live: « Modèles en veille » (stopped), « Chargement… » (loading),
-« Modèles prêts » (ready; « Sens seul prêt » and « Sens seul en veille » at that level), « Vectorisation n/N », « Recherche… », « Injection… »
-(work in progress, the latest one, « +1 » if there are others), « Modèles coupés » (off) or « Modèles en échec »
-(failed).
+The **Local models** button sits in the title bar, between the quotas and the Archivist button. It is absent while the
+models are not installed. Its text follows the state live: « Models idle » (stopped), « Loading… »,
+« Models ready » (« Semantic only ready » and « Semantic only idle » at that level), « Embedding n/N », « Searching… », « Injecting… »
+(work in progress, the latest one, « +1 » if there are others), « Models off » or « Models failed ».
 
 A click opens a menu and changes nothing by itself. It shows:
 
 - each piece with its state: the meaning model bge-m3 and the reranker bge-reranker-v2-m3, both from BAAI in Q8_0, with
   their size and the start of their SHA-256 hash; the engine llama.cpp b11671, local on `127.0.0.1`;
-- the work in progress, with « – cette session » for the session selected in Sessions, or « – autre dossier » for
+- the work in progress, with « – this session » for the session selected in Sessions, or « – other folder » for
   another folder;
-- the level under « Partout » (everywhere): « Complets », « Sens seul », « Coupés »;
-- « Démarrer maintenant » (start now) or « Arrêter maintenant » (stop now), which keeps the level: the next use (a
+- the level under « Everywhere »: « Full », « Semantic only », « Off »;
+- « Start now » or « Stop now », which keeps the level: the next use (a
   search or a hook) starts the models again;
 - the shutdown delay after inactivity.
 
-In the Contexte panel, a small button at the right of « Injecté dans la session » shows the level of the selected
-session. Its menu offers « Comme partout » (follow the level of the machine), « Complets », « Sens seul » and
-« Coupés ». A level wider than the level of the machine is greyed out.
+In the Context panel, a small button at the right of « Injected into the session » shows the level of the selected
+session. Its menu offers « Same as everywhere » (follow the level of the machine), « Full », « Semantic only » and
+« Off »; its title is « Models for this session ». A level wider than the level of the machine is greyed out.
 
 ### How a result is ranked
 
@@ -401,8 +405,8 @@ The interface is built once, at the root of the repository: `pnpm construire` (i
 service; to redo after an update). To work on the interface: `MNEMO_DOSSIER=<Mnemo folder> pnpm --filter @mnemo/ui dev`
 (service running in that folder), then the printed address.
 
-The title bar shows, left of the Archiviste button, the **Modèles** button (the local models: see
-[The Modèles button](#the-modèles-button)) and, left of it, the **quotas of the subscriptions** (5-hour window and
+The title bar shows, left of the Archivist button, the **Local models** button (see
+[The Local models button](#the-local-models-button)) and, left of it, the **quotas of the subscriptions** (5-hour window and
 week), common to all sessions: one group per subscription seen, « Claude » and « ChatGPT », side by side. Each is a small
 circle with two rings (inner: 5 hours; outer: week), green, amber from 50 %, red from 80 %. A click unfolds them into
 bars with the reset time; another click folds them.
@@ -412,28 +416,28 @@ bars with the reset time; another click folds them.
 - **ChatGPT** quotas come from the transcript of the Codex sessions launched by Mnemo, read by the service after a hook
   (Codex has no status line). A window Codex does not report is not shown (some plans report the week only). A reading
   older than an hour is ignored.
-- Mistral Vibe reports no quotas Mnemo can read: the Contexte panel of its sessions says
-  « Quotas : non communiqués par … » (not reported) instead.
+- Mistral Vibe reports no quotas Mnemo can read: the Context panel of its sessions says
+  « Quotas: not reported by … » instead.
 
-The left rail has two views: **Sessions** (its badge: sessions waiting for your answer) and **Mémoire** (its badge: items
+The left rail has two views: **Sessions** (its badge: sessions waiting for your answer) and **Memory** (its badge: items
 to process).
 
-- **Sessions**: the grid of sessions, the Dossier panel (tree of all the folders of the root, two levels unfolded at
-  start, with session status dots, git status and "+ session" on each folder) and the Contexte panel ("Injecté dans
-  la session": one list for the selected session, see "Injected context"). The side panels are resized by dragging their
-  border (double-click: default width). In the session bar, left of the Dossier and Contexte switches, one small avatar
+- **Sessions**: the grid of sessions, the Folder panel (tree of all the folders of the root, two levels unfolded at
+  start, with session status dots, git status and "+ session" on each folder) and the Context panel ("Injected into
+  the session": one list for the selected session, see "Injected context"). The side panels are resized by dragging their
+  border (double-click: default width). In the session bar, left of the Folder and Context switches, one small avatar
   per agent (profile) with a live session: its most urgent state (waiting for an answer: amber dot with a ring; working:
   pulsing dot; idle: hollow dot) and its number of sessions; a click goes to that session. The archivist is not in this
-  row: its avatar is on the Archiviste button of the title bar, with its pulse in the corner (amber with a ring when it
+  row: its avatar is on the Archivist button of the title bar, with its pulse in the corner (amber with a ring when it
   waits for an answer). The row hides when the bar gets narrow.
-- **Mémoire › Archiviste**: one page to enrich the memory and decide, in three columns: to decide (facts to confirm,
+- **Memory › Archivist**: one page to enrich the memory and decide, in three columns: to decide (facts to confirm,
   level raises and modifications proposed by a session) and to process (imported sources); the archivist terminal in the
-  centre; on the right, the drop zone, the recent documents and "Appris aujourd'hui" (learned today: the commits of the
-  memory of the day).
-- **Mémoire › Fichiers**: the tree, the note (reading, Markdown editing), its links and the sessions that used it. The side panels
-  (tree, links) and the side columns of Archiviste are resized like those of Sessions: drag the border (double-click:
+  centre; on the right, the drop zone, the recent documents and "Learned on" (learned today: the commits of the
+  memory of the day, with a day picker).
+- **Memory › Files**: the tree, the note (reading, Markdown editing), its links and the sessions that used it. The side panels
+  (tree, links) and the side columns of Archivist are resized like those of Sessions: drag the border (double-click:
   default width).
-- **Mémoire › Graph 3D**: the memory as a graph (`/` search, `L` next label density, Alt+click releases a node).
+- **Memory › 3D graph**: the memory as a graph (`/` search, `L` next label density, Alt+click releases a node).
 
 Shortcuts (read from the physical key, ⌥ = Alt): ⌥1…⌥9 opens session n full size, ⌥0 returns to the grid; ⌥A opens or
 closes the archivist drawer, ⌥⇧A maximises or reduces it; ⌥M opens the last note injected into the chosen session; ⌥L
@@ -454,18 +458,17 @@ Without the interface, sessions are driven from the command line, with the servi
 
 `<id>` can be shortened to its start (8 characters are enough).
 
-In the interface, **New session** (« + Nouvelle session » in the session bar, or « + session » on a folder) works like a
+In the interface, **New session** (« + New session » in the session bar, or « + session » on a folder) works like a
 character select.
 The chosen agent (a work profile started in a dialog) stands large in the middle, on a floor in its colour, its
 neighbours smaller on each side; the arrows, ← and → (outside a text field), a click on a neighbour or on the row of
 agents below choose another. Its sheet gives its name, whether it is the default, built-in or your own, its
-description, its provider, engine and version, its model (the one the profile sets, or « par défaut du moteur », the
-engine's default), where it starts, and its equipment (skills, plugins, hooks). Below, the state of its engine:
-« Prêt » (ready), or what blocks it. An engine that is not linked to Mnemo blocks the launch (« Lancer » unavailable,
-with the reason), since without its MCP server and hooks Mnemo cannot follow the session; « Lier à Mnemo » links it on
-the spot, « Voir dans Réglages » opens Settings › Réglages › Branchements. Hooks still to approve in the engine, or a state that cannot
-be read, are only flagged. The folder is folded behind « Changer » (fixed for a profile that starts in the memory), the
-objective is optional, and the footer sums up the choice and starts it with « Lancer <agent> » (Enter). Profiles started
+description, its provider, engine and version, its model (the one the profile sets, or « engine's default »), where it starts, and its equipment (skills, plugins, hooks). Below, the state of its engine:
+« Ready », or what blocks it. An engine that is not linked to Mnemo blocks the launch (« Launch » unavailable,
+with the reason), since without its MCP server and hooks Mnemo cannot follow the session; « Link to Mnemo » links it on
+the spot, « View in Settings » opens Settings › Settings › Connections. Hooks still to approve in the engine, or a state that cannot
+be read, are only flagged. The folder is folded behind « Change » (fixed for a profile that starts in the memory), the
+objective is optional, and the footer sums up the choice and starts it with « Launch <agent> » (Enter). Profiles started
 outside a dialog, warnings and ignored profiles are listed under the sheet. Motion is turned off under « reduce
 motion ».
 
@@ -506,7 +509,7 @@ own. Deleting a session keeps its gestures but erases the text and the vectors o
 
 A profile whose engine is Codex starts `codex` (0.171 or later; `MNEMO_CODEX` names another binary) in the terminal of
 the session, without a shell, with your ChatGPT subscription (`CODEX_API_KEY` is removed from its environment). The hooks
-are those installed once for the machine (« Lier à Mnemo », `mnemo declarer --moteur codex --lier` or `mnemo init
+are those installed once for the machine (« Link to Mnemo », `mnemo declarer --moteur codex --lier` or `mnemo init
 --codex`) and approved in Codex (`/hooks`): see
 [installation.md](installation.md#codex). They act only in a session started by Mnemo, and follow the hooks of the
 profile.
@@ -523,7 +526,7 @@ profile.
 - **Resume.** Mnemo learns the identity of the Codex session from that first hook, and resumes it with `codex resume`.
   A session whose hooks are not approved never sends it: it can be neither paused nor resumed, and neither wrapped up;
   only abandoned. The interface greys these actions out and says why.
-- **Permissions.** When Codex asks you to approve a tool, the session shows « Attend ta réponse » (waiting for your
+- **Permissions.** When Codex asks you to approve a tool, the session shows « Waiting for your answer » (waiting for your
   answer). After you approve a patch or a Mnemo tool, it goes back to work; after you approve a command, it keeps
   showing the question while the command runs, until the next hook arrives (the next tool, your next message, or the end
   of the turn): changing the installed hooks to see it sooner would make you approve them again.
@@ -542,7 +545,7 @@ profile.
 
 A profile whose engine is Mistral Vibe starts `vibe` (3.1.5 or later; `MNEMO_VIBE` names another binary) in the terminal
 of the session, without a shell, with the sign-in of your own `vibe`. The hooks are those installed once for the machine
-(« Lier à Mnemo », `mnemo declarer --moteur mistral-vibe --lier` or `mnemo init --mistral`): see
+(« Link to Mnemo », `mnemo declarer --moteur mistral-vibe --lier` or `mnemo init --mistral`): see
 [installation.md](installation.md#mistral-vibe). They act only in a session started by Mnemo, and follow the hooks of
 the profile.
 
@@ -553,7 +556,7 @@ the profile.
 - **Resume.** Vibe sends its first hook when it opens the session; Mnemo learns the identity of the Vibe session from it
   and resumes it with `vibe --resume=<id>`.
 - **Stop.** Mnemo stops a Vibe session by typing `/exit`.
-- **Permissions.** When Vibe asks you to approve a tool, the session shows « Attend ta réponse » (waiting for your
+- **Permissions.** When Vibe asks you to approve a tool, the session shows « Waiting for your answer » (waiting for your
   answer) until the tool has run.
 - **`/clear`** starts a new conversation in the same session; Mnemo follows the new one (not measured yet).
 - **Context gauge.** Read from the session log of Vibe (`~/.vibe/logs/session/`) after a hook. No quotas.
@@ -593,18 +596,18 @@ At the root (no position), only the neutral notes and the linked ones are candid
 signals: the meaning of the message (compared with the other notes of the memory), its words, the weight of a note
 injected by hand on its neighbours, and the history of your gestures (below). When the estimate of its duration fits in
 the time left, the reranker also scores the first 5 to 8 candidates during the hook. The whole ranking is kept in the
-journal of the session and shown in the Contexte panel.
+journal of the session and shown in the Context panel.
 
 **Refinement in the background.** Once the hook has answered, the service asks the reranker to score the first 30
 candidates, plus those a signal designates (40 at most, within 3 seconds); if meaning did not answer in time, it computes
-it too. The ranking of the panel is updated in place, and the models button of the session reads « affinage… »
-(refining) meanwhile. Refinement changes nothing in the session: no injection, no lead, nothing kept for a later message.
+it too. The ranking of the panel is updated in place, and the models button of the session reads « refining… »
+meanwhile. Refinement changes nothing in the session: no injection, no lead, nothing kept for a later message.
 A newer meaningful message makes it obsolete: it stops and writes nothing.
 
-**The confidence score.** A small model, learned on your own judgements (Mémoire › Entraîner, see
+**The confidence score.** A small model, learned on your own judgements (Memory › Train, see
 [Training the confidence score](#training-the-confidence-score), or `mnemo banc contexte --apprendre`, see
 [Benchmarks](#benchmarks)), turns the signals of a note into the probability that it is useful for this message. There
-is one model per level of the models: « Complets », for the notes the reranker scored, and « Sens seul » (meaning only),
+is one model per level of the models: « Full », for the notes the reranker scored, and « Semantic only »,
 for the others. The coefficients are in `.mnemo/coefficients-note.json`, written by the learning and read again when it
 changes; without this file, Mnemo uses the starting score shipped with it. A model is **accepted** only if it passes
 strict criteria on your judgements (enough injections in enough real sessions, a high precision even at its pessimistic
@@ -613,13 +616,14 @@ with. Four cases:
 
 - **Accepted**: the score is a calibrated percentage. It orders the ranking, chooses the leads and may inject a note.
 - **Learned but refused** (criteria not met, or other model files installed since): its score still orders the ranking
-  and chooses the leads at each message, but nothing is injected by Mnemo: « ordre seul » (order only). Its score is
+  and chooses the leads at each message, but nothing is injected by Mnemo: « order only ». Its score is
   shown in grey with the sign « about », « ≈ 42 % », never as a calibrated percentage.
 - **Starting score** (a new installation): weights shipped with Mnemo, learned on a bench of 133 judged messages from 28
   sessions of another memory (numbers only: no text of a note or a message). It is not learned on your data, so it works
   like a refused model: it orders the ranking and chooses the leads, without % and without automatic injection. The
-  Entraîner page calls it « De départ », the ranking « note de départ, à entraîner ».
-- **Nothing learned** (the coefficients file cannot be read): a provisional rule, also « ordre seul ». The ranking
+  Train page calls it « Default », the ranking « starter score, to train »
+  (« Uncalibrated score: starter score, to train »).
+- **Nothing learned** (the coefficients file cannot be read): a provisional rule, also « order only ». The ranking
   follows the meaning and the words; the first new notes go out as leads only at the first message and at the message
   that carries a note you inject by hand, at most `contexte.pistesParMessage`. Without the meaning model, a lead must
   match the words of the message or be linked to an injected note (at the first message, the notes of the folder of the
@@ -627,7 +631,7 @@ with. Four cases:
 
 **Leads.** With a learned or starting score, each meaningful message sends as leads the new notes whose score reaches
 `contexte.seuilPiste` (10 % by default), best first, at most `contexte.pistesParMessage` (3 by default). A note whose title
-or alias is written in your message (whole words, at least 4 letters) is a lead at any message, with the reason *nommée*,
+or alias is written in your message (whole words, at least 4 letters) is a lead at any message, with the reason *named*,
 at most `contexte.cartesNommees` (5 by default), in the order of the message. Naming the place of a note from elsewhere
 unlocks the notes stored under it, and only those that are named too are proposed.
 
@@ -646,9 +650,9 @@ also a lead. Nothing is injected automatically after a tool call, at a mute mess
 model was learned or since you last reactivated injection. An injection counts as wrong when you set the note aside (✗)
 later in the same session without restoring it. When the lower bound of the Wilson interval (95 %) of these injections
 falls below 0.75, automatic injection stops for that level (a window not full yet counts the missing injections as
-right). The scores and the order stay; ➤ still injects by hand; if « Complets » is cut, « Sens seul » takes over when it is
-accepted and not cut. The Contexte panel then says « Injection automatique coupée », with the reason (*N des M dernières
-fiches injectées par Mnemo ont été écartées*) and a **Réactiver** button (reactivate), which starts a new window. A model
+right). The scores and the order stay; ➤ still injects by hand; if « Full » is turned off, « Semantic only » takes over when it is
+accepted and not cut. The Context panel then says « Automatic injection turned off », with the reason (*N des M dernières
+fiches injectées par Mnemo ont été écartées*) and a **Turn back on** button, which starts a new window. A model
 learned and accepted again also starts a new window. When the log of gestures cannot be read, automatic injection waits
 for the next reading.
 
@@ -656,7 +660,7 @@ for the next reading.
 the agent after a lead, count for it (a read counts half, and the reads of a note are capped); set aside counts against
 it. A gesture weighs less with age (half-life: 60 days), half as much when it was made elsewhere (another position or
 folder), and more when its message looks like the current one. The prior is bounded, and only a learned score that
-uses it takes it into account; a lead it pushed up reads *souvent injectée*.
+uses it takes it into account; a lead it pushed up reads *often injected*.
 
 What Mnemo does not do:
 
@@ -678,54 +682,54 @@ The profile `travail` does not tell the agent how to use its own native memory. 
 information relevant to the work, that Mnemo proposes leads, and to write with `proposer` whatever is worth keeping. The
 automatic memory of Claude Code, and the memory of Codex, stay off in the sessions started by Mnemo.
 
-**Injecting a note by hand.** In the Contexte panel, ➤ "Injecter dans la session" (inject into the session) on a line
+**Injecting a note by hand.** In the Context panel, ➤ "Inject into the session" on a line
 queues the whole note for the session's **next message** (never after a tool call): it is then injected whole, under
 `## Fiches injectées à la demande de l’utilisateur`, even if it was set aside or already injected, and recorded as
 injected. ➤ stays lit until then; a second click cancels it. The notes linked to it become candidates with the reason
-*liée à …*: injecting a note adds `contexte.poidsInjection` (0.25 by default) to each note linked to it; the weight halves
+*linked to …*: injecting a note adds `contexte.poidsInjection` (0.25 by default) to each note linked to it; the weight halves
 every `contexte.demiVieInjection` messages (3 by default; mute messages do not count, time does not either), is dropped
 below 0.02, and several injected notes add up to 0.40 at most on the same note. Injecting the note again restarts its
 weight; `/clear` and `/compact` clear all weights. A weight still active also counts in the `contexte` tool.
 
 **Setting a note aside.** On hover, ✗ opens a menu with two choices:
 
-- « Pas pour cette session » (not for this session): the note is no longer proposed nor injected in this session. It is
-  listed under « Écartées (N) », with « Rétablir » (restore).
-- « Ne plus jamais suggérer » (never suggest again): the note leaves the candidates of every session and of the
-  `contexte` tool. Its page in Mémoire says so, with « Rétablir ».
+- « Not for this session »: the note is no longer proposed nor injected in this session. It is
+  listed under « Set aside (N) », with « Restore ».
+- « Never suggest again »: the note leaves the candidates of every session and of the
+  `contexte` tool. Its page in Memory says so, with « Restore ».
 
-When you set the same note aside in 3 sessions, on at least 2 different days, the panel asks « écartée dans 3 sessions :
-ne plus la suggérer ? », with « Ne plus suggérer » and « Garder » (keep: it stays aside for this session only). Setting
+When you set the same note aside in 3 sessions, on at least 2 different days, the panel asks « set aside in 3 sessions:
+stop suggesting it? », with « Stop suggesting » and « Keep » (it stays aside for this session only). Setting
 aside a note Mnemo injected counts as an error for the watch above.
 
-**Contexte panel.** For the selected session, one list, "Injecté dans la session":
+**Context panel.** For the selected session, one list, "Injected into the session":
 
-- At the top, ◆ the notes injected whole, oldest first, with on the right how: « du dossier » (the note of the position),
-  « à la main » (➤), or « auto 94 % » (injected by Mnemo, with its score at that message; the tooltip gives the threshold
+- At the top, ◆ the notes injected whole, oldest first, with on the right how: « from folder » (the note of the position),
+  « by hand » (➤), or « auto 94 % » (injected by Mnemo, with its score at that message; the tooltip gives the threshold
   and the time).
 - One separator between what the session has seen (◆) and what it has not, as soon as a note was injected (none: nothing
   to separate, no line): a plain grey line; when
   automatic injection is active (accepted score, not cut), the same line becomes the dashed threshold of injection,
-  « seuil d’injection 90 % »; when it is cut, grey again, « seuil 90 % – coupé ». Under it, when cut, the notice and
-  « Réactiver ». A note above the threshold that was not injected (refined later, or the cap per message reached) stays
+  « injection threshold 90 % »; when it is cut, grey again, « threshold 90 % – off ». Under it, when cut, the notice and
+  « Turn back on ». A note above the threshold that was not injected (refined later, or the cap per message reached) stays
   under the line: the session has not seen it.
-- Finding a note: the magnifier at the right of « Injecté dans la session » (or `/` in the panel) opens « Chercher une
-  fiche… » (find a note) just under the separator (at the top of what the session has not seen when nothing is
+- Finding a note: the magnifier at the right of « Injected into the session » (or `/` in the panel) opens « Search for a
+  note… » just under the separator (at the top of what the session has not seen when nothing is
   injected). From two characters, a targeted search of the memory (the same search as the palette, notes only) replaces
   the list below it (the ◆ stay above), one line per note, without %; ➤ injects it, a click on the title shows its preview, a note
   already injected is marked ◆, without ➤, and a note set aside says so. ↑/↓ move through the results; Escape empties
   the field, then closes it. The magnifier stays lit while a search has text.
-- The ranking of the last meaningful message: on the left the calibrated score in %; in « ordre seul », the uncalibrated
+- The ranking of the last meaningful message: on the left the calibrated score in %; in « order only », the uncalibrated
   score in grey (« ≈ 42 % »: the refused or starting model, the provisional rule, or an entry from before the live ranking), or ◇
-  when there is none; the type dot and the title, with the reason under it and « piste » when the note was sent as a
+  when there is none; the type dot and the title, with the reason under it and « lead » when the note was sent as a
   lead. At each ranking, then at the refinement, the lines slide to their new place, ▲/▼ shows a change of rank for a
   few seconds, and a newcomer fades in; a note that becomes injected appears at the top in a fade rather than sliding up
   through the list. When the last meaningful message predates the live ranking, the panel says the ranking comes at the
   next message.
-- « Plus tôt dans la session » (earlier in the session): the leads of earlier messages and the notes the session read (◈,
+- « Earlier in the session »: the leads of earlier messages and the notes the session read (◈,
   tools `lire` and `voisins`) that are not in the ranking, most recent first, without %. A note read that is already in
-  the list keeps its line, and its tooltip adds « lue aussi à HH:MM ».
-- Then the suggestion of the 3 sessions, « Sous le seuil (N) » (notes scored under 5 %) and « Écartées (N) ».
+  the list keeps its line, and its tooltip adds « also read at HH:MM ».
+- Then the suggestion of the 3 sessions, « Below the threshold (N) » (notes scored under 5 %) and « Set aside (N) ».
 
 On hover, a line offers ➤ and ✗; a note that was only read has ➤ alone, since only what Mnemo proposed can be set aside.
 A mute message shows its reason under the list.
@@ -734,30 +738,30 @@ A mute message shows its reason under the list.
 unfolds a preview under it, to judge whether the note fits without leaving the session: its type and folder, its
 summary (the text before its first section, four lines at most), its first three facts not struck out (two lines each;
 the fact the line points to comes first), and how many others it has. The title and the reason of the line, above,
-wrap instead of being cut. Under the preview, « Ouvrir la fiche » (open the note) goes to the note in Mémoire, and the
-gestures of the line move there as text buttons: « Injecter » (lit while the injection is pending; a click cancels it)
-and « Écarter ▾ ». One preview at a time; clicking the title again, or Escape, folds it back. The note is read when the
-preview opens, with a placeholder meanwhile; when it cannot be read, the preview says so and « Ouvrir la fiche »
+wrap instead of being cut. Under the preview, « Open note » goes to the note in Memory, and the
+gestures of the line move there as text buttons: « Inject » (lit while the injection is pending; a click cancels it)
+and « Set aside ▾ ». One preview at a time; clicking the title again, or Escape, folds it back. The note is read when the
+preview opens, with a placeholder meanwhile; when it cannot be read, the preview says so and « Open note »
 remains. ⌥M still opens the last injected note directly.
 
 The list scrolls on its own and stays
 anchored where the injected notes and the ranking meet. The models button of the session, at the right of the panel
 title, always shows a plain text at the left of its icon, which stays in place (no frame; the whole button opens the
-menu). At rest, dimmed: the state of the ranking, « ordre seul » (no accepted score; the reason in its tooltip),
-« calibré » (an accepted level injects) or « injection coupée ». During the computation that follows a meaningful
-message, its current step, sent by the service as it starts (it never delays the hook): « recherche… », « reranker… »,
-« note… », « lecture des fiches… », then in the background « sens… », « affinage 10/30… » (by batches of 10) and
-« note… ». A step shows only if it lasts more than 150 ms, and stays at least 400 ms. An activity of the models for the
+menu). At rest, dimmed: the state of the ranking, « order only » (no accepted score; the reason in its tooltip),
+« calibrated » (an accepted level injects) or « injection off ». During the computation that follows a meaningful
+message, its current step, sent by the service as it starts (it never delays the hook): « searching… », « reranker… »,
+« scoring… », « reading notes… », then in the background « semantics… », « refining 10/30… » (by batches of 10) and
+« scoring… ». A step shows only if it lasts more than 150 ms, and stays at least 400 ms. An activity of the models for the
 session comes first. While something is under way (a step, an activity, models loading in the title bar button too),
 a slow highlight passes over the letters; with reduced motion, the text stays dimmed.
 
 Above the list: the avatar of the profile, the state and the objective of the session, then its engine and model (the
-**Moteur** line), its folder, start, duration, branch and, once known, the **Contexte** line: how full the agent's
+**Engine** line), its folder, start, duration, branch and, once known, the **Context** line: how full the agent's
 context window is (read from the end of the session's transcript by the service, for this gauge only; the same gauge runs
 under the title bar of the session). When Claude Code's `autoCompactWindow` setting is set (the project's
 `.claude/settings.local.json`, then `.claude/settings.json`, then `~/.claude/settings.json`; read again at each reading),
-the gauge fills up to that threshold instead of the size of the window, and its tooltip says "tokens avant résumé
-automatique" (before the automatic summary).
+the gauge fills up to that threshold instead of the size of the window, and its tooltip says "before auto-compact"
+(before the automatic summary).
 
 The context settings (`contexte.seuilInjection`, `contexte.injectionsParMessage`, `contexte.seuilPiste`,
 `contexte.pistesParMessage`, `contexte.cartesNommees`, `contexte.poidsInjection`, `contexte.demiVieInjection`) and the
@@ -774,65 +778,65 @@ Mnemo starts from the starting score shipped with it (above); the more you judge
 follows what helps you. Only the judgements you validate measure a model: the propositions of Claude count once you
 validate them, and your gestures help it learn, never measure it.
 
-**The Entraîner page.** Mémoire › Entraîner (train). A badge on the tab counts the messages pre-judged by Claude that
+**The Train page.** Memory › Train. A badge on the tab counts the messages pre-judged by Claude that
 wait for your review. From top to bottom:
 
-- **The state of the score**, for each level (« Complets », « Sens seul »; one line when both say the same): a word
-  (« Acceptée », « Refusée », « De départ »…), a sentence, where it comes from (« livrée avec Mnemo » for the starting
-  score) and its date. The ⋯ menu holds « Revenir au modèle d’avant » (back to the previous model; below).
-- **The task under way**, if any: its name, its progress (« 12 sur 30 ») and « Arrêter » (stop). Only one task runs at
+- **The state of the score**, for each level (« Full », « Meaning only »; one line when both say the same): a word
+  (« Accepted », « Rejected », « Default »…), a sentence, where it comes from (« shipped with Mnemo » for the starting
+  score) and its date. The ⋯ menu holds « Go back to the previous model » (below).
+- **The task under way**, if any: its name, its progress (« 12 of 30 ») and « Stop ». Only one task runs at
   a time; the others wait, greyed, with the task as their reason.
-- **Three steps**, as numbered cards; the useful one is highlighted and carries the main button: « Préparer » when
-  nothing is prepared, « Juger » while messages wait for a judgement, « Apprendre » when messages were judged since the
-  last learning (or there was none), otherwise « Préparer » again. A gesture that is not available is greyed, with its
+- **Three steps**, as numbered cards; the useful one is highlighted and carries the main button: « Prepare » when
+  nothing is prepared, « Judge » while messages wait for a judgement, « Train » when messages were judged since the
+  last learning (or there was none), otherwise « Prepare » again. A gesture that is not available is greyed, with its
   reason under it.
 - **The last learning** and the **history**, once there is one (below).
 
-**1. Préparer des messages** (prepare messages). Mnemo takes real messages from your last sessions (varied,
+**1. Prepare messages**. Mnemo takes real messages from your last sessions (varied,
 deduplicated, 6 at most per session), each with the notes it would have proposed: the union of the first ones by
 meaning, by words and by the reranker, plus two notes drawn outside it. The number is 30 by default, 1 to 200. Mnemo
 uses the models of the service at their level, and the reranker in the background, so that a session is never kept
-waiting. The gauge counts the validated messages against the ~100 advised. « Arrêter » keeps the messages already
+waiting. The gauge counts the validated messages against the ~100 advised. « Stop » keeps the messages already
 prepared.
 
-**2. Juger** (judge). « Juger » opens the judging screen in the page; « Relire (n) » (review) when Claude has pre-judged
+**2. Judge**. « Judge » opens the judging screen in the page; « Review (n) » when Claude has pre-judged
 messages: those come first, the most uncertain first. One screen is one whole message, with the message before it in
 the session, dimmed, when there is one; then its notes, in a mixed order that has nothing to do with their rank or
 score, so as not to sway you. Each note shows its title, its line and its summary (unfolded on demand), and three
-choices: « Utile » (useful), « Pas utile » (not useful), « Je ne sais pas » (I do not know). At the bottom:
+choices: « Useful », « Not useful », « Not sure ». At the bottom:
 
-- « Le reste n’est pas utile » (the rest is not useful), checked by default, with the number of notes it will touch: the
-  notes left without an answer become « Pas utile » when you validate. Unchecked, they stay without a judgement.
-- « Valider » (validate) records the message and opens the next one.
-- « Rien d’utile ici » (nothing useful here): a message that needs no note, which the acceptance needs too. Not
+- « The rest is not useful », checked by default, with the number of notes it will touch: the
+  notes left without an answer become « Not useful » when you validate. Unchecked, they stay without a judgement.
+- « Validate » records the message and opens the next one.
+- « Nothing useful here »: a message that needs no note, which the acceptance needs too. Not
   available once a note is judged useful.
-- « Passer » (skip) sets the message aside.
+- « Skip » sets the message aside.
 
-At the top, the progress, « Annuler le dernier » (undo the last answer: its message opens again) and « Retour » (back).
-When everything is judged, « Tout est jugé » leads back to the page, which then proposes to learn. Keyboard, while the
+At the top, the progress, « Undo last » (its message opens again) and « Back ».
+When everything is judged, « Everything is judged » leads back to the page, which then proposes to learn. Keyboard, while the
 screen has the focus (or nothing has) and outside a field: ↑ ↓ move from note to note, `o`, `n`, `i` answer useful, not
-useful, I do not know and go to the next note, Entrée validates, Échap goes back.
+useful, I do not know and go to the next note, Enter validates, Esc goes back.
 
-**Pré-juger avec Claude** (pre-judge with Claude). Claude proposes an answer for each note of the messages to judge that
+**Pre-judge with Claude**. Claude proposes an answer for each note of the messages to judge that
 have none yet. **It costs one Claude Code call per message, on your Claude subscription**: the page gives the number of
 calls before you start. Claude runs `claude -p` without any tool or MCP server, two messages at a time, and sees only the
 message, the message before it and, for each note, its title, line and a short summary, never the whole note. Its
 proposition is preselected on the judging screen, marked « Claude » with its confidence and its reason; you change it
 or validate it. A proposition never replaces a judgement you gave, and counts only once its message is validated.
-« Arrêter » keeps the propositions already received. Not available when Claude Code cannot be found on the computer.
+« Stop » keeps the propositions already received. Not available when Claude Code cannot be found on the computer.
 
-**Accepter les sûres** (accept the sure ones) validates at once each message where Claude proposed an answer for every
+**Accept confident ones** validates at once each message where Claude proposed an answer for every
 note, each with a confidence of 90 % or more; a judgement you gave by hand is kept. The others wait for your review.
-« Annuler » undoes it.
+« Cancel » undoes it.
 
-**3. Apprendre** (learn). « Apprendre la note » learns one model per level on your validated judgements, outside the
+**3. Train**. « Train the score » learns one model per level on your validated judgements, outside the
 thread of the service (the sessions are not slowed down), and checks the acceptance criteria (see
 [Benchmarks](#benchmarks)). Not available without a validated judgement. The new model replaces the current one, even
-refused; a level with no judged pair (for example « Complets » when the messages were prepared without the reranker)
+refused; a level with no judged pair (for example « Full » when the messages were prepared without the reranker)
 keeps its current model, so it never falls back to the provisional rule for lack of data. The service takes the new model
-at the next message, without a restart. « Arrêter » leaves the current model in place. Once the score has been learned,
+at the next message, without a restart. « Stop » leaves the current model in place. Once the score has been learned,
 the card says how many messages were judged since the last learning (the most recent of the successful lines of the
-history and of the dates of the learned models; « Revenir au modèle d’avant » does not change it): a message counts from
+history and of the dates of the learned models; « Go back to the previous model » does not change it): a message counts from
 its validation; one judged in the terminal with `--juger`, which has no validation date, counts only if it was prepared
 after the last learning.
 
@@ -842,19 +846,19 @@ au-dessus de 90 % : 2, il en faut 25 », « trop peu de messages « Rien d’uti
 the number of messages, whether its model replaced the one before, the state of each level and the table of
 reliability, folded (the predicted score against the share really useful).
 
-**Revenir au modèle d’avant** (back to the previous model), in the ⋯ menu: each learning keeps the model it replaced
+**Go back to the previous model**, in the ⋯ menu: each learning keeps the model it replaced
 (`.mnemo/coefficients-note.avant.json`); this gesture puts it back, and doing it again returns to the newer one. Not
 available during a learning, nor while a `mnemo banc contexte` command (`--apprendre`, `--juger`…) holds the file of
 judgements in a terminal.
 
-**History.** The last 10 learnings: date, « Manuel » or « Automatique », the verdict of each level, and whether the
-model was « Remplacé » (replaced), « Gardé » (kept) or « Gardé (échec) » (kept after a failure, with the error).
+**History.** The last 10 learnings: date, « Manual » or « Automatic », the verdict of each level, and whether the
+model was « Replaced », « Kept » or « Kept (failed) » (kept after a failure, with the error).
 
 **Relearning in the background.** With the setting `entrainement.automatique` (on by default,
-[Settings](installation.md#settings) › Réglages › Mémoire, card Rappel, group « Note de confiance »), the service learns the score again from
+[Settings](installation.md#settings) › Settings › Memory, card Recall, group « Confidence score »), the service learns the score again from
 your gestures. It checks 5 minutes after it starts, then every 10 minutes, and learns when all of these hold:
 
-- no task of the Entraîner page is under way, and no session is computing (a hook, a refinement), nor finished within
+- no task of the Train page is under way, and no session is computing (a hook, a refinement), nor finished within
   the last minute;
 - the last learning, by hand or automatic, successful or not, is at least 24 hours old;
 - at least one validated judgement on the bench: gestures alone measure nothing;
@@ -867,11 +871,11 @@ by Mnemo is not a judgement (Mnemo chose it). Only what was shown can get a gest
 the inverse of the share of the notes of its rank that get one (at most 5 times). These pairs only help the model
 learn; the acceptance is measured on your validated judgements alone. The new model replaces the current one when it
 keeps every level the current one has accepted: an accepted level is never lost, and a refused model only replaces a
-refused, starting or unlearned one. Each attempt writes its report and a line « Automatique » in the history.
+refused, starting or unlearned one. Each attempt writes its report and a line « Automatic » in the history.
 
-**From a session.** When the ranking of a session is in « ordre seul » for want of an accepted score, the models menu of
-the session (at the right of the title of the Contexte panel) offers « Entraîner la note », which opens Mémoire ›
-Entraîner (not when the models are off).
+**From a session.** When the ranking of a session is in « order only » for want of an accepted score, the models menu of
+the session (at the right of the title of the Context panel) offers « Train the confidence score », which opens Memory ›
+Train (not when the models are off).
 
 ## Profiles
 
@@ -962,7 +966,7 @@ Besides notes, `entretenir` acts on the information lines of a note (the `ancre`
   archivist never deletes or confirms an information itself. At most 50 batches wait; an information can be in only one
   pending batch.
 
-**Validating a batch.** Pending batches appear in Mémoire › Archiviste, under « À arbitrer » (they count in the badges).
+**Validating a batch.** Pending batches appear in Memory › Archivist, under « To decide » (they count in the badges).
 **Tout valider** applies every line; **Revoir** shows each line before and after, with a checkbox: **Valider N lignes**
 applies the checked lines only; **Rejeter** drops the batch. A validation is one commit (`mnemo:
 fusionne|supprime|confirme <n> informations <path>`). A batch records, at its proposal, a fingerprint of each
@@ -1000,41 +1004,40 @@ A profile is a note of the memory, `_mnemo/profils/<name>/<name>.md`: see [forma
 
 ### Managing profiles
 
-**Settings › Agents** lists the profiles (agents) in the panel, in two groups: **Mémoire**, the archivist, always there,
-which files and keeps the memory (started from the Archivist drawer); and **Travail**, the sessions on your projects,
+**Settings › Agents** lists the profiles (agents) in the panel, in two groups: **Memory**, the archivist, always there,
+which files and keeps the memory (started from the Archivist drawer); and **Work**, the sessions on your projects,
 started from New session, `travail` first (the default one, always there). Each line shows the avatar, the name, and
-engine · model; « + Nouvel agent » asks for a name. The chosen agent opens on the right in a character creator, all in
+engine · model; « + New agent » asks for a name. The chosen agent opens on the right in a character creator, all in
 a draft saved with one gesture:
 
 - **The stage** (left, stays in view): the avatar large on its podium (a slow breathing motion, off under « reduce
   motion »), the name, the class summary (provider logo, engine · model, provider), stats as bars (skills, plugins with
-  Claude Code, capabilities, each against what can be equipped), the switch **« Démarre dans la mémoire »** (start in the
-  memory: `_mnemo/`, the root added with `--add-dir`; otherwise in the folder chosen at launch; the archivist always
+  Claude Code, capabilities, each against what can be equipped), the switch **« Starts in the memory »** (`_mnemo/`, the root added with `--add-dir`; otherwise in the folder chosen at launch; the archivist always
   starts in the memory) and the Cancel / Save footer.
-- **Apparence** (appearance): a small creature (12 shapes) and a colour, chosen separately; shown in New session and in
+- **Appearance**: a small creature (12 shapes) and a colour, chosen separately; shown in New session and in
   the session lists.
-- **Classe** (class): one card per engine (Claude Code, Codex, Mistral Vibe) with its provider's logo and its state on
-  this computer; an engine not yet linked to Mnemo, or not installed, is locked 🔒 with the reason (Settings › Réglages ›
-  Branchements links it). The archivist stays on Claude Code. Then the model, as chips, « par défaut » (the engine's
+- **Class**: one card per engine (Claude Code, Codex, Mistral Vibe) with its provider's logo and its state on
+  this computer; an engine not yet linked to Mnemo, or not installed, is locked 🔒 with the reason (Settings › Settings ›
+  Connections links it). The archivist stays on Claude Code. Then the model, as chips, « default » (the engine's
   default) first, then the models the engine offers (Claude Code: `opus`, `sonnet`, `haiku`; Codex: the list given by
   `codex debug models`); another name can be typed. It is passed as `--model` (Claude Code) or `-m` (Codex). Changing the
   engine empties the model and the plugins; going back to the saved engine restores them.
-- **Équipement** (equipment), as an inventory: the agent's own skills (`profils/<name>/skills/`, always active, winning
+- **Equipment**, as an inventory: the agent's own skills (`profils/<name>/skills/`, always active, winning
   over a memory skill of the same name), the memory skills (`_mnemo/skills/`, equipped one by one, or all of them,
   future ones included), then the **Claude Code plugins** (greyed out with another engine): the installed plugins (read
   from `~/.claude/plugins/installed_plugins.json`, or `CLAUDE_CONFIG_DIR`). The ticked ones are switched on in the
   session, every other installed plugin is switched off, even one switched on in your Claude Code settings
   (`enabledPlugins` of the session settings). A profile with no plugin ticked gets none.
-- **Capacités** (capabilities): the six Mnemo hooks, each with what it does: Éveil (start), Souffle (each message), Bouclier
-  (before an action), Carnet (after an action), Veille (stop), Récit (end). Souffle, Bouclier and Carnet are switches;
-  Éveil, Veille and Récit keep the session state and are always on (shown on, not switchable, with the reason).
-- **Mission**: the instruction, Mnemo's default one (which follows Mnemo updates) or your own text; « Revenir à la
-  consigne par défaut » goes back to the default.
-- **Gérer l'agent** (manage, folded at the bottom): its note in the memory, **what a session receives** (read-only, as
+- **Capabilities**: the six Mnemo hooks, each with what it does: Wake (start), Breath (each message), Shield
+  (before an action), Logbook (after an action), Watch (stop), Chronicle (end). Breath, Shield and Logbook are switches;
+  Wake, Watch and Chronicle keep the session state and are always on (shown on, not switchable, with the reason).
+- **Mission**: the instruction, Mnemo's default one (which follows Mnemo updates) or your own text; « Go back to the
+  default instruction » goes back to the default.
+- **Manage the agent** (folded at the bottom): its note in the memory, **what a session receives** (read-only, as
   saved: the profile instruction, the Mnemo MCP server instructions, the hooks, the memory skills and why one is left
   out, the Claude Code plugins, what comes from the engine outside Mnemo such as personal skills or `CLAUDE.md`, and the
   system instructions; for Codex or Mistral Vibe, the instruction is shown with the list of skills it carries, and no
-  plugins), « Dupliquer » (copies its effective values and its own skills under another name) and « Supprimer » (removes
+  plugins), « Duplicate » (copies its effective values and its own skills under another name) and « Delete » (removes
   `profils/<name>/` after a confirmation; not possible for `travail` and `archiviste`, the reason is shown; the sessions
   of a deleted profile resume with the defaults of `travail`).
 
@@ -1042,16 +1045,16 @@ Each save is one commit. If the note changed elsewhere since it was opened, the 
 Switching agent, tab or view with unsaved changes asks first.
 
 **Editing skills.** On hover (always shown on touch screens), the pencil ✎ of a memory skill or of one of the agent's
-own skills opens its editor; plugin skills have none. « + Nouvelle skill » at the end of the inventory creates one, in the
+own skills opens its editor; plugin skills have none. « + New skill » at the end of the inventory creates one, in the
 memory (shared by every agent, equipped on the open agent in its draft) or for this agent only. The editor has the icon
 (an emoji, stored in the frontmatter under `metadata.icone`), the name (lowercase letters, digits and hyphens, 40
-characters at most, unique: the name the agent sees), « Quand l'utiliser » (when to use it: the description that makes
+characters at most, unique: the name the agent sees), « When to use it » (the description that makes
 the agent load it, required), the Markdown content, and the agents that carry it. Each gesture writes at once, one
 commit under the lock: create (`mnemo: cree <path>`), save (`modifie`; a rename is `renomme <old> → <new>` and updates the
 profiles that list the skill, in the same commit), delete (the second click confirms and says how many agents lose it;
 the profiles that list it are updated in the same commit). A skill changed elsewhere since it was opened is refused with
-« Recharger ». A **skill provided by Mnemo** (the archivist's default skills) can be edited (a warning says it then
-leaves the automatic updates) and brought back with « Revenir à la version d'origine », but neither renamed nor deleted:
+« Reload ». A **skill provided by Mnemo** (the archivist's default skills) can be edited (a warning says it then
+leaves the automatic updates) and brought back with « Go back to the original version », but neither renamed nor deleted:
 the next launch of its profile would place it again; the greyed action says so. A skill still in a past default version
 is shown as up to date (the next launch replaces it anyway).
 
@@ -1085,7 +1088,7 @@ Benchmarks measure Mnemo on fictitious corpora shipped with it (`packages/mnemo/
   messages, from the file `.mnemo/banc-contexte.json` (private, never committed); `--recalculer` computes the signals
   again with the models. It ranks as the hook does, reading the index and the log of gestures as they are, without writing
   to them. The steps to learn the confidence score of your memory in a terminal (see [Injected context](#injected-context);
-  the Entraîner page does the same, see [Training the confidence score](#training-the-confidence-score)):
+  the Train page does the same, see [Training the confidence score](#training-the-confidence-score)):
   1. `--extraire [<session>] [--nombre <n>]` adds real messages from your sessions (varied, deduplicated), each with the
      notes to judge: the union of the first ones by meaning, by words and by the reranker, plus two notes drawn outside
      that union, to measure what it misses. `--par-session <n>` (6 by default) caps the messages taken per session.
@@ -1095,26 +1098,26 @@ Benchmarks measure Mnemo on fictitious corpora shipped with it (`packages/mnemo/
      resumes where you stopped (a copy `banc-contexte.json.bak` is kept from before the session). After `--completer`,
      it asks only the new notes.
      `--prejuger [--nombre <n>]` has Claude propose an answer for each note of the messages to judge that have none yet
-     (at most `<n>` messages), as « Pré-juger avec Claude » does: **one Claude Code call per message, on your Claude
+     (at most `<n>` messages), as « Pre-judge with Claude » does: **one Claude Code call per message, on your Claude
      subscription**, two at a time, without any tool or MCP server. The propositions are saved after each message and
-     never replace a judgement; they count once a message is validated on the Entraîner page. Run it again to resume
+     never replace a judgement; they count once a message is validated on the Train page. Run it again to resume
      the messages left.
-  3. `--apprendre [--module <path>]` learns one model per level (« Complets » and « Sens seul ») on the judgements,
+  3. `--apprendre [--module <path>]` learns one model per level (« Full » and « Meaning only ») on the judgements,
      validated on sessions it did not learn from, and decides whether each one is accepted: at least 25 simulated
      injections in at least 10 real sessions, a pessimistic precision of 90 % or more (80 % or more at its lower Wilson
      bound and at the 2.5th percentile of a bootstrap by session), a calibration slope between 0.8 and 1.25, at least 20
      judged messages that need nothing (from 5 sessions) with an injection on at most 5 % of them, and at most 0.5
-     injection per message. It records the result as « Apprendre la note » does: the coefficients in
+     injection per message. It records the result as « Train the score » does: the coefficients in
      `.mnemo/coefficients-note.json`, which the service reads again at once (a level with no judged pair keeps its
-     current model; the current model is kept in `.mnemo/coefficients-note.avant.json`, for « Revenir au modèle
-     d’avant »), its report in `.mnemo/apprentissage-note.txt` (and `.json`): the reason of each refusal, and what each
-     threshold would give, and a line « Manuel » in the history of the Entraîner page. None of these files holds any text
+     current model; the current model is kept in `.mnemo/coefficients-note.avant.json`, for « Go back to the
+     previous model »), its report in `.mnemo/apprentissage-note.txt` (and `.json`): the reason of each refusal, and what each
+     threshold would give, and a line « Manual » in the history of the Train page. None of these files holds any text
      of a note or a message. `--module <path>` also writes the
      coefficients as the TypeScript module of defaults shipped with Mnemo (for development); with `--depart`, it writes
-     only that module, as starting models (shown « De départ », never accepted), and nothing in `.mnemo`.
+     only that module, as starting models (shown « Default », never accepted), and nothing in `.mnemo`.
 
-  Only one operation writes `banc-contexte.json` at a time, whether a command or a task of the Entraîner page in the
-  service: the second is refused, and the refusal names the one that holds the file (« préparer des messages »,
+  Only one operation writes `banc-contexte.json` at a time, whether a command or a task of the Train page in the
+  service: the second is refused, and the refusal names the one that holds the file (« Preparing messages »,
   `--juger`…). A lock left by a stopped process is taken over.
 
   A note changed since the extraction has its judgement left out (`--empreintes garder` to keep it). `--json` also gives
@@ -1138,7 +1141,7 @@ To undo: `claude mcp remove mnemo --scope user`. `MNEMO_SANS_MCP=1` is the same 
 
 ## Connecting Codex
 
-`mnemo init --codex`, `mnemo declarer --moteur codex --lier` or « Lier à Mnemo » in Settings › Réglages › Branchements
+`mnemo init --codex`, `mnemo declarer --moteur codex --lier` or « Link to Mnemo » in Settings › Settings › Connections
 declares the same server to Codex at user level, so every Codex session reaches the memory, and installs the Mnemo hooks
 for the sessions started by Mnemo. If `codex` cannot be found, `init --codex` prints the command to run yourself;
 `--lier` and the button refuse, and link nothing:
@@ -1151,8 +1154,8 @@ case of your own settings are in [installation.md](installation.md#codex).
 
 ## Connecting the Claude app
 
-The Claude app (Claude Desktop) has its own list of MCP servers, in `claude_desktop_config.json`. The **App Claude**
-group of Settings › Réglages › Branchements edits it from the interface; the path of the file is shown below the group:
+The Claude app (Claude Desktop) has its own list of MCP servers, in `claude_desktop_config.json`. The **Claude app**
+group of Settings › Settings › Connections edits it from the interface; the path of the file is shown below the group:
 
 | Platform | File |
 | --- | --- |
@@ -1164,16 +1167,16 @@ When the Claude app is not installed (its folder does not exist), the group only
 (invalid JSON, `mcpServers` not an object, no permission), the group shows the error and the path and changes nothing: Mnemo
 never rewrites a file it cannot read. Fix it by hand, then open the settings again.
 
-- **Mémoire Mnemo** connects the memory of this folder: its switch adds a `mnemo` entry that runs `mnemo mcp` with the
+- **Mnemo memory** connects the memory of this folder: its switch adds a `mnemo` entry that runs `mnemo mcp` with the
   Node and the copy of Mnemo of this installation, and the folder in `MNEMO_RACINE`, or removes it. When the entry no
-  longer matches this installation (another Node, Mnemo moved, another folder), the line says so: « Mettre à jour »
-  rewrites it, « Débrancher » removes it. The name `mnemo` is reserved: the other servers can never take it, in any
+  longer matches this installation (another Node, Mnemo moved, another folder), the line says so: « Update »
+  rewrites it, « Disconnect » removes it. The name `mnemo` is reserved: the other servers can never take it, in any
   case.
 - The other servers of the file follow, one line each, in its order: name, command and arguments, and the names of
-  their environment variables. « + Ajouter un serveur » and « Modifier » open a form (name, command, arguments one per line,
-  variables as `NOM=valeur` one per line); « Retirer… » asks for a confirmation in the page. Only servers run by a command
+  their environment variables. « + Add a server » and « Edit » open a form (name, command, arguments one per line,
+  variables as `NOM=valeur` one per line); « Remove… » asks for a confirmation in the page. Only servers run by a command
   (stdio: `command`, with optional `args` and `env`) can be changed; a server described otherwise (a remote `url`, other
-  fields) is marked « lecture seule » and can only be removed. A remote address is shown without credentials, query or
+  fields) is marked « read-only » and can only be removed. A remote address is shown without credentials, query or
   fragment.
 
 The values of environment variables (often API keys) are never shown: the service never sends them to the interface. When

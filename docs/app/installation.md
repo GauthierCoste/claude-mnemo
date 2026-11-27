@@ -22,8 +22,8 @@ in [usage.md](usage.md).
    Applications folder. The released `.dmg` is for Apple silicon; on an Intel Mac, build the app yourself.
 2. Open Mnemo from Applications (Finder, Launchpad or Spotlight), not from the disk image. The app is signed ad hoc, not by an identified Apple developer (the project has no Apple Developer
    account), so the first time macOS refuses to open it. Either Control-click (right-click) Mnemo in the Finder, choose
-   Open (« Ouvrir »), then Open again in the dialog; or, on recent macOS versions where that dialog has no Open button,
-   go to System Settings › Privacy & Security (« Réglages Système › Confidentialité et sécurité »), find the message
+   Open (« Ouvrir » on a French macOS), then Open again in the dialog; or, on recent macOS versions where that dialog has no Open button,
+   go to System Settings › Privacy & Security (« Réglages Système › Confidentialité et sécurité » on a French macOS), find the message
    about Mnemo and click « Ouvrir quand même » (Open Anyway). macOS remembers it: later openings are normal.
 3. The installation assistant opens.
 
@@ -40,7 +40,7 @@ would otherwise point to a path about to disappear). Quit it by closing its wind
 2. Download `Mnemo-Setup-<version>-x64.exe` from the [latest release](https://github.com/GauthierCoste/mnemo/releases/latest)
    (free; or build it yourself, see [below](#build-the-app-from-the-sources)) and open it. The installer is not signed
    (the project has no code signing certificate), so Windows SmartScreen stops it the first time: click « More info »
-   (« Informations complémentaires »), then « Run anyway » (« Exécuter quand même »).
+   (« Informations complémentaires » on a French Windows), then « Run anyway » (« Exécuter quand même »).
 3. The installer has steps: for you only (the default, no administrator rights) or for all users, then the folder (by
    default `%LOCALAPPDATA%\Programs\Mnemo`, for you only), then it installs. It adds Mnemo to the Start menu and to the
    desktop, and registers its uninstaller in Settings › Apps.
@@ -58,29 +58,33 @@ The app shows it when it has no configuration yet (or an unreadable one), or whe
 above). It is a page of the app itself, with no network access; its links (installing git or Claude Code) open in your
 browser. The steps are listed at the top of the window:
 
-1. **Vérifications** (checks): git, Claude Code (the `claude` the sessions will run) and the Node.js version, through
+1. **Language**: « Français » or « English », preselected on the language of the system. The choice is passed to
+   `mnemo init --langue` at the installation step (see [the command line of Mnemo](../usage.md#command-line)) and sets the
+   language of the assistant, of the menus and of the interface; it can be changed later in Settings (see
+   [Language](../usage.md#language)).
+2. **Checks**: git, Claude Code (the `claude` the sessions will run) and the Node.js version, through
    `mnemo verifier-poste --json`. Without git: on macOS `xcode-select --install` in a terminal, or the link to install
-   it; on Windows « Installer Git pour Windows ». Without Claude Code: « Installer Claude Code ». « Vérifier à nouveau »
-   checks again (after installing git on Windows, quit Mnemo and open it again if git is still not found: the app keeps
-   the `Path` it was opened with); « Continuer » is available once both are there.
-2. **Dossier** (folder): « Choisir un dossier… » opens the folder picker of the system (a new folder can be created there).
+   it; on Windows « Install Git for Windows ». Without Claude Code: « Install Claude Code ». « Check again »
+   reruns the checks (after installing git on Windows, quit Mnemo and open it again if git is still not found: the app keeps
+   the `Path` it was opened with); « Continue » is available once both are there.
+3. **Folder**: « Choose a folder… » opens the folder picker of the system (a new folder can be created there).
    Choose the folder that holds your projects: the memory goes into its `_mnemo/`. A folder that already has a Mnemo
-   memory is reused as is (« Mémoire existante, reprise telle quelle »); choosing the `_mnemo/` folder of a memory means
+   memory is reused as is (« Existing memory, reused as is »); choosing the `_mnemo/` folder of a memory means
    its parent; a folder inside a memory is refused.
-3. **Choix** (choices), one checkbox each:
-   - « Déclarer Mnemo à Claude Code » (the MCP server, for all your Claude Code sessions): yes by default;
-   - « Installer la commande « mnemo » » (`~/.local/bin/mnemo`): yes (macOS only: not offered on Windows);
-   - « Télécharger les modèles locaux » (search by meaning, about 1.3 GB): no;
-   - « Ouvrir Mnemo à l'ouverture de session » (at login, in the menu bar or the notification area only): yes.
-4. **Installation**: « Installer » runs `mnemo init <folder> --json` with one explicit option per choice (see
+4. **Choices**, one checkbox each:
+   - « Declare Mnemo to Claude Code » (the MCP server, for all your Claude Code sessions): yes by default;
+   - « Install the "mnemo" command » (`~/.local/bin/mnemo`): yes (macOS only: not offered on Windows);
+   - « Download the local models » (search by meaning, about 1.3 GB): no;
+   - « Open Mnemo at login » (at login, in the menu bar or the notification area only): yes.
+5. **Installation**: « Install » runs `mnemo init <folder> --json` with one explicit option per choice (see
    [the command line of Mnemo](../usage.md#command-line)), and shows each step as it goes (memory, declaration to Claude Code, models,
    command), with one progress bar per model download. A step that fails outside the memory does not stop the others:
    it is marked, and you can redo it later with `mnemo init` in that folder (on macOS). If Claude Code already has a Mnemo
    declaration made for another installation (another copy of Mnemo, or the sources), the assistant rewrites it for
    this app right away (`mnemo declarer --remplacer`, user scope only) and shows the step as done; a declaration of
    another scope stays, and the step stays failed with the commands to run by hand. If the memory itself could not be
-   created, « Revenir aux choix » lets you try again.
-5. **Prêt** (ready): « Ouvrir Mnemo » writes the configuration of the app, applies the open-at-login choice, starts the
+   created, « Back to the choices » lets you try again.
+6. **Ready**: « Open Mnemo » writes the configuration of the app, applies the open-at-login choice, starts the
    service and opens the interface.
 
 Closing the assistant before the end quits the app without writing its configuration (what `init` already did stays).
@@ -93,7 +97,7 @@ configuration: after installing a tool, quit Mnemo and open it again. On macOS, 
 assistant reads the `PATH` of your login shell (`$SHELL`, `/bin/zsh` by default, started as a login and interactive shell
 with a 10-second limit), as your terminal sees it (nvm, Homebrew, `pnpm`…), and uses it for the checks, for `init` and in
 the configuration. If the shell cannot be read, it falls back to `~/.local/bin`, Homebrew and the system folders, and
-says so in `installation.log`. « Reprendre le PATH du terminal », in the menu bar menu, reads it again later (see
+says so in `installation.log`. « Reload the terminal PATH », in the menu bar menu, reads it again later (see
 [usage.md](usage.md#menu)). The same
 folder holds `preferences.json`, what the app remembers by itself (answer to the quit question, window size and position,
 new versions).
@@ -177,8 +181,8 @@ configuration, if they are Mnemo's.
 Close your Claude Code sessions and the Claude app first: their Mnemo MCP server runs the Node.js of the app, and a
 running copy keeps its files in use (on Windows, the uninstaller could then leave some of them behind).
 
-**With the app**, « Désinstaller Mnemo… » in its menu (menu bar, or notification area on Windows) says what it will remove, what will stay, and asks
-for confirmation (« Annuler » by default). It removes the opening at login; the `mnemo` command, the MCP declaration of
+**With the app**, « Uninstall Mnemo… » in its menu (menu bar, or notification area on Windows) says what it will remove, what will stay, and asks
+for confirmation (« Cancel » by default). It removes the opening at login; the `mnemo` command, the MCP declaration of
 Claude Code and the `mnemo` entry of the Claude app, each only if it runs this app (those of another Mnemo installation,
 such as a clone of the sources, stay, and so does anything that is not Mnemo's: the dialog lists them); the files of the
 app in `~/Library/Application Support/Mnemo/` or `%APPDATA%\Mnemo\` (`config.json`, `preferences.json`,
@@ -189,7 +193,7 @@ Start menu and desktop shortcuts. Each removal is
 independent: one failure does not stop the others. Your memory (`_mnemo/`) and the local state (`.mnemo/`) stay; so does
 the models cache (see [installation.md](../installation.md#uninstall-cleanly) of Mnemo).
 
-**By hand**, for the app on macOS: quit it (« Quitter Mnemo »), uncheck its opening at login first if you can (or remove it in
+**By hand**, for the app on macOS: quit it (« Quit Mnemo »), uncheck its opening at login first if you can (or remove it in
 System Settings › General › Login Items), then `pnpm installer-dev --retirer` for an app installed by `pnpm installer-dev`, or drag
 `/Applications/Mnemo.app` to the Trash for an app installed from the `.dmg`; delete
 `~/Library/Application Support/Mnemo/`. On Windows: quit it, uncheck its opening at login (or turn it off in Settings ›

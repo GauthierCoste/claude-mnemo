@@ -2,11 +2,11 @@
 
 One memory on your machine, shared by all your coding agents. Claude Code, Codex and Mistral Vibe sessions started
 from Mnemo read and write the same memory: a folder of Markdown notes, versioned with git, next to your projects. At
-each message, Mnemo injects what the session should know from it, and the Contexte panel shows exactly what was
+each message, Mnemo injects what the session should know from it, and the Context panel shows exactly what was
 injected and why. The agents keep the memory up to date as they work; anything that changes what is trusted waits for
 your OK. Nothing leaves your machine except what each agent already sends to its own provider.
 
-![A Claude Code session zoomed in Mnemo. On the right, the Contexte panel: the notes injected into the session, the injection threshold, the ranked candidate notes with their score and reason, and the preview of one note with « Ouvrir la fiche », « Injecter » and « Écarter »](docs/images/sessions.png)
+![A Claude Code session zoomed in Mnemo. On the right, the Context panel: the notes injected into the session, the injection threshold, the ranked candidate notes with their score and reason, and the preview of one note with « Open note », « Inject » and « Set aside »](docs/images/sessions.png)
 
 ## What it does
 
@@ -14,14 +14,14 @@ your OK. Nothing leaves your machine except what each agent already sends to its
   folder. A grid groups them by project with their state (working, waiting for you, paused, to review); zoom one with
   ⌥1 to ⌥9.
 - **The right context, at each message.** Mnemo ranks the notes that may help and gives the agent a few leads to read;
-  a note it is sure of is injected whole. The Contexte panel shows the live ranking and what was injected: click a note
+  a note it is sure of is injected whole. The Context panel shows the live ranking and what was injected: click a note
   to preview it, inject it by hand or set it aside.
 - **A confidence score trained on you.** A small local model, shipped with starting weights, learns from your
-  judgements (Mémoire › Entraîner, where Claude can pre-judge for you) and from your gestures in the background.
+  judgements (Memory › Train, where Claude can pre-judge for you) and from your gestures in the background.
 - **Memory kept by the agent.** Through an MCP server, the agent searches the memory, reads notes and proposes changes;
   anything that changes what is trusted waits for your OK. Each session ends with a short episode of what was learned.
 
-![The same memory in a Codex session: the notes injected from the project folder in the Contexte panel, and Codex proposing a new fact to the memory through the MCP server](docs/images/codex.png)
+![The same memory in a Codex session: the notes injected from the project folder in the Context panel, and Codex proposing a new fact to the memory through the MCP server](docs/images/codex.png)
 
 - **Documents.** Drop a spec, an email, meeting notes or a PDF: the archivist pulls out the facts worth keeping, with
   their source and date, and asks you when something contradicts what is already there.
@@ -30,7 +30,7 @@ your OK. Nothing leaves your machine except what each agent already sends to its
 - **Plain files.** It is all Markdown in `_mnemo/`, one git commit per change. Browse it as a tree or a 3D graph, edit
   it in the interface or your own editor, and `git revert` what you don't like.
 
-![Archivist page: facts proposed by the sessions and the archivist, waiting for « Confirmer », « Modifier » or « Rejeter », the archivist session reading a dropped mailbox, and the recent documents](docs/images/archiviste.png)
+![Archivist page: facts proposed by the sessions and the archivist, waiting for « Confirm », « Edit » or « Reject », the archivist session reading a dropped mailbox, and the recent documents](docs/images/archiviste.png)
 
 ## How it works
 
@@ -56,7 +56,7 @@ Download it from the [latest release](https://github.com/GauthierCoste/mnemo/rel
 git and Claude Code: the app carries its own Node.js and copy of Mnemo.
 
 - **macOS** (Apple silicon): `Mnemo-<version>-arm64.dmg`, drag Mnemo onto Applications. It is signed ad hoc: the first
-  time, confirm in System Settings › Privacy & Security (« Ouvrir quand même »).
+  time, confirm in System Settings › Privacy & Security (« Ouvrir quand même » (Open Anyway) on a French macOS).
 - **Windows** (x64): `Mnemo-Setup-<version>-x64.exe`. It is not signed: if SmartScreen stops it, choose « More info »,
   then « Run anyway ».
 
@@ -86,7 +86,7 @@ Version 1.11.7. Mnemo runs on macOS and Windows (x64; the desktop app is checked
 Linux has not been used. The CI runs the type check and the tests on Linux, macOS and Windows at each push. What comes
 next is in [coming next](docs/coming-next.md).
 
-The interface and the command line are in French; this README and the docs are in English.
+The interface is in French or English (a setting, see [usage](docs/usage.md#language)); the `mnemo` command line is in French; this README and the docs are in English.
 
 ## Documentation
 
