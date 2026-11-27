@@ -7,6 +7,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { FicheVue } from '@mnemo/contrat';
 import { DePlus } from '../commun/DePlus.tsx';
 import { useToast } from '../Toast.tsx';
+import { useTextes } from '../../langue/langue.tsx';
 import s from './LiensFiche.module.css';
 
 type Ligne = { cle: string; libelle: string; chemin: string | null; titre?: string };
@@ -37,6 +38,7 @@ export function LiensFiche(p: {
 	ouvrir(chemin: string): void;
 	ouvrirSession(id: string): void;
 }): ReactNode {
+	const t = useTextes().memoire.liens;
 	const toast = useToast();
 	const f = p.fiche;
 	const entrants = sansDoublon((f?.liens.entrants ?? []).map((l) => ({ cle: l.chemin, libelle: l.titre, chemin: l.chemin })));
@@ -50,7 +52,7 @@ export function LiensFiche(p: {
 
 	const lignes = (liste: Ligne[]) =>
 		liste.length === 0 ? (
-			<p className={s.vide}>Aucun.</p>
+			<p className={s.vide}>{t.aucun}</p>
 		) : (
 			liste.map((l) => {
 				const chemin = l.chemin;
@@ -59,7 +61,7 @@ export function LiensFiche(p: {
 						key={l.cle}
 						couleur={chemin ? p.couleur(chemin) : 'var(--dim)'}
 						titre={chemin ?? undefined}
-						surClic={() => (chemin ? p.ouvrir(chemin) : toast(`Fiche « ${l.libelle} » absente`))}
+						surClic={() => (chemin ? p.ouvrir(chemin) : toast(t.ficheAbsente(l.libelle)))}
 					>
 						{l.libelle}
 					</Ligne>
@@ -68,23 +70,23 @@ export function LiensFiche(p: {
 		);
 
 	return (
-		<aside className={s.liens} aria-label="Liens de la fiche">
+		<aside className={s.liens} aria-label={t.titre}>
 			{f && (
 				<>
-					<span className={s.lbl}>Liens entrants ({entrants.length})</span>
+					<span className={s.lbl}>{t.entrants(entrants.length)}</span>
 					{lignes(entrants)}
 					<div className={s.sec}>
-						<span className={s.lbl}>Liens sortants ({sortants.length})</span>
+						<span className={s.lbl}>{t.sortants(sortants.length)}</span>
 						{lignes(sortants)}
 					</div>
 					<div className={s.sec}>
-						<span className={s.lbl}>Sessions qui l'ont utilisée ({f.sessionsTotal})</span>
+						<span className={s.lbl}>{t.sessions(f.sessionsTotal)}</span>
 						{sessions.length === 0 ? (
-							<p className={s.vide}>Aucune.</p>
+							<p className={s.vide}>{t.aucune}</p>
 						) : (
 							sessions.map((x) => (
 								<Ligne key={x.id} couleur="var(--blue)" titre={x.id} surClic={() => p.ouvrirSession(x.id)}>
-									{x.objectif ?? `Session ${x.id.slice(0, 8)}`}
+									{x.objectif ?? t.session(x.id.slice(0, 8))}
 								</Ligne>
 							))
 						)}

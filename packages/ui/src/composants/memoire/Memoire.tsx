@@ -20,6 +20,7 @@ import { useOuvrirSession } from '../sessions/ouvrir-session.ts';
 import { cx } from '../commun/classes.ts';
 import { Separateur } from '../commun/Separateur.tsx';
 import { largeurMaxPanneau, useTailleGardee } from '../commun/taille-gardee.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import { ArbreFiches } from './ArbreFiches.tsx';
 import { Entrainer } from './entrainer/Entrainer.tsx';
 import { LiensFiche } from './LiensFiche.tsx';
@@ -44,6 +45,7 @@ export function Memoire(p: { visible: boolean; ficheInitiale?: string; editionIn
 }
 
 function CorpsMemoire(p: { visible: boolean; editionInitiale: boolean }): ReactNode {
+	const t = useTextes().memoire.vue;
 	const nav = useNavigation();
 	const memoire = useNavigationMemoire();
 	const graphe = useGraphe();
@@ -101,7 +103,7 @@ function CorpsMemoire(p: { visible: boolean; editionInitiale: boolean }): ReactN
 		<Separateur
 			bord
 			orientation="vertical"
-			label="Largeur du panneau Liens"
+			label={t.largeurLiens}
 			valeur={largeurLiens.valeur}
 			min={LARGEUR_LIENS.min}
 			max={largeurMax}
@@ -114,17 +116,17 @@ function CorpsMemoire(p: { visible: boolean; editionInitiale: boolean }): ReactN
 	return (
 		<section className={s.memoire} hidden={!p.visible}>
 			<div className={s.barre}>
-				<div role="tablist" aria-label="Mémoire" className={s.onglets}>
-					{onglet('archiviste', `Archiviste (${aFaire.total})`)}
-					{onglet('fichiers', 'Fichiers')}
-					{onglet('graphe', 'Graph 3D')}
+				<div role="tablist" aria-label={t.onglets} className={s.onglets}>
+					{onglet('archiviste', t.archiviste(aFaire.total))}
+					{onglet('fichiers', t.fichiers)}
+					{onglet('graphe', t.graphe)}
 					{onglet(
 						'entrainer',
-						'Entraîner',
+						t.entrainer,
 						aRelire > 0 && (
-							<span className={s.pastille} title={`${aRelire} message${aRelire > 1 ? 's' : ''} à relire`}>
+							<span className={s.pastille} title={t.aRelireTitre(aRelire)}>
 								<span aria-hidden="true">{aRelire}</span>
-								<span className={s.horsEcran}>{` (${aRelire} à relire)`}</span>
+								<span className={s.horsEcran}>{t.aRelireHorsEcran(aRelire)}</span>
 							</span>
 						),
 					)}
@@ -143,7 +145,7 @@ function CorpsMemoire(p: { visible: boolean; editionInitiale: boolean }): ReactN
 					<Separateur
 						bord
 						orientation="vertical"
-						label="Largeur du panneau Arbre"
+						label={t.largeurArbre}
 						valeur={largeurArbre.valeur}
 						min={LARGEUR_ARBRE.min}
 						max={largeurMax}
@@ -155,9 +157,9 @@ function CorpsMemoire(p: { visible: boolean; editionInitiale: boolean }): ReactN
 						<FicheOuverte key={memoire.fiche} chemin={memoire.fiche} fiches={graphe.donnees?.fiches} editionInitiale={memoire.fiche === ficheEditee} poigneeLiens={poigneeLiens} />
 					) : (
 						<>
-							<p className={s.vide}>Choisir une fiche dans l'arbre.</p>
+							<p className={s.vide}>{t.choisirFiche}</p>
 							{poigneeLiens}
-							<aside className={s.liensVides} aria-label="Liens de la fiche" />
+							<aside className={s.liensVides} aria-label={t.liensFiche} />
 						</>
 					)}
 				</div>
@@ -167,7 +169,7 @@ function CorpsMemoire(p: { visible: boolean; editionInitiale: boolean }): ReactN
 			</div>
 			{grapheVisite && (
 				<div role="tabpanel" id="panneau-memoire-graphe" aria-labelledby="onglet-memoire-graphe" className={s.panneau} hidden={memoire.onglet !== 'graphe'}>
-					<Suspense fallback={<p className={s.vide}>Chargement du graphe…</p>}>
+					<Suspense fallback={<p className={s.vide}>{t.chargementGraphe}</p>}>
 						<Graphe3D visible={p.visible && memoire.onglet === 'graphe'} />
 					</Suspense>
 				</div>

@@ -13,6 +13,7 @@ import { pliageArbre } from '../../raccourcis.ts';
 import { BoutonsArbre } from '../commun/BoutonsArbre.tsx';
 import { cx } from '../commun/classes.ts';
 import { ChevronArbre, GuidesArbre, IconeDossier, margeArbre } from '../commun/ElementsArbre.tsx';
+import { useTextes } from '../../langue/langue.tsx';
 import s from './ArbreFiches.module.css';
 
 /** Lignes affichées au plus : une grande mémoire (5 000 fiches) ne met pas 5 000 boutons dans la page ; le filtre affine. */
@@ -26,6 +27,7 @@ export function ArbreFiches(p: {
 	/** Compteur de demandes de localisation venues d'ailleurs (⌥L) : chaque nouvelle valeur localise la fiche ouverte. */
 	localisation: number;
 }): ReactNode {
+	const t = useTextes().memoire.arbre;
 	const [filtre, setFiltre] = useState('');
 	const [replies, setReplies] = useState<ReadonlySet<string>>(() => new Set());
 	const fiches = p.fiches;
@@ -90,8 +92,8 @@ export function ArbreFiches(p: {
 	const guides = (dossiers: readonly string[], debut: number) => <GuidesArbre niveaux={dossiers.map((d, k) => chemin[k] === d)} debut={debut} />;
 
 	let contenu: ReactNode;
-	if (fiches === undefined) contenu = <p className={s.vide}>{p.erreur ?? 'Chargement…'}</p>;
-	else if (lignes.length === 0) contenu = <p className={s.vide}>{filtre.trim() ? 'Aucune fiche ne correspond.' : 'Aucune fiche.'}</p>;
+	if (fiches === undefined) contenu = <p className={s.vide}>{p.erreur ?? t.chargement}</p>;
+	else if (lignes.length === 0) contenu = <p className={s.vide}>{filtre.trim() ? t.aucuneCorrespondance : t.aucune}</p>;
 	else
 		contenu = lignes.slice(debut, debut + LIGNES_MAX).map((l) =>
 			l.genre === 'dossier' ? (
@@ -108,7 +110,7 @@ export function ArbreFiches(p: {
 					<ChevronArbre ouvert={!l.replie} />
 					<IconeDossier ouvert={!l.replie} />
 					<bdi className={s.titre}>{l.nom}</bdi>
-					<span className={s.nombre} title={`${l.nombre} fiche${l.nombre > 1 ? 's' : ''}`} aria-hidden="true">
+					<span className={s.nombre} title={t.nombreFiches(l.nombre)} aria-hidden="true">
 						{l.nombre}
 					</span>
 				</button>
@@ -141,18 +143,18 @@ export function ArbreFiches(p: {
 			}}
 		>
 			<div className={s.entete}>
-				<input type="text" className={s.filtre} placeholder="Filtrer les fichiers" aria-label="Filtrer les fichiers" value={filtre} onChange={(e) => filtrer(e.target.value)} />
+				<input type="text" className={s.filtre} placeholder={t.filtrer} aria-label={t.filtrer} value={filtre} onChange={(e) => filtrer(e.target.value)} />
 				<BoutonsArbre surReplier={toutReplier} surDeplier={toutDeplier} localiser={{ possible: p.courante !== null, surLocaliser: localiser }} />
 			</div>
-			<nav ref={arbre} className={s.arbre} aria-label="Fiches">
+			<nav ref={arbre} className={s.arbre} aria-label={t.fiches}>
 				{debut > 0 && (
 					<button type="button" className={s.debut} onClick={() => setFenetre(null)}>
-						Afficher le début ({debut.toLocaleString('fr-FR')} lignes avant)
+						{t.debut(debut)}
 					</button>
 				)}
 				{contenu}
 				{lignes.length > debut + LIGNES_MAX && (
-					<p className={s.vide}>{(lignes.length - debut - LIGNES_MAX).toLocaleString('fr-FR')} lignes de plus : filtrer, ou replier des dossiers.</p>
+					<p className={s.vide}>{t.dePlus(lignes.length - debut - LIGNES_MAX)}</p>
 				)}
 			</nav>
 		</div>
