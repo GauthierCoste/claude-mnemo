@@ -11,6 +11,7 @@ import { expressionFts } from '../../src/domaine/requete.ts';
 import type { ElementIndexe } from '../../src/domaine/elements.ts';
 import { coffreFichiers } from '../../src/infra/coffre-fichiers.ts';
 import { ouvrirIndex, VERSION_SCHEMA } from '../../src/infra/index-sqlite.ts';
+import { TOLERANCE } from '../aides/charge.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
 function element(id: string, texte: string, extra: Partial<ElementIndexe> = {}): ElementIndexe {
@@ -223,7 +224,8 @@ describe('ouverture sûre', () => {
 		autre.exec('COMMIT');
 		const debut = Date.now();
 		expect(() => ouvrirIndex(fichier, { lectureSeule: { finMs: debut + 150 } })).toThrow(/locked/u);
-		expect(Date.now() - debut).toBeLessThan(150 + 100);
+		// machine chargée (CI) : la marge au-delà de finMs suit la tolérance
+		expect(Date.now() - debut).toBeLessThan(150 + 100 * TOLERANCE);
 		autre.close();
 	});
 

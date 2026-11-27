@@ -17,6 +17,8 @@ import { MOTEURS, MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { commandesDuHook } from '../../src/domaine/moteurs/codex/hooks-installes.ts';
 
+const POSIX = process.platform !== 'win32';
+
 afterEach(() => {
 	vi.unstubAllEnvs();
 	process.exitCode = undefined;
@@ -55,7 +57,8 @@ describe('trouverCodex', () => {
 		const d = await dossierTemporaire();
 		const bin = await executable(join(d, 'bin'), 'codex');
 		const bundle = await executable(join(d, 'bundle'), 'codex');
-		expect(trouverCodex({ PATH: `${join(d, 'vide')}:${join(d, 'bin')}` }, 'linux')).toEqual({ commande: bin, avant: [] });
+		// un PATH POSIX (« : ») de chemins Windows (« C:\… ») est ambigu : vérifié hors de Windows
+		if (POSIX) expect(trouverCodex({ PATH: `${join(d, 'vide')}:${join(d, 'bin')}` }, 'linux')).toEqual({ commande: bin, avant: [] });
 		expect(trouverCodex({ PATH: join(d, 'vide') }, 'darwin', bundle)).toEqual({ commande: bundle, avant: [] });
 		expect(trouverCodex({ PATH: join(d, 'vide') }, 'linux', bundle)).toBeNull();
 		expect(trouverCodex({ PATH: join(d, 'vide') }, 'darwin', join(d, 'absent'))).toBeNull();
@@ -75,7 +78,8 @@ describe('trouverCodex', () => {
 		expect(trouverCodex({ PATH: join(d, 'codex-cli', 'bin') }, 'darwin', '/nulle/part')).toBeNull();
 		expect(trouverCodex({ MNEMO_CODEX: script }, 'darwin', '/nulle/part')).toBeNull();
 		const suivant = await executable(join(d, 'suivant'), 'codex');
-		expect(trouverCodex({ PATH: `${join(d, 'codex-cli', 'bin')}:${join(d, 'suivant')}` }, 'linux')).toEqual({ commande: suivant, avant: [] });
+		// un PATH POSIX (« : ») de chemins Windows (« C:\… ») est ambigu : vérifié hors de Windows
+		if (POSIX) expect(trouverCodex({ PATH: `${join(d, 'codex-cli', 'bin')}:${join(d, 'suivant')}` }, 'linux')).toEqual({ commande: suivant, avant: [] });
 		const reel = await executable(join(d, 'codex-cli', 'CodexCLI.app', 'Contents', 'MacOS'), 'codex');
 		expect(trouverCodex({ MNEMO_CODEX: script }, 'darwin', '/nulle/part')).toEqual({ commande: realpathSync.native(reel), avant: [] });
 	});

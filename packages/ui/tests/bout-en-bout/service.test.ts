@@ -290,15 +290,19 @@ describe('interface de bout en bout, contre le vrai service', () => {
 		// un abonnement neuf au terminal de la session reprise
 		let relu = '';
 		let relecturesApres = 0;
-		connexion.abonner(session.id, (m) => {
+		const ecouter = (m: FluxTerminal) => {
 			if (m.type === 'relecture') {
 				relecturesApres++;
 				relu = m.donnees;
 			} else if (m.type === 'sortie') relu += m.donnees;
-		});
+		};
+		let finAbonnement = connexion.abonner(session.id, ecouter);
 		expect(await jusqua(() => relecturesApres > 0)).toBe(true);
 		expect(await jusqua(() => relu.includes('prêt')), relu).toBe(true);
 
+		// sous Windows, un signal tue net (TerminateProcess) : l'arrêt propre que SIGTERM demande ailleurs y passe par
+		// `mnemo arreter` (la session est notée pour être relancée)
+		if (process.platform === 'win32') await commandeMnemo({ dossier, dist, args: ['arreter'] });
 		await service!.arreter('SIGTERM');
 		expect(await jusqua(() => connexion.etat() === 'reconnexion')).toBe(true);
 		const relecturesAvant = relecturesApres;
@@ -311,9 +315,20 @@ describe('interface de bout en bout, contre le vrai service', () => {
 		expect(principal.etats).not.toContain('jeton_refuse');
 		const { sessions } = await api.lire<{ sessions: SessionVue[] }>(ROUTES.sessions);
 		expect(sessions.map((s) => s.id)).toContain(session.id);
-		// réabonnement par la connexion à la réouverture : l'écran du nouveau terminal (session reprise par --resume) revient
-		// par une relecture
-		expect(await jusqua(() => relecturesApres > relecturesAvant && relu.includes(`--resume","${session.id}`), DELAI), relu).toBe(true);
+		// réabonnement par la connexion à la réouverture : une relecture revient, vide si elle précède la relance de la session
+		// (le service relance ses sessions en fond, après avoir ouvert son port ; sur une machine lente, la connexion rouverte
+		// le devance)
+		expect(await jusqua(() => relecturesApres > relecturesAvant)).toBe(true);
+		// la session relancée retrouve un terminal : comme la carte de l'interface, qui monte alors son terminal (et
+		// s'abonne), un abonnement neuf si l'écran du nouveau terminal (session reprise par --resume) n'est pas encore venu
+		expect(
+			await jusqua(async () => (await api.lire<{ sessions: SessionVue[] }>(ROUTES.sessions)).sessions.some((s) => s.id === session.id && s.terminal), DELAI),
+		).toBe(true);
+		if (!relu.includes(`--resume","${session.id}`)) {
+			finAbonnement();
+			finAbonnement = connexion.abonner(session.id, ecouter);
+		}
+		expect(await jusqua(() => relu.includes(`--resume","${session.id}`)), relu).toBe(true);
 		expect(await jusqua(() => relu.includes('prêt')), relu).toBe(true);
 	}, 120_000);
 

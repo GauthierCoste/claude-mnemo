@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	adresseFenetre,
 	agentUtilisateur,
+	barreDesMenusCachee,
 	bornesAOuvrir,
 	decisionNavigation,
 	FOND_FENETRE,
@@ -50,8 +51,11 @@ describe('la fenêtre est l’app', () => {
 		expect(optionsBarreTitre('darwin', POSITION_BOUTONS_FENETRE)).toEqual({ titleBarStyle: 'hidden', trafficLightPosition: { x: 14, y: 14 } });
 		expect(optionsBarreTitre('darwin', null)).toEqual({ titleBarStyle: 'hiddenInset' });
 		for (const position of [POSITION_BOUTONS_FENETRE, null]) {
-			expect(optionsBarreTitre('win32', position)).toEqual({ titleBarStyle: 'hidden', titleBarOverlay: BOUTONS_WINDOWS, autoHideMenuBar: true });
+			expect(optionsBarreTitre('win32', position)).toEqual({ titleBarStyle: 'hidden', titleBarOverlay: BOUTONS_WINDOWS });
 		}
+		// Windows : barre des menus cachée pour de bon (Alt seul ne la montre plus) ; macOS : rien à cacher
+		expect(barreDesMenusCachee('win32')).toBe(true);
+		expect(barreDesMenusCachee('darwin')).toBe(false);
 		const jetons = readFileSync(join(import.meta.dirname, '../../../ui/src/styles/jetons.css'), 'utf8');
 		expect(/--tx:\s*(#[0-9a-f]{6})/iu.exec(jetons)?.[1]?.toLowerCase()).toBe(BOUTONS_WINDOWS.symbolColor);
 		expect(jetons).toMatch(/--degrade-titre:\s*linear-gradient\(#121317, #0e0f12\)/u);

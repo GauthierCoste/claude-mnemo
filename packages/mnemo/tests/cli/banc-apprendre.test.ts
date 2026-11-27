@@ -1,5 +1,5 @@
 import { mkdir, readdir, readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { apprendreAuBanc, ggufInstalles, rapportEnTexte, verifierCheminDuModule } from '../../src/adaptateurs/cli/banc-apprendre.ts';
 import type { CasContexte } from '../../src/application/banc-contexte.ts';
@@ -112,7 +112,8 @@ describe('mnemo banc contexte --apprendre', () => {
 
 	it('refuse d’écrire le module sous node_modules', () => {
 		expect(() => verifierCheminDuModule('/opt/mnemo/node_modules/mnemo/src/domaine/coefficients-note.ts')).toThrow('node_modules');
-		expect(verifierCheminDuModule('/tmp/coefficients-note.ts')).toBe('/tmp/coefficients-note.ts');
+		// le chemin absolu de la plateforme (sous Windows : C:\tmp\…)
+		expect(verifierCheminDuModule('/tmp/coefficients-note.ts')).toBe(resolve('/tmp/coefficients-note.ts'));
 	});
 
 	it('identifie les fichiers GGUF par leur nom et le début de leur SHA-256', () => {

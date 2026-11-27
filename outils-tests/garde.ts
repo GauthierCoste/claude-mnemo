@@ -11,8 +11,15 @@ import { VARIABLES_NEUTRALISEES, verifierIsolement } from './isolement.ts';
 
 for (const nom of VARIABLES_NEUTRALISEES) delete process.env[nom];
 
+// Sous Windows, le TEMP du compte peut passer par un nom court 8.3 (RUNNER~1 sur la CI) : remplacé par le chemin long, celui que
+// voient les moteurs et que rend `realpathSync.native` (le cwd des hooks), pour que les chemins des tests et ceux du
+// code se comparent (les enfants en héritent).
+if (process.platform === 'win32') process.env['TEMP'] = process.env['TMP'] = realpathSync.native(tmpdir());
+
 const isole = realpathSync(mkdtempSync(join(tmpdir(), 'mnemo-tests-isole-')));
 process.env['HOME'] = isole;
+// Sous Windows, `os.homedir()` lit USERPROFILE, pas HOME.
+if (process.platform === 'win32') process.env['USERPROFILE'] = isole;
 process.chdir(isole);
 
 verifierIsolement(process.cwd(), process.env['HOME'], process.env);

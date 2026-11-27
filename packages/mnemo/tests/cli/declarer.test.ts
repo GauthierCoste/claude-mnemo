@@ -51,7 +51,7 @@ describe('declarerServeurMcp', () => {
 	it('sorties get plus fines : sous-chaîne, arguments espacés, format inconnu', async () => {
 		const cas: [string, string][] = [
 			[sortieGet(process.execPath, MAIN), 'deja'],
-			[sortieGet(process.execPath.replace(/node$/u, 'node-old'), MAIN), 'perime'],
+			[sortieGet(process.execPath.replace(/node(\.exe)?$/u, 'node-old$1'), MAIN), 'perime'], // node.exe sous Windows
 			[sortieGet(process.execPath, `${MAIN}-ancien`), 'perime'],
 			[sortieGet(process.execPath, `/x${MAIN}`), 'perime'],
 			[`  Command: ${process.execPath}\n  Args: mcp ${MAIN}\n`, 'perime'],

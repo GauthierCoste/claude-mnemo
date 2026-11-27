@@ -34,12 +34,8 @@ jobs:
       - run: pnpm verifier
 
       # Dossier personnel, APPDATA et LOCALAPPDATA temporaires : aucun test ne lit ni n'écrit ceux du compte (os.homedir()
-      # suit USERPROFILE sous Windows, pas HOME, que vitest remplace). Premier passage sous Windows (jamais lancés sur un
-      # Windows auparavant) : un échec n'arrête pas le job, pour que la construction, l'installation et les captures
-      # renseignent quand même ; l'étape « Bilan des tests » fait ensuite échouer le job.
+      # suit USERPROFILE sous Windows, pas HOME, que vitest remplace).
       - name: Tests de l'app
-        id: tests
-        continue-on-error: true
         env:
           USERPROFILE: ${{ runner.temp }}\profil-tests
           APPDATA: ${{ runner.temp }}\profil-tests\AppData\Roaming
@@ -128,11 +124,6 @@ jobs:
           name: captures
           path: ${{ runner.temp }}/captures
           if-no-files-found: warn
-
-      - name: Bilan des tests
-        if: ${{ !cancelled() && steps.tests.outcome == 'failure' }}
-        run: |
-          throw "Des tests de l'app ont échoué : voir l'étape « Tests de l'app »."
 
   # Sur une étiquette x.y.z : l'installeur est attaché à la release de même nom, qui doit déjà exister (créée avec le .dmg,
   # construit sur un Mac) ; une étiquette d'une autre forme ne publie rien.

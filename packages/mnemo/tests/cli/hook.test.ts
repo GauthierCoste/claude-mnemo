@@ -14,6 +14,7 @@ import { ECHEANCES_MS } from '../../src/adaptateurs/cli/hook.ts';
 import { assemblerPlugin } from '../../src/application/moteurs/claude-code/plugin.ts';
 import { EVENEMENTS_HOOK, PROFILS_PAR_DEFAUT } from '../../src/domaine/profil.ts';
 import { refusSurErreur, reponseDe, texteDuRefus } from '../../src/domaine/refus-outil.ts';
+import { cheminReel } from '../../src/infra/chemin-reel.ts';
 import { FICHIER_CONSIGNES_VERIFIEES } from '../../src/infra/indicateur-consignes.ts';
 import type { CauseNonVerifiee } from '../../src/domaine/refus-outil.ts';
 import type { EvenementHook, Session } from '../../src/domaine/session.ts';
@@ -491,10 +492,20 @@ describe('mnemo hook (avec le service)', () => {
 	it('service muet : réponse locale, processus sous la limite', async () => {
 		const racine = await dossierMnemo();
 		const { requetes } = await fauxService(racine, null);
-		const r = await hook(racine, 'message', entreeMessage(racine), { MNEMO_RACINE: racine });
+		let r = await hook(racine, 'message', entreeMessage(racine), { MNEMO_RACINE: racine });
+		let essais = 1;
+		// machine chargée (vu sur les CI Windows et macOS) : l'échéance du hook, 900 ms depuis le lancement de Node (démarrage
+		// compris, puis 300 ms d'attente du service muet), peut passer avant la fin du calcul local, qui ne rend alors rien,
+		// sans erreur ; un second essai, Node et les modules en cache du système
+		if (r.out === '' && r.err === '') {
+			r = await hook(racine, 'message', entreeMessage(racine), { MNEMO_RACINE: racine });
+			essais++;
+		}
 		expect(r.code).toBe(0);
 		expect(r.ms).toBeLessThan(LIMITE_MS);
-		expect(requetes.length).toBe(1);
+		expect(requetes.length).toBe(essais);
+		// une erreur du calcul ne rend rien sur stdout : son message est sur stderr
+		expect(r.out, r.err).not.toBe('');
 		expect(JSON.parse(r.out).hookSpecificOutput.additionalContext).toContain('Réponds en français.');
 		expect((await lireSession(racine))?.etat).toBe('travaille');
 	});
@@ -507,7 +518,8 @@ describe('mnemo hook (avec le service)', () => {
 		expect(r.out).toBe(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: 'Contexte du service.' } })}\n`);
 		expect(requetes[0]?.auth).toBe(`Bearer ${'a'.repeat(64)}`);
 		expect(requetes[0]?.chemin).toBe('/api/hook');
-		expect(JSON.parse(requetes[0]!.corps)).toMatchObject({ evenement: 'message', session: ID, cwd: racine, prompt: 'Bonjour, le catalogue' });
+		// le cwd tel qu'il est sur le disque (sous Windows, le nom court RUNNER~1 du dossier temporaire devient le nom long)
+		expect(JSON.parse(requetes[0]!.corps)).toMatchObject({ evenement: 'message', session: ID, cwd: cheminReel(racine), prompt: 'Bonjour, le catalogue' });
 		// l'instant où le hook cessera d'attendre : le service ne note rien de servi au-delà
 		const { echeanceMs, horodatageMs } = JSON.parse(requetes[0]!.corps) as { echeanceMs: number; horodatageMs: number };
 		expect(echeanceMs - horodatageMs).toBeGreaterThan(0);
@@ -817,7 +829,8 @@ describe('mnemo hook sans service : niveau des modèles de la session', () => {
 		etat.fermer();
 		const r = await hook(coupee, 'message', entreeMessage(coupee, prompt), c.env);
 		expect(r.code).toBe(0);
-		expect(r.out).toContain('Catalogue des machines');
+		// une erreur du calcul ne rend rien sur stdout : son message est sur stderr
+		expect(r.out, r.err).toContain('Catalogue des machines');
 		expect(existsSync(cheminsModeles(c.serveurs).etat)).toBe(false);
 		expect(existsSync(c.lancements)).toBe(false);
 

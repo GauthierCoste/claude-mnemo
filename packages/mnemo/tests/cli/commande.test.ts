@@ -8,8 +8,11 @@ import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
 const MAIN = join(import.meta.dirname, '../../src/adaptateurs/cli/main.ts');
 
+/** La commande est un script POSIX (shebang, droit d'exécution, PATH séparé par « : ») : Windows la refuse (avant-dernier test). */
+const POSIX = process.platform !== 'win32';
+
 describe('commande « mnemo » (~/.local/bin/mnemo)', () => {
-	it('écrite exécutable, avec le Node absolu ; elle lance vraiment Mnemo, arguments transmis', async () => {
+	it.runIf(POSIX)('écrite exécutable, avec le Node absolu ; elle lance vraiment Mnemo, arguments transmis', async () => {
 		const dossier = await dossierTemporaire();
 		const r = ecrireCommande(dossier, { node: process.execPath, main: MAIN });
 		expect(r).toEqual({ fichier: join(dossier, 'mnemo'), remplace: false });
@@ -41,7 +44,7 @@ describe('commande « mnemo » (~/.local/bin/mnemo)', () => {
 		expect(retirerCommande(dossier)).toEqual({ absent: join(dossier, 'mnemo') });
 	});
 
-	it('mnemo commande : installe dans <maison>/.local/bin, signale un PATH qui ne le contient pas ; Windows : refus', async () => {
+	it.runIf(POSIX)('mnemo commande : installe dans <maison>/.local/bin, signale un PATH qui ne le contient pas', async () => {
 		const maison = await dossierTemporaire();
 		const lignes: string[] = [];
 		await commandeCommande([], { maison, plateforme: 'darwin', path: '/usr/bin', ecrire: (l) => void lignes.push(l) });
@@ -53,11 +56,15 @@ describe('commande « mnemo » (~/.local/bin/mnemo)', () => {
 		expect(lignes2.join('\n')).not.toContain('export PATH=');
 		await commandeCommande(['--retirer'], { maison, plateforme: 'darwin', ecrire: () => {} });
 		expect(existsSync(join(dossierDeCommande(maison), 'mnemo'))).toBe(false);
+	});
+
+	it('mnemo commande : Windows refusé ; option inconnue', async () => {
+		const maison = await dossierTemporaire();
 		await expect(commandeCommande([], { maison, plateforme: 'win32' })).rejects.toThrow(/pnpm link --global/u);
 		await expect(commandeCommande(['--x'], { maison })).rejects.toThrow(/Option inconnue/u);
 	});
 
-	it('dansLePath : compare des chemins résolus', () => {
+	it.runIf(POSIX)('dansLePath : compare des chemins résolus', () => {
 		expect(dansLePath('/a/b', '/x:/a/b/')).toBe(true);
 		expect(dansLePath('/a/b', '/x:/a')).toBe(false);
 		expect(dansLePath('/a/b', undefined)).toBe(false);

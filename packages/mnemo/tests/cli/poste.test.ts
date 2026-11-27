@@ -135,7 +135,8 @@ describe('verifier-poste : Codex', () => {
 		await writeFile(fichier, texteJsonReecrit(remplacerHooks({}, hooksAttendus(nodeDurable('darwin'), MAIN_MNEMO)), null));
 		expect((await verifierPoste(avec(repond(get)))).codex.hooks).toEqual({ etat: 'a_jour', approbation: { etat: 'a_approuver', motif: expect.stringContaining('7 hook(s) de Mnemo sur 7') } });
 		const cles = ['session_start', 'user_prompt_submit', 'pre_tool_use', 'post_tool_use', 'stop', 'permission_request', 'session_end'];
-		await writeFile(join(maison, 'config.toml'), cles.map((c) => `[hooks.state."${fichier}:${c}:0:0"]\ntrusted_hash = "sha256:0"\n`).join('\n'));
+		// clé en chaîne TOML de base (JSON.stringify) : les « \ » d'un chemin Windows échappés, comme Codex les écrit
+		await writeFile(join(maison, 'config.toml'), cles.map((c) => `[hooks.state.${JSON.stringify(`${fichier}:${c}:0:0`)}]\ntrusted_hash = "sha256:0"\n`).join('\n'));
 		const approuves = (await verifierPoste(avec(repond(get)))).codex.hooks;
 		expect(approuves).toEqual({ etat: 'a_jour', approbation: { etat: 'approuves', motif: expect.stringContaining('recalculer') } });
 		const lignes: string[] = [];

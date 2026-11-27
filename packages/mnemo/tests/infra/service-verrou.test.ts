@@ -5,6 +5,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import fs from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { demarrageMachineMs } from '../../src/infra/processus.ts';
 import { estLigneDuService, prendreVerrouService } from '../../src/infra/verrou-service.ts';
@@ -20,6 +21,8 @@ afterEach(() => {
 /** Un pid qui n'existe pas (au-delà des pids possibles). */
 const PID_MORT = 99_999_999;
 const VERROU_SERVICE = resolve(import.meta.dirname, '../../src/infra/verrou-service.ts');
+/** À importer d'un script enfant : en URL `file:`, un chemin absolu Windows (`D:\…`) n'étant pas un spécificateur valide. */
+const VERROU_SERVICE_URL = pathToFileURL(VERROU_SERVICE).href;
 
 async function racineAvecVerrou(contenu: unknown, fichier = 'service.verrou'): Promise<{ racine: string; chemin: string }> {
 	const racine = await dossierTemporaire();
@@ -89,7 +92,8 @@ describe('verrou du service : propriétaire identifié', () => {
 		const ancien = await racineAvecVerrou({ pid, demarrageMachineMs: demarrageMachineMs() - 86_400_000, lanceMs: lanceMs - 86_400_000 });
 		expect((await prendreVerrouService(ancien.racine)).pris).toBe(true);
 		const recycle = await racineAvecVerrou({ pid, demarrageMachineMs: demarrageMachineMs(), lanceMs: lanceMs - 60_000 });
-		expect((await prendreVerrouService(recycle.racine)).pris).toBe(true);
+		// Windows : l'instant de lancement n'est pas lu (pas de `ps`) ; un Node vivant sous ce pid y est tenu pour le service
+		expect((await prendreVerrouService(recycle.racine)).pris).toBe(process.platform !== 'win32');
 	});
 
 	it('ancien format (pid seul) d’un mort : repris', async () => {
@@ -131,7 +135,7 @@ if (retardMs > 0) {
 	fs.renameSync = (a, b) => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, retardMs); return vrai(a, b); };
 	syncBuiltinESMExports();
 }
-const { prendreVerrouService } = await import(${JSON.stringify(VERROU_SERVICE)});
+const { prendreVerrouService } = await import(${JSON.stringify(VERROU_SERVICE_URL)});
 const v = await prendreVerrouService(racine);
 console.log(JSON.stringify({ pid: process.pid, pris: v.pris }));
 await new Promise((r) => setTimeout(r, 1500));
@@ -233,7 +237,7 @@ fs.renameSync = (a, b) => { if (r > 0 && String(b).endsWith('service.verrou')) d
 fs.unlinkSync = (a) => { if (u > 0 && String(a).endsWith('service.verrou.reprise')) dort(u); return vraiUnlink(a); };
 fs.linkSync = (a, b) => { if (l > 0 && String(b).endsWith('service.verrou.reprise')) dort(l); return vraiLink(a, b); };
 syncBuiltinESMExports();
-const { prendreVerrouService } = await import(${JSON.stringify(VERROU_SERVICE)});
+const { prendreVerrouService } = await import(${JSON.stringify(VERROU_SERVICE_URL)});
 const v = await prendreVerrouService(process.argv[2]);
 console.log(JSON.stringify({ pid: process.pid, pris: v.pris }));
 // le gagnant reste en vie : un démarrage décalé le trouve vivant (jamais un verrou mort repris plus tard)

@@ -1,19 +1,26 @@
 // @vitest-environment happy-dom
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ROUTES, type ReponseLiaisonMoteur, type ReponseMoteurs } from '@mnemo/contrat';
 import { ErreurApi } from '../../src/client/api.ts';
 import type { Client } from '../../src/client/contexte.tsx';
 import { creerClientDemo } from '../../src/client/demo.ts';
 import { Application } from '../../src/composants/Application.tsx';
+import { stockage } from '../aides/stockage.ts';
 
 // Les terminaux de la vue Sessions (restée montée) : huit xterm injecteraient ~440 Ko de CSS et réécriraient le DOM en
 // continu ; chaque requête par rôle recalculerait alors les styles (50 à 150 ms l'une). Un simple champ les remplace.
 vi.mock('../../src/terminal/Terminal.tsx', () => ({ Terminal: (p: { session: string }) => <textarea aria-label={`terminal ${p.session}`} readOnly /> }));
 
+// Un stockage neuf par test : l'onglet de Réglages retenu par un test (« Réglages ») ne doit pas ouvrir le suivant ailleurs
+// que sur Agents (sous Node 24, le `localStorage` de happy-dom dure tout le fichier ; Node 25 et plus le masquent).
+beforeEach(() => {
+	stockage();
+});
 afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
 });
 
 /** Réglages de la démo ouverts (onglet Agents d'abord). */

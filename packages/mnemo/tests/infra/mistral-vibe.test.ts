@@ -21,6 +21,8 @@ import { MOTEURS, MOTEURS_DU_POSTE } from '../../src/infra/moteurs/moteurs.ts';
 import { nodeDurable } from '../../src/infra/node-durable.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
+const POSIX = process.platform !== 'win32';
+
 const MAIN = '/opt/mnemo/src/adaptateurs/cli/main.ts';
 const NODE = nodeDurable(process.platform);
 const VIBE = { commande: '/opt/vibe', avant: [] };
@@ -50,7 +52,8 @@ describe('trouverVibe', () => {
 		const uv = await executable(join(d, 'maison', '.local', 'bin'), 'vibe');
 		expect(trouverVibe({ MNEMO_VIBE: faux, PATH: join(d, 'bin') }, 'darwin', join(d, 'maison'))).toEqual({ commande: process.execPath, avant: [faux] });
 		expect(trouverVibe({ MNEMO_VIBE: join(d, 'absent'), PATH: join(d, 'bin') }, 'darwin', join(d, 'maison'))).toBeNull();
-		expect(trouverVibe({ PATH: `${join(d, 'vide')}:${join(d, 'bin')}` }, 'linux', join(d, 'maison'))).toEqual({ commande: bin, avant: [] });
+		// un PATH POSIX (« : ») de chemins Windows (« C:\… ») est ambigu : vérifié hors de Windows
+		if (POSIX) expect(trouverVibe({ PATH: `${join(d, 'vide')}:${join(d, 'bin')}` }, 'linux', join(d, 'maison'))).toEqual({ commande: bin, avant: [] });
 		expect(trouverVibe({ PATH: join(d, 'vide') }, 'darwin', join(d, 'maison'))).toEqual({ commande: uv, avant: [] });
 		expect(trouverVibe({ PATH: join(d, 'vide') }, 'darwin', join(d, 'personne'))).toBeNull();
 	});

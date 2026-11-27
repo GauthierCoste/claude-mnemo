@@ -429,7 +429,7 @@ describe.skipIf(sauter)('WebSocket : client lent (vrai pseudo-terminal, faux-cla
 			max = Math.max(max, process.memoryUsage().rss - avant);
 		};
 		// 15 Mo passés : bien au-delà des tampons du système et du retard permis, le client lent a été fermé
-		expect(await jusqua(() => (mesurer(), rapide.recuSortie > 15 * 1024 * 1024), 120_000)).toBe(true);
+		expect(await jusqua(() => (mesurer(), rapide.recuSortie > 15 * 1024 * 1024), 120_000), `${rapide.recuSortie} octets reçus, fin : ${JSON.stringify(rapide.queue.slice(-3000))}`).toBe(true);
 		// il relit ce qui l'attendait, puis la fermeture 4008
 		lent.ws.resume();
 		const code = await Promise.race([lent.ferme, new Promise<number>((r) => setTimeout(() => r(-1), 30_000))]);

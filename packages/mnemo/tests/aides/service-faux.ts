@@ -85,7 +85,8 @@ export async function serviceFaux(
 		},
 		moteurs: moteursDeTest({ commande: process.execPath, avant: ['/aides/faux-claude.mjs'] }),
 		hote: {
-			env: { PATH: '/bin' },
+			// SystemRoot sous Windows : sans lui, Node ne démarre pas (CSPRNG de BCrypt introuvable)
+			env: { PATH: '/bin', ...(process.env['SystemRoot'] === undefined ? {} : { SystemRoot: process.env['SystemRoot'] }) },
 			plateforme: process.platform,
 			dossier: async (relatif) => (existants.has(relatif) ? { absolu: join(racine, relatif), reel: relatif } : null),
 			processus: async () => 'mort',

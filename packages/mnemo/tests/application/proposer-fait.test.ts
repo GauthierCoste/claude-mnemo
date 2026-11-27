@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { proposer } from '../../src/application/proposer.ts';
 import type { DemandeFait } from '../../src/application/proposer.ts';
-import { dependancesReelles } from '../../src/infra/systeme.ts';
+import { dependancesFermees } from '../aides/dependances-reelles.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
 
@@ -324,7 +324,7 @@ describe('proposer un fait', () => {
 
 	it('écrit sur disque et dans git (entrées/sorties réelles)', async () => {
 		const racine = await dossierTemporaire();
-		const dep = dependancesReelles(racine);
+		const dep = dependancesFermees(racine);
 		await dep.historique.initialiser();
 		const r = await proposer(dep, demande());
 		expect(r).toMatchObject({ statut: 'ecrit', ancre: 'f-0001' });

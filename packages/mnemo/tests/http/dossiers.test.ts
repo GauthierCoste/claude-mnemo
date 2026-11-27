@@ -72,7 +72,8 @@ describe('routes : dossiers de la racine', () => {
 		expect(parent).toEqual([{ chemin: dossier, nom: '2026 « bilan »', git: false, marque: false, sessions: 1, erreur: null }]);
 	});
 
-	it('un dossier illisible rend son erreur, ses voisins s\'affichent ; le déplier rend 404', async () => {
+	// chmod 000 ne rend pas un dossier illisible sous Windows (ni pour root) : un dossier illisible ne s'y fabrique pas ainsi
+	it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('un dossier illisible rend son erreur, ses voisins s\'affichent ; le déplier rend 404', async () => {
 		const c = await serviceFaux();
 		await mkdir(join(c.racine, 'Projets/A/.git'), { recursive: true });
 		await mkdir(join(c.racine, 'Projets/Ferme'), { recursive: true });

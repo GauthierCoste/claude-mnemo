@@ -18,7 +18,7 @@ import type { Configuration, Lancement } from '../domaine/configuration.ts';
 import { bilanDesinstallation, type EntreeDesinstallation, planDesinstallation } from '../domaine/desinstallation.ts';
 import { iconeDockDeLaPage } from '../domaine/dock.ts';
 import { toutesLesImages } from '../domaine/icone.ts';
-import { IDENTIFIANT_APP } from '../domaine/identite-app.ts';
+import { IDENTIFIANT_APP, NOM_APP } from '../domaine/identite-app.ts';
 import type { ActionMenu } from '../domaine/menu.ts';
 import { optionsOuvertureSession, ouverteParLaSession } from '../domaine/ouverture-session.ts';
 import { plateformeApp } from '../domaine/plateforme.ts';
@@ -60,7 +60,7 @@ const INTERVALLE_EXAMEN_VERSION_MS = 60 * 60 * 1000;
  * sur la sortie standard. `dossierMain` : le dossier du `main.js` construit (les images sont à côté).
  */
 export function demarrerApplication(options: { essai: boolean; dossierMain: string }): void {
-	app.setName('Mnemo');
+	app.setName(NOM_APP);
 	// Windows : sans lui, les notifications ne s'affichent pas (et l'app est mal regroupée dans la barre des tâches)
 	if (PLATEFORME === 'win32') app.setAppUserModelId(IDENTIFIANT_APP);
 	const images = dossierImages(options.dossierMain);

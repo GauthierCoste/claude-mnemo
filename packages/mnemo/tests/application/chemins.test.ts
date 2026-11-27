@@ -5,7 +5,7 @@ import { deplacer } from '../../src/application/deplacer.ts';
 import { lister } from '../../src/application/lister.ts';
 import { proposer } from '../../src/application/proposer.ts';
 import type { Demande } from '../../src/application/proposer.ts';
-import { dependancesReelles } from '../../src/infra/systeme.ts';
+import { dependancesFermees } from '../aides/dependances-reelles.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
 
@@ -15,7 +15,7 @@ const git = (racine: string, ...args: string[]) => execFileSync('git', args, { c
 
 async function coffreReel() {
 	const racine = await dossierTemporaire();
-	const dep = dependancesReelles(racine);
+	const dep = dependancesFermees(racine);
 	await dep.historique.initialiser();
 	return { racine, dep };
 }
