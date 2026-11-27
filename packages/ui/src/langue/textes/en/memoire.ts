@@ -4,7 +4,17 @@ import type { memoire as fr } from '../fr/memoire.ts';
 
 const NOMBRE = new Intl.NumberFormat('en-US');
 const nombre = (n: number): string => NOMBRE.format(n);
-const compte = (n: number, un: string, autre: string): string => `${nombre(n)} ${pluriel('en', n, { un, autre })}`;
+const MENTIONS: Readonly<Record<string, string>> = {
+	'a confirmer': 'to confirm',
+	'à confirmer': 'to confirm',
+	declare: 'stated',
+	déclaré: 'stated',
+	observe: 'observed',
+	observé: 'observed',
+	infere: 'inferred',
+	inféré: 'inferred',
+};
+const compte =(n: number, un: string, autre: string): string => `${nombre(n)} ${pluriel('en', n, { un, autre })}`;
 
 export const memoire: Forme<typeof fr> = {
 	vue: {
@@ -41,5 +51,47 @@ export const memoire: Forme<typeof fr> = {
 		aucune: 'None.',
 		session: (debutId) => `Session ${debutId}`,
 		ficheAbsente: (titre) => `Note "${titre}" is missing`,
+	},
+	fiche: {
+		edition: 'Edit',
+		voirDansLeGraphe: 'Show in graph',
+		deplacer: 'Move',
+		chargement: 'Loading note…',
+		proprietes: 'Properties',
+		modifie: 'updated',
+		aVerifier: 'To check in this note',
+		markdown: 'Note Markdown',
+		aideMarkdown: 'Markdown file, also readable in Obsidian',
+		enregistree: 'Note saved',
+		deplaceeDans: (dossier) => `Note moved to ${dossier}`,
+		deplaceeALaRacine: 'Note moved to the root',
+		disparue: (erreur, enEdition) => `This note no longer exists here (${erreur}).${enEdition ? ' The text stays in the editor; copy it before leaving.' : ''}`,
+		relectureImpossible: (erreur) => `Could not reload the note (${erreur}). The version shown may be out of date.`,
+		conflit: 'The note has changed since it was opened. The text stays in the editor: Reload starts again from the version on disk.',
+		changeeSurLeDisque: 'The note changed on disk while you were editing.',
+		recharger: 'Reload',
+		refus: (motif) => `Save refused: ${motif}`,
+		plusSuggeree: (date) => `Mnemo no longer suggests this note in any session ("Never suggest again", on ${date}).`,
+		retablir: 'Restore',
+		retablirTitre: 'Mnemo can suggest it as a lead or inject it again',
+		retablie: 'Mnemo can suggest this note again',
+		quitter: {
+			titre: 'Unsaved changes',
+			texte: 'Unsaved changes.',
+			abandonner: 'Discard changes',
+			rester: 'Stay',
+		},
+		deplacement: {
+			dossier: 'Destination folder',
+			indication: 'Destination folder (empty = root)',
+			ici: 'Move here',
+		},
+	},
+	rendu: {
+		sansCategorie: 'no category',
+		barrees: 'removed or outdated',
+		mention: (brute) => MENTIONS[brute] ?? brute,
+		corroboree: (le) => `corroborated ${le}`,
+		ficheAbsente: (cible) => `Note "${cible}" is missing`,
 	},
 };

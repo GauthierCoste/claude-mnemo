@@ -8,6 +8,7 @@ import type { FicheVue } from '@mnemo/contrat';
 import { cx } from '../composants/commun/classes.ts';
 import { Puce } from '../composants/commun/Puce.tsx';
 import { useToast } from '../composants/Toast.tsx';
+import { useTextes } from '../langue/langue.tsx';
 import s from './rendu-fiche.module.css';
 
 export type LigneAnalysee =
@@ -127,13 +128,11 @@ export function analyserCorps(corps: string): LigneAnalysee[] {
 /**
  * Un groupe d'informations : une catégorie (`cle` = la catégorie), ou un groupe réservé, `[sans-categorie]` ou les barrées
  * (`[barrees]`) ; une catégorie ne contient jamais de crochets, les clés ne se confondent pas. `section` : rang de la
- * section des informations dans la fiche (d'ordinaire 0), pour une clé React stable.
+ * section des informations dans la fiche (d'ordinaire 0), pour une clé React stable. `categorie` : null pour un groupe réservé.
  */
-export type GroupeInformations = { cle: string; section: number; titre: string; barrees: boolean; nombre: number; lignes: LigneAnalysee[] };
+export type GroupeInformations = { cle: string; section: number; categorie: string | null; barrees: boolean; nombre: number; lignes: LigneAnalysee[] };
 export type BlocCorps = { genre: 'ligne'; ligne: LigneAnalysee } | { genre: 'groupe'; groupe: GroupeInformations };
 
-const SANS_CATEGORIE = 'sans catégorie';
-const BARREES = 'retirées ou périmées';
 const CLE_SANS_CATEGORIE = '[sans-categorie]';
 const CLE_BARREES = '[barrees]';
 
@@ -154,10 +153,10 @@ export function grouperInformations(lignes: LigneAnalysee[]): BlocCorps[] {
 		groupes = null;
 		courant = null;
 	};
-	const groupeDe = (cle: string, titre: string, barrees: boolean): GroupeInformations => {
+	const groupeDe = (cle: string, categorie: string | null, barrees: boolean): GroupeInformations => {
 		let groupe = groupes!.find((g) => g.cle === cle);
 		if (groupe === undefined) {
-			groupe = { cle, section, titre, barrees, nombre: 0, lignes: [] };
+			groupe = { cle, section, categorie, barrees, nombre: 0, lignes: [] };
 			groupes!.push(groupe);
 		}
 		return groupe;
@@ -177,10 +176,10 @@ export function grouperInformations(lignes: LigneAnalysee[]): BlocCorps[] {
 			continue;
 		}
 		if (ligne.genre === 'puce') {
-			courant = ligne.barre ? groupeDe(CLE_BARREES, BARREES, true) : groupeDe(ligne.categorie ?? CLE_SANS_CATEGORIE, ligne.categorie ?? SANS_CATEGORIE, false);
+			courant = ligne.barre ? groupeDe(CLE_BARREES, null, true) : groupeDe(ligne.categorie ?? CLE_SANS_CATEGORIE, ligne.categorie, false);
 			courant.nombre++;
 		}
-		(courant ?? groupeDe(CLE_SANS_CATEGORIE, SANS_CATEGORIE, false)).lignes.push(ligne);
+		(courant ?? groupeDe(CLE_SANS_CATEGORIE, null, false)).lignes.push(ligne);
 	}
 	fermer();
 	return blocs;
@@ -189,11 +188,12 @@ export function grouperInformations(lignes: LigneAnalysee[]): BlocCorps[] {
 /** Un groupe repliable : son titre (catégorie et nombre) ouvre et ferme la liste. */
 function Groupe(p: { groupe: GroupeInformations; children: ReactNode }): JSX.Element {
 	const { groupe } = p;
+	const t = useTextes().memoire.rendu;
 	const [ouvert, setOuvert] = useState(!groupe.barrees);
 	return (
 		<div className={s.groupe} data-groupe={groupe.cle}>
 			<button type="button" className={s.titreGroupe} aria-expanded={ouvert} onClick={() => setOuvert((o) => !o)}>
-				<bdi>{groupe.titre}</bdi>
+				<bdi>{groupe.categorie ?? (groupe.barrees ? t.barrees : t.sansCategorie)}</bdi>
 				<Puce className={s.nombre}>{groupe.nombre}</Puce>
 			</button>
 			{ouvert && <div className={s.contenuGroupe}>{p.children}</div>}
@@ -201,18 +201,17 @@ function Groupe(p: { groupe: GroupeInformations; children: ReactNode }): JSX.Ele
 	);
 }
 
-/** Mentions du format affichées avec leurs accents (`a confirmer` → « à confirmer »). */
-const LIBELLES: Record<string, string> = { 'a confirmer': 'à confirmer', declare: 'déclaré', observe: 'observé', infere: 'inféré' };
-
-function tonDe(libelle: string): 'avertissement' | 'succes' | 'neutre' {
-	if (libelle === 'à confirmer' || libelle === 'a confirmer') return 'avertissement';
-	if (libelle === 'déclaré' || libelle === 'declare') return 'succes';
+/** Ton d'une mention du format, telle qu'écrite (avec ou sans accents). */
+function tonDe(mention: string): 'avertissement' | 'succes' | 'neutre' {
+	if (mention === 'à confirmer' || mention === 'a confirmer') return 'avertissement';
+	if (mention === 'déclaré' || mention === 'declare') return 'succes';
 	return 'neutre';
 }
 
 /** Lien `[[cible]]` ou `[[cible|alias]]` (`.wl`) ; cible absente : `.wl.x`, et un clic le dit. */
 function LienFiche(p: { ecrit: string; chemin: string | null; ouvrir(chemin: string): void }): ReactNode {
 	const toast = useToast();
+	const t = useTextes().memoire.rendu;
 	const separateur = p.ecrit.indexOf('|');
 	const cible = separateur < 0 ? p.ecrit : p.ecrit.slice(0, separateur);
 	const libelle = separateur < 0 ? p.ecrit : p.ecrit.slice(separateur + 1);
@@ -222,7 +221,7 @@ function LienFiche(p: { ecrit: string; chemin: string | null; ouvrir(chemin: str
 			type="button"
 			className={cx(s.wl, chemin === null && s.x)}
 			title={chemin ?? undefined}
-			onClick={() => (chemin === null ? toast(`Fiche « ${cible} » absente`) : p.ouvrir(chemin))}
+			onClick={() => (chemin === null ? toast(t.ficheAbsente(cible)) : p.ouvrir(chemin))}
 		>
 			<bdi>{libelle}</bdi>
 		</button>
@@ -259,6 +258,7 @@ export function rendreEnLigne(texte: string, cibles: (ecrit: string) => string |
 /** Analyse et rendu mémorisés sur le corps (et les liens) : une fiche relue à l'identique ne se réanalyse pas. */
 export function CorpsFiche(p: { corps: string; liens: FicheVue['liens']; ouvrir(chemin: string): void }): JSX.Element {
 	const { corps, liens, ouvrir } = p;
+	const t = useTextes().memoire.rendu;
 	const blocs = useMemo(() => grouperInformations(analyserCorps(corps)), [corps]);
 	return useMemo(() => {
 		const parEcrit = new Map(liens.sortants.map((l) => [l.ecrit, l.chemin]));
@@ -293,7 +293,7 @@ export function CorpsFiche(p: { corps: string; liens: FicheVue['liens']; ouvrir(
 								<bdi>{enLigne(`src: ${l.source}`)}</bdi>
 							</Puce>
 							<Puce className={s.puce}>
-								<bdi>{`corroboré ${l.le}`}</bdi>
+								<bdi>{t.corroboree(l.le)}</bdi>
 							</Puce>
 						</div>
 					);
@@ -307,10 +307,9 @@ export function CorpsFiche(p: { corps: string; liens: FicheVue['liens']; ouvrir(
 							)}
 							{l.barre ? <s>{enLigne(l.texte)}</s> : enLigne(l.texte)}
 							{l.meta.map((m, j) => {
-								const libelle = LIBELLES[m] ?? m;
 								return (
-									<Puce key={j} ton={tonDe(libelle)} className={s.puce}>
-										<bdi>{enLigne(libelle)}</bdi>
+									<Puce key={j} ton={tonDe(m)} className={s.puce}>
+										<bdi>{enLigne(t.mention(m))}</bdi>
 									</Puce>
 								);
 							})}
@@ -332,5 +331,5 @@ export function CorpsFiche(p: { corps: string; liens: FicheVue['liens']; ouvrir(
 				)}
 			</article>
 		);
-	}, [blocs, liens, ouvrir]);
+	}, [blocs, liens, ouvrir, t]);
 }

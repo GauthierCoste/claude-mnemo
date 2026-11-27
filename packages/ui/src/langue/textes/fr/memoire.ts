@@ -2,6 +2,7 @@ import { pluriel } from '../../pluriel.ts';
 
 const NOMBRE = new Intl.NumberFormat('fr-FR');
 const nombre = (n: number): string => NOMBRE.format(n);
+const MENTIONS: Readonly<Record<string, string>> = { 'a confirmer': 'à confirmer', declare: 'déclaré', observe: 'observé', infere: 'inféré' };
 
 /** Vue Mémoire : onglets, Fichiers (arbre, fiche, liens), Graph 3D, Entraîner. */
 export const memoire = {
@@ -40,5 +41,51 @@ export const memoire = {
 		aucune: 'Aucune.',
 		session: (debutId: string) => `Session ${debutId}`,
 		ficheAbsente: (titre: string) => `Fiche « ${titre} » absente`,
+	},
+	fiche: {
+		edition: 'Édition',
+		voirDansLeGraphe: 'Voir dans le graphe',
+		deplacer: 'Déplacer',
+		chargement: 'Chargement de la fiche…',
+		proprietes: 'Propriétés',
+		/** Nom de la propriété `updated`. */
+		modifie: 'modifié',
+		aVerifier: 'À vérifier dans cette fiche',
+		markdown: 'Markdown de la fiche',
+		aideMarkdown: 'Fichier Markdown, lisible aussi dans Obsidian',
+		enregistree: 'Fiche enregistrée',
+		deplaceeDans: (dossier: string) => `Fiche déplacée dans ${dossier}`,
+		deplaceeALaRacine: 'Fiche déplacée à la racine',
+		disparue: (erreur: string, enEdition: boolean) =>
+			`Cette fiche n'existe plus à cet endroit (${erreur}).${enEdition ? ' Le texte reste dans la zone ; le copier avant de quitter.' : ''}`,
+		relectureImpossible: (erreur: string) => `Relecture de la fiche impossible (${erreur}). La version affichée est peut-être dépassée.`,
+		conflit: "La fiche a changé depuis l'ouverture. Le texte reste dans la zone : Recharger repart de la version du disque.",
+		changeeSurLeDisque: 'La fiche a changé sur le disque pendant l’édition.',
+		recharger: 'Recharger',
+		refus: (motif: string) => `Enregistrement refusé : ${motif}`,
+		plusSuggeree: (date: string) => `Mnemo ne suggère plus cette fiche, dans aucune session (« Ne plus jamais suggérer », le ${date}).`,
+		retablir: 'Rétablir',
+		retablirTitre: "Mnemo peut de nouveau la proposer en piste ou l'injecter",
+		retablie: 'Mnemo peut de nouveau suggérer cette fiche',
+		quitter: {
+			titre: 'Modifications non enregistrées',
+			texte: 'Modifications non enregistrées.',
+			abandonner: 'Abandonner les modifications',
+			rester: 'Rester',
+		},
+		deplacement: {
+			dossier: 'Dossier d’arrivée',
+			indication: 'Dossier d’arrivée (vide = racine)',
+			ici: 'Déplacer ici',
+		},
+	},
+	/** Corps d'une fiche rendu : groupes d'informations, mentions du format, liens. */
+	rendu: {
+		sansCategorie: 'sans catégorie',
+		barrees: 'retirées ou périmées',
+		/** Mention du format affichée avec ses accents (`a confirmer` → « à confirmer ») ; une mention inconnue telle quelle. */
+		mention: (brute: string): string => MENTIONS[brute] ?? brute,
+		corroboree: (le: string) => `corroboré ${le}`,
+		ficheAbsente: (cible: string) => `Fiche « ${cible} » absente`,
 	},
 };

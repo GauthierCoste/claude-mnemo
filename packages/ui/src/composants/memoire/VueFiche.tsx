@@ -26,6 +26,8 @@ import { useToast } from '../Toast.tsx';
 import { useAnnonceEcriture } from '../commun/annonce-ecriture.ts';
 import { useNavigationMemoire } from './navigation-memoire.tsx';
 import s from './VueFiche.module.css';
+import { useTextes } from '../../langue/langue.tsx';
+import type { Textes } from '../../langue/textes.ts';
 import { avertissementsDe } from '@mnemo/commun';
 
 type Avis = { genre: 'conflit' } | { genre: 'refus'; motif: string };
@@ -34,20 +36,16 @@ type Relecture = 'aucune' | 'demandee' | 'en_cours';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-/** « 25.11.2026 », heure locale. */
-function dateCourte(ms: number): string {
-	const d = new Date(ms);
-	return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
-}
-
 /** `updated: 2026-11-21` s'affiche « modifié 21.11.2026 » ; les autres propriétés telles quelles. */
-function propriete(cle: string, valeur: string): [string, string] {
+function propriete(cle: string, valeur: string, t: Textes): [string, string] {
 	if (cle !== 'updated') return [cle, valeur];
 	const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valeur.trim());
-	return ['modifié', date ? `${date[3]}.${date[2]}.${date[1]}` : valeur];
+	return [t.memoire.fiche.modifie, date ? t.commun.formats.date(new Date(Number(date[1]), Number(date[2]) - 1, Number(date[3])).getTime()) : valeur];
 }
 
 export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editionInitiale?: boolean }): ReactNode {
+	const textes = useTextes();
+	const t = textes.memoire.fiche;
 	const { api } = useClient();
 	const toast = useToast();
 	const annoncer = useAnnonceEcriture();
@@ -74,7 +72,7 @@ export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editio
 	const retablirSuggestions = async () => {
 		try {
 			await toujours.retablir(chemin);
-			annoncer('Mnemo peut de nouveau suggérer cette fiche');
+			annoncer(t.retablie);
 		} catch (e) {
 			toast(message(e));
 		}
@@ -167,7 +165,7 @@ export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editio
 			modifieCourant.current = false;
 			setEdition(false);
 			setEmpreinteLue(null);
-			annoncer('Fiche enregistrée', avertissementsDe(r));
+			annoncer(t.enregistree, avertissementsDe(r));
 			fiche.recharger();
 			return true;
 		} catch (e) {
@@ -198,7 +196,7 @@ export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editio
 		try {
 			const r = await api.envoyer<ResultatEcriture | null>(ROUTES.deplacer, { id: chemin, dossier: vers });
 			setDossier(null);
-			annoncer(vers ? `Fiche déplacée dans ${vers}` : 'Fiche déplacée à la racine', ...(r === null ? [] : [avertissementsDe(r)]));
+			annoncer(vers ? t.deplaceeDans(vers) : t.deplaceeALaRacine, ...(r === null ? [] : [avertissementsDe(r)]));
 			// le chemin rendu par le service fait foi ; à défaut, la même règle que lui (`<dossier>/<nom>`)
 			memoire.ouvrirFiche(r !== null && 'fiche' in r ? r.fiche : vers ? `${vers}/${nom}` : nom);
 		} catch (err) {
@@ -227,47 +225,45 @@ export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editio
 	if (disparue)
 		alertes.push(
 			<div key="disparue" role="alert" className={s.avis}>
-				<span>
-					Cette fiche n'existe plus à cet endroit ({fiche.erreur}).{edition ? ' Le texte reste dans la zone ; le copier avant de quitter.' : ''}
-				</span>
+				<span>{t.disparue(fiche.erreur ?? '', edition)}</span>
 			</div>,
 		);
 	if (relectureEnEchec)
 		alertes.push(
 			<div key="relecture" role="alert" className={s.avis}>
-				<span>Relecture de la fiche impossible ({fiche.erreur}). La version affichée est peut-être dépassée.</span>
+				<span>{t.relectureImpossible(fiche.erreur ?? '')}</span>
 			</div>,
 		);
 	if (avis?.genre === 'conflit')
 		alertes.push(
 			<div key="conflit" role="alert" className={s.avis}>
-				<span>La fiche a changé depuis l'ouverture. Le texte reste dans la zone : Recharger repart de la version du disque.</span>
+				<span>{t.conflit}</span>
 				<Bouton petit onClick={recharger}>
-					Recharger
+					{t.recharger}
 				</Bouton>
 			</div>,
 		);
 	if (avis?.genre === 'refus')
 		alertes.push(
 			<div key="refus" role="alert" className={s.avis}>
-				<span>Enregistrement refusé : {avis.motif}</span>
+				<span>{t.refus(avis.motif)}</span>
 			</div>,
 		);
 	if (ecarteeToujours !== null)
 		alertes.push(
 			<div key="jamais" role="note" className={s.avis}>
-				<span>Mnemo ne suggère plus cette fiche, dans aucune session (« Ne plus jamais suggérer », le {dateCourte(ecarteeToujours.horodatageMs)}).</span>
-				<Bouton petit title="Mnemo peut de nouveau la proposer en piste ou l'injecter" onClick={() => void retablirSuggestions()}>
-					Rétablir
+				<span>{t.plusSuggeree(textes.commun.formats.date(ecarteeToujours.horodatageMs))}</span>
+				<Bouton petit title={t.retablirTitre} onClick={() => void retablirSuggestions()}>
+					{t.retablir}
 				</Bouton>
 			</div>,
 		);
 	if (changeeSurLeDisque)
 		alertes.push(
 			<div key="disque" role="alert" className={s.avis}>
-				<span>La fiche a changé sur le disque pendant l’édition.</span>
+				<span>{t.changeeSurLeDisque}</span>
 				<Bouton petit onClick={recharger}>
-					Recharger
+					{t.recharger}
 				</Bouton>
 			</div>,
 		);
@@ -279,26 +275,26 @@ export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editio
 					<span className={s.chemin}>{chemin.split('/').join(' / ')}</span>
 					<span className={s.espace} />
 					<Bascule actif={edition} surChangement={basculerEdition}>
-						Édition
+						{t.edition}
 					</Bascule>
 					<Bouton petit onClick={() => memoire.voirDansLeGraphe(chemin)}>
-						Voir dans le graphe
+						{t.voirDansLeGraphe}
 					</Bouton>
 					<Bouton petit aria-expanded={dossier !== null} onClick={basculerDeplacement}>
-						Déplacer
+						{t.deplacer}
 					</Bouton>
 				</div>
 				{quitter && (
-					<div role="alertdialog" aria-label="Modifications non enregistrées" className={s.quitter}>
-						<span>Modifications non enregistrées.</span>
+					<div role="alertdialog" aria-label={t.quitter.titre} className={s.quitter}>
+						<span>{t.quitter.texte}</span>
 						<Bouton petit genre="primaire" disabled={enregistrement || disparue} onClick={() => void decider.enregistrer()}>
-							Enregistrer
+							{textes.commun.actions.enregistrer}
 						</Bouton>
 						<Bouton petit onClick={decider.abandonner}>
-							Abandonner les modifications
+							{t.quitter.abandonner}
 						</Bouton>
 						<Bouton petit onClick={decider.rester} autoFocus>
-							Rester
+							{t.quitter.rester}
 						</Bouton>
 					</div>
 				)}
@@ -306,30 +302,30 @@ export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editio
 					<form className={s.deplacement} onSubmit={deplacer}>
 						<input
 							type="text"
-							aria-label="Dossier d’arrivée"
-							placeholder="Dossier d’arrivée (vide = racine)"
+							aria-label={t.deplacement.dossier}
+							placeholder={t.deplacement.indication}
 							value={dossier}
 							onChange={(e) => setDossier(e.target.value)}
 							autoFocus
 						/>
 						<Bouton petit genre="primaire" type="submit">
-							Déplacer ici
+							{t.deplacement.ici}
 						</Bouton>
 						<Bouton petit onClick={() => setDossier(null)}>
-							Annuler
+							{textes.commun.actions.annuler}
 						</Bouton>
 						{refusDeplacement && <span className={s.refus}>{refusDeplacement}</span>}
 					</form>
 				)}
 				{donnees === undefined ? (
-					<p className={s.attente}>{fiche.erreur ?? 'Chargement de la fiche…'}</p>
+					<p className={s.attente}>{fiche.erreur ?? t.chargement}</p>
 				) : (
 					<>
 						<h1>{donnees.titre}</h1>
 						{donnees.proprietes.length > 0 && (
-							<dl className={s.props} aria-label="Propriétés">
+							<dl className={s.props} aria-label={t.proprietes}>
 								{donnees.proprietes.map(([cle, valeur], i) => {
-									const [nom, texteValeur] = propriete(cle, valeur);
+									const [nom, texteValeur] = propriete(cle, valeur, textes);
 									return (
 										<div key={i} className={s.prop}>
 											<dt>{nom}</dt>
@@ -341,7 +337,7 @@ export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editio
 						)}
 						{donnees.avertissements.length > 0 && (
 							<div role="note" aria-labelledby="titre-a-verifier" className={s.avis}>
-								<span id="titre-a-verifier">À vérifier dans cette fiche</span>
+								<span id="titre-a-verifier">{t.aVerifier}</span>
 								<ul className={s.avertissements}>
 									{donnees.avertissements.map((a, i) => (
 										<li key={i}>{a}</li>
@@ -352,12 +348,12 @@ export function VueFiche(p: { chemin: string; fiche: Ressource<FicheVue>; editio
 						{alertes}
 						{edition ? (
 							<>
-								<textarea className={s.raw} aria-label="Markdown de la fiche" spellCheck={false} value={texte} readOnly={enregistrement} onChange={(e) => setTexte(e.target.value)} />
+								<textarea className={s.raw} aria-label={t.markdown} spellCheck={false} value={texte} readOnly={enregistrement} onChange={(e) => setTexte(e.target.value)} />
 								<div className={s.actions}>
 									<Bouton genre="primaire" disabled={enregistrement || empreinteLue === null || disparue} onClick={() => void enregistrer()}>
-										Enregistrer
+										{textes.commun.actions.enregistrer}
 									</Bouton>
-									<span className={s.aide}>Fichier Markdown, lisible aussi dans Obsidian</span>
+									<span className={s.aide}>{t.aideMarkdown}</span>
 								</div>
 							</>
 						) : (
