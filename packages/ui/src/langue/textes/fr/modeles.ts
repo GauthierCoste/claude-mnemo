@@ -1,1 +1,92 @@
-export const modeles = {};
+/** Modèles locaux : bouton de la barre de titre, menu des modèles d'une session, état de chaque pièce. */
+export const modeles = {
+	niveaux: { complets: 'Complets', sens: 'Sens seul', coupes: 'Coupés' },
+	detailsNiveaux: {
+		complets: 'Sens et reclassement : la meilleure recherche – ~1,6 Go',
+		sens: 'Sans reclassement : un peu moins précis – ~0,8 Go',
+		coupes: 'Mots seuls : ne trouve pas les reformulations – aucun',
+	},
+	/** Effet d'un niveau sur les recherches et l'injection d'une session. */
+	detailsSession: {
+		complets: 'Sens et reclassement : les pistes les plus justes',
+		sens: 'Sans reclassement : pistes un peu moins bien classées, réponses plus rapides',
+		coupes: 'Mots seuls : ne trouve pas les reformulations',
+	},
+	activite: {
+		vectorisation: 'Vectorisation…',
+		/** « Vectorisation 120/800 » */
+		vectorisationAvancee: (faits: number, total: number) => `Vectorisation ${faits}/${total}`,
+		recherche: 'Recherche…',
+		injection: 'Injection…',
+	},
+	resume: {
+		coupes: 'Modèles coupés',
+		echec: 'Modèles en échec',
+		chargement: 'Chargement…',
+		sensPret: 'Sens seul prêt',
+		prets: 'Modèles prêts',
+		sensVeille: 'Sens seul en veille',
+		veille: 'Modèles en veille',
+	},
+	etats: {
+		nonInstalle: 'non installé',
+		exclu: 'exclu',
+		echec: 'en échec',
+		pret: 'prêt',
+		chargement: 'chargement…',
+		veille: 'en veille',
+	},
+	pieces: {
+		sens: 'Sens',
+		reclassement: 'Reclassement',
+		moteur: 'Moteur',
+		usageSens: 'Vecteurs de sens (recherche par le sens)',
+		usageReclassement: 'Reclasse les meilleures pistes',
+		/** Bulle d'une pièce installée : son usage et le début de son empreinte. */
+		titre: (usage: string, empreinte: string) => `${usage} – empreinte SHA-256 ${empreinte}…`,
+		serveur: 'Serveur llama-server de llama.cpp (ggml)',
+		serveurVersion: (version: string) => `Serveur llama-server de llama.cpp (ggml), version ${version}`,
+		local: (plateforme: string) => `${plateforme} – local, 127.0.0.1`,
+	},
+	bouton: {
+		encoreEnChargement: 'Des modèles chargent encore : réessayer dans un instant.',
+		coupesPartout: 'Les modèles sont coupés partout',
+		actionImpossible: 'Action impossible.',
+		/** Nom accessible du bouton : « Modèles locaux : Modèles prêts ». */
+		libelle: (etat: string) => `Modèles locaux : ${etat}`,
+		partout: 'Partout',
+		demarrer: 'Démarrer maintenant',
+		arreter: 'Arrêter maintenant',
+		titre: 'Modèles locaux',
+		cetteSession: ' – cette session',
+		autreDossier: ' – autre dossier',
+		inactivite: (minutes: number) => `Ils démarrent au besoin et s’arrêtent seuls après ${minutes} min sans requête.`,
+	},
+	session: {
+		/** Texte du bouton : rien pour le cas courant (complets), un mot sinon. */
+		textes: { complets: '', sens: 'Sens', coupes: 'Coupés' },
+		titreAffinage: "Le reranker affine le classement en arrière-plan ; les lignes glisseront à leur nouvelle place. Rien n'est injecté après coup.",
+		affinage: 'affinage…',
+		ordreSeul: 'ordre seul',
+		niveauCommePartout: (niveau: string) => `Modèles de cette session : comme partout (${niveau})`,
+		niveauPropre: (niveau: string) => `Modèles de cette session : ${niveau}`,
+		actionImpossible: 'Action impossible.',
+		titre: 'Modèles de cette session',
+		sens: 'Sens',
+		reclassement: 'Reclassement',
+		enCours: 'En cours',
+		classement: 'Classement',
+		utilise: 'utilisé',
+		nonUtilise: 'non utilisé',
+		rien: 'rien',
+		affinageDuClassement: 'affinage du classement',
+		ordreSeulSansPourcent: 'ordre seul, sans %',
+		pied: 'Ne change que cette session : les modèles restent en marche pour les autres. Pour libérer la mémoire, choisissez le niveau partout.',
+		entrainer: 'Entraîner la note',
+		entrainerDetail: 'Mémoire › Entraîner : juge des messages, la note apprend à donner des %',
+		groupe: 'Niveau pour cette session',
+		commePartout: (niveau: string) => `Comme partout (${niveau})`,
+		commePartoutDetail: 'Suit le niveau choisi dans la barre du haut',
+		indisponible: (niveau: string) => `Indisponible : limité partout à « ${niveau} »`,
+	},
+};

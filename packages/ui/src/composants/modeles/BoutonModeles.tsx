@@ -9,37 +9,41 @@ import type { EtatModelesVue, ReponseArretModeles } from '@mnemo/contrat';
 import type { ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
 import { useModeles, useReglages } from '../../client/hooks.ts';
+import { useTextes } from '../../langue/langue.tsx';
+import { TEXTES } from '../../langue/textes.ts';
 import { aDemarrer } from '../../modeles/etat.ts';
 import { useNavigation } from '../../navigation.tsx';
 import { cx } from '../commun/classes.ts';
 import { useToast } from '../Toast.tsx';
 import { IconeModeles } from './IconeModeles.tsx';
-import { DETAILS_NIVEAUX, NOMS_NIVEAUX, libelleActivite, lignesPieces, resume } from './libelles.ts';
+import { libelleActivite, lignesPieces, resume } from './libelles.ts';
 import { GroupeMenu, ItemMenu, MenuModeles } from './MenuModeles.tsx';
 import r from '../commun/Reflet.module.css';
 import s from './Modeles.module.css';
 
-export const ENCORE_EN_CHARGEMENT = 'Des modèles chargent encore : réessayer dans un instant.';
-const COUPES_PARTOUT = 'Les modèles sont coupés partout';
+/** Arrêt qui a trouvé des modèles encore en chargement, en français : le texte des tests. */
+export const ENCORE_EN_CHARGEMENT = TEXTES.fr.modeles.bouton.encoreEnChargement;
 
 export function BoutonModeles(): ReactNode {
 	const modeles = useModeles(true);
 	const { sessionPremierPlan } = useNavigation();
 	const toast = useToast();
+	const t = useTextes();
+	const b = t.modeles.bouton;
 	const e = modeles.etat;
 	if (e?.installes !== true) return null;
-	const { texte, point } = resume(e);
+	const { texte, point } = resume(e, t);
 	const coupes = e.niveau === 'coupes';
 	const agir = (geste: () => Promise<void>) =>
-		void geste().catch((erreur: unknown) => toast(erreur instanceof ErreurApi ? erreur.message : 'Action impossible.'));
+		void geste().catch((erreur: unknown) => toast(erreur instanceof ErreurApi ? erreur.message : b.actionImpossible));
 	/** Un arrêt qui a trouvé des modèles encore en chargement (geste « Arrêter », ou niveau qui en retire un) : le dire. */
 	const direArret = (arret: ReponseArretModeles['arret'] | null) => {
-		if (arret !== null && typeof arret === 'object') toast(ENCORE_EN_CHARGEMENT);
+		if (arret !== null && typeof arret === 'object') toast(b.encoreEnChargement);
 	};
 	const choisirNiveau = (n: NiveauModeles) => agir(async () => direArret(await modeles.changerNiveau(n)));
 	return (
 		<MenuModeles
-			libelle={`Modèles locaux : ${texte}`}
+			libelle={b.libelle(texte)}
 			classeBouton={cx(s.bouton, coupes && s.eteint)}
 			alignement="droite"
 			contenuBouton={
@@ -58,17 +62,17 @@ export function BoutonModeles(): ReactNode {
 			{(fermer) => (
 				<>
 					<div className={s.separateur} role="separator" />
-					<GroupeMenu titre="Partout">
+					<GroupeMenu titre={b.partout}>
 						{NIVEAUX_MODELES.map((n) => (
-							<ItemMenu key={n} coche={e.niveau === n} libelle={NOMS_NIVEAUX[n]} detail={DETAILS_NIVEAUX[n]} surChoix={() => choisirNiveau(n)} />
+							<ItemMenu key={n} coche={e.niveau === n} libelle={t.modeles.niveaux[n]} detail={t.modeles.detailsNiveaux[n]} surChoix={() => choisirNiveau(n)} />
 						))}
 					</GroupeMenu>
 					<div className={s.separateur} role="separator" />
 					{aDemarrer(e) ? (
 						<ItemMenu
-							libelle="Démarrer maintenant"
+							libelle={b.demarrer}
 							desactive={coupes}
-							detail={coupes ? COUPES_PARTOUT : undefined}
+							detail={coupes ? b.coupesPartout : undefined}
 							surChoix={() => {
 								agir(modeles.demarrer);
 								fermer();
@@ -76,7 +80,7 @@ export function BoutonModeles(): ReactNode {
 						/>
 					) : (
 						<ItemMenu
-							libelle="Arrêter maintenant"
+							libelle={b.arreter}
 							surChoix={() => {
 								agir(async () => direArret(await modeles.arreter()));
 								fermer();
@@ -91,11 +95,12 @@ export function BoutonModeles(): ReactNode {
 
 /** En-tête du panneau (hors du menu) : chaque pièce, puis les appels en cours, avec leur session et leur dossier. */
 function EtatPieces(p: { e: EtatModelesVue; sessionAffichee: string | null }): ReactNode {
+	const t = useTextes();
 	return (
 		<>
-			<div className={s.entete}>Modèles locaux</div>
+			<div className={s.entete}>{t.modeles.bouton.titre}</div>
 			<ul className={s.pieces}>
-				{lignesPieces(p.e).map((x) => (
+				{lignesPieces(p.e, t).map((x) => (
 					<li key={x.role} title={x.titre}>
 						<span className={s.role}>{x.role}</span>
 						<span className={s.etatPiece}>{x.etat}</span>
@@ -109,9 +114,9 @@ function EtatPieces(p: { e: EtatModelesVue; sessionAffichee: string | null }): R
 					{p.e.activites.map((a, i) => (
 						<li key={i}>
 							<span className={cx(s.point, s.actif)} aria-hidden="true" />
-							{libelleActivite(a)}
-							{a.session !== null && a.session === p.sessionAffichee && <span className={s.detail}> – cette session</span>}
-							{!a.ceDossier && <span className={s.detail}> – autre dossier</span>}
+							{libelleActivite(a, t)}
+							{a.session !== null && a.session === p.sessionAffichee && <span className={s.detail}>{t.modeles.bouton.cetteSession}</span>}
+							{!a.ceDossier && <span className={s.detail}>{t.modeles.bouton.autreDossier}</span>}
 						</li>
 					))}
 				</ul>
@@ -135,5 +140,6 @@ function InactiviteDesReglages(): ReactNode {
 }
 
 function TexteInactivite(p: { minutes: number }): ReactNode {
-	return <p className={s.note}>Ils démarrent au besoin et s’arrêtent seuls après {p.minutes} min sans requête.</p>;
+	const t = useTextes();
+	return <p className={s.note}>{t.modeles.bouton.inactivite(p.minutes)}</p>;
 }
