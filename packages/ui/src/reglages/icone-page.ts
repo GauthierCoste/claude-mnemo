@@ -55,7 +55,8 @@ export function poserIconePage(couleurs: { fond: string; trait: string }): void 
 	const cle = `${couleurs.fond} ${couleurs.trait}`;
 	if (lien.dataset['couleurs'] === cle) return;
 	const url = dessinerIcone(couleurs);
-	if (url === null) return;
+	// seule adresse posée à la main dans l'interface : un PNG `data:` sorti de notre canevas, jamais une donnée de la mémoire
+	if (url === null || !url.startsWith('data:image/png;base64,')) return;
 	lien.type = 'image/png';
 	lien.href = url;
 	lien.dataset['couleurs'] = cle;

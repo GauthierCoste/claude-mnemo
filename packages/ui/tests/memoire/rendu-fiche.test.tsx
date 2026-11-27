@@ -228,7 +228,11 @@ Voir [x](javascript:alert(1)) et [y](data:text/html,<script>alert(2)</script>) e
 				),
 			)
 			.map((f) => relative(SRC, f));
-		expect(fautes).toEqual([]);
+		// une seule exception : l'icône de la page, un PNG `data:` dessiné par notre canevas (vérifié avant d'être posé)
+		const icone = join('reglages', 'icone-page.ts');
+		expect(readFileSync(join(SRC, icone), 'utf8').match(/\bhref\s*=/g)).toHaveLength(1);
+		expect(readFileSync(join(SRC, icone), 'utf8')).toContain("url.startsWith('data:image/png;base64,')");
+		expect(fautes.filter((f) => f !== icone)).toEqual([]);
 	});
 });
 
