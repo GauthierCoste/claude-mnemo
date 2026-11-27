@@ -11,7 +11,7 @@ const deux = (n: number): string => String(n).padStart(2, '0');
 export const sessions = {
 	formats: {
 		/** « 87 % » (espace fine insécable). */
-		pourcentage: (n: number): string => `${n}\u202f%`,
+		pourcentage: (n: number): string => `${n}\u00a0%`,
 		/** « 124 k » ; « 1 M » au million. */
 		tokens: (n: number): string => (n >= 1_000_000 ? `${Math.round(n / 100_000) / 10} M` : `${Math.round(n / 1000)} k`),
 		/** Durées des cartes : « 18 min », « 1 h 10 », « 1 j 4 h » ; en pause, « 3 j sans activité ». */

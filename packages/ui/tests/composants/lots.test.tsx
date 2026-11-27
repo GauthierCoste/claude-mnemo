@@ -263,7 +263,7 @@ describe('Mémoire › Archiviste : lots d’informations à valider', () => {
 		const carte = await carteDuLot('4 doublons proposés dans Module stocks');
 		fireEvent.click(within(carte).getByRole('button', { name: 'Revoir' }));
 		for (const c of within(carte).getAllByRole('checkbox')) fireEvent.click(c);
-		expect((within(carte).getByRole('button', { name: 'Valider 0 doublons' }) as HTMLButtonElement).disabled).toBe(true);
+		expect((within(carte).getByRole('button', { name: 'Valider 0 doublon' }) as HTMLButtonElement).disabled).toBe(true);
 	});
 
 	it('lot reproposé (autre date de proposition) : les cases repartent cochées', async () => {
