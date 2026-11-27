@@ -9,6 +9,7 @@ import { Point } from '../sessions/Point.tsx';
 import s from './ArbreDossiers.module.css';
 import { BoutonsArbre } from './BoutonsArbre.tsx';
 import { cx } from './classes.ts';
+import { ChevronArbre, GuidesArbre, IconeDossier, margeArbre, RETRAIT_ARBRE } from './ElementsArbre.tsx';
 
 /**
  * Puce git : « branche | n modif. » ou « branche | à jour », sans branche si la tête est détachée ; rien pendant le
@@ -37,8 +38,18 @@ type Props = {
 	details(chemin: string, git: GitDossierVue | undefined, retrait: number): ReactNode;
 };
 
-/** Retrait de l'arbre : 14 px par niveau. */
-const RETRAIT = 14;
+/**
+ * Traits de guide d'une ligne de profondeur `profondeur` : un par dossier qui la contient (la racine, puis chaque
+ * ascendant) ; vrai pour ceux qui contiennent aussi le dossier `choisi`.
+ */
+function niveauxDe(chemin: string, profondeur: number, choisi: string | null): boolean[] {
+	const morceaux = chemin === '' ? [] : chemin.split('/');
+	return Array.from({ length: profondeur }, (_, k) => {
+		if (choisi === null) return false;
+		const ascendant = morceaux.slice(0, k).join('/');
+		return ascendant === '' || choisi === ascendant || choisi.startsWith(`${ascendant}/`);
+	});
+}
 
 export function ArbreDossiers(p: Props): ReactNode {
 	const nomRacine = useNomRacine();
@@ -70,6 +81,7 @@ export function ArbreDossiers(p: Props): ReactNode {
 					ligne={l}
 					sessions={sessions.filter((x) => x.dossier === l.chemin)}
 					choisi={p.choisi === l.chemin}
+					niveaux={niveauxDe(l.chemin, l.profondeur, p.choisi)}
 					surChoisir={p.surChoisir}
 					surBasculer={(deplie) => p.surPliage(basculer(p.pliage, l.chemin, deplie))}
 					details={p.details}
@@ -83,6 +95,8 @@ function LigneDossier(p: {
 	ligne: LigneArbre;
 	sessions: readonly SessionVue[];
 	choisi: boolean;
+	/** Traits de guide de la ligne (`niveauxDe`). */
+	niveaux: readonly boolean[];
 	surChoisir(chemin: string): void;
 	surBasculer(deplie: boolean): void;
 	details: Props['details'];
@@ -90,26 +104,30 @@ function LigneDossier(p: {
 	const { ligne: l } = p;
 	const git = useGitDossier(l.dossier?.git === true && (p.choisi || p.sessions.length > 0) ? l.chemin : null);
 	const puce = texteGit(git.donnees);
-	const retrait = l.profondeur * RETRAIT;
+	const marge = margeArbre(l.profondeur);
+	// le contenu du dossier choisi (fichiers modifiés, actions) est au niveau de ses enfants
+	const retrait = (l.profondeur + 1) * RETRAIT_ARBRE;
+	const ouvert = l.deplie === true || p.choisi;
 	const erreur = l.dossier?.erreur ?? l.erreurNiveau;
 	return (
 		<>
-			<div className={s.ligne} style={{ paddingLeft: retrait }} data-dossier={l.chemin}>
-				{l.deplie === null ? (
-					<span className={s.replier} aria-hidden="true" />
-				) : (
+			<div className={s.ligne} style={{ paddingLeft: marge }} data-dossier={l.chemin}>
+				<GuidesArbre niveaux={p.niveaux} debut={0} />
+				{l.deplie !== null && (
 					<button
 						type="button"
 						className={s.replier}
+						style={{ left: marge - 22 }}
 						aria-label={`${l.deplie ? 'Replier' : 'Déplier'} ${l.chemin || l.nom}`}
 						aria-expanded={l.deplie}
 						onClick={() => p.surBasculer(l.deplie === true)}
 					>
-						{l.deplie ? '▾' : '▸'}
+						<ChevronArbre ouvert={l.deplie} />
 					</button>
 				)}
 				<button type="button" className={cx(s.dossier, p.choisi && s.on)} title={l.chemin || undefined} aria-pressed={p.choisi} onClick={() => p.surChoisir(l.chemin)}>
-					<b>{l.nom}</b>
+					<IconeDossier ouvert={ouvert} />
+					<b className={cx(!ouvert && s.ferme)}>{l.nom}</b>
 					{l.dossier?.marque === true && (
 						<span className={s.marque} title="Projet" aria-hidden="true">
 							◆
@@ -129,11 +147,16 @@ function LigneDossier(p: {
 				</button>
 			</div>
 			{erreur !== null && (
-				<p className={s.erreur} style={{ paddingLeft: retrait + 22 }}>
+				<p className={s.erreur} style={{ paddingLeft: marge + 4 }}>
 					{erreur}
 				</p>
 			)}
-			{p.choisi && p.details(l.chemin, git.donnees, retrait)}
+			{p.choisi && (
+				<div className={s.details}>
+					<GuidesArbre niveaux={[...p.niveaux, true]} debut={0} />
+					{p.details(l.chemin, git.donnees, retrait)}
+				</div>
+			)}
 		</>
 	);
 }

@@ -495,7 +495,7 @@ describe('Mémoire › Fichiers', () => {
 		expect(within(arbre).getAllByRole('button')).toHaveLength(400);
 		expect(within(arbre).getByText('201 lignes de plus : filtrer, ou replier des dossiers.')).toBeTruthy();
 		fireEvent.change(screen.getByPlaceholderText('Filtrer les fichiers'), { target: { value: 'P59' } });
-		expect(within(arbre).getAllByRole('button').map((b) => b.textContent)).toEqual(['personnes', ...Array.from({ length: 10 }, (_, i) => `P59${i}`)]);
+		expect(within(arbre).getAllByRole('button').map((b) => b.querySelector('bdi')?.textContent)).toEqual(['personnes', ...Array.from({ length: 10 }, (_, i) => `P59${i}`)]);
 	});
 
 	describe('modifications non enregistrées', () => {
@@ -745,7 +745,9 @@ describe('Mémoire › Fichiers : localiser, tout replier, tout déplier', () =>
 		monter();
 		await within(await screen.findByRole('navigation', { name: 'Fiches' })).findByRole('button', { name: 'Module stocks' });
 		fireEvent.click(screen.getByRole('button', { name: 'Tout replier' }));
-		expect(within(arbre()).getAllByRole('button').map((b) => b.textContent)).toEqual(['consignes', 'personnes', 'projets']);
+		expect(within(arbre()).getAllByRole('button').map((b) => b.querySelector('bdi')?.textContent)).toEqual(['consignes', 'personnes', 'projets']);
+		// replié, un dossier dit combien de fiches il cache
+		expect(within(arbre()).getAllByRole('button').map((b) => b.querySelector('[title]')?.getAttribute('title'))).toEqual(['1 fiche', '1 fiche', '1 fiche']);
 		fireEvent.click(screen.getByRole('button', { name: 'Tout déplier' }));
 		expect(within(arbre()).getByRole('button', { name: 'Module stocks' })).toBeTruthy();
 		// hors de l'arbre : ⌘- laissé au navigateur (zoom), l'arbre ne bouge pas

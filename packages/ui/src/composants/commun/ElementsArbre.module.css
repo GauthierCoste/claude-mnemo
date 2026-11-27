@@ -1,0 +1,44 @@
+/* Éléments communs aux arbres : chevron, icône de dossier, traits de guide. */
+.chevron {
+	position: absolute;
+	left: -18px;
+	top: calc(50% - 7px);
+	flex: none;
+	color: var(--mu);
+	transition: transform 0.12s;
+}
+
+.chevron.ouvert {
+	transform: rotate(90deg);
+	color: var(--tx);
+}
+
+.icone {
+	flex: none;
+	color: var(--mu);
+}
+
+.icone.ouvert {
+	color: var(--tx);
+}
+
+/* Au-dessus du surlignage des lignes, jamais cliquable. */
+.guide {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 1px;
+	z-index: 1;
+	pointer-events: none;
+	background: var(--bd2);
+}
+
+.guide.courant {
+	background: color-mix(in srgb, var(--ac) 45%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chevron {
+		transition: none;
+	}
+}

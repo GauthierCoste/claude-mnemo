@@ -50,6 +50,7 @@
 	--perso: var(--ac); /* couleur de l'agent dans le créateur d'agent (Réglages › Agents) */
 	--etat: var(--dim); /* pastille d'état sur l'avatar d'une session */
 	--part: 0; /* part remplie de la jauge de la fenêtre de contexte, de 0 à 1 */
+	--marge-arbre: 0px; /* début du libellé d'une ligne d'arbre (Mémoire › Fichiers), posé par la ligne */
 	--l-a-faire: 340px; /* largeurs des panneaux redimensionnables : Archiviste */
 	--l-enrichir: 380px;
 	--l-arbre: 260px; /* … et Mémoire › Fichiers */

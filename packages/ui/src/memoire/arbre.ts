@@ -7,7 +7,8 @@ import type { FicheGraphe } from '@mnemo/contrat';
 import { plier } from '@mnemo/commun';
 
 export type NoeudArbre =
-	| { genre: 'dossier'; cle: string; nom: string; profondeur: number; replie: boolean }
+	/** `nombre` : fiches retenues du dossier, sous-dossiers compris (ce qu'il cache, replié). */
+	| { genre: 'dossier'; cle: string; nom: string; profondeur: number; replie: boolean; nombre: number }
 	/** `branche` : dossier de premier niveau de la fiche ('' = racine), qui donne sa couleur. */
 	| { genre: 'fiche'; chemin: string; titre: string; profondeur: number; branche: string };
 
@@ -45,12 +46,13 @@ export function lignesArbre(fiches: FicheGraphe[], filtre: string, replies: Read
 	const lignes: NoeudArbre[] = [];
 	const fiche = (f: FicheGraphe, profondeur: number) =>
 		lignes.push({ genre: 'fiche', chemin: f.chemin, titre: f.titre, profondeur, branche: dossierDe(f)[0] ?? '' });
+	const compter = (d: Dossier): number => d.fiches.length + [...d.dossiers.values()].reduce((n, x) => n + compter(x), 0);
 	const parcourir = (d: Dossier, profondeur: number) => {
 		const enTete = d.fiches.filter((f) => d.nom !== '' && nomDeFichier(f) === d.nom);
 		for (const f of enTete) fiche(f, profondeur);
 		for (const sous of [...d.dossiers.values()].sort((a, b) => comparer(a.nom, b.nom))) {
 			const replie = replies.has(sous.cle);
-			lignes.push({ genre: 'dossier', cle: sous.cle, nom: sous.nom, profondeur, replie });
+			lignes.push({ genre: 'dossier', cle: sous.cle, nom: sous.nom, profondeur, replie, nombre: compter(sous) });
 			if (!replie) parcourir(sous, profondeur + 1);
 		}
 		for (const f of d.fiches.filter((x) => !enTete.includes(x)).sort((a, b) => comparer(a.titre, b.titre))) fiche(f, profondeur);

@@ -12,9 +12,9 @@ import { dossiersDe, lignesArbre } from '../../memoire/arbre.ts';
 import { pliageArbre } from '../../raccourcis.ts';
 import { BoutonsArbre } from '../commun/BoutonsArbre.tsx';
 import { cx } from '../commun/classes.ts';
+import { ChevronArbre, GuidesArbre, IconeDossier, margeArbre } from '../commun/ElementsArbre.tsx';
 import s from './ArbreFiches.module.css';
 
-const RETRAIT_PX = 14;
 /** Lignes affichées au plus : une grande mémoire (5 000 fiches) ne met pas 5 000 boutons dans la page ; le filtre affine. */
 export const LIGNES_MAX = 400;
 
@@ -85,6 +85,10 @@ export function ArbreFiches(p: {
 			return suivant;
 		});
 
+	// dossiers de la fiche ouverte : leurs traits de guide sont tracés en couleur
+	const chemin = p.courante === null ? [] : dossiersDe(p.courante);
+	const guides = (dossiers: readonly string[], debut: number) => <GuidesArbre niveaux={dossiers.map((d, k) => chemin[k] === d)} debut={debut} />;
+
 	let contenu: ReactNode;
 	if (fiches === undefined) contenu = <p className={s.vide}>{p.erreur ?? 'Chargement…'}</p>;
 	else if (lignes.length === 0) contenu = <p className={s.vide}>{filtre.trim() ? 'Aucune fiche ne correspond.' : 'Aucune fiche.'}</p>;
@@ -95,23 +99,30 @@ export function ArbreFiches(p: {
 					key={`d:${l.cle}`}
 					type="button"
 					className={cx(s.fo, l.replie && s.c)}
-					style={{ paddingLeft: 6 + l.profondeur * RETRAIT_PX }}
+					style={{ '--marge-arbre': `${margeArbre(l.profondeur)}px` } as CSSProperties}
 					aria-expanded={!l.replie}
 					title={l.cle}
 					onClick={() => basculer(l.cle)}
 				>
-					<bdi>{l.nom}</bdi>
+					{guides(dossiersDe(l.cle), margeArbre(l.profondeur))}
+					<ChevronArbre ouvert={!l.replie} />
+					<IconeDossier ouvert={!l.replie} />
+					<bdi className={s.titre}>{l.nom}</bdi>
+					<span className={s.nombre} title={`${l.nombre} fiche${l.nombre > 1 ? 's' : ''}`} aria-hidden="true">
+						{l.nombre}
+					</span>
 				</button>
 			) : (
 				<button
 					key={`f:${l.chemin}`}
 					type="button"
 					className={cx(s.fi, l.chemin === p.courante && s.on)}
-					style={{ paddingLeft: 8 + l.profondeur * RETRAIT_PX, '--c': couleurDeBranche(rangs, l.chemin) } as CSSProperties}
+					style={{ '--marge-arbre': `${margeArbre(l.profondeur)}px`, '--c': couleurDeBranche(rangs, l.chemin) } as CSSProperties}
 					aria-current={l.chemin === p.courante ? 'page' : undefined}
 					title={l.chemin}
 					onClick={() => p.ouvrir(l.chemin)}
 				>
+					{guides(dossiersDe(l.chemin), margeArbre(l.profondeur))}
 					<i aria-hidden="true" />
 					<bdi className={s.titre}>{l.titre}</bdi>
 				</button>

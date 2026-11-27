@@ -3,7 +3,7 @@
 .entete {
 	position: sticky;
 	top: calc(-1 * var(--esp-4));
-	z-index: 1;
+	z-index: 2;
 	display: flex;
 	align-items: center;
 	gap: 4px;
@@ -24,45 +24,56 @@
 
 .fo,
 .fi {
+	/* le surlignage commence au libellé, à `--m` du bord : le chevron et les traits des parents restent dans la marge */
+	position: relative;
 	display: flex;
 	align-items: center;
-	width: 100%;
+	margin-left: var(--marge-arbre);
+	width: calc(100% - var(--marge-arbre));
 	border: 0;
 	background: none;
 	text-align: left;
 	border-radius: var(--r-1);
 	cursor: pointer;
-	padding-top: 4px;
-	padding-bottom: 4px;
-	padding-right: 6px;
+	padding: 4px 6px 4px 4px;
 }
 
 .fo {
 	gap: 6px;
+	color: var(--tx);
+	font-weight: 600;
+}
+
+/* replié : en gris, ce qu'il cache se compte à droite */
+.fo.c {
 	color: var(--mu);
 	font-weight: 550;
-	margin-top: 4px;
 }
 
-.fo::before {
-	content: '▾';
-	font-size: 10px;
+.fo:hover,
+.fi:hover {
+	background: color-mix(in srgb, var(--tx) 6%, transparent);
+}
+
+.nombre {
+	margin-left: auto;
+	padding-left: 6px;
+	font: 11px var(--mono);
+	font-weight: 400;
 	color: var(--dim);
+	font-variant-numeric: tabular-nums;
+	flex: none;
 }
 
-.fo.c::before {
-	content: '▸';
+.fo.c .nombre {
+	color: var(--mu);
 }
 
 .fi {
 	gap: 7px;
+	padding-left: 7px;
 	color: var(--tx);
 	white-space: nowrap;
-	overflow: hidden;
-}
-
-.fi:hover {
-	background: var(--s2);
 }
 
 .fi.on {
@@ -81,6 +92,7 @@
 .titre {
 	display: block;
 	min-width: 0;
+	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
