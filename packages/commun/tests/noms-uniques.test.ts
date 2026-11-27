@@ -28,7 +28,10 @@ const EXCEPTIONS: readonly { fichier: string; symbole: string; texte: string; no
 	{ fichier: 'packages/mnemo/src/adaptateurs/cli/banc.ts', symbole: 'consignes', texte: 'consignes', nombre: 2, raison: 'section `consignes` du fichier de banc et son libellé d’erreur' },
 	{ fichier: 'packages/contrat/src/index.ts', symbole: 'sourcesTraiterToutes', texte: '/api/memoire/sources/traiter-toutes', nombre: 1, raison: 'chemin d’une route HTTP (ROUTES)' },
 	{ fichier: 'packages/mnemo/src/domaine/profil.ts', symbole: 'CLES_GEREES_DU_PROFIL', texte: 'skills', nombre: 1, raison: 'ancienne clé `skills` du frontmatter d’une fiche profil (v1.0), retirée à l’enregistrement' },
-	{ fichier: 'packages/ui/src/archiviste/lots.ts', symbole: 'versees', texte: 'sources', nombre: 1, raison: 'pluriel du mot « source » dans le libellé d’un lot (« + 2 sources »), pas le dossier de la mémoire' },
+	{ fichier: 'packages/ui/src/langue/textes/fr/sessions.tsx', symbole: 'autre', texte: 'skills', nombre: 1, raison: 'pluriel du mot « skill » dans l’équipement d’un agent, pas le dossier de la mémoire' },
+	{ fichier: 'packages/ui/src/langue/textes/en/sessions.tsx', symbole: 'autre', texte: 'skills', nombre: 1, raison: 'pluriel anglais du mot « skill » dans l’équipement d’un agent, pas le dossier de la mémoire' },
+	{ fichier: 'packages/ui/src/langue/textes/fr/archiviste.ts', symbole: 'autre', texte: 'sources', nombre: 1, raison: 'pluriel du mot « source » dans le libellé d’un lot (« + 2 sources »), pas le dossier de la mémoire' },
+	{ fichier: 'packages/ui/src/langue/textes/en/archiviste.ts', symbole: 'autre', texte: 'sources', nombre: 1, raison: 'pluriel anglais du mot « source » dans le libellé d’un lot, pas le dossier de la mémoire' },
 	{ fichier: 'packages/mnemo/src/infra/plugins-claude.ts', symbole: 'DOSSIER_SKILLS_CLAUDE', texte: 'skills', nombre: 1, raison: 'dossier des skills dans l’arborescence de Claude Code (plugin ou ~/.claude), pas le dossier fixe de la mémoire' },
 ];
 /** Fichiers de données d'exemple : chemins de fiches d'une mémoire fictive (mode démo), pas des noms de code. */
