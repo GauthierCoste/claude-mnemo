@@ -1,4 +1,8 @@
-/** Pendant un glissement, `body` porte la classe `drag` : les terminaux attendent la fin pour se réajuster. */
+/**
+ * Pendant un glissement, `body` porte la classe `drag` : les terminaux attendent la fin pour se réajuster, et la grille coupe
+ * ses transitions. Un glissement finit toujours : relâché, annulé, capture du pointeur perdue (bouton relâché hors de la
+ * fenêtre de l'app) ou fenêtre qui perd le focus. Sinon `drag` resterait posée : plus d'animation entre les sessions.
+ */
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { CLASSE_GLISSEMENT } from '../../terminal/useTerminal.ts';
 
@@ -14,6 +18,7 @@ export type GestesSeparateur = {
 	onPointerMove(e: PointerEvent<HTMLElement>): void;
 	onPointerUp(e: PointerEvent<HTMLElement>): void;
 	onPointerCancel(e: PointerEvent<HTMLElement>): void;
+	onLostPointerCapture(e: PointerEvent<HTMLElement>): void;
 	onKeyDown(e: KeyboardEvent<HTMLElement>): void;
 };
 
@@ -30,19 +35,31 @@ export function useGestesSeparateur(o: {
 	const [glisse, setGlisse] = useState(false);
 	const depart = useRef<number | null>(null);
 
+	const terminer = () => {
+		if (depart.current === null) return;
+		depart.current = null;
+		setGlisse(false);
+		o.surFin();
+	};
+	const terminerRef = useRef(terminer);
+	terminerRef.current = terminer;
+
 	useEffect(() => {
 		if (!glisse) return;
 		document.body.classList.add(CLASSE_GLISSEMENT);
-		return () => document.body.classList.remove(CLASSE_GLISSEMENT);
+		const perdu = () => terminerRef.current();
+		window.addEventListener('blur', perdu);
+		return () => {
+			window.removeEventListener('blur', perdu);
+			document.body.classList.remove(CLASSE_GLISSEMENT);
+		};
 	}, [glisse]);
 
 	const position = (e: PointerEvent<HTMLElement>) => (o.vertical ? e.clientX : e.clientY);
 	const finir = (e: PointerEvent<HTMLElement>) => {
 		if (depart.current === null) return;
-		depart.current = null;
 		if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-		setGlisse(false);
-		o.surFin();
+		terminer();
 	};
 
 	return {
@@ -61,6 +78,7 @@ export function useGestesSeparateur(o: {
 			},
 			onPointerUp: finir,
 			onPointerCancel: finir,
+			onLostPointerCapture: () => terminer(),
 			onKeyDown(e) {
 				const pas = e.shiftKey ? PAS_LARGE_PX : PAS_CLAVIER_PX;
 				const [moins, plus] = o.vertical ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown'];

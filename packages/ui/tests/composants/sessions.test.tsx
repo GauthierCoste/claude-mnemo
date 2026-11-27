@@ -680,6 +680,24 @@ describe('vue Sessions', () => {
 		expect(cellule('s5').style.flexGrow).toBe('400');
 	});
 
+	it('glissement jamais relâché (bouton lâché hors de la fenêtre, fenêtre qui perd le focus) : `drag` retirée, les transitions reviennent', async () => {
+		vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(400);
+		vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(300);
+		await monter();
+		const grille = screen.getByRole('region', { name: 'Grille des sessions' });
+		const separateur = document.querySelector<HTMLElement>('[data-ligne="erp-saas"] [data-separateur]')!;
+		await act(async () => fireEvent.pointerDown(separateur, { clientX: 100, button: 0, pointerId: 1 }));
+		expect(grille.classList.contains('drag')).toBe(true);
+		await act(async () => fireEvent.lostPointerCapture(separateur, { pointerId: 1 }));
+		expect(grille.classList.contains('drag')).toBe(false);
+		expect(document.body.classList.contains('drag')).toBe(false);
+		await act(async () => fireEvent.pointerDown(separateur, { clientX: 100, button: 0, pointerId: 2 }));
+		expect(grille.classList.contains('drag')).toBe(true);
+		await act(async () => fireEvent.blur(window));
+		expect(grille.classList.contains('drag')).toBe(false);
+		expect(document.body.classList.contains('drag')).toBe(false);
+	});
+
 	it('séparateurs de la grille au clavier : flèches de leur axe (Maj : grand pas), Début et Fin aux minimums', async () => {
 		vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(400);
 		vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(300);
