@@ -35,6 +35,8 @@ export const commun = {
 		/** « 3 fiches », « 1 fiche », « 0 fiche » */
 		fiches: (n: number): string => `${NOMBRE.format(n)} ${pluriel('fr', n, { un: 'fiche', autre: 'fiches' })}`,
 	},
+	/** Un avertissement du service, montré tel qu'il est écrit. */
+	avertissement: (texte: string): string => `Avertissement : ${texte}`,
 	actions: {
 		annuler: 'Annuler',
 		enregistrer: 'Enregistrer',

@@ -45,7 +45,8 @@ export function CentreArchiviste(p: {
 }): ReactNode {
 	const { api } = useClient();
 	const toast = useToast();
-	const t = useTextes().archiviste.centre;
+	const textes = useTextes();
+	const t = textes.archiviste.centre;
 	const [lancement, setLancement] = useState(false);
 	const [manuel, setManuel] = useState<string | null>(null);
 	const a = p.archiviste;
@@ -112,7 +113,7 @@ export function CentreArchiviste(p: {
 				<div className={s.manuel}>
 					<span>{t.terminauxIndisponibles}</span>
 					<code>{manuel}</code>
-					<Bouton petit onClick={() => copierTexte(manuel, toast, t.commandeCopiee)}>
+					<Bouton petit onClick={() => copierTexte(manuel, toast, t.commandeCopiee, textes.coquille.partage.copieImpossible)}>
 						{t.copier}
 					</Bouton>
 				</div>

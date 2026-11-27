@@ -48,7 +48,8 @@ function puceEtat(a: SessionVue | null, t: Textes['archiviste']['tiroir']['etats
 const porteDesFichiers = (e: DragEvent) => [...(e.dataTransfer?.types ?? [])].includes('Files');
 
 export function TiroirArchiviste(): ReactNode {
-	const textes = useTextes().archiviste;
+	const tout = useTextes();
+	const textes = tout.archiviste;
 	const t = textes.tiroir;
 	const nav = useNavigation();
 	const sessions = useSessions();
@@ -56,7 +57,7 @@ export function TiroirArchiviste(): ReactNode {
 	const fil = useFil(useAujourdhui());
 	const aFaire = useAFaire();
 	const connues = useSessionsConnues();
-	const activite = useMemo(() => activiteArchiviste([], fil.donnees?.commits ?? [], connues, textes.activite), [fil.donnees, connues, textes]);
+	const activite = useMemo(() => activiteArchiviste([], fil.donnees?.commits ?? [], connues, textes.activite, tout.sessions), [fil.donnees, connues, textes, tout]);
 	const ouvert = nav.tiroirOuvert;
 	const grand = nav.archivisteGrand;
 	const [depliee, setDepliee] = useState(() => lireGarde(CLE_ACTIVITE_DEPLIEE) === '1');
@@ -125,7 +126,7 @@ export function TiroirArchiviste(): ReactNode {
 				{t.aFaire(aFaire.total)}
 			</Bouton>
 			{(archiviste?.terminal || grand) && (
-				<Bouton genre="icone" onClick={() => nav.agrandirArchiviste()} aria-keyshortcuts="Alt+Shift+A" title={grand ? t.rendre(raccourciAlt('A', { maj: true })) : t.enGrand(raccourciAlt('A', { maj: true }))}>
+				<Bouton genre="icone" onClick={() => nav.agrandirArchiviste()} aria-keyshortcuts="Alt+Shift+A" title={grand ? t.rendre(raccourciAlt('A', { maj: true, textes: tout.coquille.raccourcis })) : t.enGrand(raccourciAlt('A', { maj: true, textes: tout.coquille.raccourcis }))}>
 					{grand ? t.reduire : t.agrandir}
 				</Bouton>
 			)}

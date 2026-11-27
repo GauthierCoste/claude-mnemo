@@ -9,7 +9,7 @@ import type { MoteurVue, ProfilVue } from '@mnemo/contrat';
 import type { CSSProperties, ReactNode } from 'react';
 import { couleurFournisseur } from '../../../moteurs/fournisseurs.ts';
 import { nomDuMoteur } from '../../../moteurs/noms.ts';
-import { HOOKS_PROFIL } from '../../../profils/hooks.ts';
+import { hooksProfil } from '../../../profils/hooks.ts';
 import { annonceDeLAgent, etiquetteDuProfil, modeleDuProfil, montrePlugins, texteHooks, type EtatMoteurAgent as Etat } from '../../../sessions/agents.ts';
 import { useTextes } from '../../../langue/langue.tsx';
 import { EtatMoteurAgent } from './EtatMoteurAgent.tsx';
@@ -18,7 +18,8 @@ import s from './FicheAgent.module.css';
 type Props = { profil: ProfilVue; moteur: MoteurVue | undefined; etat: Etat; verification: boolean; idRaison: string; surVoirReglages(): void };
 
 export function FicheAgent(p: Props): ReactNode {
-	const ts = useTextes().sessions;
+	const textes = useTextes();
+	const ts = textes.sessions;
 	const t = ts.nouvelle;
 	const a = p.profil;
 	const nomMoteur = p.moteur?.nom ?? nomDuMoteur(a.moteur);
@@ -64,7 +65,7 @@ export function FicheAgent(p: Props): ReactNode {
 						<b>{plugins}</b> {t.plugins(plugins)}
 					</li>
 				)}
-				<li title={HOOKS_PROFIL.filter((h) => hooks.includes(h.cle)).map((h) => `${h.libelle} : ${h.detail}`).join('\n')}>{t.hooks(texteHooks(hooks, ts))}</li>
+				<li title={hooksProfil(textes.agents.hooks).filter((h) => hooks.includes(h.cle)).map((h) => ts.nouvelle.hookEtDetail(h.libelle, h.detail)).join('\n')}>{t.hooks(texteHooks(hooks, ts, textes.agents.hooks))}</li>
 			</ul>
 			<EtatMoteurAgent key={a.moteur} id={a.moteur} moteur={nomMoteur} etat={p.etat} verification={p.verification} idRaison={p.idRaison} surVoirReglages={p.surVoirReglages} />
 		</div>

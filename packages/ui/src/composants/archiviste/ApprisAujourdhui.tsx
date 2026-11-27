@@ -12,7 +12,8 @@ import { CommitsDuJour } from './CommitsDuJour.tsx';
 import { DetailCommit } from './DetailCommit.tsx';
 
 export function ApprisAujourdhui(): ReactNode {
-	const t = useTextes().archiviste;
+	const textes = useTextes();
+	const t = textes.archiviste;
 	const aujourdhui = useAujourdhui();
 	// null : « aujourd'hui », qui suit la date après minuit.
 	const [jourChoisi, setJourChoisi] = useState<string | null>(null);
@@ -21,7 +22,7 @@ export function ApprisAujourdhui(): ReactNode {
 	const sessions = useSessionsConnues();
 	const servis = useServisRecus();
 	const commits = useMemo(() => [...(fil.donnees?.commits ?? [])].sort((a, b) => b.dateMs - a.dateMs), [fil.donnees]);
-	const activite = useMemo(() => activiteArchiviste(servis, [], sessions, t.activite), [servis, sessions, t]);
+	const activite = useMemo(() => activiteArchiviste(servis, [], sessions, t.activite, textes.sessions), [servis, sessions, t, textes]);
 	const [choisi, setChoisi] = useState<string | null>(null);
 	const commit = commits.find((c) => c.hash === choisi) ?? commits[0] ?? null;
 

@@ -28,24 +28,24 @@ function nomSession(id: string | null, sessions: readonly SessionVue[], t: Texte
 }
 
 /** « 2 fiches injectées au démarrage, en tête : Titre (87 %) » : la tête du classement suit ses mises à jour (notes). */
-function detailServi(e: EntreeServieVue, t: TextesActivite): string {
+function detailServi(e: EntreeServieVue, t: TextesActivite, ts: Textes['sessions']): string {
 	const fournies = t.injectees(fichesServies([e]).length, e.moment === 'debut');
 	const [tete] = dernierClassement([e], []);
 	if (tete === undefined) return fournies;
-	return t.enTete(fournies, tete.titre, pourcentage(tete.note));
+	return t.enTete(fournies, tete.titre, pourcentage(tete.note, ts));
 }
 
 /**
  * Activité de l'archiviste : les `servi` reçus depuis l'ouverture (« Ce qu'il a fait pour les sessions », Mémoire ›
  * Archiviste) et les commits du fil du jour (activité minimale du tiroir), mêlés par date (plus récents d'abord).
  */
-export function activiteArchiviste(servis: readonly EntreeServieVue[], commits: FilVue['commits'], sessions: readonly SessionVue[], t: TextesActivite = TEXTES.fr.archiviste.activite): Activite {
+export function activiteArchiviste(servis: readonly EntreeServieVue[], commits: FilVue['commits'], sessions: readonly SessionVue[], t: TextesActivite = TEXTES.fr.archiviste.activite, ts: Textes['sessions'] = TEXTES.fr.sessions): Activite {
 	const lignes: LigneActivite[] = [
 		...servis.map((e) => ({
 			cle: `servi|${e.session}|${e.horodatageMs}|${e.ids.join(',')}`,
 			ms: e.horodatageMs,
 			titre: nomSession(e.session, sessions, t),
-			detail: detailServi(e, t),
+			detail: detailServi(e, t, ts),
 		})),
 		...commits.map((c) => ({ cle: `commit|${c.hash}`, ms: c.dateMs, titre: nomSession(c.session, sessions, t), detail: messageCourt(c.message) })),
 	];

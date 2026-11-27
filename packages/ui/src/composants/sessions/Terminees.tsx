@@ -101,7 +101,7 @@ export function Terminees(p: { ouvert: boolean; historique: Ressource<SessionTer
 							<span className={s.mu}>
 								{x.dossier || p.nomRacine}
 								{x.profil !== PROFIL_TRAVAIL ? t.profil(x.profil) : ''}
-								{moteurParticulier(x) !== null ? `, ${moteurParticulier(x)}` : ''}
+								{moteurParticulier(x, textes) !== null ? `, ${moteurParticulier(x, textes)}` : ''}
 							</span>
 							<span className={s.dates}>
 								{dateHeure(x.creeeMs)} → {dateHeure(x.majMs)}

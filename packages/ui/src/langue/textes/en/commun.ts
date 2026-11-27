@@ -24,6 +24,7 @@ export const commun: Forme<typeof fr> = {
 		},
 		fiches: (n) => `${NOMBRE.format(n)} ${pluriel('en', n, { un: 'note', autre: 'notes' })}`,
 	},
+	avertissement: (texte) => `Warning: ${texte}`,
 	actions: {
 		annuler: 'Cancel',
 		enregistrer: 'Save',

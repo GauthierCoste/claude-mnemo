@@ -7,11 +7,12 @@
  * large que celui de partout est désactivé, avec son motif. Rien tant que l'état des modèles n'est pas connu ou qu'ils ne sont pas
  * installés.
  */
-import { libelleEtapeCalcul, NIVEAUX_MODELES, niveauEffectif, plusLarge, type NiveauModeles } from '@mnemo/commun';
+import { type EtapeCalcul, NIVEAUX_MODELES, niveauEffectif, plusLarge, type NiveauModeles } from '@mnemo/commun';
 import type { ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
 import { useEtapeSession, useModeles, useNiveauModelesSession } from '../../client/hooks.ts';
 import { useTextes } from '../../langue/langue.tsx';
+import type { Textes } from '../../langue/textes.ts';
 import { useNavigation } from '../../navigation.tsx';
 import { cx } from '../commun/classes.ts';
 import { useToast } from '../Toast.tsx';
@@ -58,7 +59,7 @@ export function ModelesSession(p: { session: string; niveau: NiveauModeles | nul
 	const affinage = p.classement?.affinage === true;
 	const ordreSeul = p.classement?.ordreSeul ?? null;
 	// ce qui est en cours d'abord (en texte, point animé), puis l'état du classement, puis le niveau
-	const enCours = activite !== undefined ? libelleActivite(activite, t) : etape !== null ? libelleEtapeCalcul(etape) : affinage ? x.affinage : null;
+	const enCours = activite !== undefined ? libelleActivite(activite, t) : etape !== null ? libelleEtape(etape, x) : affinage ? x.affinage : null;
 	const texte = enCours ?? p.classement?.repos ?? (ordreSeul !== null ? x.ordreSeul : x.textes[effectif]);
 	const niveauDit = propre === null ? x.niveauCommePartout(noms[e.niveau]) : x.niveauPropre(noms[propre]);
 	const titre = [niveauDit, ...(activite === undefined && affinage ? [x.titreAffinage] : []), ...(ordreSeul !== null ? [ordreSeul] : [])].join('\n');
@@ -150,4 +151,11 @@ export function ModelesSession(p: { session: string; niveau: NiveauModeles | nul
 			)}
 		</MenuModeles>
 	);
+}
+
+/** Libellé court d'une étape du calcul : « affinage 10/30… » quand elle se compte. */
+function libelleEtape(e: EtapeCalcul, x: Textes['modeles']['session']): string {
+	const nom = x.etapes[e.nom].replace(/…$/u, '');
+	if (e.fait !== undefined && e.total !== undefined && e.total > 0) return x.etapeComptee(nom, e.fait, e.total);
+	return x.etapes[e.nom];
 }

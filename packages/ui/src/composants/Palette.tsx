@@ -295,7 +295,7 @@ function Ligne(p: { r: Resultat; mots: readonly string[]; t: TextesPalette; raci
 
 function LigneTrouve(p: { t: TrouveRechercheVue; rattaches: readonly TrouveRechercheVue[]; mots: readonly string[]; textes: TextesPalette; racine: string }): ReactNode {
 	const t = p.t;
-	const note = pourcentage(t.note);
+	const note = pourcentage(t.note, useTextes().sessions);
 	const morceaux = extrait(corpsDe(t), p.mots);
 	return (
 		<>
@@ -330,7 +330,7 @@ function LigneTrouve(p: { t: TrouveRechercheVue; rattaches: readonly TrouveReche
 
 /** Un autre élément de la même fiche (information, passage…), sous elle : son genre, sa note, son extrait. */
 function SousLigne(p: { t: TrouveRechercheVue; mots: readonly string[]; textes: TextesPalette }): ReactNode {
-	const note = pourcentage(p.t.note);
+	const note = pourcentage(p.t.note, useTextes().sessions);
 	return (
 		<span className={s.sousLigne}>
 			<Icone genre={iconeDe(p.t)} libelle={libelleGenre(p.t, p.textes.genres)} />

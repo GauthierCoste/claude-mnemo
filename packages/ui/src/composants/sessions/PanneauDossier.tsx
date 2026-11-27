@@ -29,7 +29,8 @@ type Props = {
 
 export function PanneauDossier(p: Props): ReactNode {
 	const toast = useToast();
-	const t = useTextes().sessions.panneauDossier;
+	const textes = useTextes();
+	const t = textes.sessions.panneauDossier;
 	// undefined : rien n'a encore été cliqué, le dossier de la session choisie est ouvert
 	const [ouvert, setOuvert] = useState<string | null | undefined>(undefined);
 	const choisi = ouvert === undefined ? p.dossierChoisi : ouvert;
@@ -41,7 +42,7 @@ export function PanneauDossier(p: Props): ReactNode {
 
 	const details = (chemin: string, git: GitDossierVue | undefined, retrait: number): ReactNode => (
 		<>
-			{git && <FichiersGit chemin={chemin} git={git} retrait={retrait} copier={(f) => copierTexte([p.racineAbsolue, chemin, f].filter(Boolean).join('/'), toast, t.cheminCopie)} />}
+			{git && <FichiersGit chemin={chemin} git={git} retrait={retrait} copier={(f) => copierTexte([p.racineAbsolue, chemin, f].filter(Boolean).join('/'), toast, t.cheminCopie, textes.coquille.partage.copieImpossible)} />}
 			<div className={s.actions} style={{ paddingLeft: 18 + retrait }}>
 				<button type="button" className={s.ib} onClick={() => p.surNouvelle(chemin)}>
 					{t.nouvelle}

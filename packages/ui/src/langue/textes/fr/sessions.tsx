@@ -309,6 +309,7 @@ export const sessions = {
 		modeleParDefaut: 'modèle par défaut',
 		hooksAucun: 'aucun',
 		hooksTous: 'tous',
+		hookEtDetail: (libelle: string, detail: string) => `${libelle} : ${detail}`,
 		hooks: (texte: string): string => `hooks : ${texte}`,
 		skills: (n: number): string => pluriel('fr', n, { un: 'skill', autre: 'skills' }),
 		plugins: (n: number): string => pluriel('fr', n, { un: 'plugin', autre: 'plugins' }),

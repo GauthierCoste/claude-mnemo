@@ -5,7 +5,7 @@
 import { FOURNISSEURS_MOTEURS, MOTEUR_PAR_DEFAUT, PROFIL_TRAVAIL } from '@mnemo/commun';
 import type { MoteurVue, ProfilVue } from '@mnemo/contrat';
 import { actionDuMoteur, statutDuMoteur } from '../moteurs/circuit.ts';
-import { HOOKS_PROFIL } from '../profils/hooks.ts';
+import { hooksProfil } from '../profils/hooks.ts';
 import { TEXTES, type Textes } from '../langue/textes.ts';
 
 type T = Textes['sessions'];
@@ -33,10 +33,12 @@ export const modeleDuProfil = (p: Pick<ProfilVue, 'modele'>, t: T = TEXTES.fr.se
 	p.modele === '' ? { texte: t.nouvelle.modeleParDefautDuMoteur, parDefaut: true } : { texte: p.modele, parDefaut: false };
 
 /** Hooks du profil, en clair : « tous » (le suivi complet), ou les libellés de ses événements. */
-export function texteHooks(hooks: readonly string[], t: T = TEXTES.fr.sessions): string {
+export function texteHooks(hooks: readonly string[], t: T = TEXTES.fr.sessions, textesHooks: Textes['agents']['hooks'] = TEXTES.fr.agents.hooks): string {
 	if (hooks.length === 0) return t.nouvelle.hooksAucun;
-	if (HOOKS_PROFIL.every((h) => hooks.includes(h.cle))) return t.nouvelle.hooksTous;
-	return HOOKS_PROFIL.filter((h) => hooks.includes(h.cle))
+	const tous = hooksProfil(textesHooks);
+	if (tous.every((h) => hooks.includes(h.cle))) return t.nouvelle.hooksTous;
+	return tous
+		.filter((h) => hooks.includes(h.cle))
 		.map((h) => h.libelle)
 		.join(', ');
 }
@@ -62,16 +64,16 @@ export type EtatMoteurAgent =
 	| { genre: 'attention'; titre: string; motif: string | null };
 
 /** `verification` : une lecture des moteurs en cours ; `erreur` : celle de la dernière lecture. */
-export function etatDuMoteur(m: MoteurVue | undefined, verification: boolean, erreur: string | null, t: T = TEXTES.fr.sessions): EtatMoteurAgent {
+export function etatDuMoteur(m: MoteurVue | undefined, verification: boolean, erreur: string | null, t: T = TEXTES.fr.sessions, textes: Textes = TEXTES.fr): EtatMoteurAgent {
 	const n = t.nouvelle;
 	if (m === undefined) return erreur !== null && !verification ? { genre: 'illisible', motif: erreur } : { genre: 'verification' };
 	const enDefaut = (m.poste ?? []).filter((x) => x.ok === false).map((x) => n.pointDuPoste(x.libelle, x.etat));
 	if (m.indisponible !== null) return m.manuel ? { genre: 'manuel' } : { genre: 'bloque', raison: n.lancementImpossibleIci(m.indisponible), lignes: enDefaut, lier: false };
 	// points du poste pas encore vérifiés : rien à dire tant que la vérification court ; elle a échoué : jamais « lié »
 	if (m.poste === undefined) return verification ? { genre: 'verification' } : { genre: 'illisible', motif: erreur ?? n.posteNonVerifie };
-	const statut = statutDuMoteur(m);
+	const statut = statutDuMoteur(m, textes);
 	if (statut.cle === 'pret') return { genre: 'pret' };
-	const action = actionDuMoteur(m);
+	const action = actionDuMoteur(m, textes);
 	if (statut.cle === 'a-lier' && action !== null) {
 		const lignes = (m.poste ?? []).filter((x) => (x.cle === 'mcp' || x.cle === 'hooks') && x.ok !== true).map((x) => n.pointDuPoste(x.libelle, x.etat));
 		return { genre: 'bloque', raison: n.lancementImpossibleCar(action.titre), lignes, lier: true };

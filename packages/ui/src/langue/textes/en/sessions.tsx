@@ -287,6 +287,7 @@ export const sessions: Forme<typeof fr> = {
 		modeleParDefaut: 'default model',
 		hooksAucun: 'none',
 		hooksTous: 'all',
+		hookEtDetail: (libelle, detail) => `${libelle}: ${detail}`,
 		hooks: (texte) => `hooks: ${texte}`,
 		skills: (n) => pluriel('en', n, { un: 'skill', autre: 'skills' }),
 		plugins: (n) => pluriel('en', n, { un: 'plugin', autre: 'plugins' }),

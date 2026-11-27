@@ -81,7 +81,7 @@ export function PanneauContexte(p: {
 				<span>{t.dossier}</span>
 				<span>{x.dossier || p.nomRacine}</span>
 				<span>{t.moteur}</span>
-				<span>{moteurEtModele(x)}</span>
+				<span>{moteurEtModele(x, textes)}</span>
 				<span>{t.demarree}</span>
 				<span>{textes.commun.formats.dateHeure(x.creeeMs)}</span>
 				<span>{t.duree}</span>

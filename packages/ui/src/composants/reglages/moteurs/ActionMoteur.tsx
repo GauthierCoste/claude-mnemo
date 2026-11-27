@@ -21,10 +21,11 @@ import s from './Moteurs.module.css';
 /** `lecture` : une vérification du poste en cours (« Relire »). */
 export function ActionMoteur(p: { id: IdMoteur; moteur: string; action: Action; lecture: boolean }): ReactNode {
 	const a = p.action;
-	const t = useTextes().reglages.moteurs.action;
+	const textes = useTextes();
+	const t = textes.reglages.moteurs.action;
 	const toast = useToast();
 	const { enCours, retour, lier, effacer } = useLiaisonMoteur(p.id, p.moteur);
-	const copier = (texte: string) => copierTexte(texte, toast, t.copiee);
+	const copier = (texte: string) => copierTexte(texte, toast, t.copiee, textes.coquille.partage.copieImpossible);
 	// une nouvelle vérification du poste : le retour de la dernière liaison n'est plus à jour
 	useEffect(() => {
 		if (p.lecture) effacer();

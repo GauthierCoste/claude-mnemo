@@ -45,7 +45,8 @@ export function SourcesATraiter(p: { documents: readonly DocumentVue[]; total: n
 	const { api } = useClient();
 	const toast = useToast();
 	const annoncer = useAnnonceEcriture();
-	const t = useTextes().archiviste.sources;
+	const textes = useTextes();
+	const t = textes.archiviste.sources;
 	const memoire = useNavigationMemoire();
 	/** Envoyées à l'archiviste, avec l'heure d'envoi : « en cours » tant que la marque reste, `EN_COURS_MS` au plus. */
 	const [envois, setEnvois] = useState<ReadonlyMap<string, number>>(() => new Map());
@@ -158,7 +159,7 @@ export function SourcesATraiter(p: { documents: readonly DocumentVue[]; total: n
 				<div key={manuel} className={s.manuel} role="group" aria-label={t.commande}>
 					<span>{t.archiviste.manuel}.</span>
 					<code>{manuel}</code>
-					<Bouton petit onClick={() => copierTexte(manuel, toast, t.commandeCopiee)}>
+					<Bouton petit onClick={() => copierTexte(manuel, toast, t.commandeCopiee, textes.coquille.partage.copieImpossible)}>
 						{t.copier}
 					</Bouton>
 				</div>

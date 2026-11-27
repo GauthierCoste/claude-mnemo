@@ -33,7 +33,8 @@ export type PropsCarte = {
 
 export function CarteSession(p: PropsCarte): ReactNode {
 	const { session } = p;
-	const t = useTextes().sessions;
+	const textes = useTextes();
+	const t = textes.sessions;
 	const choisir = () => p.surChoisir(session.id);
 	return (
 		<div className={cx(s.carte, p.choisie && s.foc)} data-session={session.id} onMouseDown={choisir}>
@@ -41,9 +42,9 @@ export function CarteSession(p: PropsCarte): ReactNode {
 				<AvatarSession session={session} taille="barre" />
 				{p.rang <= 9 && <kbd>{raccourciAlt(String(p.rang))}</kbd>}
 				<span className={s.objectif}>{session.objectif ?? t.sansObjectif}</span>
-				{moteurParticulier(session) !== null && (
-					<span className={s.moteur} title={t.carte.moteur(moteurEtModele(session))}>
-						{moteurParticulier(session)}
+				{moteurParticulier(session, textes) !== null && (
+					<span className={s.moteur} title={t.carte.moteur(moteurEtModele(session, textes))}>
+						{moteurParticulier(session, textes)}
 					</span>
 				)}
 				<span>{p.duree}</span>

@@ -62,7 +62,7 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 	const moteurs = (poste.donnees ?? leger.donnees)?.moteurs;
 	const verification = poste.chargement;
 	const moteurDe = (a: ProfilVue) => moteurs?.find((m) => m.id === a.moteur);
-	const etatDe = (a: ProfilVue) => etatDuMoteur(moteurDe(a), poste.chargement || leger.chargement, poste.erreur ?? leger.erreur, textes.sessions);
+	const etatDe = (a: ProfilVue) => etatDuMoteur(moteurDe(a), poste.chargement || leger.chargement, poste.erreur ?? leger.erreur, textes.sessions, textes);
 	const eteints = new Set(agents.filter((a) => etatDe(a).genre === 'bloque').map((a) => a.nom));
 	const etat = agent === undefined ? null : etatDe(agent);
 	const bloque = etat?.genre === 'bloque' ? etat : null;
@@ -140,7 +140,7 @@ export function NouvelleSession(p: { dossierInitial: string | null; nomRacine: s
 	};
 
 	const copier = () => {
-		if (manuel !== null) copierTexte(manuel, toast, t.commandeCopiee);
+		if (manuel !== null) copierTexte(manuel, toast, t.commandeCopiee, textes.coquille.partage.copieImpossible);
 	};
 
 	return (
