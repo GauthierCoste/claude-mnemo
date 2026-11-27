@@ -7,6 +7,7 @@
  */
 import { useId, useState, type ReactNode } from 'react';
 import { useEntrainement } from '../../../client/hooks.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
 import { EnteteNote } from './EnteteNote.tsx';
 import s from './Entrainer.module.css';
@@ -17,6 +18,7 @@ import { ResultatApprentissage } from './ResultatApprentissage.tsx';
 import { TacheEntrainement } from './TacheEntrainement.tsx';
 
 export function Entrainer(): ReactNode {
+	const t = useTextes().memoire.entrainer.page;
 	const ressource = useEntrainement();
 	const v = ressource.donnees;
 	const [jugement, setJugement] = useState(false);
@@ -30,9 +32,9 @@ export function Entrainer(): ReactNode {
 				<div className={s.colonne} aria-busy={ressource.erreur === null}>
 					{ressource.erreur !== null ? (
 						<p className={s.refus} role="alert">
-							État de l’entraînement illisible : {ressource.erreur}{' '}
+							{t.illisible(ressource.erreur)}{' '}
 							<Bouton petit className={s.cible} onClick={ressource.recharger}>
-								Relire
+								{t.relire}
 							</Bouton>
 						</p>
 					) : (
@@ -58,7 +60,7 @@ export function Entrainer(): ReactNode {
 						{v.tache !== null && <TacheEntrainement tache={v.tache} id={idTache} />}
 						{v.derniereErreur !== undefined && v.tache === null && (
 							<p className={s.erreurTache} role="alert">
-								<span className={s.titreErreur}>La dernière tâche a échoué.</span> {v.derniereErreur}
+								<span className={s.titreErreur}>{t.derniereTacheEchouee}</span> {v.derniereErreur}
 							</p>
 						)}
 						<EtapesEntrainement vue={v} idTache={v.tache !== null ? idTache : null} focusAuRetour={revenu} surJuger={() => setJugement(true)} />

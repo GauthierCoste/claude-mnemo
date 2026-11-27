@@ -3,9 +3,11 @@
  * Au clavier : le focus va sur l'item à l'ouverture ; Échap ou Tab referme (focus rendu au bouton) ; un clic ailleurs aussi.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useTextes } from '../../../langue/langue.tsx';
 import s from './Entrainer.module.css';
 
 export function MenuNote(p: { libelle: string; detail: string; indisponible: boolean; surChoix(): void }): ReactNode {
+	const autresActions = useTextes().memoire.entrainer.entete.autresActions;
 	const [ouvert, setOuvert] = useState(false);
 	const racine = useRef<HTMLDivElement>(null);
 	const bouton = useRef<HTMLButtonElement>(null);
@@ -29,8 +31,8 @@ export function MenuNote(p: { libelle: string; detail: string; indisponible: boo
 				ref={bouton}
 				type="button"
 				className={s.boutonMenu}
-				aria-label="Autres actions sur la note"
-				title="Autres actions sur la note"
+				aria-label={autresActions}
+				title={autresActions}
 				aria-haspopup="menu"
 				aria-expanded={ouvert}
 				onClick={() => setOuvert((o) => !o)}
@@ -40,7 +42,7 @@ export function MenuNote(p: { libelle: string; detail: string; indisponible: boo
 			{ouvert && (
 				<div
 					role="menu"
-					aria-label="Autres actions sur la note"
+					aria-label={autresActions}
 					className={s.menu}
 					onKeyDown={(e) => {
 						if (e.key !== 'Escape' && e.key !== 'Tab') return;

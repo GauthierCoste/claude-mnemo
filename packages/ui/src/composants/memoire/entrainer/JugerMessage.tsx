@@ -15,7 +15,7 @@
 import type { DemandeReponseMessage, JugementVue, VueMessageAJuger } from '@mnemo/contrat';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useActionsEntrainement, useEntrainement, useMessageAJuger } from '../../../client/hooks.ts';
-import { accorder } from '../../../memoire/entrainement.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { choixDeDepart, demandePasser, demandeSilence, demandeValider, marqueeUtile, progression, sansReponse, TOUCHES_JUGEMENTS, type Choix } from '../../../memoire/jugement.ts';
 import { useNavigation } from '../../../navigation.tsx';
 import { origineDeLaTouche } from '../../../raccourcis.ts';
@@ -36,6 +36,8 @@ type GesteMessage = 'valider' | 'silence' | 'passer';
 type Poignee = (e: KeyboardEvent) => void;
 
 export function JugerMessage(p: { surFermer(): void }): ReactNode {
+	const te = useTextes().memoire.entrainer;
+	const t = te.jugement;
 	const nav = useNavigation();
 	const id = useId();
 	const actions = useActionsEntrainement();
@@ -97,24 +99,24 @@ export function JugerMessage(p: { surFermer(): void }): ReactNode {
 		return () => document.removeEventListener('keydown', surTouche);
 	}, [visible, paletteOuverte, tiroirOuvert]);
 
-	const titre = !fin ? 'Juger' : faits > 0 ? 'Tout est jugé' : 'Rien à juger';
+	const titre = !fin ? t.titre : faits > 0 ? t.toutEstJuge : t.rienAJuger;
 	return (
 		<section ref={ecran} className={s.juger} aria-labelledby={`${id}-titre`}>
 			<div className={s.tete}>
 				<h3 id={`${id}-titre`} className={s.titre}>
 					{titre}
 				</h3>
-				{!fin && affiche !== null && <p className={s.progression}>{progression(faits + 1, affiche.m)}</p>}
+				{!fin && affiche !== null && <p className={s.progression}>{progression(faits + 1, affiche.m, te)}</p>}
 				<div className={s.gestesTete}>
 					{annulables > 0 && (
-						<Bouton petit className={s.cible} disabled={geste.enCours !== null} title="Rouvre le message de la dernière réponse, sans elle" onClick={annuler}>
-							{geste.enCours === 'annuler' ? <span className={r.reflet}>Annuler le dernier</span> : 'Annuler le dernier'}
+						<Bouton petit className={s.cible} disabled={geste.enCours !== null} title={t.annulerTitre} onClick={annuler}>
+							{geste.enCours === 'annuler' ? <span className={r.reflet}>{t.annulerDernier}</span> : t.annulerDernier}
 						</Bouton>
 					)}
 					{/* à la fin, « Revenir à l'entraînement » le dit déjà */}
 					{!fin && (
-						<Bouton petit className={s.cible} title="Revenir à l’entraînement (Échap)" aria-keyshortcuts="Escape" onClick={p.surFermer}>
-							Retour
+						<Bouton petit className={s.cible} title={t.retourTitre} aria-keyshortcuts="Escape" onClick={p.surFermer}>
+							{t.retour}
 						</Bouton>
 					)}
 				</div>
@@ -126,9 +128,9 @@ export function JugerMessage(p: { surFermer(): void }): ReactNode {
 				<Fin faits={faits} sautes={sautes} surFermer={p.surFermer} />
 			) : lu.erreur !== null ? (
 				<p className={s.refus} role="alert">
-					Message illisible : {lu.erreur}{' '}
+					{t.illisible(lu.erreur)}{' '}
 					<Bouton petit className={s.cible} onClick={lu.recharger}>
-						Relire
+						{t.relire}
 					</Bouton>
 				</p>
 			) : affiche !== null ? (
@@ -143,6 +145,7 @@ export function JugerMessage(p: { surFermer(): void }): ReactNode {
 /** Le message affiché, ses fiches et la barre du bas ; `inerte` : un geste ou la lecture du suivant est en cours. */
 function MessageAJuger(p: { m: VueMessageAJuger; inerte: boolean; geste: Geste; poignee: { current: Poignee | null }; surRepondre(ou: GesteMessage, d: DemandeReponseMessage): void }): ReactNode {
 	const { m } = p;
+	const t = useTextes().memoire.entrainer.jugement;
 	const id = useId();
 	const [choix, setChoix] = useState<Choix>(() => choixDeDepart(m.candidates));
 	const [reste, setReste] = useState(true);
@@ -152,8 +155,8 @@ function MessageAJuger(p: { m: VueMessageAJuger; inerte: boolean; geste: Geste; 
 
 	const restantes = sansReponse(m.candidates, choix);
 	const repondues = m.candidates.length - restantes;
-	const raisonValider = repondues === 0 && !reste ? 'Répondre pour une fiche au moins, ou cocher « Le reste n’est pas utile ».' : null;
-	const raisonSilence = marqueeUtile(choix) ? 'Une fiche est marquée « Utile ».' : null;
+	const raisonValider = repondues === 0 && !reste ? t.repondreAuMoins : null;
+	const raisonSilence = marqueeUtile(choix) ? t.silenceImpossible : null;
 
 	const choisir = (chemin: string, j: JugementVue) => setChoix((c) => ({ ...c, [chemin]: j }));
 	const valider = () => {
@@ -226,16 +229,16 @@ function MessageAJuger(p: { m: VueMessageAJuger; inerte: boolean; geste: Geste; 
 		<div className={cx(s.corps, p.inerte && s.inerte)} aria-busy={p.inerte}>
 			{m.precedent !== null && (
 				<div className={s.precedent}>
-					<span className={s.etiquette}>Message d’avant</span>
+					<span className={s.etiquette}>{t.messageDAvant}</span>
 					<p className={s.textePrecedent}>{m.precedent}</p>
 				</div>
 			)}
-			<blockquote className={s.message} aria-label="Message à juger">
+			<blockquote className={s.message} aria-label={t.message}>
 				{m.message}
 			</blockquote>
-			{(m.valide || m.silence || m.saute) && <p className={s.aide}>{m.saute ? 'Passé auparavant : une réponse le remet parmi les messages jugés.' : 'Déjà validé : une nouvelle réponse remplace la précédente.'}</p>}
+			{(m.valide || m.silence || m.saute) && <p className={s.aide}>{m.saute ? t.passeAuparavant : t.dejaValide}</p>}
 
-			<ol ref={liste} className={s.fiches} aria-label="Fiches proposées pour ce message" onFocus={(e) => (courante.current = Math.max(0, fiches().findIndex((li) => li.contains(e.target))))}>
+			<ol ref={liste} className={s.fiches} aria-label={t.fichesProposees} onFocus={(e) => (courante.current = Math.max(0, fiches().findIndex((li) => li.contains(e.target))))}>
 				{m.candidates.map((c) => (
 					<FicheAJuger key={c.chemin} candidate={c} choix={choix[c.chemin]} inerte={p.inerte} surChoix={(j) => choisir(c.chemin, j)} />
 				))}
@@ -244,23 +247,23 @@ function MessageAJuger(p: { m: VueMessageAJuger; inerte: boolean; geste: Geste; 
 			<div className={s.barre}>
 				<label className={s.reste}>
 					<input type="checkbox" checked={reste} disabled={p.inerte} onChange={(e) => setReste(e.target.checked)} aria-describedby={`${id}-reste`} />
-					<span>Le reste n’est pas utile</span>
+					<span>{t.reste}</span>
 					<span id={`${id}-reste`} className={s.compte}>
-						{restantes === 0 ? 'aucune fiche sans réponse' : `${accorder(restantes, 'fiche sans réponse', 'fiches sans réponse')}`}
+						{t.sansReponse(restantes)}
 					</span>
 				</label>
 				<div className={s.gestes}>
-					<Bouton className={s.cible} disabled={p.inerte} title="Mettre ce message de côté sans le juger" onClick={() => p.surRepondre('passer', demandePasser(m))}>
-						<Libelle geste={p.geste} nom="passer" texte="Passer" />
+					<Bouton className={s.cible} disabled={p.inerte} title={t.passerTitre} onClick={() => p.surRepondre('passer', demandePasser(m))}>
+						<Libelle geste={p.geste} nom="passer" texte={t.passer} />
 					</Bouton>
 					<Bouton
 						className={s.cible}
 						disabled={p.inerte}
 						indisponible={raisonSilence !== null && { raison: `${id}-silence` }}
-						title="Aucune fiche n’aurait aidé à répondre à ce message"
+						title={t.silenceTitre}
 						onClick={() => p.surRepondre('silence', demandeSilence(m, choix))}
 					>
-						<Libelle geste={p.geste} nom="silence" texte="Rien d’utile ici" />
+						<Libelle geste={p.geste} nom="silence" texte={t.silence} />
 					</Bouton>
 					<Bouton
 						genre="primaire"
@@ -270,12 +273,12 @@ function MessageAJuger(p: { m: VueMessageAJuger; inerte: boolean; geste: Geste; 
 						aria-keyshortcuts="Enter"
 						onClick={valider}
 					>
-						<Libelle geste={p.geste} nom="valider" texte="Valider" />
+						<Libelle geste={p.geste} nom="valider" texte={t.valider} />
 					</Bouton>
 				</div>
 				{raisonSilence !== null && (
 					<p id={`${id}-silence`} className={s.aide}>
-						« Rien d’utile ici » : {raisonSilence.charAt(0).toLocaleLowerCase('fr-FR') + raisonSilence.slice(1)}
+						{raisonSilence}
 					</p>
 				)}
 				{raisonValider !== null && (
@@ -298,16 +301,17 @@ function Libelle(p: { geste: Geste; nom: string; texte: string }): ReactNode {
 
 /** Après la dernière réponse (ou rien à juger dès l'ouverture) : le retour à la page, qui propose alors d'apprendre. */
 function Fin(p: { faits: number; sautes: number; surFermer(): void }): ReactNode {
+	const t = useTextes().memoire.entrainer.jugement;
 	const gestes = useRef<HTMLDivElement>(null);
 	// Entrée y revient : le focus sur le bouton
 	useEffect(() => gestes.current?.querySelector('button')?.focus(), []);
 	return (
 		<div className={s.fin}>
-			<p className={s.texteFin}>{p.faits > 0 ? 'Réponses enregistrées. Retour à l’entraînement pour apprendre la note.' : 'Aucun message n’attend de jugement : en préparer d’autres.'}</p>
-			{p.sautes > 0 && <p className={s.aide}>{`${accorder(p.sautes, 'message passé reste', 'messages passés restent')} de côté.`}</p>}
+			<p className={s.texteFin}>{p.faits > 0 ? t.finReponses : t.finRien}</p>
+			{p.sautes > 0 && <p className={s.aide}>{t.sautes(p.sautes)}</p>}
 			<div ref={gestes}>
 				<Bouton genre="primaire" className={s.cible} onClick={p.surFermer}>
-					Revenir à l’entraînement
+					{t.revenir}
 				</Bouton>
 			</div>
 		</div>
@@ -316,17 +320,18 @@ function Fin(p: { faits: number; sautes: number; surFermer(): void }): ReactNode
 
 /** L'aide des raccourcis, discrète, sous le titre. */
 function Raccourcis(): ReactNode {
+	const t = useTextes().memoire.entrainer.jugement;
 	const touches: [string[], string][] = [
-		[['↑', '↓'], 'fiche'],
-		[['o'], 'Utile'],
-		[['n'], 'Pas utile'],
-		[['i'], 'Je ne sais pas'],
-		[['Entrée'], 'Valider'],
-		[['Échap'], 'Retour'],
+		[['↑', '↓'], t.touches.fiche],
+		[['o'], t.noms.pertinente],
+		[['n'], t.noms.non_pertinente],
+		[['i'], t.noms.indecise],
+		[[t.touches.entree], t.valider],
+		[[t.touches.echap], t.retour],
 	];
 	return (
 		<p className={s.raccourcis}>
-			<span className={s.horsEcran}>Raccourcis : </span>
+			<span className={s.horsEcran}>{t.raccourcis}</span>
 			{touches.map(([ks, effet]) => (
 				<span key={effet} className={s.raccourci}>
 					{ks.map((k) => (

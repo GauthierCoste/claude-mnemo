@@ -6,15 +6,17 @@
  */
 import type { CandidateAJugerVue, JugementVue } from '@mnemo/contrat';
 import { useId, type ReactNode } from 'react';
-import { JUGEMENTS, NOMS_JUGEMENTS, propositionEnClair } from '../../../memoire/jugement.ts';
+import { JUGEMENTS, propositionEnClair } from '../../../memoire/jugement.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { cx } from '../../commun/classes.ts';
 import s from './JugerMessage.module.css';
 
 export function FicheAJuger(p: { candidate: CandidateAJugerVue; choix: JugementVue | undefined; inerte: boolean; surChoix(j: JugementVue): void }): ReactNode {
+	const t = useTextes().memoire.entrainer;
 	const c = p.candidate;
 	const id = useId();
 	const proposition = c.proposition;
-	const enClair = proposition === null ? null : propositionEnClair(proposition);
+	const enClair = proposition === null ? null : propositionEnClair(proposition, t);
 	return (
 		<li className={s.fiche} data-fiche={c.chemin}>
 			<div className={s.texteFiche}>
@@ -29,7 +31,7 @@ export function FicheAJuger(p: { candidate: CandidateAJugerVue; choix: JugementV
 				)}
 				{c.synthese !== '' && (
 					<details className={s.synthese}>
-						<summary>Synthèse</summary>
+						<summary>{t.jugement.synthese}</summary>
 						<p>{c.synthese}</p>
 					</details>
 				)}
@@ -40,7 +42,7 @@ export function FicheAJuger(p: { candidate: CandidateAJugerVue; choix: JugementV
 					return (
 						<label key={j} className={cx(s.option, propose && s.proposee)} data-jugement={j} title={propose && enClair !== null ? enClair : undefined}>
 							<input type="radio" name={`${id}-choix`} value={j} checked={p.choix === j} disabled={p.inerte} onChange={() => p.surChoix(j)} />
-							<span>{NOMS_JUGEMENTS[j]}</span>
+							<span>{t.jugement.noms[j]}</span>
 							{propose && (
 								<span className={s.marque} aria-hidden="true">
 									Claude

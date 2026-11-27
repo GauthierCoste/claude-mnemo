@@ -3,6 +3,7 @@
  * dit à côté de sa cause (`ou` : le bloc qui l'affiche), effacé au geste suivant.
  */
 import { useCallback, useRef, useState } from 'react';
+import { useTextes } from '../../../langue/langue.tsx';
 
 export type Geste = {
 	enCours: string | null;
@@ -16,6 +17,7 @@ export type Geste = {
 };
 
 export function useGeste(): Geste {
+	const serviceMuet = useTextes().memoire.entrainer.serviceMuet;
 	const [enCours, setEnCours] = useState<string | null>(null);
 	const [refus, setRefus] = useState<Geste['refus']>(null);
 	const enVol = useRef(false);
@@ -28,13 +30,13 @@ export function useGeste(): Geste {
 			await f();
 			return true;
 		} catch (e) {
-			setRefus({ ou, message: e instanceof Error && e.message ? e.message : 'Le service n’a pas répondu.' });
+			setRefus({ ou, message: e instanceof Error && e.message ? e.message : serviceMuet });
 			return false;
 		} finally {
 			enVol.current = false;
 			setEnCours(null);
 		}
-	}, []);
+	}, [serviceMuet]);
 	const effacer = useCallback(() => setRefus(null), []);
 	return { enCours, refus, agir, effacer };
 }

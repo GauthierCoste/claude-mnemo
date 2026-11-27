@@ -1,9 +1,14 @@
 /**
- * Ce que la page Mémoire › Entraîner dit de l'état de l'entraînement, en fonctions pures : l'état d'une note en un mot (et
- * le ton de sa puce), le verdict du service sans son premier mot, les niveaux regroupés quand ils disent la même chose,
- * l'étape utile, les dates et les libellés des tâches. Vocabulaire (spec, D9) : « note de confiance », « injecter ».
+ * Ce que la page Mémoire › Entraîner dit de l'état de l'entraînement, en fonctions pures : le ton de la puce d'un état, le
+ * verdict du service sans son premier mot, les niveaux regroupés quand ils disent la même chose, l'étape utile, les dates
+ * et l'avancement. Les phrases sont dans la liste de textes (`t.memoire.entrainer`) ; le français par défaut pour un
+ * appelant sans langue. Vocabulaire (spec, D9) : « note de confiance », « injecter ».
  */
-import type { AvancementNoteVue, EtatNoteVue, NiveauNoteVue, NoteDuNiveauVue, TacheEntrainementVue, VolumeNoteVue, VueEntrainement } from '@mnemo/contrat';
+import type { AvancementNoteVue, EtatNoteVue, NiveauNoteVue, NoteDuNiveauVue, VueEntrainement } from '@mnemo/contrat';
+import { TEXTES, type Textes } from '../langue/textes.ts';
+
+export type TextesEntrainer = Textes['memoire']['entrainer'];
+const FR: TextesEntrainer = TEXTES.fr.memoire.entrainer;
 
 /** Messages validés conseillés pour un premier apprentissage (la jauge de « Préparer »). */
 export const MESSAGES_CONSEILLES = 100;
@@ -11,29 +16,18 @@ export const MESSAGES_CONSEILLES = 100;
 export const NOMBRE_A_PREPARER = 30;
 export const PREPARER_MAX = 200;
 
-export const NOMS_NIVEAUX_NOTE: Record<NiveauNoteVue, string> = { complets: 'Complets', sens: 'Sens seul' };
-
-/** L'état d'une note en un mot (puce). La note est féminine ; le verdict du service parle du modèle. */
-export const NOMS_ETATS_NOTE: Record<EtatNoteVue, string> = {
-	accepte: 'Acceptée',
-	coupe: 'Injection coupée',
-	refuse: 'Refusée',
-	depart: 'De départ',
-	non_appris: 'Pas entraînée',
-};
-
 export type TonEtat = 'succes' | 'avertissement' | 'neutre';
 export const TONS_ETATS_NOTE: Record<EtatNoteVue, TonEtat> = { accepte: 'succes', coupe: 'avertissement', refuse: 'avertissement', depart: 'neutre', non_appris: 'neutre' };
 
 /**
  * Le verdict du service (« Refusé : la note ordonne le classement, sans % ») sans ce qui précède le premier « : », que la
- * puce dit déjà ; avec une majuscule. Sans « : », tel quel.
+ * puce dit déjà ; avec une majuscule. Sans « : », tel quel. Le verdict est un texte du service, en français.
  */
 export function suiteDuVerdict(verdict: string): string {
 	const i = verdict.indexOf(' : ');
 	if (i < 0) return verdict;
 	const suite = verdict.slice(i + 3).trim();
-	return suite.charAt(0).toLocaleUpperCase('fr-FR') + suite.slice(1);
+	return suite.charAt(0).toUpperCase() + suite.slice(1);
 }
 
 /** Une ligne de l'en-tête : un ou plusieurs niveaux qui ont le même état, la même origine, la même date et le même verdict. */
@@ -50,28 +44,20 @@ export function lignesDeNote(niveaux: readonly NoteDuNiveauVue[]): LigneDeNote[]
 	return lignes;
 }
 
-export const nomsDesNiveaux = (niveaux: readonly NiveauNoteVue[]): string => niveaux.map((n) => NOMS_NIVEAUX_NOTE[n]).join(' et ');
+export const nomsDesNiveaux = (niveaux: readonly NiveauNoteVue[], t: TextesEntrainer = FR): string => t.nomsDesNiveaux(niveaux.map((n) => t.niveaux[n]));
 
-/** Date et heure courtes, à la française : « 26/11/2026 à 14:05 ». */
-export function dateEtHeure(iso: string): string {
-	const d = new Date(iso);
-	if (Number.isNaN(d.getTime())) return '—';
-	return `${d.toLocaleDateString('fr-FR')} à ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+/** Date et heure courtes : « 26/11/2026 à 14:05 » ; « — » pour une date illisible. */
+export function dateEtHeure(iso: string, t: TextesEntrainer = FR): string {
+	const ms = Date.parse(iso);
+	return Number.isNaN(ms) ? t.sansValeur : t.dateEtHeure(ms);
 }
 
 /** D'où vient la note, à côté de son état : apprise (et quand), livrée avec Mnemo, ou rien. */
-export function origineDeNote(n: NoteDuNiveauVue): string | null {
-	if (n.origine === 'depart') return 'livrée avec Mnemo';
-	if (n.origine === 'appris' && n.date !== null) return `apprise le ${dateEtHeure(n.date)}`;
+export function origineDeNote(n: NoteDuNiveauVue, t: TextesEntrainer = FR): string | null {
+	if (n.origine === 'depart') return t.livreeAvecMnemo;
+	if (n.origine === 'appris' && n.date !== null) return t.apprise(dateEtHeure(n.date, t));
 	return null;
 }
-
-/** La tâche en cours, nommée par l'opération réelle. */
-export const NOMS_TACHES: Record<TacheEntrainementVue['genre'], string> = {
-	preparer: 'Préparation des messages',
-	prejuger: 'Pré-jugement par Claude',
-	apprendre: 'Apprentissage de la note',
-};
 
 export type Etape = 1 | 2 | 3;
 
@@ -92,37 +78,22 @@ export const dejaAppris = (v: Pick<VueEntrainement, 'historique' | 'resultat' | 
 	v.resultat !== null || v.historique.some((l) => l.erreur === undefined) || v.note.niveaux.some((n) => n.origine === 'appris');
 
 /** Les messages jugés depuis le dernier apprentissage, dits sur la carte Apprendre (null : jamais appris, rien de plus à dire). */
-export function jugesDepuisApprentissage(v: Pick<VueEntrainement, 'banc' | 'historique' | 'resultat' | 'note'>): string | null {
+export function jugesDepuisApprentissage(v: Pick<VueEntrainement, 'banc' | 'historique' | 'resultat' | 'note'>, t: TextesEntrainer = FR): string | null {
 	if (!dejaAppris(v)) return null;
-	const n = v.banc.nouveauxDepuisApprentissage;
-	return n === 0 ? 'Aucun message jugé depuis le dernier apprentissage' : `${accorder(n, 'message jugé', 'messages jugés')} depuis le dernier apprentissage`;
+	return t.jugesDepuisApprentissage(v.banc.nouveauxDepuisApprentissage);
 }
 
-/** Un pourcentage entier (« 82 % ») d'une part de 0 à 1. */
-export const pourcent = (x: number): string => `${Math.round(x * 100)} %`;
-
-/** Accord en nombre : `1 message`, `3 messages` (le pluriel régulier par défaut). */
-export const accorder = (n: number, singulier: string, pluriel = `${singulier}s`): string => `${n} ${n > 1 ? pluriel : singulier}`;
-
-/** Date courte d'un écart d'avancement : « 26/11 ». */
-const jourMois = (iso: string): string => {
-	const d = new Date(iso);
-	return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
-};
-
-/** Ce qu'un volume compte, en clair, pour son infobulle. */
-const SENS_DES_VOLUMES: Record<VolumeNoteVue['nom'], (cible: number, seuil: string) => string> = {
-	injections: (cible, seuil) => `Fiches que Mnemo injecterait seul, notées au-dessus de ${seuil} (il en faut ${cible}).`,
-	sessions: (cible) => `Sessions où Mnemo injecterait au moins une fiche (il en faut ${cible}).`,
-	silences: (cible) => `Messages jugés « Rien d'utile ici » (il en faut ${cible}).`,
-};
-const NOMS_DES_VOLUMES: Record<VolumeNoteVue['nom'], string> = { injections: 'fiches injectables', sessions: 'sessions', silences: '« Rien d’utile ici »' };
+/** Seuil d'injection dit quand le service n'en a pas mesuré. */
+const SEUIL_PAR_DEFAUT = 0.9;
 
 /**
  * Les textes du bandeau d'avancement (page Entraîner) : libellé et son explication, pourcentage (« — » sans apprentissage),
  * écart, puis les volumes (nom, fait, cible, infobulle) ou, volume atteint, le critère de qualité qui manque.
  */
-export function textesAvancement(a: AvancementNoteVue): {
+export function textesAvancement(
+	a: AvancementNoteVue,
+	t: TextesEntrainer = FR,
+): {
 	explication: string;
 	pourcentage: string;
 	ecart: { texte: string; titre: string } | null;
@@ -130,34 +101,34 @@ export function textesAvancement(a: AvancementNoteVue): {
 	qualite: string | null;
 	sansApprentissage: boolean;
 } {
-	const seuil = a.seuil === null ? '90 %' : pourcent(a.seuil);
-	const parNiveau = a.parNiveau.length > 1 ? ` ${a.parNiveau.map((n) => `${NOMS_NIVEAUX_NOTE[n.niveau]} ${pourcent(n.part)}`).join(', ')}.` : '';
-	const explication =
-		a.part === null
-			? 'Les vrais résultats (des % justes, et Mnemo qui injecte seul) viennent quand assez de fiches, de sessions et de messages « Rien d’utile ici » sont jugés. L’avancement est connu au premier apprentissage.'
-			: `Les vrais résultats (des % justes, et Mnemo qui injecte seul) viennent quand les trois volumes sont atteints, puis la précision. L’avancement est celui du volume le plus en retard : c’est lui qui bloque. Mesuré au dernier apprentissage, au seuil de ${seuil}.${parNiveau}`;
+	const ta = t.avancement;
+	const seuil = t.pourcent(a.seuil ?? SEUIL_PAR_DEFAUT);
+	const parNiveau = a.parNiveau.length > 1 ? a.parNiveau.map((n) => ta.partDuNiveau(t.niveaux[n.niveau], t.pourcent(n.part))) : [];
+	const explication = a.part === null ? ta.explicationSansApprentissage : ta.explication(seuil, parNiveau);
+	const depuis = a.ecart === null ? NaN : Date.parse(a.ecart.depuis);
 	const ecart =
 		a.ecart === null
 			? null
 			: {
-					texte: a.ecart.points === 0 ? `inchangé depuis le ${jourMois(a.ecart.depuis)}` : `${a.ecart.points > 0 ? '+' : '−'}${Math.abs(a.ecart.points)} pts depuis le ${jourMois(a.ecart.depuis)}`,
-					titre: `Écart avec l’apprentissage du ${dateEtHeure(a.ecart.depuis)}.`,
+					texte: a.ecart.points === 0 ? ta.inchange(depuis) : ta.ecart(a.ecart.points, depuis),
+					titre: ta.ecartTitre(dateEtHeure(a.ecart.depuis, t)),
 				};
 	const volumes =
 		a.part !== null && a.part >= 1
 			? []
 			: a.volumes.map((v) => ({
-					nom: NOMS_DES_VOLUMES[v.nom],
+					nom: ta.volumes[v.nom],
 					fait: v.fait,
 					cible: v.cible,
-					titre: SENS_DES_VOLUMES[v.nom](v.cible, seuil) + (v.sessions === undefined ? '' : ` Venus de ${v.sessions.fait} sessions, il en faut ${v.sessions.cible}.`),
+					titre: ta.sensDesVolumes[v.nom](v.cible, seuil) + (v.sessions === undefined ? '' : ta.venusDeSessions(v.sessions.fait, v.sessions.cible)),
 				}));
 	return {
 		explication,
-		pourcentage: a.part === null ? '—' : pourcent(a.part),
+		pourcentage: a.part === null ? t.sansValeur : t.pourcent(a.part),
 		ecart,
 		volumes,
-		qualite: a.part !== null && a.part >= 1 ? (a.qualite ?? 'volume atteint ; reste la qualité') : null,
+		// `qualite` : texte du service
+		qualite: a.part !== null && a.part >= 1 ? (a.qualite ?? ta.volumeAtteintResteQualite) : null,
 		sansApprentissage: a.part === null,
 	};
 }

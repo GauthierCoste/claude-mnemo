@@ -5,12 +5,13 @@
  * « Je ne sais pas », « Rien d'utile ici ».
  */
 import type { CandidateAJugerVue, DemandeReponseMessage, JugementVue, PropositionDuJugeVue, VueMessageAJuger } from '@mnemo/contrat';
-import { pourcent } from './entrainement.ts';
+import type { TextesEntrainer } from './entrainement.ts';
+import { TEXTES } from '../langue/textes.ts';
+
+const FR: TextesEntrainer = TEXTES.fr.memoire.entrainer;
 
 /** Les trois choix d'une fiche, dans l'ordre de l'écran. */
 export const JUGEMENTS: readonly JugementVue[] = ['pertinente', 'non_pertinente', 'indecise'];
-
-export const NOMS_JUGEMENTS: Record<JugementVue, string> = { pertinente: 'Utile', non_pertinente: 'Pas utile', indecise: 'Je ne sais pas' };
 
 /** Raccourcis d'une fiche : o (oui) Utile, n (non) Pas utile, i (indécis) Je ne sais pas. */
 export const TOUCHES_JUGEMENTS: Readonly<Record<string, JugementVue>> = { o: 'pertinente', n: 'non_pertinente', i: 'indecise' };
@@ -55,10 +56,9 @@ export function apresCeluiCi(m: Pick<VueMessageAJuger, 'restants' | 'valide' | '
 }
 
 /** La progression : « Message 3 – 2 autres à juger », `numero` étant le rang du message dans cette séance de jugement. */
-export function progression(numero: number, m: Pick<VueMessageAJuger, 'restants' | 'valide' | 'silence' | 'saute'>): string {
-	const r = apresCeluiCi(m);
-	return `Message ${numero} – ${r === 0 ? 'le dernier à juger' : `${r} ${r > 1 ? 'autres' : 'autre'} à juger`}`;
+export function progression(numero: number, m: Pick<VueMessageAJuger, 'restants' | 'valide' | 'silence' | 'saute'>, t: TextesEntrainer = FR): string {
+	return t.jugement.progression(numero, apresCeluiCi(m));
 }
 
 /** La proposition du juge en clair : « Claude propose Utile (sûr à 96 %) : raison ». */
-export const propositionEnClair = (p: PropositionDuJugeVue): string => `Claude propose « ${NOMS_JUGEMENTS[p.jugement]} » (sûr à ${pourcent(p.confiance)})${p.raison === '' ? '' : ` : ${p.raison}`}`;
+export const propositionEnClair = (p: PropositionDuJugeVue, t: TextesEntrainer = FR): string => t.jugement.proposition(t.jugement.noms[p.jugement], t.pourcent(p.confiance), p.raison);

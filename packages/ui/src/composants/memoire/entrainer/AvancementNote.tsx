@@ -8,10 +8,13 @@
 import type { AvancementNoteVue } from '@mnemo/contrat';
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { textesAvancement } from '../../../memoire/entrainement.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import s from './Entrainer.module.css';
 
 export function AvancementNote(p: { avancement: AvancementNoteVue }): ReactNode {
-	const t = textesAvancement(p.avancement);
+	const textes = useTextes().memoire.entrainer;
+	const ta = textes.avancement;
+	const t = textesAvancement(p.avancement, textes);
 	const part = p.avancement.part ?? 0;
 	return (
 		<p
@@ -20,7 +23,7 @@ export function AvancementNote(p: { avancement: AvancementNoteVue }): ReactNode 
 			style={{ '--part': `${Math.round(part * 100)}%` } as CSSProperties}
 		>
 			<span className={s.aideSurvol} title={t.explication}>
-				Vers les vrais résultats
+				{ta.titre}
 			</span>
 			<span className={s.pctAvancement}>{t.pourcentage}</span>
 			{t.ecart !== null && (
@@ -31,21 +34,21 @@ export function AvancementNote(p: { avancement: AvancementNoteVue }): ReactNode 
 			{t.qualite !== null && (
 				<>
 					<span className={s.sepAvancement}>·</span>
-					<span>volume atteint ; reste la qualité : {t.qualite}</span>
-					<CocheVolume />
+					<span>{ta.qualite(t.qualite)}</span>
+					<CocheVolume titre={ta.volumeAtteint} />
 				</>
 			)}
 			{t.sansApprentissage && (
 				<>
 					<span className={s.sepAvancement}>·</span>
-					<span>connu au premier apprentissage</span>
+					<span>{ta.connuAuPremier}</span>
 				</>
 			)}
 			{t.volumes.map((v) => (
 				<Fragment key={v.nom}>
 					<span className={s.sepAvancement}>·</span>
 					<span className={`${s.volume} ${s.aideSurvol}`} title={v.titre}>
-						{v.nom} <b>{v.fait}</b>/{v.cible}
+						{ta.volume(v.nom, <b>{v.fait}</b>, v.cible)}
 					</span>
 				</Fragment>
 			))}
@@ -54,10 +57,10 @@ export function AvancementNote(p: { avancement: AvancementNoteVue }): ReactNode 
 }
 
 /** Coche verte en bout de ligne : le volume est atteint (le vert est fixe, une couleur de sens). */
-function CocheVolume(): ReactNode {
+function CocheVolume(p: { titre: string }): ReactNode {
 	return (
-		<svg className={s.cocheVolume} viewBox="0 0 16 16" width="14" height="14" role="img" aria-label="Volume atteint">
-			<title>Volume atteint</title>
+		<svg className={s.cocheVolume} viewBox="0 0 16 16" width="14" height="14" role="img" aria-label={p.titre}>
+			<title>{p.titre}</title>
 			<path d="M3 8.5 6.5 12 13 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
 		</svg>
 	);

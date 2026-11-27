@@ -10,7 +10,8 @@
 import type { VueEntrainement } from '@mnemo/contrat';
 import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { useActionsEntrainement } from '../../../client/hooks.ts';
-import { accorder, etapeUtile, jugesDepuisApprentissage, MESSAGES_CONSEILLES, NOMBRE_A_PREPARER, PREPARER_MAX, type Etape } from '../../../memoire/entrainement.ts';
+import { etapeUtile, jugesDepuisApprentissage, MESSAGES_CONSEILLES, NOMBRE_A_PREPARER, PREPARER_MAX, type Etape } from '../../../memoire/entrainement.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
 import { cx } from '../../commun/classes.ts';
 import r from '../../commun/Reflet.module.css';
@@ -19,6 +20,9 @@ import { useGeste, type Geste } from './useGeste.ts';
 
 /** `idTache` : l'élément qui nomme la tâche en cours (raison des gestes indisponibles), null sans tâche. */
 export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | null; focusAuRetour?: boolean; surJuger(): void }): ReactNode {
+	const textes = useTextes();
+	const te = textes.memoire.entrainer;
+	const t = te.etapes;
 	const v = p.vue;
 	const b = v.banc;
 	const actions = useActionsEntrainement();
@@ -58,20 +62,20 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 			setAcceptes(null);
 		});
 
-	const raisonJuger = b.messages === 0 ? 'Préparer d’abord des messages.' : b.aJuger === 0 ? 'Tous les messages préparés sont jugés.' : null;
+	const raisonJuger = b.messages === 0 ? t.juger.preparerDAbord : b.aJuger === 0 ? t.juger.tousJuges : null;
 	// rien à juger (rien de préparé, ou tout est jugé) : la raison de « Juger » vaut aussi pour Claude (dite une fois)
 	const sansMessage = raisonJuger !== null && v.juge.disponible;
-	const raisonClaude = !v.juge.disponible ? (v.juge.raison ?? 'Claude Code est introuvable sur ce poste.') : b.aPrejuger === 0 && !sansMessage ? 'Chaque message à juger a déjà ses propositions.' : null;
-	const raisonApprendre = b.paires === 0 ? 'Aucun jugement validé : juger des messages d’abord.' : null;
-	const depuisApprentissage = jugesDepuisApprentissage(v);
+	const raisonClaude = !v.juge.disponible ? (v.juge.raison ?? t.juger.claudeIntrouvable) : b.aPrejuger === 0 && !sansMessage ? t.juger.dejaProposees : null;
+	const raisonApprendre = b.paires === 0 ? t.apprendre.aucunJugement : null;
+	const depuisApprentissage = jugesDepuisApprentissage(v, te);
 
 	return (
-		<ol ref={liste} className={s.etapes} aria-label="Étapes de l’entraînement">
+		<ol ref={liste} className={s.etapes} aria-label={t.titre}>
 			<li className={s.etape} data-utile={utile === 1 || undefined} aria-current={utile === 1 ? 'step' : undefined}>
-				<TitreEtape numero={1} titre="Préparer des messages" />
-				<p className={s.aide}>Tirés des dernières sessions, avec les fiches que Mnemo aurait proposées.</p>
+				<TitreEtape numero={1} titre={t.preparer.titre} />
+				<p className={s.aide}>{t.preparer.aide}</p>
 				<Jauge valides={b.valides} />
-				<p className={s.chiffres}>{accorder(b.messages, 'message préparé', 'messages préparés')}</p>
+				<p className={s.chiffres}>{t.preparer.prepares(b.messages)}</p>
 				<form className={s.gestes} onSubmit={preparer} noValidate>
 					<label className={s.nombre}>
 						<input
@@ -81,38 +85,38 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 							min={1}
 							max={PREPARER_MAX}
 							value={nombre}
-							aria-label="Nombre de messages à préparer"
+							aria-label={t.preparer.nombre}
 							aria-invalid={!nombreValide || undefined}
 							aria-describedby={nombreValide ? undefined : `${id}-nombre`}
 							onChange={(e) => setNombre(e.target.value)}
 						/>
-						<span>messages</span>
+						<span>{t.preparer.unite}</span>
 					</label>
-					<Bouton type="submit" genre={genre(1)} {...principal(1)} className={s.cible} indisponible={occupe} title={occupe ? 'Une tâche est en cours' : undefined}>
-						{libelle('preparer', 'Préparer')}
+					<Bouton type="submit" genre={genre(1)} {...principal(1)} className={s.cible} indisponible={occupe} title={occupe ? t.tacheEnCours : undefined}>
+						{libelle('preparer', t.preparer.bouton)}
 					</Bouton>
 				</form>
 				{!nombreValide && (
 					<p id={`${id}-nombre`} className={s.refus}>
-						De 1 à {PREPARER_MAX} messages.
+						{t.preparer.bornes(PREPARER_MAX)}
 					</p>
 				)}
 				<Refus geste={geste} ou="preparer" />
 			</li>
 
 			<li className={s.etape} data-utile={utile === 2 || undefined} aria-current={utile === 2 ? 'step' : undefined}>
-				<TitreEtape numero={2} titre="Juger" />
+				<TitreEtape numero={2} titre={t.juger.titre} />
 				<p className={s.chiffres}>
-					{b.messages === 0 ? 'Aucun message préparé' : `${b.aJuger} à juger`}
-					{b.aRelire > 0 && <span className={s.discret}>{`, dont ${b.aRelire} pré-jugés par Claude, à relire`}</span>}
+					{b.messages === 0 ? t.juger.aucunPrepare : t.juger.aJuger(b.aJuger)}
+					{b.aRelire > 0 && <span className={s.discret}>{t.juger.dontARelire(b.aRelire)}</span>}
 				</p>
 				<div className={s.gestes}>
 					<Bouton genre={genre(2)} {...principal(2)} className={s.cible} indisponible={raisonJuger !== null && { raison: `${id}-juger` }} onClick={p.surJuger}>
-						{b.aRelire > 0 ? `Relire (${b.aRelire})` : 'Juger'}
+						{b.aRelire > 0 ? t.juger.relire(b.aRelire) : t.juger.bouton}
 					</Bouton>
 					{b.aRelire > 0 && (
-						<Bouton className={s.cible} disabled={geste.enCours !== null} title="Valide les messages dont Claude est sûr à 90 % ou plus pour chaque fiche" onClick={accepterSures}>
-							{libelle('accepter', 'Accepter les sûres')}
+						<Bouton className={s.cible} disabled={geste.enCours !== null} title={t.juger.accepterTitre} onClick={accepterSures}>
+							{libelle('accepter', t.juger.accepter)}
 						</Bouton>
 					)}
 				</div>
@@ -123,10 +127,10 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 				)}
 				{acceptes !== null && (
 					<p className={s.fait} role="status">
-						{acceptes === 0 ? 'Aucun message sûr à 90 % ou plus : les relire.' : `${accorder(acceptes, 'message validé', 'messages validés')} avec les propositions sûres.`}
+						{acceptes === 0 ? t.juger.aucunSur : t.juger.acceptes(acceptes)}
 						{acceptes > 0 && (
 							<Bouton petit className={s.cible} disabled={geste.enCours !== null} onClick={annuler}>
-								{libelle('annuler', 'Annuler')}
+								{libelle('annuler', textes.commun.actions.annuler)}
 							</Bouton>
 						)}
 					</p>
@@ -137,14 +141,14 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 					<Bouton
 						className={s.cible}
 						indisponible={sansMessage ? { raison: `${id}-juger` } : raisonClaude !== null ? { raison: `${id}-claude` } : occupe}
-						title={occupe && raisonClaude === null ? 'Une tâche est en cours' : undefined}
+						title={occupe && raisonClaude === null ? t.tacheEnCours : undefined}
 						onClick={() => void geste.agir('prejuger', actions.prejuger)}
 					>
-						{libelle('prejuger', 'Pré-juger avec Claude')}
+						{libelle('prejuger', t.juger.prejuger)}
 					</Bouton>
 					{!sansMessage && (
 						<p id={`${id}-claude`} className={s.aide}>
-							{raisonClaude ?? `${accorder(b.aPrejuger, 'appel')} à Claude Code, un par message, sur l’abonnement Claude.`}
+							{raisonClaude ?? t.juger.cout(b.aPrejuger)}
 						</p>
 					)}
 				</div>
@@ -152,10 +156,10 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 			</li>
 
 			<li className={s.etape} data-utile={utile === 3 || undefined} aria-current={utile === 3 ? 'step' : undefined}>
-				<TitreEtape numero={3} titre="Apprendre" />
+				<TitreEtape numero={3} titre={t.apprendre.titre} />
 				<p className={s.chiffres}>
-					{accorder(b.paires, 'fiche jugée', 'fiches jugées')}
-					<span className={s.discret}>{` dans ${accorder(b.valides, 'message validé', 'messages validés')}`}</span>
+					{t.apprendre.fichesJugees(b.paires)}
+					<span className={s.discret}>{t.apprendre.dansMessages(b.valides)}</span>
 				</p>
 				{depuisApprentissage !== null && <p className={s.aide}>{depuisApprentissage}</p>}
 				<div className={s.gestes}>
@@ -164,14 +168,14 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 						{...principal(3)}
 						className={s.cible}
 						indisponible={raisonApprendre !== null ? { raison: `${id}-apprendre` } : occupe}
-						title={occupe && raisonApprendre === null ? 'Une tâche est en cours' : undefined}
+						title={occupe && raisonApprendre === null ? t.tacheEnCours : undefined}
 						onClick={() => void geste.agir('apprendre', actions.apprendre)}
 					>
-						{libelle('apprendre', 'Apprendre la note')}
+						{libelle('apprendre', t.apprendre.bouton)}
 					</Bouton>
 				</div>
 				<p id={`${id}-apprendre`} className={s.aide}>
-					{raisonApprendre ?? 'Le nouveau modèle remplace l’actuel, même refusé ; le modèle d’avant reste à portée (menu ⋯).'}
+					{raisonApprendre ?? t.apprendre.aide}
 				</p>
 				<Refus geste={geste} ou="apprendre" />
 			</li>
@@ -180,12 +184,13 @@ export function EtapesEntrainement(p: { vue: VueEntrainement; idTache: string | 
 }
 
 function TitreEtape(p: { numero: Etape; titre: string }): ReactNode {
+	const t = useTextes().memoire.entrainer.etapes;
 	return (
 		<h3 className={s.titreEtape}>
 			<span className={s.numero} aria-hidden="true">
 				{p.numero}
 			</span>
-			<span className={s.horsEcran}>{`Étape ${p.numero} : `}</span>
+			<span className={s.horsEcran}>{t.etape(p.numero)}</span>
 			{p.titre}
 		</h3>
 	);
@@ -193,16 +198,17 @@ function TitreEtape(p: { numero: Etape; titre: string }): ReactNode {
 
 /** Jauge des messages validés sur ceux conseillés ; au-delà, pleine. */
 function Jauge(p: { valides: number }): ReactNode {
+	const t = useTextes().memoire.entrainer.etapes.preparer;
 	const part = Math.min(1, p.valides / MESSAGES_CONSEILLES);
 	return (
 		<div className={s.jauge}>
 			<span className={s.texteJauge}>
-				<span className={s.compte}>{p.valides}</span> validés sur ~{MESSAGES_CONSEILLES} conseillés
+				{t.jauge(<span className={s.compte}>{p.valides}</span>, MESSAGES_CONSEILLES)}
 			</span>
 			<div
 				className={cx(s.barre, part >= 1 && s.pleine)}
 				role="meter"
-				aria-label="Messages validés"
+				aria-label={t.jaugeTitre}
 				aria-valuemin={0}
 				aria-valuemax={MESSAGES_CONSEILLES}
 				aria-valuenow={Math.min(p.valides, MESSAGES_CONSEILLES)}

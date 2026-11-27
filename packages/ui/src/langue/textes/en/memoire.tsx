@@ -3,7 +3,11 @@ import { pluriel } from '../../pluriel.ts';
 import type { memoire as fr } from '../fr/memoire.tsx';
 
 const NOMBRE = new Intl.NumberFormat('en-US');
-const MOIS_ANNEE = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+const DATE = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const HEURE = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' });
+const JOUR_MOIS = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+const LISTE = new Intl.ListFormat('en', { type: 'conjunction' });
+const MOIS_ANNEE =new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
 const nombre = (n: number): string => NOMBRE.format(n);
 const MENTIONS: Readonly<Record<string, string>> = {
 	'a confirmer': 'to confirm',
@@ -188,6 +192,177 @@ export const memoire: Forme<typeof fr> = {
 			fermerFiche: 'Close note',
 			reliesA: (n) => `Linked to (${n})`,
 			ouvrir: 'Open note',
+		},
+	},
+	entrainer: {
+		niveaux: { complets: 'Full', sens: 'Meaning only' },
+		etats: { accepte: 'Accepted', coupe: 'Injection stopped', refuse: 'Rejected', depart: 'Default', non_appris: 'Not trained' },
+		nomsDesNiveaux: (noms) => LISTE.format(noms),
+		pourcent: (part) => `${Math.round(part * 100)}%`,
+		dateEtHeure: (ms) => `${DATE.format(ms)} at ${HEURE.format(ms)}`,
+		sansValeur: '—',
+		livreeAvecMnemo: 'shipped with Mnemo',
+		apprise: (quand) => `trained on ${quand}`,
+		taches: { preparer: 'Preparing messages', prejuger: 'Pre-judging with Claude', apprendre: 'Training the score' },
+		jugesDepuisApprentissage: (n) => (n === 0 ? 'No messages judged since the last training' : `${compte(n, 'message', 'messages')} judged since the last training`),
+		serviceMuet: 'The service did not respond.',
+		page: {
+			illisible: (erreur) => `Could not read the training state: ${erreur}`,
+			relire: 'Reload',
+			derniereTacheEchouee: 'The last task failed.',
+		},
+		entete: {
+			titre: 'Confidence score',
+			autresActions: 'More actions on the score',
+			revenir: 'Go back to the previous model',
+			revenirIndisponible: 'Unavailable during training.',
+			revenirDetail: 'Restores the model replaced by the last training. Doing this again comes back to the current one.',
+			revenu: 'Previous model restored.',
+		},
+		avancement: {
+			titre: 'Toward real results',
+			explicationSansApprentissage:
+				'Real results (accurate percentages, and Mnemo injecting on its own) come once enough notes, sessions and "Nothing useful here" messages are judged. Progress is known after the first training.',
+			explication: (seuil, parNiveau) =>
+				`Real results (accurate percentages, and Mnemo injecting on its own) come once all three volumes are reached, then precision. Progress is that of the volume furthest behind: that is the one holding things up. Measured at the last training, at a ${seuil} threshold.${parNiveau.length > 0 ? ` ${parNiveau.join(', ')}.` : ''}`,
+			partDuNiveau: (niveau, part) => `${niveau} ${part}`,
+			inchange: (depuis) => `unchanged since ${JOUR_MOIS.format(depuis)}`,
+			ecart: (points, depuis) => `${points > 0 ? '+' : '−'}${Math.abs(points)} pts since ${JOUR_MOIS.format(depuis)}`,
+			ecartTitre: (quand) => `Change since the training of ${quand}.`,
+			volumes: { injections: 'injectable notes', sessions: 'sessions', silences: '"Nothing useful here"' },
+			sensDesVolumes: {
+				injections: (cible, seuil) => `Notes Mnemo would inject on its own, scored above ${seuil} (${cible} needed).`,
+				sessions: (cible) => `Sessions where Mnemo would inject at least one note (${cible} needed).`,
+				silences: (cible) => `Messages judged "Nothing useful here" (${cible} needed).`,
+			},
+			venusDeSessions: (fait, cible) => ` From ${compte(fait, 'session', 'sessions')}, ${cible} needed.`,
+			volumeAtteintResteQualite: 'volume reached; quality remains',
+			qualite: (critere) => `volume reached; quality remains: ${critere}`,
+			connuAuPremier: 'known after the first training',
+			volume: (nom, fait, cible) => (
+				<>
+					{nom} {fait}/{cible}
+				</>
+			),
+			volumeAtteint: 'Volume reached',
+		},
+		tache: {
+			titre: 'Task in progress',
+			enCours: (nom) => `${nom}…`,
+			compte: (fait, total) => ` ${fait} of ${total}`,
+			depuis: (heure) => `since ${heure}`,
+			arreter: 'Stop',
+			arret: {
+				preparer: 'Stopping keeps the messages already prepared.',
+				prejuger: 'Stopping keeps the proposals already received.',
+				apprendre: 'Stopping leaves the current model in place.',
+			},
+		},
+		etapes: {
+			titre: 'Training steps',
+			etape: (numero) => `Step ${numero}: `,
+			tacheEnCours: 'A task is in progress',
+			preparer: {
+				titre: 'Prepare messages',
+				aide: 'Taken from recent sessions, with the notes Mnemo would have suggested.',
+				prepares: (n) => `${compte(n, 'message', 'messages')} prepared`,
+				nombre: 'Number of messages to prepare',
+				unite: 'messages',
+				bouton: 'Prepare',
+				bornes: (max) => `From 1 to ${max} messages.`,
+				jauge: (valides, conseilles) => (
+					<>
+						{valides} validated out of ~{conseilles} recommended
+					</>
+				),
+				jaugeTitre: 'Validated messages',
+			},
+			juger: {
+				titre: 'Judge',
+				aucunPrepare: 'No messages prepared',
+				aJuger: (n) => `${n} to judge`,
+				dontARelire: (n) => `, including ${n} pre-judged by Claude, to review`,
+				bouton: 'Judge',
+				relire: (n) => `Review (${n})`,
+				accepter: 'Accept confident ones',
+				accepterTitre: 'Validates the messages where Claude is at least 90% sure for every note',
+				preparerDAbord: 'Prepare messages first.',
+				tousJuges: 'All prepared messages are judged.',
+				aucunSur: 'No message is 90% sure or more: review them.',
+				acceptes: (n) => `${compte(n, 'message', 'messages')} validated with the confident proposals.`,
+				claudeIntrouvable: 'Claude Code was not found on this computer.',
+				dejaProposees: 'Every message to judge already has its proposals.',
+				prejuger: 'Pre-judge with Claude',
+				cout: (appels) => `${compte(appels, 'call', 'calls')} to Claude Code, one per message, on the Claude subscription.`,
+			},
+			apprendre: {
+				titre: 'Train',
+				fichesJugees: (n) => `${compte(n, 'note', 'notes')} judged`,
+				dansMessages: (n) => ` in ${compte(n, 'validated message', 'validated messages')}`,
+				bouton: 'Train the score',
+				aucunJugement: 'No validated judgments: judge messages first.',
+				aide: 'The new model replaces the current one, even if rejected; the previous model stays within reach (⋯ menu).',
+			},
+		},
+		resultat: {
+			titre: 'Last training',
+			quand: (date, messages, sessions) => `${date} – ${compte(messages, 'message', 'messages')} from ${compte(sessions, 'session', 'sessions')}`,
+			garde: 'The model in place at the time was kept.',
+			toujoursRefuse: 'Still rejected: this model replaces the previous one, also without percentages, and orders the ranking.',
+			remplace: 'Its model replaced the one in place at the time.',
+			manque: 'What was missing:',
+			fiabilite: (jugements) => `Reliability table (${compte(jugements, 'judgment', 'judgments')})`,
+			note: 'Score',
+			jugements: 'Judgments',
+			jugementsTitre: 'One note judged for one message: the same note judged for two messages counts twice',
+			noteMoyenne: 'Average score',
+			utiles: 'Actually useful',
+			tranche: (de, a) => `${Math.round(de * 100)}–${Math.round(a * 100)}%`,
+		},
+		historique: {
+			titre: 'History',
+			date: 'Date',
+			origine: 'Origin',
+			modele: 'Model',
+			origines: { manuel: 'Manual', automatique: 'Automatic' },
+			gardeEchec: 'Kept (failed)',
+			remplace: 'Replaced',
+			garde: 'Kept',
+		},
+		jugement: {
+			noms: { pertinente: 'Useful', non_pertinente: 'Not useful', indecise: 'Not sure' },
+			progression: (numero, restants) => `Message ${numero} – ${restants === 0 ? 'the last one to judge' : `${restants} more to judge`}`,
+			proposition: (jugement, confiance, raison) => `Claude suggests "${jugement}" (${confiance} sure)${raison === '' ? '' : `: ${raison}`}`,
+			synthese: 'Summary',
+			titre: 'Judge',
+			toutEstJuge: 'Everything is judged',
+			rienAJuger: 'Nothing to judge',
+			annulerDernier: 'Undo last',
+			annulerTitre: 'Reopens the message of the last answer, without it',
+			retour: 'Back',
+			retourTitre: 'Back to training (Esc)',
+			illisible: (erreur) => `Could not read the message: ${erreur}`,
+			relire: 'Reload',
+			messageDAvant: 'Previous message',
+			message: 'Message to judge',
+			passeAuparavant: 'Skipped before: an answer puts it back among the judged messages.',
+			dejaValide: 'Already validated: a new answer replaces the previous one.',
+			fichesProposees: 'Notes suggested for this message',
+			reste: 'The rest is not useful',
+			sansReponse: (n) => (n === 0 ? 'no unanswered notes' : compte(n, 'unanswered note', 'unanswered notes')),
+			repondreAuMoins: 'Answer for at least one note, or check "The rest is not useful".',
+			silenceImpossible: '"Nothing useful here": a note is marked "Useful".',
+			passer: 'Skip',
+			passerTitre: 'Set this message aside without judging it',
+			silence: 'Nothing useful here',
+			silenceTitre: 'No note would have helped answer this message',
+			valider: 'Validate',
+			finReponses: 'Answers saved. Back to training to train the score.',
+			finRien: 'No message is waiting to be judged: prepare more.',
+			sautes: (n) => `${compte(n, 'skipped message stays', 'skipped messages stay')} set aside.`,
+			revenir: 'Back to training',
+			raccourcis: 'Shortcuts: ',
+			touches: { fiche: 'note', entree: 'Enter', echap: 'Esc' },
 		},
 	},
 };

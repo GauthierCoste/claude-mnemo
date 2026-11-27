@@ -2,7 +2,16 @@ import type { ReactNode } from 'react';
 import { pluriel } from '../../pluriel.ts';
 
 const NOMBRE = new Intl.NumberFormat('fr-FR');
-const MOIS_ANNEE = new Intl.DateTimeFormat('fr-FR', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+const HEURE = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const deux = (n: number): string => String(n).padStart(2, '0');
+/** « 26/11 », heure locale. */
+const jourMois = (ms: number): string => {
+	const d = new Date(ms);
+	return `${deux(d.getDate())}/${deux(d.getMonth() + 1)}`;
+};
+/** `1 message`, `3 messages` : au-delà de 1, le pluriel (accord des participes compris). */
+const accorder = (n: number, un: string, autre: string): string => `${n} ${pluriel('fr', n, { un, autre })}`;
+const MOIS_ANNEE =new Intl.DateTimeFormat('fr-FR', { month: 'short', year: 'numeric', timeZone: 'UTC' });
 const nombre = (n: number): string => NOMBRE.format(n);
 const MENTIONS: Readonly<Record<string, string>> = { 'a confirmer': 'à confirmer', declare: 'déclaré', observe: 'observé', infere: 'inféré' };
 
@@ -187,6 +196,194 @@ export const memoire = {
 			fermerFiche: 'Fermer la fiche',
 			reliesA: (n: number) => `Relié à (${n})`,
 			ouvrir: 'Ouvrir la fiche',
+		},
+	},
+	/** Mémoire › Entraîner : la note de confiance et son entraînement. Vocabulaire : « note de confiance », « injecter ». */
+	entrainer: {
+		niveaux: { complets: 'Complets', sens: 'Sens seul' },
+		/** L'état d'une note en un mot (puce) ; la note est féminine. */
+		etats: { accepte: 'Acceptée', coupe: 'Injection coupée', refuse: 'Refusée', depart: 'De départ', non_appris: 'Pas entraînée' },
+		/** « Complets et Sens seul » */
+		nomsDesNiveaux: (noms: readonly string[]) => noms.join(' et '),
+		/** « 82 % » d'une part de 0 à 1. */
+		pourcent: (part: number) => `${Math.round(part * 100)} %`,
+		/** « 26/11/2026 à 14:05 », heure locale. */
+		dateEtHeure: (ms: number) => `${new Date(ms).toLocaleDateString('fr-FR')} à ${HEURE.format(ms)}`,
+		sansValeur: '—',
+		livreeAvecMnemo: 'livrée avec Mnemo',
+		apprise: (quand: string) => `apprise le ${quand}`,
+		taches: { preparer: 'Préparation des messages', prejuger: 'Pré-jugement par Claude', apprendre: 'Apprentissage de la note' },
+		jugesDepuisApprentissage: (n: number) =>
+			n === 0 ? 'Aucun message jugé depuis le dernier apprentissage' : `${accorder(n, 'message jugé', 'messages jugés')} depuis le dernier apprentissage`,
+		serviceMuet: 'Le service n’a pas répondu.',
+		page: {
+			illisible: (erreur: string) => `État de l’entraînement illisible : ${erreur}`,
+			relire: 'Relire',
+			derniereTacheEchouee: 'La dernière tâche a échoué.',
+		},
+		entete: {
+			titre: 'Note de confiance',
+			autresActions: 'Autres actions sur la note',
+			revenir: 'Revenir au modèle d’avant',
+			revenirIndisponible: 'Indisponible pendant un apprentissage.',
+			revenirDetail: 'Remet le modèle remplacé par le dernier apprentissage. Refaire ce geste revient à celui-ci.',
+			revenu: 'Modèle d’avant rétabli.',
+		},
+		/** Bandeau d'avancement vers les vrais résultats. */
+		avancement: {
+			titre: 'Vers les vrais résultats',
+			explicationSansApprentissage:
+				'Les vrais résultats (des % justes, et Mnemo qui injecte seul) viennent quand assez de fiches, de sessions et de messages « Rien d’utile ici » sont jugés. L’avancement est connu au premier apprentissage.',
+			/** `parNiveau` : la part de chaque niveau (« Complets 40 % »), vide avec un seul niveau. */
+			explication: (seuil: string, parNiveau: readonly string[]) =>
+				`Les vrais résultats (des % justes, et Mnemo qui injecte seul) viennent quand les trois volumes sont atteints, puis la précision. L’avancement est celui du volume le plus en retard : c’est lui qui bloque. Mesuré au dernier apprentissage, au seuil de ${seuil}.${parNiveau.length > 0 ? ` ${parNiveau.join(', ')}.` : ''}`,
+			partDuNiveau: (niveau: string, part: string) => `${niveau} ${part}`,
+			inchange: (depuis: number) => `inchangé depuis le ${jourMois(depuis)}`,
+			ecart: (points: number, depuis: number) => `${points > 0 ? '+' : '−'}${Math.abs(points)} pts depuis le ${jourMois(depuis)}`,
+			ecartTitre: (quand: string) => `Écart avec l’apprentissage du ${quand}.`,
+			volumes: { injections: 'fiches injectables', sessions: 'sessions', silences: '« Rien d’utile ici »' },
+			/** Ce qu'un volume compte, pour son infobulle ; `seuil` ne sert qu'aux fiches injectables. */
+			sensDesVolumes: {
+				injections: (cible: number, seuil: string) => `Fiches que Mnemo injecterait seul, notées au-dessus de ${seuil} (il en faut ${cible}).`,
+				sessions: (cible: number, _seuil: string) => `Sessions où Mnemo injecterait au moins une fiche (il en faut ${cible}).`,
+				silences: (cible: number, _seuil: string) => `Messages jugés « Rien d'utile ici » (il en faut ${cible}).`,
+			},
+			venusDeSessions: (fait: number, cible: number) => ` Venus de ${fait} sessions, il en faut ${cible}.`,
+			volumeAtteintResteQualite: 'volume atteint ; reste la qualité',
+			qualite: (critere: string) => `volume atteint ; reste la qualité : ${critere}`,
+			connuAuPremier: 'connu au premier apprentissage',
+			/** « sessions 12/40 » ; `fait` arrive mis en forme (gras). */
+			volume: (nom: string, fait: ReactNode, cible: number) => (
+				<>
+					{nom} {fait}/{cible}
+				</>
+			),
+			volumeAtteint: 'Volume atteint',
+		},
+		tache: {
+			titre: 'Tâche en cours',
+			enCours: (nom: string) => `${nom}…`,
+			compte: (fait: number, total: number) => ` ${fait} sur ${total}`,
+			depuis: (heure: string) => `depuis ${heure}`,
+			arreter: 'Arrêter',
+			/** Ce que garde un arrêt. */
+			arret: {
+				preparer: 'Arrêter garde les messages déjà préparés.',
+				prejuger: 'Arrêter garde les propositions déjà reçues.',
+				apprendre: 'Arrêter laisse le modèle actuel en place.',
+			},
+		},
+		etapes: {
+			titre: 'Étapes de l’entraînement',
+			etape: (numero: number) => `Étape ${numero} : `,
+			tacheEnCours: 'Une tâche est en cours',
+			preparer: {
+				titre: 'Préparer des messages',
+				aide: 'Tirés des dernières sessions, avec les fiches que Mnemo aurait proposées.',
+				prepares: (n: number) => accorder(n, 'message préparé', 'messages préparés'),
+				nombre: 'Nombre de messages à préparer',
+				unite: 'messages',
+				bouton: 'Préparer',
+				bornes: (max: number) => `De 1 à ${max} messages.`,
+				/** Jauge : `valides` arrive mis en forme. */
+				jauge: (valides: ReactNode, conseilles: number) => (
+					<>
+						{valides} validés sur ~{conseilles} conseillés
+					</>
+				),
+				jaugeTitre: 'Messages validés',
+			},
+			juger: {
+				titre: 'Juger',
+				aucunPrepare: 'Aucun message préparé',
+				aJuger: (n: number) => `${n} à juger`,
+				dontARelire: (n: number) => `, dont ${n} pré-jugés par Claude, à relire`,
+				bouton: 'Juger',
+				relire: (n: number) => `Relire (${n})`,
+				accepter: 'Accepter les sûres',
+				accepterTitre: 'Valide les messages dont Claude est sûr à 90 % ou plus pour chaque fiche',
+				preparerDAbord: 'Préparer d’abord des messages.',
+				tousJuges: 'Tous les messages préparés sont jugés.',
+				aucunSur: 'Aucun message sûr à 90 % ou plus : les relire.',
+				acceptes: (n: number) => `${accorder(n, 'message validé', 'messages validés')} avec les propositions sûres.`,
+				claudeIntrouvable: 'Claude Code est introuvable sur ce poste.',
+				dejaProposees: 'Chaque message à juger a déjà ses propositions.',
+				prejuger: 'Pré-juger avec Claude',
+				cout: (appels: number) => `${accorder(appels, 'appel', 'appels')} à Claude Code, un par message, sur l’abonnement Claude.`,
+			},
+			apprendre: {
+				titre: 'Apprendre',
+				fichesJugees: (n: number) => accorder(n, 'fiche jugée', 'fiches jugées'),
+				dansMessages: (n: number) => ` dans ${accorder(n, 'message validé', 'messages validés')}`,
+				bouton: 'Apprendre la note',
+				aucunJugement: 'Aucun jugement validé : juger des messages d’abord.',
+				aide: 'Le nouveau modèle remplace l’actuel, même refusé ; le modèle d’avant reste à portée (menu ⋯).',
+			},
+		},
+		resultat: {
+			titre: 'Dernier apprentissage',
+			quand: (date: string, messages: number, sessions: number) => `${date} – ${accorder(messages, 'message', 'messages')} de ${accorder(sessions, 'session', 'sessions')}`,
+			garde: 'Le modèle d’alors a été gardé.',
+			toujoursRefuse: 'Toujours refusé : ce modèle remplace celui d’alors, sans % non plus, et ordonne le classement.',
+			remplace: 'Son modèle a remplacé le modèle d’alors.',
+			manque: 'Ce qui a manqué :',
+			fiabilite: (jugements: number) => `Table de fiabilité (${accorder(jugements, 'jugement', 'jugements')})`,
+			note: 'Note',
+			jugements: 'Jugements',
+			jugementsTitre: 'Une fiche jugée pour un message : la même fiche jugée pour deux messages compte deux fois',
+			noteMoyenne: 'Note moyenne',
+			utiles: 'Réellement utiles',
+			/** Une tranche de notes, de `de` à `a` (0 à 1) : « 80 – 90 % ». */
+			tranche: (de: number, a: number) => `${Math.round(de * 100)} – ${Math.round(a * 100)} %`,
+		},
+		historique: {
+			titre: 'Historique',
+			date: 'Date',
+			origine: 'Origine',
+			modele: 'Modèle',
+			origines: { manuel: 'Manuel', automatique: 'Automatique' },
+			gardeEchec: 'Gardé (échec)',
+			remplace: 'Remplacé',
+			garde: 'Gardé',
+		},
+		/** L'écran de jugement d'un message. Vocabulaire : « Utile », « Pas utile », « Je ne sais pas », « Rien d'utile ici ». */
+		jugement: {
+			noms: { pertinente: 'Utile', non_pertinente: 'Pas utile', indecise: 'Je ne sais pas' },
+			/** « Message 3 – 2 autres à juger » ; `restants` : messages encore à juger après celui-ci. */
+			progression: (numero: number, restants: number) =>
+				`Message ${numero} – ${restants === 0 ? 'le dernier à juger' : `${restants} ${restants > 1 ? 'autres' : 'autre'} à juger`}`,
+			/** « Claude propose « Utile » (sûr à 96 %) : raison » ; `raison` vide : sans elle. */
+			proposition: (jugement: string, confiance: string, raison: string) => `Claude propose « ${jugement} » (sûr à ${confiance})${raison === '' ? '' : ` : ${raison}`}`,
+			synthese: 'Synthèse',
+			titre: 'Juger',
+			toutEstJuge: 'Tout est jugé',
+			rienAJuger: 'Rien à juger',
+			annulerDernier: 'Annuler le dernier',
+			annulerTitre: 'Rouvre le message de la dernière réponse, sans elle',
+			retour: 'Retour',
+			retourTitre: 'Revenir à l’entraînement (Échap)',
+			illisible: (erreur: string) => `Message illisible : ${erreur}`,
+			relire: 'Relire',
+			messageDAvant: 'Message d’avant',
+			message: 'Message à juger',
+			passeAuparavant: 'Passé auparavant : une réponse le remet parmi les messages jugés.',
+			dejaValide: 'Déjà validé : une nouvelle réponse remplace la précédente.',
+			fichesProposees: 'Fiches proposées pour ce message',
+			reste: 'Le reste n’est pas utile',
+			sansReponse: (n: number) => (n === 0 ? 'aucune fiche sans réponse' : accorder(n, 'fiche sans réponse', 'fiches sans réponse')),
+			repondreAuMoins: 'Répondre pour une fiche au moins, ou cocher « Le reste n’est pas utile ».',
+			silenceImpossible: '« Rien d’utile ici » : une fiche est marquée « Utile ».',
+			passer: 'Passer',
+			passerTitre: 'Mettre ce message de côté sans le juger',
+			silence: 'Rien d’utile ici',
+			silenceTitre: 'Aucune fiche n’aurait aidé à répondre à ce message',
+			valider: 'Valider',
+			finReponses: 'Réponses enregistrées. Retour à l’entraînement pour apprendre la note.',
+			finRien: 'Aucun message n’attend de jugement : en préparer d’autres.',
+			sautes: (n: number) => `${accorder(n, 'message passé reste', 'messages passés restent')} de côté.`,
+			revenir: 'Revenir à l’entraînement',
+			raccourcis: 'Raccourcis : ',
+			touches: { fiche: 'fiche', entree: 'Entrée', echap: 'Échap' },
 		},
 	},
 };

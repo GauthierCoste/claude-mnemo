@@ -5,7 +5,8 @@
  */
 import type { ResultatApprentissageVue, TrancheFiabiliteVue } from '@mnemo/contrat';
 import type { ReactNode } from 'react';
-import { accorder, dateEtHeure, NOMS_ETATS_NOTE, NOMS_NIVEAUX_NOTE, pourcent, suiteDuVerdict, TONS_ETATS_NOTE } from '../../../memoire/entrainement.ts';
+import { dateEtHeure, suiteDuVerdict, TONS_ETATS_NOTE, type TextesEntrainer } from '../../../memoire/entrainement.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { Puce } from '../../commun/Puce.tsx';
 import s from './Entrainer.module.css';
 
@@ -15,41 +16,43 @@ type NiveauResultat = ResultatApprentissageVue['niveaux'][number];
  * Ce qu'est devenu le modèle d'alors. Un modèle refusé ne remplace jamais un accepté : refusé à tous les niveaux, il a remplacé
  * un modèle qui ne donnait pas de % non plus, et la note reste sans %.
  */
-function phraseRemplacement(r: ResultatApprentissageVue): string {
-	if (!r.remplace) return 'Le modèle d’alors a été gardé.';
-	if (r.niveaux.every((n) => !n.accepte)) return 'Toujours refusé : ce modèle remplace celui d’alors, sans % non plus, et ordonne le classement.';
-	return 'Son modèle a remplacé le modèle d’alors.';
+function phraseRemplacement(r: ResultatApprentissageVue, t: TextesEntrainer['resultat']): string {
+	if (!r.remplace) return t.garde;
+	if (r.niveaux.every((n) => !n.accepte)) return t.toujoursRefuse;
+	return t.remplace;
 }
 
 /** L'état du modèle appris pour ce niveau : accepté, refusé, ou rien d'appris (aucune fiche jugée pour ce niveau). */
 const etatDu = (n: NiveauResultat) => (n.accepte ? 'accepte' : n.paires === 0 ? 'non_appris' : 'refuse');
 
 export function ResultatApprentissage(p: { resultat: ResultatApprentissageVue }): ReactNode {
+	const te = useTextes().memoire.entrainer;
+	const t = te.resultat;
 	const r = p.resultat;
 	return (
 		<section className={s.section} aria-labelledby="titre-resultat">
 			<div className={s.teteSection}>
 				<h3 id="titre-resultat" className={s.titreSection}>
-					Dernier apprentissage
+					{t.titre}
 				</h3>
 				<span className={s.discret}>
-					{dateEtHeure(r.date)} – {accorder(r.messages, 'message')} de {accorder(r.sessions, 'session')}
+					{t.quand(dateEtHeure(r.date, te), r.messages, r.sessions)}
 				</span>
 			</div>
-			<p className={s.remplace}>{phraseRemplacement(r)}</p>
+			<p className={s.remplace}>{phraseRemplacement(r, t)}</p>
 			<div className={s.grilleNiveaux}>
 				{r.niveaux.map((n) => {
 					const etat = etatDu(n);
 					return (
 						<div key={n.niveau} className={s.niveauResultat}>
 							<h4 className={s.titreNiveau}>
-								{NOMS_NIVEAUX_NOTE[n.niveau]}
-								<Puce ton={TONS_ETATS_NOTE[etat]}>{NOMS_ETATS_NOTE[etat]}</Puce>
+								{te.niveaux[n.niveau]}
+								<Puce ton={TONS_ETATS_NOTE[etat]}>{te.etats[etat]}</Puce>
 							</h4>
 							{!r.remplace && <p className={s.verdict}>{suiteDuVerdict(n.verdict)}</p>}
 							{n.criteres.length > 0 && (
 								<>
-									<p className={s.discret}>Ce qui a manqué :</p>
+									<p className={s.discret}>{t.manque}</p>
 									<ul className={s.criteres}>
 										{n.criteres.map((c) => (
 											<li key={c}>{c}</li>
@@ -71,28 +74,30 @@ export function ResultatApprentissage(p: { resultat: ResultatApprentissageVue })
  * notée hors de l'apprentissage. Son total est celui de ses lignes.
  */
 function Fiabilite(p: { tranches: TrancheFiabiliteVue[] }): ReactNode {
+	const te = useTextes().memoire.entrainer;
+	const tr = te.resultat;
 	const total = p.tranches.reduce((n, t) => n + t.paires, 0);
 	return (
 		<details className={s.fiabilite}>
-			<summary>Table de fiabilité ({accorder(total, 'jugement', 'jugements')})</summary>
+			<summary>{tr.fiabilite(total)}</summary>
 			<table className={s.tableNombres}>
 				<thead>
 					<tr>
-						<th scope="col">Note</th>
-						<th scope="col" title="Une fiche jugée pour un message : la même fiche jugée pour deux messages compte deux fois">
-							Jugements
+						<th scope="col">{tr.note}</th>
+						<th scope="col" title={tr.jugementsTitre}>
+							{tr.jugements}
 						</th>
-						<th scope="col">Note moyenne</th>
-						<th scope="col">Réellement utiles</th>
+						<th scope="col">{tr.noteMoyenne}</th>
+						<th scope="col">{tr.utiles}</th>
 					</tr>
 				</thead>
 				<tbody>
 					{p.tranches.map((t) => (
 						<tr key={t.de}>
-							<td>{`${Math.round(t.de * 100)} – ${pourcent(t.a)}`}</td>
+							<td>{tr.tranche(t.de, t.a)}</td>
 							<td>{t.paires}</td>
-							<td>{t.paires === 0 ? '—' : pourcent(t.pMoyen)}</td>
-							<td>{t.paires === 0 ? '—' : pourcent(t.frequence)}</td>
+							<td>{t.paires === 0 ? te.sansValeur : te.pourcent(t.pMoyen)}</td>
+							<td>{t.paires === 0 ? te.sansValeur : te.pourcent(t.frequence)}</td>
 						</tr>
 					))}
 				</tbody>

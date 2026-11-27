@@ -6,48 +6,42 @@
 import type { TacheEntrainementVue } from '@mnemo/contrat';
 import type { CSSProperties, ReactNode } from 'react';
 import { useActionsEntrainement } from '../../../client/hooks.ts';
-import { NOMS_TACHES } from '../../../memoire/entrainement.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
 import r from '../../commun/Reflet.module.css';
 import s from './Entrainer.module.css';
 import { useGeste } from './useGeste.ts';
 
-const heure = (iso: string): string => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-
-/** Ce que garde un arrêt : les messages préparés et les propositions enregistrées ; un apprentissage arrêté n'écrit rien. */
-const ARRET: Record<TacheEntrainementVue['genre'], string> = {
-	preparer: 'Arrêter garde les messages déjà préparés.',
-	prejuger: 'Arrêter garde les propositions déjà reçues.',
-	apprendre: 'Arrêter laisse le modèle actuel en place.',
-};
-
 export function TacheEntrainement(p: { tache: TacheEntrainementVue; id: string }): ReactNode {
+	const textes = useTextes();
+	const te = textes.memoire.entrainer;
 	const t = p.tache;
+	const nom = te.taches[t.genre];
 	const actions = useActionsEntrainement();
 	const geste = useGeste();
 	const connu = t.total > 0;
 	const part = connu ? Math.min(1, t.fait / t.total) : 0;
 	return (
-		<section className={s.tache} aria-label="Tâche en cours">
+		<section className={s.tache} aria-label={te.tache.titre}>
 			<p className={s.texteTache}>
 				<span id={p.id}>
-					<span className={r.reflet}>{NOMS_TACHES[t.genre]}…</span>
-					{connu && <span className={s.compte}>{` ${t.fait} sur ${t.total}`}</span>}
+					<span className={r.reflet}>{te.tache.enCours(nom)}</span>
+					{connu && <span className={s.compte}>{te.tache.compte(t.fait, t.total)}</span>}
 				</span>
-				<span className={s.discret}>depuis {heure(t.depuis)}</span>
+				<span className={s.discret}>{te.tache.depuis(textes.commun.formats.heure(Date.parse(t.depuis)))}</span>
 			</p>
 			<Bouton petit className={s.cible} disabled={geste.enCours !== null} onClick={() => void geste.agir('arreter', actions.arreter)}>
-				Arrêter
+				{te.tache.arreter}
 			</Bouton>
 			<div
 				className={s.barre}
 				data-indeterminee={!connu || undefined}
 				role="progressbar"
-				aria-label={NOMS_TACHES[t.genre]}
+				aria-label={nom}
 				{...(connu ? { 'aria-valuemin': 0, 'aria-valuemax': t.total, 'aria-valuenow': t.fait } : {})}
 				style={{ '--part': part } as CSSProperties}
 			/>
-			<p className={s.aideTache}>{ARRET[t.genre]}</p>
+			<p className={s.aideTache}>{te.tache.arret[t.genre]}</p>
 			{geste.refus !== null && (
 				<p className={s.refus} role="alert">
 					{geste.refus.message}
