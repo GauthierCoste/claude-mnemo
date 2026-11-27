@@ -7,6 +7,8 @@
  */
 import type { PluginInstalleVue, ProfilDetailVue, ProfilEditableVue, SkillVue } from '@mnemo/contrat';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useTextes } from '../../../langue/langue.tsx';
+import type { Textes } from '../../../langue/textes.ts';
 import { basculer, basculerSkill, compterEquipement, retient } from '../../../reglages/equipement.ts';
 import { Bascule } from '../../commun/Bascule.tsx';
 import s from './Agents.module.css';
@@ -28,6 +30,7 @@ function Case(p: {
 	surEditer?: () => void;
 }): ReactNode {
 	const id = useId();
+	const t = useTextes().agents.equipement;
 	return (
 		<li className={s.caseW}>
 			<button
@@ -53,7 +56,7 @@ function Case(p: {
 				</span>
 			</button>
 			{p.surEditer !== undefined && (
-				<button type="button" className={s.crayon} aria-label={`Modifier la skill ${p.nom}`} title={`Modifier la skill ${p.nom}`} onClick={p.surEditer}>
+				<button type="button" className={s.crayon} aria-label={t.modifierSkill(p.nom)} title={t.modifierSkill(p.nom)} onClick={p.surEditer}>
 					✎
 				</button>
 			)}
@@ -61,8 +64,8 @@ function Case(p: {
 	);
 }
 
-const descriptionPlugin = (x: PluginInstalleVue): string =>
-	[`version ${x.version}, ${x.portee}`, x.skills.length > 0 ? `skills : ${x.skills.map((k) => k.nom).join(', ')}` : '', x.hooks ? 'a ses propres hooks' : ''].filter((t) => t !== '').join(' · ');
+const descriptionPlugin = (x: PluginInstalleVue, t: Textes['agents']['equipement']): string =>
+	[t.pluginVersion(x.version, x.portee), x.skills.length > 0 ? t.pluginSkills(x.skills.map((k) => k.nom).join(', ')) : '', x.hooks ? t.pluginHooks : ''].filter((x) => x !== '').join(' · ');
 
 export function BlocEquipement(p: {
 	editable: ProfilEditableVue;
@@ -77,6 +80,7 @@ export function BlocEquipement(p: {
 	const e = p.editable;
 	const d = p.detail;
 	const id = useId();
+	const t = useTextes().agents.equipement;
 	const inventaire = useRef<HTMLUListElement>(null);
 	const { focus, surFocusFait } = p;
 	useEffect(() => {
@@ -95,24 +99,24 @@ export function BlocEquipement(p: {
 	const installes = new Set(ordrePlugins);
 	const absents = e.plugins.filter((x) => !installes.has(x));
 	const sansPlugins = e.moteur !== 'claude-code';
-	const raisonPropre = { id: `${id}-propre`, texte: 'Skill propre à cet agent : toujours équipée.' };
-	const raisonPlugins = { id: `${id}-plugins`, texte: 'Les plugins sont propres à Claude Code.' };
+	const raisonPropre = { id: `${id}-propre`, texte: t.raisonPropre };
+	const raisonPlugins = { id: `${id}-plugins`, texte: t.raisonPlugins };
 	const icone = (x: SkillVue) => x.icone ?? ICONE_SKILL;
 	return (
-		<Bloc titre="Équipement" sous={`skills et plugins : des savoir-faire que l’agent charge quand sa tâche s’y prête · ${n} équipé${n > 1 ? 's' : ''}`}>
+		<Bloc titre={t.titre} sous={t.sous(n)}>
 			<div className={s.toutes}>
 				<Bascule actif={e.skillsMemoire === 'tous'} surChangement={(actif) => p.surChange({ skillsMemoire: actif ? 'tous' : [...disponibles] })}>
-					Toutes les skills de la mémoire, y compris les futures
+					{t.toutes}
 				</Bascule>
 			</div>
-			<ul ref={inventaire} className={s.inventaire} aria-label="Inventaire" tabIndex={-1}>
+			<ul ref={inventaire} className={s.inventaire} aria-label={t.inventaire} tabIndex={-1}>
 				{d.skillsDuProfil.map((x) => (
 					<Case
 						key={`profil:${x.nom}`}
 						icone={icone(x)}
 						nom={x.nom}
 						description={x.description}
-						type="skill de l’agent"
+						type={t.typeSkillAgent}
 						equipee
 						raison={raisonPropre}
 						surBascule={() => {}}
@@ -125,7 +129,7 @@ export function BlocEquipement(p: {
 						icone={icone(x)}
 						nom={x.nom}
 						description={x.description}
-						type="skill"
+						type={t.typeSkill}
 						equipee={retient(e.skillsMemoire, x.nom)}
 						surBascule={() => p.surChange({ skillsMemoire: basculerSkill(e.skillsMemoire, x.nom, !retient(e.skillsMemoire, x.nom), disponibles) })}
 						{...(x.origine !== undefined ? { surEditer: () => p.surEditerSkill(x.nom, null) } : {})}
@@ -136,8 +140,8 @@ export function BlocEquipement(p: {
 						key={`plugin:${x.id}`}
 						icone={ICONE_PLUGIN}
 						nom={x.nom}
-						description={descriptionPlugin(x)}
-						type="plugin"
+						description={descriptionPlugin(x, t)}
+						type={t.typePlugin}
 						equipee={!sansPlugins && e.plugins.includes(x.id)}
 						{...(sansPlugins ? { raison: raisonPlugins } : {})}
 						surBascule={() => p.surChange({ plugins: basculer(e.plugins, x.id, !e.plugins.includes(x.id), ordrePlugins) })}
@@ -149,8 +153,8 @@ export function BlocEquipement(p: {
 							key={`absent:${x}`}
 							icone={ICONE_PLUGIN}
 							nom={x}
-							description="non installé : décocher pour le retirer"
-							type="plugin"
+							description={t.nonInstalle}
+							type={t.typePlugin}
 							equipee
 							surBascule={() => p.surChange({ plugins: e.plugins.filter((y) => y !== x) })}
 						/>
@@ -160,14 +164,14 @@ export function BlocEquipement(p: {
 						<span className={s.ic} aria-hidden="true">
 							＋
 						</span>
-						<span className={s.nomCase}>Nouvelle skill</span>
-						<span className={s.desc}>un savoir-faire à créer</span>
+						<span className={s.nomCase}>{t.nouvelleSkill}</span>
+						<span className={s.desc}>{t.nouvelleSkillDesc}</span>
 					</button>
 				</li>
 			</ul>
 			{d.skillsDuProfil.length > 0 && (
 				<p id={raisonPropre.id} className={s.effet}>
-					Les skills de l’agent sont toujours équipées.
+					{t.skillsAgentEquipees}
 				</p>
 			)}
 			{sansPlugins && d.pluginsInstalles.length > 0 && (
@@ -175,7 +179,7 @@ export function BlocEquipement(p: {
 					{raisonPlugins.texte}
 				</p>
 			)}
-			{d.skillsMemoireDisponibles.length === 0 && <p className={s.effet}>Aucune skill dans _mnemo/skills/.</p>}
+			{d.skillsMemoireDisponibles.length === 0 && <p className={s.effet}>{t.aucuneSkill}</p>}
 		</Bloc>
 	);
 }

@@ -6,6 +6,7 @@
 import { NOMS_MOTEURS, PROFIL_ARCHIVISTE, PROFIL_TRAVAIL } from '@mnemo/commun';
 import type { ProfilVue } from '@mnemo/contrat';
 import { useState, type ReactNode } from 'react';
+import { useTextes } from '../../../langue/langue.tsx';
 import { AvatarProfil } from '../../commun/AvatarProfil.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
 import { cx } from '../../commun/classes.ts';
@@ -13,7 +14,7 @@ import f from '../champs/Saisie.module.css';
 import d from '../Panneau.module.css';
 
 /** « Claude Code · opus », « Codex · par défaut ». */
-const classeDe = (x: ProfilVue): string => `${NOMS_MOTEURS[x.moteur]} · ${x.modele === '' ? 'par défaut' : x.modele}`;
+const classeDe = (x: ProfilVue, parDefaut: string): string => `${NOMS_MOTEURS[x.moteur]} · ${x.modele === '' ? parDefaut : x.modele}`;
 
 export function ListeAgents(p: {
 	profils: ProfilVue[];
@@ -27,6 +28,8 @@ export function ListeAgents(p: {
 	/** Crée l'agent `nom` aux valeurs par défaut de `travail` ; rend le motif d'un refus, null si créé. */
 	surNouveau(nom: string): Promise<string | null>;
 }): ReactNode {
+	const textes = useTextes();
+	const t = textes.agents.liste;
 	const [saisie, setSaisie] = useState('');
 	const [refus, setRefus] = useState<string | null>(null);
 	const [envoi, setEnvoi] = useState(false);
@@ -58,10 +61,10 @@ export function ListeAgents(p: {
 							<span className={d.identite}>
 								<span className={d.nom}>
 									{x.nom}
-									{x.nom === PROFIL_TRAVAIL && <span className={d.badge}>par défaut</span>}
+									{x.nom === PROFIL_TRAVAIL && <span className={d.badge}>{t.parDefaut}</span>}
 								</span>
-								<span className={d.description} title={classeDe(x)}>
-									{classeDe(x)}
+								<span className={d.description} title={classeDe(x, t.parDefaut)}>
+									{classeDe(x, t.parDefaut)}
 								</span>
 							</span>
 						</button>
@@ -71,9 +74,9 @@ export function ListeAgents(p: {
 		</section>
 	);
 	return (
-		<nav className={d.liste} aria-label="Agents">
-			{groupe('groupe-memoire', 'Mémoire', memoire)}
-			{groupe('groupe-travail', 'Travail', travail)}
+		<nav className={d.liste} aria-label={t.agents}>
+			{groupe('groupe-memoire', t.memoire, memoire)}
+			{groupe('groupe-travail', t.travail, travail)}
 			{!p.creation ? (
 				<button
 					type="button"
@@ -83,7 +86,7 @@ export function ListeAgents(p: {
 						p.surOuvrirNouveau();
 					}}
 				>
-					+ Nouvel agent
+					{t.nouvelAgent}
 				</button>
 			) : (
 				<form
@@ -94,14 +97,14 @@ export function ListeAgents(p: {
 					}}
 				>
 					<label className={f.libelle} htmlFor="nom-nouvel-agent">
-						Nom du nouvel agent
+						{t.nomNouvelAgent}
 					</label>
 					<input
 						id="nom-nouvel-agent"
 						className={f.champTexte}
 						autoFocus
 						spellCheck={false}
-						placeholder="minuscules, chiffres, tirets"
+						placeholder={t.formeNom}
 						value={saisie}
 						onChange={(e) => setSaisie(e.target.value)}
 					/>
@@ -112,7 +115,7 @@ export function ListeAgents(p: {
 					)}
 					<div className={f.actions}>
 						<Bouton genre="primaire" type="submit" disabled={envoi || saisie.trim() === ''}>
-							Créer
+							{t.creer}
 						</Bouton>
 						<Bouton
 							disabled={envoi}
@@ -121,7 +124,7 @@ export function ListeAgents(p: {
 								p.surAnnulerNouveau();
 							}}
 						>
-							Annuler
+							{textes.commun.actions.annuler}
 						</Bouton>
 					</div>
 				</form>

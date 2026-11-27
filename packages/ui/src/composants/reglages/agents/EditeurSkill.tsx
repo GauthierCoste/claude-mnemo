@@ -12,6 +12,7 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { ErreurApi } from '../../../client/api.ts';
 import { useClient } from '../../../client/contexte.tsx';
 import { avecId } from '../../../client/hooks.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
 import f from '../champs/Saisie.module.css';
 import s from './EditeurSkill.module.css';
@@ -28,7 +29,6 @@ const saisieDe = (d: SkillDetailVue): Saisie => ({ icone: d.icone ?? '', nom: d.
 const corpsDe = (x: Saisie): SkillEditableVue => ({ nom: x.nom.trim(), description: x.description.trim(), icone: x.icone.trim() === '' ? null : x.icone.trim(), contenu: x.contenu });
 /** Portée d'une route de skill : `?profil=<nom>` pour une skill d'un agent, rien pour la mémoire. */
 const portee = (profil: string | null): string => (profil === null ? '' : `?profil=${encodeURIComponent(profil)}`);
-const pluriel = (n: number) => (n > 1 ? 's' : '');
 
 export function EditeurSkill(p: {
 	/** null : une nouvelle skill. */
@@ -43,6 +43,8 @@ export function EditeurSkill(p: {
 	surFermer(): void;
 }): ReactNode {
 	const { api } = useClient();
+	const textes = useTextes();
+	const t = textes.agents.skill;
 	const id = useId();
 	const dialogue = useRef<HTMLDialogElement>(null);
 	const nouvelle = p.nom === null;
@@ -77,9 +79,9 @@ export function EditeurSkill(p: {
 			setConflit(false);
 			setConfirmer(false);
 		} catch (e) {
-			setLecture(e instanceof ErreurApi ? e.message : 'Lecture de la skill impossible.');
+			setLecture(e instanceof ErreurApi ? e.message : t.lectureImpossible);
 		}
-	}, [api, p.nom, p.profil]);
+	}, [api, p.nom, p.profil, t]);
 	useEffect(() => void lire(), [lire]);
 
 	const fermer = () => {
@@ -108,7 +110,7 @@ export function EditeurSkill(p: {
 			await geste();
 		} catch (e) {
 			if (e instanceof ErreurApi && e.statut === 409) setConflit(true);
-			else setErreur(e instanceof ErreurApi ? e.message : 'Écriture impossible.');
+			else setErreur(e instanceof ErreurApi ? e.message : t.ecritureImpossible);
 			setConfirmer(false);
 		} finally {
 			setEnvoi(false);
@@ -153,21 +155,21 @@ export function EditeurSkill(p: {
 	const touches = detail?.profil === null ? agents.length : 0;
 	const qui = nouvelle
 		? pourAgent
-			? `Propre à « ${p.agent} » : toujours équipée sur lui, créée tout de suite.`
+			? t.quiPourAgent(p.agent)
 			: p.toutesLesSkills
-				? `Créée tout de suite dans la mémoire ; « ${p.agent} » l’équipe déjà (toutes les skills de la mémoire), les autres agents au choix.`
-				: `Créée tout de suite dans la mémoire, et équipée sur « ${p.agent} » : enregistrer l’agent pour garder cet équipement. Les autres agents au choix.`
+				? t.quiToutes(p.agent)
+				: t.quiMemoire(p.agent)
 		: detail === null
 			? ''
 			: detail.profil !== null
-				? `Propre à « ${detail.profil} » : toujours équipée sur lui.`
+				? t.quiPropre(detail.profil)
 				: agents.length > 0
-					? `Équipée par ${agents.join(', ')}.`
-					: 'Aucun agent ne l’équipe.';
+					? t.equipeePar(agents.join(', '))
+					: t.aucunAgent;
 	const pret = nouvelle || detail !== null;
 	const incomplet = saisie.nom.trim() === '' || saisie.description.trim() === '';
 	// pourquoi Créer / Enregistrer est indisponible (dit sous les actions) ; null : disponible
-	const raison = !pret ? 'Lecture de la skill en cours.' : conflit ? 'À recharger : la skill a changé ailleurs.' : incomplet ? 'Le nom et « Quand l’utiliser » sont obligatoires.' : null;
+	const raison = !pret ? t.raisonLecture : conflit ? t.raisonConflit : incomplet ? t.raisonIncomplet : null;
 
 	return (
 		<dialog
@@ -187,16 +189,16 @@ export function EditeurSkill(p: {
 				}}
 			>
 				<h2 id={`${id}-titre`} className={s.titre}>
-					{nouvelle ? 'Nouvelle skill' : `Skill ${p.nom}`}
+					{nouvelle || p.nom === null ? t.nouvelle : t.titre(p.nom)}
 				</h2>
 				{lecture !== null && (
 					<p className={f.erreur} role="alert">
 						{lecture}
 					</p>
 				)}
-				{!pret && lecture === null && <p className={f.discret}>Lecture de la skill…</p>}
+				{!pret && lecture === null && <p className={f.discret}>{t.lecture}</p>}
 				{detail !== null && detail.avertissements.length > 0 && (
-					<ul className={s.avis} aria-label="Avertissements">
+					<ul className={s.avis} aria-label={t.avertissements}>
 						{detail.avertissements.map((a) => (
 							<li key={a}>{a}</li>
 						))}
@@ -205,30 +207,30 @@ export function EditeurSkill(p: {
 				{detail?.origine === 'mnemo' && (
 					<p className={s.avis}>
 						{detail.modifiee
-							? 'Skill fournie par Mnemo, modifiée : elle ne suit plus ses mises à jour automatiques. '
-							: 'Skill fournie par Mnemo : la modifier arrête ses mises à jour automatiques. '}
+							? t.fournieModifiee
+							: t.fournie}
 						{detail.modifiee && (
 							<button type="button" className={s.lien} disabled={envoi} onClick={() => void revenir()}>
-								Revenir à la version d’origine
+								{t.revenirOrigine}
 							</button>
 						)}
 					</p>
 				)}
 				{nouvelle && (
 					<fieldset className={s.portee}>
-						<legend className={f.libelle}>Où la créer</legend>
+						<legend className={f.libelle}>{t.ouCreer}</legend>
 						<div className={s.choix}>
 							<input id={`${id}-memoire`} type="radio" name={`${id}-portee`} checked={!pourAgent} aria-describedby={`${id}-memoire-aide`} onChange={() => setPourAgent(false)} />
 							<span>
-								<label htmlFor={`${id}-memoire`}>Dans la mémoire</label>
-								<small id={`${id}-memoire-aide`}>partagée : chaque agent peut l’équiper</small>
+								<label htmlFor={`${id}-memoire`}>{t.dansMemoire}</label>
+								<small id={`${id}-memoire-aide`}>{t.dansMemoireAide}</small>
 							</span>
 						</div>
 						<div className={s.choix}>
 							<input id={`${id}-agent`} type="radio" name={`${id}-portee`} checked={pourAgent} aria-describedby={`${id}-agent-aide`} onChange={() => setPourAgent(true)} />
 							<span>
-								<label htmlFor={`${id}-agent`}>Pour {p.agent} seulement</label>
-								<small id={`${id}-agent-aide`}>dans son dossier, toujours équipée</small>
+								<label htmlFor={`${id}-agent`}>{t.pourAgent(p.agent)}</label>
+								<small id={`${id}-agent-aide`}>{t.pourAgentAide}</small>
 							</span>
 						</div>
 					</fieldset>
@@ -237,15 +239,15 @@ export function EditeurSkill(p: {
 					<>
 						<div className={s.deuxC}>
 							<div className={s.champ}>
-								<label htmlFor={`${id}-icone`}>Icône</label>
+								<label htmlFor={`${id}-icone`}>{t.icone}</label>
 								<input id={`${id}-icone`} className={`${f.champTexte} ${s.icone}`} maxLength={16} value={saisie.icone} onChange={(e) => changer({ icone: e.target.value })} />
 							</div>
 							<div className={`${s.champ} ${s.large}`}>
-								<label htmlFor={`${id}-nom`}>Nom</label>
+								<label htmlFor={`${id}-nom`}>{t.nom}</label>
 								<input
 									id={`${id}-nom`}
 									className={f.champTexte}
-									placeholder="ex. compte-rendu-client"
+									placeholder={t.nomExemple}
 									spellCheck={false}
 									autoComplete="off"
 									readOnly={fixe !== null}
@@ -253,28 +255,28 @@ export function EditeurSkill(p: {
 									value={saisie.nom}
 									onChange={(e) => changer({ nom: e.target.value })}
 								/>
-								<small id={`${id}-aide-nom`}>minuscules, chiffres et tirets ; c’est le nom que voit l’agent</small>
+								<small id={`${id}-aide-nom`}>{t.nomAide}</small>
 							</div>
 						</div>
 						<div className={s.champ}>
-							<label htmlFor={`${id}-desc`}>Quand l’utiliser</label>
+							<label htmlFor={`${id}-desc`}>{t.quand}</label>
 							<input
 								id={`${id}-desc`}
 								className={`${f.champTexte} ${s.prose}`}
 								aria-describedby={`${id}-aide-desc`}
-								placeholder="ex. rédiger le compte rendu d’une réunion client"
+								placeholder={t.quandExemple}
 								value={saisie.description}
 								onChange={(e) => changer({ description: e.target.value })}
 							/>
-							<small id={`${id}-aide-desc`}>l’agent charge la skill quand sa tâche correspond à cette phrase</small>
+							<small id={`${id}-aide-desc`}>{t.quandAide}</small>
 						</div>
 						<div className={s.champ}>
-							<label htmlFor={`${id}-contenu`}>Contenu</label>
+							<label htmlFor={`${id}-contenu`}>{t.contenu}</label>
 							<textarea
 								id={`${id}-contenu`}
 								className={`${f.texteLong} ${s.contenu}`}
 								rows={10}
-								placeholder="Les étapes, les règles, les exemples que l’agent doit suivre (Markdown)."
+								placeholder={t.contenuExemple}
 								value={saisie.contenu}
 								onChange={(e) => changer({ contenu: e.target.value })}
 							/>
@@ -284,10 +286,10 @@ export function EditeurSkill(p: {
 				)}
 				{conflit && (
 					<div className={f.avis} role="alert">
-						<p>Cette skill a été modifiée ailleurs depuis son ouverture. Recharger reprend sa version enregistrée ; la saisie faite ici sera perdue.</p>
+						<p>{t.modifieeAilleurs}</p>
 						<div className={f.actions}>
 							<Bouton petit onClick={() => void lire()}>
-								Recharger
+								{t.recharger}
 							</Bouton>
 						</div>
 					</div>
@@ -299,13 +301,13 @@ export function EditeurSkill(p: {
 				)}
 				{abandon && (
 					<div className={f.avis} role="alert">
-						<p>Abandonner la saisie ? Rien n’a été écrit.</p>
+						<p>{t.abandonnerSaisie}</p>
 						<div className={f.actions}>
 							<Bouton petit onClick={fermer}>
-								Abandonner
+								{t.abandonner}
 							</Bouton>
 							<Bouton petit genre="primaire" onClick={() => setAbandon(false)}>
-								Continuer
+								{t.continuer}
 							</Bouton>
 						</div>
 					</div>
@@ -318,15 +320,15 @@ export function EditeurSkill(p: {
 				<div className={s.actionsEd}>
 					{detail !== null && (
 						<Bouton className={s.supprimer} disabled={envoi} indisponible={fixe !== null && { raison: `${id}-fixe` }} onClick={supprimer}>
-							{!confirmer ? 'Supprimer' : touches > 0 ? `Retirer aussi de ${touches} agent${pluriel(touches)} ?` : 'Confirmer la suppression'}
+							{!confirmer ? textes.commun.actions.supprimer : touches > 0 ? t.retirerAussi(touches) : t.confirmerSuppression}
 						</Bouton>
 					)}
 					<span className={s.espace} />
 					<Bouton disabled={envoi} onClick={demanderFermeture}>
-						Annuler
+						{textes.commun.actions.annuler}
 					</Bouton>
 					<Bouton type="submit" genre="primaire" disabled={envoi} indisponible={raison !== null && { raison: `${id}-raison` }}>
-						{nouvelle ? 'Créer' : 'Enregistrer'}
+						{nouvelle ? t.creer : textes.commun.actions.enregistrer}
 					</Bouton>
 				</div>
 				{raison !== null && (

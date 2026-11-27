@@ -16,6 +16,8 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode 
 import { ErreurApi } from '../../../client/api.ts';
 import { useClient } from '../../../client/contexte.tsx';
 import { avecId } from '../../../client/hooks.ts';
+import { useTextes } from '../../../langue/langue.tsx';
+import type { Textes } from '../../../langue/textes.ts';
 import { useNavigation } from '../../../navigation.tsx';
 import { suivreSkill } from '../../../reglages/equipement.ts';
 import { JETONS_COULEUR } from '../../commun/AvatarProfil.tsx';
@@ -31,9 +33,9 @@ import { GererAgent } from './GererAgent.tsx';
 import { Scene } from './Scene.tsx';
 
 /** Rôle de l'agent, dit sous son nom. */
-function roleDe(nom: string): string {
-	if (nom === PROFIL_ARCHIVISTE) return 'Range et entretient la mémoire.';
-	if (nom === PROFIL_TRAVAIL) return 'Agent par défaut.';
+function roleDe(nom: string, t: Textes['agents']['atelier']): string {
+	if (nom === PROFIL_ARCHIVISTE) return t.roleArchiviste;
+	if (nom === PROFIL_TRAVAIL) return t.roleTravail;
 	return '';
 }
 
@@ -50,13 +52,15 @@ export function AtelierAgent(p: {
 	surSupprime(): void;
 }): ReactNode {
 	const { api } = useClient();
+	const textes = useTextes();
+	const t = textes.agents.atelier;
 	const d = p.detail;
 	const [brouillon, setBrouillon] = useState<ProfilEditableVue>(() => structuredClone(d.editable));
 	const [base, setBase] = useState(d);
 	const [changeAilleurs, setChangeAilleurs] = useState(false);
 	const [envoi, setEnvoi] = useState(false);
 	const [erreur, setErreur] = useState<string | null>(null);
-	const [statut, setStatut] = useState<string | null>(null);
+	const [statut, setStatut] = useState<'dejaAinsi' | 'enregistre' | null>(null);
 	const [skill, setSkill] = useState<SkillOuverte | null>(null);
 	// une skill de la mémoire renommée ou supprimée d'ici a réécrit la fiche de l'agent : la relecture qui suit n'est pas un conflit
 	const [relecture, setRelecture] = useState(false);
@@ -103,14 +107,14 @@ export function AtelierAgent(p: {
 		setErreur(null);
 		try {
 			const r = await api.remplacer<ReponseEcritureProfil>(avecId(ROUTES.profil, d.nom), { editable: brouillon, empreinte: base.empreinte });
-			setStatut(r.commit === null ? 'Rien à enregistrer : l’agent était déjà ainsi.' : 'Enregistré.');
+			setStatut(r.commit === null ? 'dejaAinsi' : 'enregistre');
 			// la base devient la saisie tout de suite (le détail relu arrive ensuite et la confirme)
 			setBase({ ...base, editable: structuredClone(brouillon) });
 			p.recharger();
 			return true;
 		} catch (e) {
 			if (e instanceof ErreurApi && e.statut === 409) setChangeAilleurs(true);
-			else setErreur(e instanceof ErreurApi ? e.message : 'Enregistrement impossible.');
+			else setErreur(e instanceof ErreurApi ? e.message : t.enregistrementImpossible);
 			return false;
 		} finally {
 			setEnvoi(false);
@@ -169,45 +173,45 @@ export function AtelierAgent(p: {
 
 	const raisonsBloquantes = changeAilleurs || modeleRefuse || relecture;
 	const texteRaison = modeleRefuse
-		? 'Enregistrement impossible : le nom du modèle est refusé (Classe) ; à corriger, ou revenir au modèle par défaut.'
+		? t.modeleRefuse
 		: changeAilleurs
-			? 'Enregistrement impossible : l’agent a été modifié ailleurs, à recharger.'
+			? t.changeAilleurs
 			: relecture
-				? 'Relecture de l’agent après l’écriture de la skill…'
+				? t.relecture
 				: null;
 	return (
 		<div className={s.atelier} style={{ '--perso': JETONS_COULEUR[brouillon.avatar.couleur] } as CSSProperties}>
 			<div className={s.colonne}>
 				<Scene
 					nom={d.nom}
-					role={roleDe(d.nom)}
+					role={roleDe(d.nom, t)}
 					editable={brouillon}
 					detail={d}
 					surLancement={(lancement) => changer({ lancement })}
 				/>
-				<footer className={s.pied} aria-label="Enregistrement de l’agent">
+				<footer className={s.pied} aria-label={t.enregistrement}>
 					{nav.sortieRetenue && (
 						<div className={s.avis} role="alert">
-							<p>Modifications de l’agent non enregistrées : les enregistrer avant de quitter les Réglages ?</p>
+							<p>{t.sortieRetenue}</p>
 							<div className={s.actions}>
 								<Bouton genre="primaire" petit disabled={envoi} indisponible={raisonsBloquantes && { raison: idRaison }} onClick={() => void enregistrerPuisPartir()}>
-									Enregistrer
+									{textes.commun.actions.enregistrer}
 								</Bouton>
 								<Bouton petit disabled={envoi} onClick={nav.poursuivreSortie}>
-									Abandonner
+									{t.abandonner}
 								</Bouton>
 								<Bouton petit disabled={envoi} onClick={nav.annulerSortie}>
-									Rester
+									{t.rester}
 								</Bouton>
 							</div>
 						</div>
 					)}
 					{changeAilleurs && (
 						<div className={s.avis} role="alert">
-							<p>Cet agent a été modifié ailleurs depuis son ouverture. Recharger reprend sa version enregistrée ; les modifications faites ici seront perdues.</p>
+							<p>{t.modifieAilleurs}</p>
 							<div className={s.actions}>
 								<Bouton petit onClick={recharger}>
-									Recharger
+									{t.recharger}
 								</Bouton>
 							</div>
 						</div>
@@ -223,20 +227,20 @@ export function AtelierAgent(p: {
 						</p>
 					)}
 					{modifie ? (
-						<p className={s.etat}>Modifié, non enregistré</p>
+						<p className={s.etat}>{t.modifie}</p>
 					) : (
 						statut !== null && (
 							<p className={s.statut} role="status">
-								{statut}
+								{t[statut]}
 							</p>
 						)
 					)}
 					<div className={s.actions}>
 						<Bouton disabled={!modifie || envoi} onClick={annuler}>
-							Annuler
+							{textes.commun.actions.annuler}
 						</Bouton>
 						<Bouton genre="primaire" disabled={!modifie || envoi} indisponible={modifie && raisonsBloquantes && { raison: idRaison }} onClick={() => void enregistrer()}>
-							Enregistrer
+							{textes.commun.actions.enregistrer}
 						</Bouton>
 					</div>
 				</footer>
@@ -244,7 +248,7 @@ export function AtelierAgent(p: {
 
 			<div className={s.creation}>
 				{d.avertissements.length > 0 && (
-					<ul className={s.avertissements} aria-label="Avertissements">
+					<ul className={s.avertissements} aria-label={t.avertissements}>
 						{d.avertissements.map((a) => (
 							<li key={a}>{a}</li>
 						))}

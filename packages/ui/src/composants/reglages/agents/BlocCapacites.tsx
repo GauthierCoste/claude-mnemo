@@ -6,7 +6,8 @@
  */
 import type { EvenementHookVue } from '@mnemo/contrat';
 import { useId, type ReactNode } from 'react';
-import { HOOKS_PROFIL, HOOKS_TOUJOURS } from '../../../profils/hooks.ts';
+import { useTextes } from '../../../langue/langue.tsx';
+import { HOOKS_PROFIL, HOOKS_TOUJOURS, hooksProfil } from '../../../profils/hooks.ts';
 import { basculer } from '../../../reglages/equipement.ts';
 import s from './Agents.module.css';
 import { Bloc } from './Bloc.tsx';
@@ -19,10 +20,12 @@ const basculerCapacite = (hooks: EvenementHookVue[], cle: EvenementHookVue, acti
 
 export function BlocCapacites(p: { hooks: EvenementHookVue[]; surChange(hooks: EvenementHookVue[]): void }): ReactNode {
 	const id = useId();
+	const textes = useTextes();
+	const t = textes.agents.capacites;
 	return (
-		<Bloc titre="Capacités" sous="les hooks : les moments où Mnemo agit dans la session">
+		<Bloc titre={t.titre} sous={t.sous}>
 			<ul className={s.capacites}>
-				{HOOKS_PROFIL.map((h) => {
+				{hooksProfil(textes.agents.hooks).map((h) => {
 					const actif = h.toujours || p.hooks.includes(h.cle);
 					return (
 						<li key={h.cle}>
@@ -49,7 +52,7 @@ export function BlocCapacites(p: { hooks: EvenementHookVue[]; surChange(hooks: E
 				})}
 			</ul>
 			<p id={`${id}-toujours`} className={s.effet}>
-				Éveil, Veille et Récit : toujours actifs, ils tiennent l’état de la session.
+				{t.toujours}
 			</p>
 		</Bloc>
 	);

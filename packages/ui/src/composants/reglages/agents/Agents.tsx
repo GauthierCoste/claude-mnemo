@@ -10,6 +10,7 @@ import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { ErreurApi } from '../../../client/api.ts';
 import { useClient } from '../../../client/contexte.tsx';
 import { avecId, useProfil, useProfils } from '../../../client/hooks.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
 import c from '../Cartes.module.css';
 import d from '../Panneau.module.css';
@@ -34,6 +35,7 @@ type Demande = { vers: 'agent'; nom: string } | { vers: 'nouveau' };
 
 export function Agents(p: { surModifie(modifie: boolean): void }): ReactNode {
 	const { api } = useClient();
+	const t = useTextes().agents.page;
 	const profils = useProfils();
 	const [choisi, setChoisi] = useState<string>(PROFIL_TRAVAIL);
 	const [creation, setCreation] = useState(false);
@@ -74,19 +76,19 @@ export function Agents(p: { surModifie(modifie: boolean): void }): ReactNode {
 	};
 
 	const creer = async (nom: string): Promise<string | null> => {
-		if (profils.donnees?.profils.some((x) => x.nom === nom)) return `L’agent « ${nom} » existe déjà.`;
+		if (profils.donnees?.profils.some((x) => x.nom === nom)) return t.existeDeja(nom);
 		try {
 			await api.remplacer<ReponseEcritureProfil>(avecId(ROUTES.profil, nom), { editable: NOUVEL_AGENT, empreinte: null });
 			profils.recharger();
 			ouvrir(nom);
 			return null;
 		} catch (e) {
-			return e instanceof ErreurApi ? e.message : 'Création impossible.';
+			return e instanceof ErreurApi ? e.message : t.creationImpossible;
 		}
 	};
 
 	if (profils.donnees === undefined) {
-		return <p className={c.contenu}>{profils.erreur ?? 'Chargement des agents…'}</p>;
+		return <p className={c.contenu}>{profils.erreur ?? t.chargement}</p>;
 	}
 	const ignores = profils.donnees.ignores;
 	return (
@@ -102,32 +104,31 @@ export function Agents(p: { surModifie(modifie: boolean): void }): ReactNode {
 			/>
 			<div className={`${c.contenu} ${s.defile}`}>
 				{ignores.length > 0 && (
-					<ul className={c.avis} aria-label="Dossiers d’agents ignorés">
+					<ul className={c.avis} aria-label={t.ignores}>
 						{ignores.map((x) => (
 							<li key={x.nom}>
-								{DOSSIERS_FIXES.profils}/{x.nom}/ ignoré : {x.motif}
+								{t.ignore(`${DOSSIERS_FIXES.profils}/${x.nom}/`, x.motif)}
 							</li>
 						))}
 					</ul>
 				)}
 				{demande !== null && (
 					<div className={c.avis} role="alert">
-						<p>Modifications de l’agent « {choisi} » non enregistrées : les abandonner ?</p>
+						<p>{t.abandonnerModifications(choisi)}</p>
 						<div className={c.actions}>
-							<Bouton onClick={() => (demande.vers === 'nouveau' ? nouveau() : ouvrir(demande.nom))}>Abandonner</Bouton>
+							<Bouton onClick={() => (demande.vers === 'nouveau' ? nouveau() : ouvrir(demande.nom))}>{t.abandonner}</Bouton>
 							<Bouton genre="primaire" onClick={() => setDemande(null)}>
-								Rester
+								{t.rester}
 							</Bouton>
 						</div>
 					</div>
 				)}
 				{creation ? (
 					<p className={c.discret}>
-						Nouvel agent : son nom se saisit à gauche, puis Créer. Il tournera sur {NOMS_MOTEURS[NOUVEL_AGENT.moteur]} ; son apparence, sa classe et le reste se
-						règlent ici une fois l’agent créé.
+						{t.nouvelAgent(NOMS_MOTEURS[NOUVEL_AGENT.moteur])}
 					</p>
 				) : detail.donnees === undefined || detail.donnees.nom !== choisi ? (
-					<p className={c.discret}>{detail.erreur ?? 'Chargement de l’agent…'}</p>
+					<p className={c.discret}>{detail.erreur ?? t.chargementAgent}</p>
 				) : (
 					<AtelierAgent
 						key={choisi}

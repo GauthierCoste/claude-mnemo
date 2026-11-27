@@ -10,6 +10,7 @@ import { useId, useState, type ReactNode } from 'react';
 import { ErreurApi } from '../../../client/api.ts';
 import { useClient } from '../../../client/contexte.tsx';
 import { avecId } from '../../../client/hooks.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { Bouton } from '../../commun/Bouton.tsx';
 import f from '../champs/Saisie.module.css';
 import s from './Agents.module.css';
@@ -17,6 +18,8 @@ import { ApercuAgent } from './ApercuAgent.tsx';
 
 export function GererAgent(p: { detail: ProfilDetailVue; modifie: boolean; surDuplique(nom: string): void; surSupprime(): void }): ReactNode {
 	const { api } = useClient();
+	const textes = useTextes();
+	const t = textes.agents.gerer;
 	const d = p.detail;
 	const id = useId();
 	const [apercu, setApercu] = useState(false);
@@ -35,7 +38,7 @@ export function GererAgent(p: { detail: ProfilDetailVue; modifie: boolean; surDu
 			setCopie(null);
 			p.surDuplique(nom);
 		} catch (e) {
-			setErreur(e instanceof ErreurApi ? e.message : 'Duplication impossible.');
+			setErreur(e instanceof ErreurApi ? e.message : t.duplicationImpossible);
 		} finally {
 			setEnvoi(false);
 		}
@@ -48,7 +51,7 @@ export function GererAgent(p: { detail: ProfilDetailVue; modifie: boolean; surDu
 			await api.supprimer<ReponseEcritureProfil>(avecId(ROUTES.profil, d.nom));
 			p.surSupprime();
 		} catch (e) {
-			setErreur(e instanceof ErreurApi ? e.message : 'Suppression impossible.');
+			setErreur(e instanceof ErreurApi ? e.message : t.suppressionImpossible);
 			setConfirmer(false);
 		} finally {
 			setEnvoi(false);
@@ -57,55 +60,59 @@ export function GererAgent(p: { detail: ProfilDetailVue; modifie: boolean; surDu
 
 	return (
 		<details className={s.gerer}>
-			<summary className={s.titreGerer}>Gérer l’agent</summary>
+			<summary className={s.titreGerer}>{t.titre}</summary>
 			<div className={s.contenuGerer}>
 				<p className={s.effet}>
-					Fiche <code>{DOSSIERS_FIXES.profils}/{d.nom}/{d.nom}.md</code>
-					{d.empreinte === null && ' (pas encore écrite : valeurs par défaut)'}
+					{t.fiche(
+						<code>
+							{DOSSIERS_FIXES.profils}/{d.nom}/{d.nom}.md
+						</code>,
+						d.empreinte !== null,
+					)}
 				</p>
 				<details className={s.sousGerer} onToggle={(e) => setApercu(e.currentTarget.open)}>
-					<summary>Ce que reçoit une session</summary>
+					<summary>{t.ceQueRecoit}</summary>
 					{apercu && <ApercuAgent nom={d.nom} modifie={p.modifie} />}
 				</details>
 				{copie === null ? (
 					<div className={f.actions}>
-						<Bouton petit disabled={envoi} onClick={() => setCopie(`${d.nom}-copie`)}>
-							Dupliquer…
+						<Bouton petit disabled={envoi} onClick={() => setCopie(t.nomCopie(d.nom))}>
+							{t.dupliquerEllipse}
 						</Bouton>
 						{!confirmer && (
 							<Bouton petit disabled={envoi} indisponible={!d.supprimable && { raison: `${id}-fixe` }} onClick={() => setConfirmer(true)}>
-								Supprimer…
+								{t.supprimerEllipse}
 							</Bouton>
 						)}
 						{!d.supprimable && (
 							<span id={`${id}-fixe`} className={s.effet}>
-								Fourni par Mnemo : il ne se supprime pas.
+								{t.fourniParMnemo}
 							</span>
 						)}
 					</div>
 				) : (
 					<div className={f.actions}>
 						<label className={f.libelle} htmlFor={`${id}-copie`}>
-							Nom de la copie
+							{t.nomDeLaCopie}
 						</label>
 						<input id={`${id}-copie`} className={f.champTexte} spellCheck={false} value={copie} onChange={(e) => setCopie(e.target.value)} />
 						<Bouton petit genre="primaire" disabled={envoi || copie.trim() === ''} onClick={() => void dupliquer()}>
-							Dupliquer
+							{t.dupliquer}
 						</Bouton>
 						<Bouton petit disabled={envoi} onClick={() => setCopie(null)}>
-							Annuler
+							{textes.commun.actions.annuler}
 						</Bouton>
 					</div>
 				)}
 				{confirmer && (
 					<div className={f.avis} role="alert">
-						<p>Supprimer l’agent « {d.nom} » et ses skills propres ? Un commit le retire ; ses sessions se reprendront avec les valeurs par défaut de l’agent travail.</p>
+						<p>{t.confirmerSuppression(d.nom)}</p>
 						<div className={f.actions}>
 							<Bouton petit disabled={envoi} onClick={() => void supprimer()}>
-								Supprimer
+								{textes.commun.actions.supprimer}
 							</Bouton>
 							<Bouton petit genre="primaire" disabled={envoi} onClick={() => setConfirmer(false)}>
-								Garder
+								{t.garder}
 							</Bouton>
 						</div>
 					</div>

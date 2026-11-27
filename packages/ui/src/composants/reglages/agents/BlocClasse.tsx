@@ -9,6 +9,8 @@ import type { IdMoteur } from '@mnemo/commun';
 import type { MoteurVue } from '@mnemo/contrat';
 import { useId, useState, type CSSProperties, type ReactNode } from 'react';
 import { useMoteurs } from '../../../client/hooks.ts';
+import { useTextes } from '../../../langue/langue.tsx';
+import type { Textes } from '../../../langue/textes.ts';
 import { statutDuMoteur } from '../../../moteurs/circuit.ts';
 import { couleurFournisseur } from '../../../moteurs/fournisseurs.ts';
 import { LogoMoteur } from '../../../moteurs/logos.tsx';
@@ -16,31 +18,27 @@ import f from '../champs/Saisie.module.css';
 import s from './Agents.module.css';
 import { Bloc } from './Bloc.tsx';
 
-/** Ce que change le moteur pour la session : ce qu'il apporte et ce qui lui manque (quotas de l'abonnement lus ou non). */
-const EFFETS: Record<IdMoteur, string> = {
-	'claude-code': 'Skills et hooks par un plugin de session, plugins Claude Code au choix, quotas de l’abonnement lus.',
-	codex: 'Skills listées dans la consigne et lues par l’outil lire, hooks à approuver une fois dans Codex, quotas de l’abonnement lus ; pas de plugins.',
-	'mistral-vibe': 'Skills listées dans la consigne et lues par l’outil lire ; ni plugins, ni quotas de l’abonnement.',
-};
+type TextesClasse = Textes['agents']['classe'];
 
 /** État d'un moteur sur ce poste, sur sa carte : sa version, ou pourquoi ses sessions ne se lanceront pas ici. */
-function etatDe(m: MoteurVue | undefined, chargement: boolean): string {
-	if (m === undefined) return chargement ? 'état en lecture…' : 'état inconnu';
+function etatDe(m: MoteurVue | undefined, chargement: boolean, t: TextesClasse): string {
+	if (m === undefined) return chargement ? t.etatEnLecture : t.etatInconnu;
 	if (m.indisponible !== null) return m.indisponible;
-	return m.version === null ? 'trouvé sur ce poste' : `version ${m.version}`;
+	return m.version === null ? t.trouve : t.version(m.version);
 }
 
 /** Pourquoi la carte d'un moteur est verrouillée ; null : il se choisit. */
-function verrouDe(id: IdMoteur, agent: string, enregistre: IdMoteur, m: MoteurVue | undefined): string | null {
-	if (agent === PROFIL_ARCHIVISTE && id !== 'claude-code') return 'Réservé : l’archiviste reste sur Claude Code.';
+function verrouDe(id: IdMoteur, agent: string, enregistre: IdMoteur, m: MoteurVue | undefined, t: TextesClasse): string | null {
+	if (agent === PROFIL_ARCHIVISTE && id !== 'claude-code') return t.reserveArchiviste;
 	if (id === enregistre || m?.poste === undefined) return null;
 	const statut = statutDuMoteur(m).cle;
-	if (statut === 'a-lier') return `À lier : ${m.nom} se lie à Mnemo dans Réglages › Branchements.`;
-	if (statut === 'pas-installe' && !m.manuel) return `Pas installé sur ce poste.`;
+	if (statut === 'a-lier') return t.aLier(m.nom);
+	if (statut === 'pas-installe' && !m.manuel) return t.pasInstalle;
 	return null;
 }
 
 export function BlocClasse(p: { agent: string; moteur: IdMoteur; moteurEnregistre: IdMoteur; modele: string; surMoteur(m: IdMoteur): void; surModele(m: string): void }): ReactNode {
+	const t = useTextes().agents.classe;
 	const leger = useMoteurs();
 	const poste = useMoteurs(true);
 	const moteurs = poste.donnees?.moteurs ?? leger.donnees?.moteurs ?? [];
@@ -56,11 +54,11 @@ export function BlocClasse(p: { agent: string; moteur: IdMoteur; moteurEnregistr
 	const saisieAutre = !puces.includes(p.modele) || autre === p.modele ? p.modele : '';
 
 	return (
-		<Bloc titre="Classe" sous="l’agent de code qui fait tourner ses sessions, et son modèle">
-			<div role="radiogroup" aria-label="Classe" className={s.classes}>
+		<Bloc titre={t.titre} sous={t.sous}>
+			<div role="radiogroup" aria-label={t.titre} className={s.classes}>
 				{IDS_MOTEURS.map((m) => {
 					const vue = moteurs.find((x) => x.id === m);
-					const verrou = verrouDe(m, p.agent, p.moteurEnregistre, vue);
+					const verrou = verrouDe(m, p.agent, p.moteurEnregistre, vue, t);
 					return (
 						<button
 							key={m}
@@ -85,40 +83,40 @@ export function BlocClasse(p: { agent: string; moteur: IdMoteur; moteurEnregistr
 								</span>
 							)}
 							<span id={`${id}-${m}`} className={verrou === null ? s.etatCarte : s.raisonCarte}>
-								{verrou ?? etatDe(vue, chargement)}
+								{verrou ?? etatDe(vue, chargement, t)}
 							</span>
 						</button>
 					);
 				})}
 			</div>
-			<p className={s.effet}>{EFFETS[p.moteur]}</p>
-			{leger.erreur !== null && <p className={s.effet}>État des moteurs illisible : {leger.erreur}</p>}
+			<p className={s.effet}>{t.effets[p.moteur]}</p>
+			{leger.erreur !== null && <p className={s.effet}>{t.etatIllisible(leger.erreur)}</p>}
 			{choisi !== undefined && choisi.indisponible !== null && (
 				<p className={s.avis} role="note">
 					{choisi.manuel
-						? `Tant que ${nom} manque, les sessions de cet agent se lancent par une ligne de commande à coller dans un terminal.`
-						: `Tant que ${nom} manque, les sessions de cet agent sont refusées.`}{' '}
-					État détaillé et commandes : Réglages › Branchements.
+						? t.manqueManuel(nom)
+						: t.manqueRefuse(nom)}{' '}
+					{t.etatDetaille}
 				</p>
 			)}
 
-			<div className={s.niveaux} role="group" aria-label={`Modèles de ${nom}`}>
+			<div className={s.niveaux} role="group" aria-label={t.modeles(nom)}>
 				{puces.map((m) => (
 					<button key={m === '' ? '(défaut)' : m} type="button" className={s.niveau} aria-pressed={p.modele === m} onClick={() => {
 							setAutre('');
 							p.surModele(m);
 						}}>
-						{m === '' ? 'par défaut' : m}
+						{m === '' ? t.parDefaut : m}
 					</button>
 				))}
 				<input
 					className={f.champTexte}
-					aria-label="Modèle"
+					aria-label={t.modele}
 					list={`${id}-modeles`}
 					spellCheck={false}
 					autoComplete="off"
 					maxLength={MODELE_MAX}
-					placeholder="autre modèle…"
+					placeholder={t.autreModele}
 					value={saisieAutre}
 					aria-invalid={!modeleValide || undefined}
 					aria-describedby={`${id}-aide-modele`}
@@ -135,10 +133,10 @@ export function BlocClasse(p: { agent: string; moteur: IdMoteur; moteurEnregistr
 			</div>
 			<p id={`${id}-aide-modele`} className={modeleValide ? s.effet : s.erreur}>
 				{!modeleValide
-					? `Nom refusé : lettres et chiffres ASCII et « . _ : / @ + [ ] - », ${MODELE_MAX} caractères au plus, commençant par une lettre ou un chiffre.`
+					? t.nomRefuse(MODELE_MAX)
 					: proposes.length === 0 && !chargement
-						? `« par défaut » : celui de ${nom}, qui ne propose pas de liste ici ; un autre nom se saisit.`
-						: `« par défaut » : celui de ${nom} ; un autre nom se saisit.`}
+						? t.parDefautSansListe(nom)
+						: t.parDefautDe(nom)}
 			</p>
 		</Bloc>
 	);
