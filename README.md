@@ -1,11 +1,12 @@
 # Mnemo
 
-Mnemo is a workspace for coding agent sessions (Claude Code, Codex and Mistral Vibe). Your sessions run side by side in
-one window, each in its own terminal, and share a memory: a plain folder of Markdown notes, versioned with git, that
-the agents read and enrich as they work. At each message, Mnemo finds in that memory what the session should know and
-shows you exactly what it was given.
+One memory on your machine, shared by all your coding agents. Claude Code, Codex and Mistral Vibe sessions started
+from Mnemo read and write the same memory: a folder of Markdown notes, versioned with git, next to your projects. At
+each message, Mnemo injects what the session should know from it, and the Contexte panel shows exactly what was
+injected and why. The agents keep the memory up to date as they work; anything that changes what is trusted waits for
+your OK. Nothing leaves your machine except what each agent already sends to its own provider.
 
-![Sessions view: sessions grouped by project, the folder tree, and the context injected into the selected session](docs/images/sessions.png)
+![A Claude Code session zoomed in Mnemo. On the right, the Contexte panel: the notes injected into the session, the injection threshold, the ranked candidate notes with their score and reason, and the preview of one note with « Ouvrir la fiche », « Injecter » and « Écarter »](docs/images/sessions.png)
 
 ## What it does
 
@@ -19,6 +20,9 @@ shows you exactly what it was given.
   judgements (Mémoire › Entraîner, where Claude can pre-judge for you) and from your gestures in the background.
 - **Memory kept by the agent.** Through an MCP server, the agent searches the memory, reads notes and proposes changes;
   anything that changes what is trusted waits for your OK. Each session ends with a short episode of what was learned.
+
+![The same memory in a Codex session: the notes injected from the project folder in the Contexte panel, and Codex proposing a new fact to the memory through the MCP server](docs/images/codex.png)
+
 - **Documents.** Drop a spec, an email, meeting notes or a PDF: the archivist pulls out the facts worth keeping, with
   their source and date, and asks you when something contradicts what is already there.
 - **Agents.** A profile sets a session's engine and model, instruction, skills, plugins and avatar. Settings › Agents
@@ -26,7 +30,7 @@ shows you exactly what it was given.
 - **Plain files.** It is all Markdown in `_mnemo/`, one git commit per change. Browse it as a tree or a 3D graph, edit
   it in the interface or your own editor, and `git revert` what you don't like.
 
-![Archivist page: facts to confirm or reject, the archivist session at work on dropped documents, and what was learned today](docs/images/archiviste.png)
+![Archivist page: facts proposed by the sessions and the archivist, waiting for « Confirmer », « Modifier » or « Rejeter », the archivist session reading a dropped mailbox, and the recent documents](docs/images/archiviste.png)
 
 ## How it works
 
@@ -42,7 +46,7 @@ shows you exactly what it was given.
 
 The details are in the [usage guide](docs/usage.md).
 
-![Memory as a 3D graph: notes for projects, clients, people, decisions and sources, linked by their relations](docs/images/graphe.png)
+![Memory as a 3D graph: notes for projects, clients, people, decisions, episodes and sources linked by their relations, with one note selected and its eight direct links listed](docs/images/graphe.png)
 
 ## Getting started
 
