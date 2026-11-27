@@ -17,7 +17,7 @@ in [usage.md](usage.md).
 
 ## macOS: install from the `.dmg`
 
-1. Download `Mnemo-<version>-arm64.dmg` from the [latest release](https://github.com/GauthierCoste/claude-mnemo/releases/latest)
+1. Download `Mnemo-<version>-arm64.dmg` from the [latest release](https://github.com/GauthierCoste/mnemo/releases/latest)
    (free; or build it yourself, see [below](#build-the-app-from-the-sources)), open it and drag Mnemo onto the
    Applications folder. The released `.dmg` is for Apple silicon; on an Intel Mac, build the app yourself.
 2. Open Mnemo from Applications (Finder, Launchpad or Spotlight), not from the disk image. The app is signed ad hoc, not by an identified Apple developer (the project has no Apple Developer
@@ -37,7 +37,7 @@ would otherwise point to a path about to disappear). Quit it by closing its wind
 1. Install the prerequisites, if they are not there yet: git ([Git for Windows](https://git-scm.com/downloads/win)) and
    [Claude Code](https://code.claude.com/docs/en/setup), signed in with your subscription. The installation assistant
    checks both and links to these pages.
-2. Download `Mnemo-Setup-<version>-x64.exe` from the [latest release](https://github.com/GauthierCoste/claude-mnemo/releases/latest)
+2. Download `Mnemo-Setup-<version>-x64.exe` from the [latest release](https://github.com/GauthierCoste/mnemo/releases/latest)
    (free; or build it yourself, see [below](#build-the-app-from-the-sources)) and open it. The installer is not signed
    (the project has no code signing certificate), so Windows SmartScreen stops it the first time: click « More info »
    (« Informations complémentaires »), then « Run anyway » (« Exécuter quand même »).
@@ -117,8 +117,8 @@ command of your terminal (macOS) therefore runs the copy of Mnemo inside the app
 ## Build the app from the sources
 
 ```sh
-git clone https://github.com/GauthierCoste/claude-mnemo.git
-cd claude-mnemo
+git clone https://github.com/GauthierCoste/mnemo.git
+cd mnemo
 pnpm install
 pnpm construire-app --dmg       # on macOS; without --dmg: the app only
 pnpm construire-app --installeur   # on Windows; without --installeur: the app only

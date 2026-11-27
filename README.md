@@ -48,7 +48,7 @@ The details are in the [usage guide](docs/usage.md).
 
 ### The desktop app (free)
 
-Download it from the [latest release](https://github.com/GauthierCoste/claude-mnemo/releases/latest). You only need
+Download it from the [latest release](https://github.com/GauthierCoste/mnemo/releases/latest). You only need
 git and Claude Code: the app carries its own Node.js and copy of Mnemo.
 
 - **macOS** (Apple silicon): `Mnemo-<version>-arm64.dmg`, drag Mnemo onto Applications. It is signed ad hoc: the first
@@ -63,7 +63,7 @@ See [the app's installation](docs/app/installation.md) and [usage](docs/app/usag
 You need Node.js 24 or later, git, pnpm and the `claude` command line tool (optionally Codex or Mistral Vibe). Then:
 
 ```sh
-git clone https://github.com/GauthierCoste/claude-mnemo.git && cd claude-mnemo && pnpm installer
+git clone https://github.com/GauthierCoste/mnemo.git && cd mnemo && pnpm installer
 mnemo ~/Projects        # the interface opens at http://127.0.0.1:4747/
 ```
 

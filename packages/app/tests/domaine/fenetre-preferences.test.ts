@@ -119,7 +119,7 @@ describe('préférences', () => {
 	});
 
 	it('nouvelles versions : réglage, date et version publiée lus, sinon les défauts', () => {
-		const versionPubliee = { version: '1.6.0', url: 'https://github.com/GauthierCoste/claude-mnemo/releases/tag/v1.6.0' };
+		const versionPubliee = { version: '1.6.0', url: 'https://github.com/GauthierCoste/mnemo/releases/tag/v1.6.0' };
 		expect(lirePreferences({ chercherVersions: false, verificationVersionsMs: 12, versionPubliee })).toEqual({ ...PREFERENCES_DEFAUT, chercherVersions: false, verificationVersionsMs: 12, versionPubliee });
 		expect(lirePreferences({ chercherVersions: 'non', verificationVersionsMs: 'hier', versionPubliee: { version: 'x', url: 'https://a' } })).toEqual(PREFERENCES_DEFAUT);
 		expect(lirePreferences({ versionPubliee: { version: '1.6.0', url: 'javascript:alert(1)' } })).toEqual(PREFERENCES_DEFAUT);

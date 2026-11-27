@@ -6,8 +6,8 @@
 LICENSE Gauthier Coste
 
 # Compte GitHub du dépôt public, dans l'adresse de clonage.
-README.md github.com/GauthierCoste/claude-mnemo
-docs/installation.md github.com/GauthierCoste/claude-mnemo
+README.md github.com/GauthierCoste/mnemo
+docs/installation.md github.com/GauthierCoste/mnemo
 
 # Ce fichier déclare ces textes : il les contient.
 publication/identite-publique.txt Gauthier Coste

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ADRESSE_DERNIERE_VERSION } from '../../src/domaine/version.ts';
 import { derniereVersionPubliee, type Telecharger } from '../../src/infra/versions.ts';
 
-const PAGE = 'https://github.com/GauthierCoste/claude-mnemo/releases/tag/v1.6.0';
+const PAGE = 'https://github.com/GauthierCoste/mnemo/releases/tag/v1.6.0';
 
 describe('dernière version publiée', () => {
 	it('requête anonyme à l’API des versions ; réponse lue', async () => {

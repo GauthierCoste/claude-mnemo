@@ -103,7 +103,7 @@ describe('menu de la barre des menus', () => {
 	});
 
 	it('version : la nouvelle version publiée ouvre sa page ; la case se décoche ; « Désinstaller Mnemo… »', () => {
-		const url = 'https://github.com/GauthierCoste/claude-mnemo/releases/tag/v1.6.0';
+		const url = 'https://github.com/GauthierCoste/mnemo/releases/tag/v1.6.0';
 		const menu = modeleMenu({ ...base, vie: 'arrete', sessions: [], nouvelleVersion: { version: '1.6.0', url } });
 		expect(lignes(menu).slice(-7)).toEqual(['—', '( Mnemo 1.5.0 )', 'Version 1.6.0 disponible', '[x] Chercher les nouvelles versions', 'Désinstaller Mnemo…', '—', 'Quitter Mnemo']);
 		expect(menu.find((e) => e.type === 'action' && e.action.type === 'nouvelleVersion')).toMatchObject({ action: { url } });

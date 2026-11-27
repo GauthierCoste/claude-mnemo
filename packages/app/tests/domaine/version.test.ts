@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { comparerVersions, estPageDeVersion, INTERVALLE_VERIFICATION_MS, lireDerniereVersion, versionAAnnoncer, verificationDue } from '../../src/domaine/version.ts';
 
-const PAGE = 'https://github.com/GauthierCoste/claude-mnemo/releases/tag/v1.6.0';
+const PAGE = 'https://github.com/GauthierCoste/mnemo/releases/tag/v1.6.0';
 
 describe('versions', () => {
 	it('comparaison : SemVer, « v » toléré, nombres comparés comme des nombres', () => {
@@ -40,8 +40,12 @@ describe('versions', () => {
 		expect(lireDerniereVersion(null)).toBeNull();
 		expect(lireDerniereVersion([])).toBeNull();
 		expect(estPageDeVersion(`${PAGE} x`)).toBe(false);
+		expect(estPageDeVersion('https://github.com/GauthierCoste/mnemo/releases/../../../autre/depot')).toBe(false);
+		expect(estPageDeVersion('https://github.com/GauthierCoste/mnemo/releases/%2E%2E/%2E%2E/autre')).toBe(false);
+		// l'ancien nom du dépôt (renommé, GitHub y redirige) reste accepté ; un autre dépôt, non
+		expect(estPageDeVersion('https://github.com/GauthierCoste/claude-mnemo/releases/tag/1.11.2')).toBe(true);
 		expect(estPageDeVersion('https://github.com/GauthierCoste/claude-mnemo/releases/../../../autre/depot')).toBe(false);
-		expect(estPageDeVersion('https://github.com/GauthierCoste/claude-mnemo/releases/%2E%2E/%2E%2E/autre')).toBe(false);
+		expect(estPageDeVersion('https://github.com/GauthierCoste/mnemo-autre/releases/tag/1.11.2')).toBe(false);
 	});
 
 	it('annoncée seulement si plus récente', () => {

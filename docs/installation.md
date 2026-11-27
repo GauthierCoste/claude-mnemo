@@ -69,8 +69,8 @@ the models at install time (the default).
 ## Install from the sources
 
 ```sh
-git clone https://github.com/GauthierCoste/claude-mnemo.git
-cd claude-mnemo
+git clone https://github.com/GauthierCoste/mnemo.git
+cd mnemo
 pnpm installer
 ```
 
