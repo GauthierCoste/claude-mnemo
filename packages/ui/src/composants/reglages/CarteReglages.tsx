@@ -45,7 +45,7 @@ export function CarteReglages(p: { carte: CarteDisposee; s: Saisies; etatService
 
 function Groupe(p: { groupe: GroupeDispose; s: Saisies; etatService: ReactNode }): ReactNode {
 	const g = p.groupe;
-	const champs = <Champs champs={g.champs} s={p.s} ton={g.ton} />;
+	const champs = <Champs champs={g.champs} s={p.s} />;
 	if (g.repli === true) {
 		return (
 			<div className={c.groupe}>
@@ -68,7 +68,7 @@ function Groupe(p: { groupe: GroupeDispose; s: Saisies; etatService: ReactNode }
 }
 
 /** Les champs d'un groupe dans l'ordre ; les barres qui se suivent dans une même grille. */
-function Champs(p: { champs: readonly ChampDispose[]; s: Saisies; ton: GroupeDispose['ton'] }): ReactNode {
+function Champs(p: { champs: readonly ChampDispose[]; s: Saisies }): ReactNode {
 	const paquets: ChampDispose[][] = [];
 	for (const x of p.champs) {
 		const dernier = paquets.at(-1);
@@ -77,7 +77,7 @@ function Champs(p: { champs: readonly ChampDispose[]; s: Saisies; ton: GroupeDis
 	}
 	return paquets.map((paquet) =>
 		paquet[0]!.forme === 'barre' ? (
-			<div key={paquet[0]!.cle} className={c.barres} data-ton={p.ton}>
+			<div key={paquet[0]!.cle} className={c.barres}>
 				{paquet.map((x) => (
 					<Champ key={x.cle} dispose={x} s={p.s} />
 				))}

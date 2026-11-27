@@ -26,8 +26,8 @@ export type ChampDispose = {
 	format?(valeur: number): string;
 };
 
-/** `repli` : groupe replié sous « titre · N » ; `etatService` : la ligne d'état du service en tête ; `ton` : couleur des barres. */
-export type GroupeDispose = { titre: string | null; champs: readonly ChampDispose[]; repli?: boolean; etatService?: boolean; ton?: 'accent' };
+/** `repli` : groupe replié sous « titre · N » ; `etatService` : la ligne d'état du service en tête. */
+export type GroupeDispose = { titre: string | null; champs: readonly ChampDispose[]; repli?: boolean; etatService?: boolean };
 
 export type CarteDisposee = { cle: string; titre: string; sous: string; groupes: readonly GroupeDispose[] };
 
@@ -57,7 +57,6 @@ const RAPPEL: CarteDisposee = {
 		{
 			titre: 'Réglages fins',
 			repli: true,
-			ton: 'accent',
 			champs: [
 				barre('contexte.similariteRecherche', 'Similarité min.'),
 				barre('contexte.poidsInjection', 'Poids d’une injection à la main'),
@@ -76,7 +75,6 @@ const RECHERCHE: CarteDisposee = {
 	groupes: [
 		{
 			titre: 'Ce qui passe devant',
-			ton: 'accent',
 			champs: [
 				barre('recherche.poidsPosition', 'Projet en cours'),
 				barre('recherche.poidsConfiance', 'Confiance'),
@@ -87,7 +85,6 @@ const RECHERCHE: CarteDisposee = {
 		{
 			titre: 'Réglages fins',
 			repli: true,
-			ton: 'accent',
 			champs: [
 				barre('recherche.resultats', 'Résultats / recherche'),
 				barre('memoire.seuilRappel', 'Seuil de rappel'),
