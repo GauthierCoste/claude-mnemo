@@ -198,6 +198,33 @@ export const memoire = {
 			ouvrir: 'Ouvrir la fiche',
 		},
 	},
+	/** Bilan d'import de la mémoire de Claude Code (`amorce`) : toast court et lignes du détail. */
+	amorce: {
+		/** « 3 nouvelles, 1 modifiée, 60 inchangées » (notes, féminin) ou « 2 nouveaux, 0 modifié, 5 inchangés » (CLAUDE.md). */
+		compte: (nouvelles: number, modifiees: number, inchangees: number, feminin: boolean) => {
+			const e = feminin ? 'e' : '';
+			return [
+				accorder(nouvelles, feminin ? 'nouvelle' : 'nouveau', feminin ? 'nouvelles' : 'nouveaux'),
+				accorder(modifiees, `modifié${e}`, `modifié${e}s`),
+				accorder(inchangees, `inchangé${e}`, `inchangé${e}s`),
+			].join(', ');
+		},
+		confie: (aTraiter: number) => `confié à l’archiviste (${aTraiter} à traiter)`,
+		enAttente: (aTraiter: number) => `en attente : l’archiviste n’est pas lancé, ${aTraiter} à traiter`,
+		notes: (n: number) => accorder(n, 'note nouvelle ou modifiée', 'notes nouvelles ou modifiées'),
+		instructions: (n: number) => accorder(n, 'CLAUDE.md nouveau ou modifié', 'CLAUDE.md nouveaux ou modifiés'),
+		rattachees: (n: number) => accorder(n, 'fiche rattachée à un projet', 'fiches rattachées à un projet'),
+		rienDeNouveau: 'Mémoire de Claude Code : rien de nouveau',
+		importee: (parties: readonly string[]) => `Mémoire de Claude Code importée : ${parties.join(', ')}`,
+		/** Le bilan suivi de l'état de la remise à l'archiviste. */
+		avecArchiviste: (bilan: string, archiviste: string) => `${bilan} — ${archiviste}`,
+		ligneNotes: (compte: string) => `Notes : ${compte}`,
+		ligneInstructions: (compte: string) => `CLAUDE.md des projets : ${compte}`,
+		ligneRattachees: (n: number) => `${accorder(n, 'fiche rattachée', 'fiches rattachées')} à un projet`,
+		secrets: (n: number) => accorder(n, 'secret masqué', 'secrets masqués'),
+		aTraiter: (archiviste: string) => `À traiter : ${archiviste}`,
+		rienEcrit: 'Aucun changement : rien n’a été écrit',
+	},
 	/** Mémoire › Entraîner : la note de confiance et son entraînement. Vocabulaire : « note de confiance », « injecter ». */
 	entrainer: {
 		niveaux: { complets: 'Complets', sens: 'Sens seul' },
