@@ -34,7 +34,7 @@ const USAGE = `Usage : mnemo [dossier] | mnemo <commande>
 Commandes :
 ${entree(
 	'init [dossier]',
-	`crée la mémoire (dossier ${DOSSIER_MEMOIRE}/) ; dans un terminal, guide pas à pas (dossier, projets, déclaration MCP à Claude Code, modèles, commande, lanceur) [--oui : les défauts, sans question] [--mcp|--sans-mcp] [--modeles|--sans-modeles] [--commande|--sans-commande] [--lanceur|--sans-lanceur] : l'étape faite ou sautée sans question ; ${FACULTATIFS.map((m) => `[${m.optionInit}]`).join(' ')} : chacune déclare aussi le serveur MCP à son moteur (${FACULTATIFS.map((m) => m.nom).join(', ')}) et y installe les hooks ; [--json] : une ligne JSON par événement, sans question`,
+	`crée la mémoire (dossier ${DOSSIER_MEMOIRE}/) ; dans un terminal, guide pas à pas (dossier, projets, déclaration MCP à Claude Code, modèles, commande, lanceur) [--oui : les défauts, sans question] [--mcp|--sans-mcp] [--modeles|--sans-modeles] [--commande|--sans-commande] [--lanceur|--sans-lanceur] : l'étape faite ou sautée sans question ; ${FACULTATIFS.map((m) => `[${m.optionInit}]`).join(' ')} : chacune déclare aussi le serveur MCP à son moteur (${FACULTATIFS.map((m) => m.nom).join(', ')}) et y installe les hooks ; [--langue fr|en] : la langue de l'interface (réglage interface.langue) ; [--json] : une ligne JSON par événement, sans question`,
 )}
 ${entree('verifier-poste', `git, Claude Code, ${enumeration(FACULTATIFS.map((m) => m.nom))} (facultatifs, avec leur déclaration MCP et leurs hooks) et Node sur ce poste [--json]`)}
   lit <chemin>      affiche une fiche, chemin relatif à ${DOSSIER_MEMOIRE}/

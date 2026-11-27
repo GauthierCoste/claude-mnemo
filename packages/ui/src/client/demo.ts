@@ -2,7 +2,7 @@
  * Mode démo (`?demo`, en développement seulement, chargé par import dynamique) : une fausse `Api` et une fausse
  * `Connexion` sur les données de `demo-donnees.ts`, pour voir les vues sans service. Jamais dans la construction.
  */
-import type { EtapeCalcul } from '@mnemo/commun';
+import type { ChoixLangue, EtapeCalcul } from '@mnemo/commun';
 import { ErreurApi, type Api } from './api.ts';
 import { creerEntrainementDemo, type DepartEntrainementDemo } from './demo-entrainement.ts';
 import { lotsDemo } from './demo-lots.ts';
@@ -713,6 +713,8 @@ export type OptionsDemo = {
 	suggestion?: boolean;
 	/** Départ de Mémoire › Entraîner (`&entrainement=vide`, `sansjuge` ou `volume`) ; absent : un banc entamé. */
 	entrainement?: DepartEntrainementDemo;
+	/** Valeur de départ du réglage `interface.langue` (`&langue=en`) ; absent : la langue du système. */
+	langue?: ChoixLangue;
 };
 
 function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo): Api {
@@ -1298,7 +1300,7 @@ function creerApiDemo(monde: Monde, connexion: FausseConnexion, o: OptionsDemo):
 		}
 		return r;
 	};
-	let reglages = structuredClone(REGLAGES_DEMO);
+	let reglages = structuredClone(REGLAGES_DEMO).map((c) => (c.cle === 'interface.langue' && o.langue !== undefined ? { ...c, valeur: o.langue } : c));
 	const reglagesDemo = (): ReglagesVue => ({
 		champs: structuredClone(reglages),
 		avertissements: [],
