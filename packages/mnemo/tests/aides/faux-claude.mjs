@@ -169,7 +169,10 @@ let file = Promise.resolve();
 if (process.platform === 'win32' && process.stdin.isTTY) process.stdin.setRawMode(true);
 const lecteur = createInterface({ input: process.stdin });
 lecteur.on('line', (texte) => {
-	file = file.then(() => traiter(texte)).catch(() => {});
+	// Ctrl-U efface la saisie commencée, comme le fait le vrai Claude Code : en lecture brute (Windows), personne d'autre ne
+	// l'interprète ; ailleurs, le terminal en mode ligne l'a déjà fait
+	const saisie = texte.slice(texte.lastIndexOf('\x15') + 1);
+	file = file.then(() => traiter(saisie)).catch(() => {});
 });
 lecteur.on('close', () => {
 	if (!tetu) file.then(() => process.exit(0));

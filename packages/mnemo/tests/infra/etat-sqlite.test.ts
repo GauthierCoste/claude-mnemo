@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ecarterDuClassement } from '../../src/application/ecarter.ts';
 import type { EtatSessions } from '../../src/application/ports.ts';
@@ -1325,7 +1326,8 @@ describe('etat.sqlite', () => {
 	it('10 processus appliquent 50 événements chacun : rien de perdu, l\'état final est le plus récent', async () => {
 		const { etat, chemin, dossier } = await ouvrir();
 		await etat.creer(session('s1'));
-		const adaptateur = resolve(import.meta.dirname, '../../src/infra/etat-sqlite.ts');
+		// en URL `file:` : un chemin absolu Windows (`D:\…`) n'est pas un spécificateur d'import valide
+		const adaptateur = pathToFileURL(resolve(import.meta.dirname, '../../src/infra/etat-sqlite.ts')).href;
 		const script = join(dossier, 'ecrivain.mjs');
 		await mkdir(dossier, { recursive: true });
 		await writeFile(

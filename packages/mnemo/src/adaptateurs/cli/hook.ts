@@ -66,10 +66,14 @@ function lireEntree(delaiMs: number | null): Promise<LectureHook> {
 	});
 }
 
-/** Dossier Mnemo : `MNEMO_RACINE` (session Mnemo) s'il en est un, sinon en remontant depuis `cwd` (celui de Claude Code). */
+/**
+ * Dossier Mnemo : `MNEMO_RACINE` (session Mnemo) s'il en est un, sinon en remontant depuis `cwd` (celui de Claude Code). Sous
+ * Windows, tel qu'il est sur le disque, comme le `cwd` de l'entrée (`cheminReel`) : un nom court (`RUNNER~1`) ou une autre
+ * casse dans l'un des deux placerait sinon le `cwd` hors de la racine (règles de chemins jamais appliquées).
+ */
 function racineDe(cwd: string, env: NodeJS.ProcessEnv): string | null {
 	const declaree = env.MNEMO_RACINE;
-	if (declaree !== undefined && declaree !== '' && existsSync(join(declaree, DOSSIER_MEMOIRE, 'SCHEMA.md'))) return declaree;
+	if (declaree !== undefined && declaree !== '' && existsSync(join(declaree, DOSSIER_MEMOIRE, 'SCHEMA.md'))) return cheminReel(declaree);
 	return trouverRacine(cwd);
 }
 

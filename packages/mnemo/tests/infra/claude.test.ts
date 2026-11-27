@@ -69,7 +69,8 @@ describe('trouverClaude', () => {
 		expect(trouverClaude({ MNEMO_CLAUDE: join(d, 'absent.mjs'), PATH: join(d, 'bin') }, 'darwin')).toBeNull();
 	});
 
-	it('sinon cherche claude dans le PATH, dans l\'ordre, en sautant les fichiers non exécutables', async () => {
+	// POSIX : PATH séparé par « : » (ambigu avec des chemins Windows « C:\… ») et droit d'exécution (Windows n'en a pas)
+	it.skipIf(process.platform === 'win32')('sinon cherche claude dans le PATH, dans l\'ordre, en sautant les fichiers non exécutables', async () => {
 		const d = await dossierTemporaire();
 		await mkdir(join(d, 'vide'));
 		await mkdir(join(d, 'non-exec'));

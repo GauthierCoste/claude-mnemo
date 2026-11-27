@@ -5,7 +5,7 @@ import { proposer } from '../../src/application/proposer.ts';
 import { reindexerApresEcriture } from '../../src/application/synchroniser.ts';
 import { presenterResultat } from '../../src/application/presenter.ts';
 import { validerDemande } from '../../src/application/validation.ts';
-import { dependancesReelles } from '../../src/infra/systeme.ts';
+import { dependancesFermees } from '../aides/dependances-reelles.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
 import { git } from '../aides/git.ts';
@@ -13,7 +13,7 @@ import { git } from '../aides/git.ts';
 /** Mémoire réelle (fichiers et git) : un dossier vide n'existe que sur un vrai disque. */
 async function memoireReelle() {
 	const racine = await dossierTemporaire();
-	const dep = dependancesReelles(racine);
+	const dep = dependancesFermees(racine);
 	await dep.historique.initialiser();
 	await dep.coffre.ecrire('projets/alpha/alpha.md', '---\ntype: dossier\n---\n# Alpha\n');
 	await dep.historique.commit('init', 'tout');

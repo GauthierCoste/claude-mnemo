@@ -99,7 +99,10 @@ describe('mnemo [dossier]', () => {
 		expect((await mnemo(racine, home, 'session', 'terminer', '00000000')).code).toBe(1);
 		expect((await mnemo(racine, home, 'session', 'pirouette')).code).toBe(2);
 
-		service.kill('SIGTERM');
-		expect(await new Promise((r) => service.once('exit', (code) => r(code)))).toBe(0);
+		// arrêt propre : SIGTERM, ou `mnemo arreter` sous Windows (un signal y tue sans arrêt propre, code null)
+		const sorti = new Promise((r) => service.once('exit', (code) => r(code)));
+		if (process.platform === 'win32') expect((await mnemo(racine, home, 'arreter')).code).toBe(0);
+		else service.kill('SIGTERM');
+		expect(await sorti).toBe(0);
 	}, 120_000);
 });

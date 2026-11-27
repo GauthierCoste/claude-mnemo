@@ -112,23 +112,30 @@ export async function commandeService(dossier: string): Promise<void> {
 	try {
 		service = await demarrerService({ racine, dep, pil, interface: interfaceUi, port, ...(portFixe(process.env) ? { portFixePar: 'MNEMO_PORT' } : {}) });
 	} catch (erreur) {
-		fermer();
-		// port fixe déjà pris : jamais un autre port en silence (l'adresse, le favori et le lanceur changeraient)
-		if ((erreur as NodeJS.ErrnoException).code === 'EADDRINUSE') throw new ErreurCli(messagePortPris(port));
-		if (!(erreur instanceof ErreurServiceOccupe)) throw erreur;
-		// un autre `mnemo` démarre en même temps : on attend son adresse
-		const fin = Date.now() + ATTENTE_AUTRE_SERVICE_MS;
-		while (Date.now() < fin) {
-			const autre = await serviceVivant(racine);
-			if (autre !== null) {
-				console.log(`Mnemo tourne déjà pour ${racine} : ${adresses(autre)}`);
-				return;
+		try {
+			fermer();
+			// port fixe déjà pris : jamais un autre port en silence (l'adresse, le favori et le lanceur changeraient)
+			if ((erreur as NodeJS.ErrnoException).code === 'EADDRINUSE') throw new ErreurCli(messagePortPris(port));
+			if (!(erreur instanceof ErreurServiceOccupe)) throw erreur;
+			// un autre `mnemo` démarre en même temps : on attend son adresse
+			const fin = Date.now() + ATTENTE_AUTRE_SERVICE_MS;
+			while (Date.now() < fin) {
+				const autre = await serviceVivant(racine);
+				if (autre !== null) {
+					console.log(`Mnemo tourne déjà pour ${racine} : ${adresses(autre)}`);
+					return;
+				}
+				await new Promise((r) => setTimeout(r, 200));
 			}
-			await new Promise((r) => setTimeout(r, 200));
+			throw new ErreurCli(
+				`${erreur.message} Il ne répond pas : s'il n'existe plus, retirer « .mnemo/service.verrou ».`,
+			);
+		} finally {
+			// sans service, le processus sort une fois l'erreur ou l'adresse écrite : sous Windows, le terminal d'essai de
+			// node-pty (ConPTY, `pilotageReel`) garde la boucle d'événements vivante après sa fin ; ailleurs, elle se vide d'elle-même
+			// avant ce délai (minuteur détaché)
+			setTimeout(() => process.exit(), 100).unref();
 		}
-		throw new ErreurCli(
-			`${erreur.message} Il ne répond pas : s'il n'existe plus, retirer « .mnemo/service.verrou ».`,
-		);
 	}
 
 	console.log(`Mnemo : ${adresses(service)}`);

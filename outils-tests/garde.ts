@@ -13,6 +13,8 @@ for (const nom of VARIABLES_NEUTRALISEES) delete process.env[nom];
 
 const isole = realpathSync(mkdtempSync(join(tmpdir(), 'mnemo-tests-isole-')));
 process.env['HOME'] = isole;
+// Sous Windows, `os.homedir()` lit USERPROFILE, pas HOME.
+if (process.platform === 'win32') process.env['USERPROFILE'] = isole;
 process.chdir(isole);
 
 verifierIsolement(process.cwd(), process.env['HOME'], process.env);

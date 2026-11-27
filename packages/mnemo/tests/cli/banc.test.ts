@@ -157,7 +157,9 @@ describe('commande mnemo banc', () => {
 		expect(r.err).toMatch(/mémoire/u);
 	});
 
-	it('interrompu (Ctrl-C) : serveur de modèle arrêté, dossier temporaire supprimé, code 130', async () => {
+	// POSIX : sous Windows, `kill('SIGINT')` termine le processus sans qu'il voie le signal (pas d'arrêt propre à observer),
+	// et le dossier temporaire suit TEMP, pas TMPDIR
+	it.skipIf(process.platform === 'win32')('interrompu (Ctrl-C) : serveur de modèle arrêté, dossier temporaire supprimé, code 130', async () => {
 		const d = await dossierTemporaire();
 		const modeles = await dossierTemporaire();
 		// faux modèle de sens « installé », lent à répondre : le banc est encore en train de vectoriser quand on l'interrompt

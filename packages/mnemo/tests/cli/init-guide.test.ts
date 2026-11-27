@@ -68,7 +68,9 @@ describe('mnemo init --oui', () => {
 		expect(r.code).toBe(0);
 		expect(r.out).toContain('Mémoire créée');
 		expect(r.out).not.toMatch(/\[[oO]\/[nN]\]/u);
-		expect(r.out).toContain('mnemo modeles installer');
+		expect(r.out).toContain('Modèles locaux : non installés');
+		// sous Windows, aucune commande « mnemo » à suggérer
+		if (process.platform !== 'win32') expect(r.out).toContain('mnemo modeles installer');
 		expect(existsSync(join(racine, '_mnemo', 'SCHEMA.md'))).toBe(true);
 		expect(readdirSync(modeles)).toEqual([]);
 		expect(existsSync(join(home, 'Applications'))).toBe(false);

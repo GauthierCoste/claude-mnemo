@@ -5,6 +5,9 @@ import { hooksAttendus } from '../../src/domaine/moteurs/codex/hooks-installes.t
 import { cheminHooksJson, HOOKS_DU_POSTE_CODEX as H } from '../../src/infra/moteurs/codex/hooks-json.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 
+/** Droits des fichiers comparés hors de Windows seulement (il n'en a pas : 666 lus pour tout fichier). */
+const POSIX = process.platform !== 'win32';
+
 const NODE = '/opt/node/bin/node';
 const MAIN = "/maison/a/Mes projets/l'outil/packages/mnemo/src/adaptateurs/cli/main.ts";
 const etranger = { type: 'command', command: 'autre-outil --hook', timeout: 5 };
@@ -24,7 +27,7 @@ describe('hooks.json de Codex sur le poste', () => {
 		expect(ecrit.hooks.Stop).toEqual([hooksAttendus(NODE, MAIN).get('Stop')]);
 		expect(await H.installer(appel)).toBe('deja');
 		expect(await H.lire(appel)).toMatchObject({ etat: 'a_jour', approbation: { etat: 'a_approuver' } });
-		expect(((await stat(join(maison, 'hooks.json'))).mode & 0o777).toString(8)).toBe('644');
+		if (POSIX) expect(((await stat(join(maison, 'hooks.json'))).mode & 0o777).toString(8)).toBe('644');
 		expect((await readdir(maison)).filter((f) => f.endsWith('.tmp'))).toEqual([]);
 	});
 
@@ -33,7 +36,8 @@ describe('hooks.json de Codex sur le poste', () => {
 		await H.installer(appel);
 		const fichier = join(maison, 'hooks.json');
 		const cles = ['session_start', 'user_prompt_submit', 'pre_tool_use', 'post_tool_use', 'stop', 'permission_request', 'session_end'];
-		await writeFile(join(maison, 'config.toml'), `model = "x"\n\n[hooks.state]\n${cles.map((c) => `\n[hooks.state."${fichier}:${c}:0:0"]\ntrusted_hash = "sha256:0"\n`).join('')}`);
+		// clé en chaîne TOML de base (JSON.stringify) : les « \ » d'un chemin Windows échappés, comme Codex les écrit
+		await writeFile(join(maison, 'config.toml'), `model = "x"\n\n[hooks.state]\n${cles.map((c) => `\n[hooks.state.${JSON.stringify(`${fichier}:${c}:0:0`)}]\ntrusted_hash = "sha256:0"\n`).join('')}`);
 		expect(await H.lire(appel)).toMatchObject({ etat: 'a_jour', approbation: { etat: 'approuves' } });
 	});
 
@@ -48,7 +52,7 @@ describe('hooks.json de Codex sur le poste', () => {
 		expect(await H.remplacer(appel)).toBe('mis_a_jour');
 		expect(await H.remplacer(appel)).toBe('deja');
 		// les droits du fichier remplacé sont gardés
-		expect(((await stat(join(maison, 'hooks.json'))).mode & 0o777).toString(8)).toBe('600');
+		if (POSIX) expect(((await stat(join(maison, 'hooks.json'))).mode & 0o777).toString(8)).toBe('600');
 		expect(await H.retirer(appel)).toBe('retire');
 		expect(JSON.parse(await readFile(join(maison, 'hooks.json'), 'utf8'))).toEqual(avant);
 		expect(await H.retirer(appel)).toBe('absent');

@@ -223,7 +223,8 @@ describe.skipIf(sauter)('terminaux-pty : faux-claude sous un vrai pseudo-termina
 		expect(await recus(true, true)).toEqual([]);
 	});
 
-	it('--tetu ignore /exit et SIGTERM : tué au SIGKILL 3 s après, lui et son enfant', async () => {
+	// POSIX : sous Windows, SIGTERM tue sans être vu (rien à ignorer) et il n'y a pas de SIGKILL différé à mesurer
+	it.skipIf(!POSIX)('--tetu ignore /exit et SIGTERM : tué au SIGKILL 3 s après, lui et son enfant', async () => {
 		const dossier = await dossierTemporaire();
 		const t = lancerFaux(dossier, ['--tetu', '--enfant']);
 		const s = suivre(t);

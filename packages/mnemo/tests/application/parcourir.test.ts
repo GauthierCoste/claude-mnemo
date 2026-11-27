@@ -5,7 +5,7 @@ import { deplacer } from '../../src/application/deplacer.ts';
 import { lire } from '../../src/application/lire.ts';
 import { lister } from '../../src/application/lister.ts';
 import { proposer } from '../../src/application/proposer.ts';
-import { dependancesReelles } from '../../src/infra/systeme.ts';
+import { dependancesFermees } from '../aides/dependances-reelles.ts';
 import { dossierTemporaire } from '../aides/dossier-temporaire.ts';
 import { fauxPorts } from '../aides/faux-ports.ts';
 
@@ -118,7 +118,7 @@ describe('deplacer', () => {
 
 	it('intégration : ports réels, fichier déplacé, un commit avec renommage', async () => {
 		const racine = await dossierTemporaire();
-		const dep = dependancesReelles(racine);
+		const dep = dependancesFermees(racine);
 		await dep.historique.initialiser();
 		await proposer(dep, { genre: 'fiche', chemin: 'projets/p/a.md', type: 'sujet', titre: 'Alpha', synthese: 'R' });
 		const avant = execFileSync('git', ['rev-list', '--count', 'HEAD'], { cwd: join(racine, '_mnemo') }).toString().trim();
