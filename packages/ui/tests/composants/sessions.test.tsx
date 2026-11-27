@@ -324,19 +324,21 @@ describe('vue Sessions', () => {
 		expect(faux.api.envoyer).toHaveBeenCalledWith('/api/sessions/s4/reprise', undefined);
 	});
 
-	it('fiches injectées sans doublon, en tête de la liste, plus anciennes d’abord ; clic → Mémoire › Fichiers sur la fiche', async () => {
+	it('fiches injectées sans doublon, en tête de la liste, plus anciennes d’abord ; clic → aperçu, « Ouvrir la fiche » → Mémoire › Fichiers sur la fiche', async () => {
 		await monter();
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
 		const liste = await within(contexte).findByRole('list', { name: 'Injecté dans la session' });
 		const fiches = within(liste).getAllByRole('button', { name: /Module stocks|Tests/ });
 		expect(fiches.map((b) => b.textContent)).toEqual(['Module stocks', 'Tests avant tout']);
 		await act(async () => fiches[0]!.click());
+		expect(screen.getByRole('main').getAttribute('data-vue')).toBe('sessions');
+		await act(async () => within(liste).getByRole('button', { name: 'Ouvrir la fiche' }).click());
 		expect(screen.getByRole('main').getAttribute('data-vue')).toBe('memoire');
 		expect(screen.getByRole('tab', { name: 'Fichiers' }).getAttribute('aria-selected')).toBe('true');
 		expect(screen.getByText('projets / erp-saas / Module stocks.md')).toBeTruthy();
 	});
 
-	it('panneau Contexte : journal ancien, les injectées en tête (◆ à la place de la note), puis le classement en ordre seul (note non calibrée en gris) ; clic → la fiche', async () => {
+	it('panneau Contexte : journal ancien, les injectées en tête (◆ à la place de la note), puis le classement en ordre seul (note non calibrée en gris) ; clic → aperçu, puis la fiche', async () => {
 		await monter();
 		const contexte = screen.getByRole('complementary', { name: 'Contexte' });
 		const classement = await within(contexte).findByRole('list', { name: 'Injecté dans la session' });
@@ -349,6 +351,7 @@ describe('vue Sessions', () => {
 		expect(within(lignes[1]!).getByRole('img', { name: 'Injectée dans la session' })).toBeTruthy();
 		expect(within(lignes[2]!).queryByRole('img', { name: 'Injectée dans la session' })).toBeNull();
 		await act(async () => within(lignes[2]!).getByRole('button', { name: 'Lots et péremption' }).click());
+		await act(async () => within(lignes[2]!).getByRole('button', { name: 'Ouvrir la fiche' }).click());
 		expect(screen.getByRole('main').getAttribute('data-vue')).toBe('memoire');
 	});
 

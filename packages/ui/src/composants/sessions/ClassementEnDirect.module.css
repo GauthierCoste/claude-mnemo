@@ -187,6 +187,28 @@
 	color: var(--ac);
 }
 
+/* Aperçu déplié (clic sur le titre) : la ligne reste marquée, son titre et sa raison passent à la ligne au lieu d'être
+   coupés ; l'aperçu (`ApercuFiche`) suit, dans le corps de la ligne. */
+.ligne[data-apercu] {
+	background: var(--s2);
+}
+
+.ligne[data-apercu] .titre,
+.ligne[data-apercu] .sous {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+.ligne[data-apercu] .titre {
+	color: var(--tx);
+}
+
+/* « Injecter » de l'aperçu, allumé tant que l'injection est demandée */
+.injecterApercu[aria-pressed='true'] {
+	border-color: var(--ac);
+	color: var(--ac);
+}
+
 /* le mode d'une fiche injectée, à droite */
 .mode,
 .auto {
