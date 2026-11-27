@@ -5,33 +5,34 @@
  */
 import type { ChampReglageVue } from '@mnemo/contrat';
 import type { ReactNode } from 'react';
+import { useTextes } from '../../../langue/langue.tsx';
 import { egales, enSaisie, enValeur, valeurLisible, type Saisie } from '../../../reglages/brouillon.ts';
 import c from '../Cartes.module.css';
 
-const EFFETS: Readonly<Record<ChampReglageVue['effet'], string | null>> = {
-	immediat: null,
-	service: 'Redémarrage du service requis',
-	modeles: 'Au prochain démarrage des modèles',
-};
-
 /** `lisible` : le défaut dit autrement que par la valeur du service (interrupteurs inversés : ceux allumés par défaut). */
 export function Defaut(p: { champ: ChampReglageVue; saisie: Saisie; surSaisie(v: Saisie): void; lisible?: string }): ReactNode {
+	const t = useTextes();
+	const mots = t.reglages.champ;
 	const champ = p.champ;
 	if (egales(enValeur(champ, p.saisie), champ.defaut)) return null;
 	return (
 		<p className={c.defaut}>
-			Défaut : {p.lisible ?? valeurLisible(champ, champ.defaut)} ·{' '}
-			<button type="button" className={c.lien} aria-label={`Rétablir le défaut : ${champ.libelle}`} onClick={() => p.surSaisie(enSaisie(champ, champ.defaut))}>
-				Rétablir
-			</button>
+			{mots.defaut(
+				p.lisible ?? valeurLisible(champ, champ.defaut, t),
+				<button type="button" className={c.lien} aria-label={mots.retablirDefaut(champ.libelle)} onClick={() => p.surSaisie(enSaisie(champ, champ.defaut))}>
+					{mots.retablir}
+				</button>,
+			)}
 		</p>
 	);
 }
 
 export function BadgeEffet(p: { champ: ChampReglageVue }): ReactNode {
-	const texte = p.champ.fixePar === undefined ? EFFETS[p.champ.effet] : `Fixé par ${p.champ.fixePar}`;
+	const mots = useTextes().reglages.champ;
+	const effet = p.champ.effet === 'immediat' ? null : mots.effets[p.champ.effet];
+	const texte = p.champ.fixePar === undefined ? effet : mots.fixePar(p.champ.fixePar);
 	if (texte === null) return null;
-	const titre = p.champ.fixePar === undefined ? undefined : `La variable d’environnement ${p.champ.fixePar} du service l’emporte sur ce réglage tant qu’elle est posée.`;
+	const titre = p.champ.fixePar === undefined ? undefined : mots.fixeParDetail(p.champ.fixePar);
 	return (
 		<span className={c.badge} title={titre}>
 			{texte}

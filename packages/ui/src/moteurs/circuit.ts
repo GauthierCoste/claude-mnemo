@@ -4,6 +4,7 @@
  * le débloque (le motif et le geste : lier à Mnemo, ou copier la commande).
  */
 import type { MoteurVue, PointMoteurVue } from '@mnemo/contrat';
+import { TEXTES, type Textes } from '../langue/textes.ts';
 
 type CleEtape = PointMoteurVue['cle'];
 
@@ -22,17 +23,6 @@ export type ActionMoteur = {
 	commande: NonNullable<PointMoteurVue['remede']> | null;
 };
 
-const LIBELLES_STATUTS: Readonly<Record<CleStatut, string>> = {
-	pret: 'Prêt',
-	'a-lier': 'À lier',
-	'a-approuver': 'À approuver',
-	'a-verifier': 'À vérifier',
-	'a-mettre-a-jour': 'À mettre à jour',
-	'a-regler': 'À régler',
-	introuvable: 'Introuvable',
-	'pas-installe': 'Pas installé',
-};
-
 /**
  * Indice du point qui bloque : le premier non satisfait (`ok` faux) ; à défaut, le premier inconnu qui a un remède (à
  * vérifier dans le moteur) ; -1 : aucun.
@@ -45,9 +35,10 @@ function indiceCasse(points: readonly PointMoteurVue[]): number {
 /** Point mcp ou hooks que « Lier à Mnemo » règle : non satisfait, avec un remède à lancer dans un terminal. */
 const liable = (x: PointMoteurVue): boolean => (x.cle === 'mcp' || x.cle === 'hooks') && x.ok !== true && x.remede?.dans === 'terminal';
 
-export function statutDuMoteur(m: MoteurVue): StatutMoteur {
+/** Le statut du moteur, son libellé dans la langue de `t`. */
+export function statutDuMoteur(m: MoteurVue, t: Textes = TEXTES.fr): StatutMoteur {
 	const points = m.poste ?? [];
-	const statut = (cle: CleStatut): StatutMoteur => ({ cle, libelle: LIBELLES_STATUTS[cle] });
+	const statut = (cle: CleStatut): StatutMoteur => ({ cle, libelle: t.reglages.moteurs.statuts[cle] });
 	if (points.length === 0) return statut(m.indisponible === null ? 'pret' : 'pas-installe');
 	const x = points[indiceCasse(points)];
 	if (x === undefined) return statut('pret');
@@ -68,15 +59,26 @@ export function attendUnGeste(m: MoteurVue): boolean {
 }
 
 /** Ce que dit l'absence de liaison, d'après les points mcp et hooks non satisfaits. */
-function motifNonLie(points: readonly PointMoteurVue[]): string {
+function motifNonLie(points: readonly PointMoteurVue[], t: Textes): string {
+	const motifs = t.reglages.moteurs.motifs;
 	const memoire = points.some((x) => x.cle === 'mcp' && liable(x));
 	const suivi = points.some((x) => x.cle === 'hooks' && liable(x));
-	if (memoire && suivi) return 'Ses sessions lancées hors de Mnemo ne lisent pas la mémoire, et Mnemo ne suit pas ses sessions.';
-	return memoire ? 'Ses sessions lancées hors de Mnemo ne lisent pas la mémoire.' : 'Mnemo ne suit pas ses sessions.';
+	if (memoire && suivi) return motifs.niMemoireNiSuivi;
+	return memoire ? motifs.sansMemoire : motifs.sansSuivi;
 }
 
-/** L'action de la première étape cassée ; null : rien ne bloque. */
-export function actionDuMoteur(m: MoteurVue): ActionMoteur | null {
+/** Libellé d'un point vérifié dans la langue de `t`, par sa clé ; une clé inconnue garde le libellé du service. */
+function libellePoint(x: PointMoteurVue, t: Textes): string {
+	const points: Readonly<Record<string, string>> = t.reglages.moteurs.points;
+	return Object.hasOwn(points, x.cle) ? points[x.cle]! : x.libelle;
+}
+
+/**
+ * L'action de la première étape cassée, ses textes dans la langue de `t` (l'état et le détail des points restent ceux du
+ * service) ; null : rien ne bloque.
+ */
+export function actionDuMoteur(m: MoteurVue, t: Textes = TEXTES.fr): ActionMoteur | null {
+	const titres = t.reglages.moteurs.titres;
 	const points = m.poste ?? [];
 	const x = points[indiceCasse(points)];
 	if (x === undefined) return null;
@@ -86,17 +88,17 @@ export function actionDuMoteur(m: MoteurVue): ActionMoteur | null {
 	const aLier = points.find(liable);
 	if ((x.cle === 'mcp' || x.cle === 'hooks') && aLier !== undefined) {
 		const perime = aLier.etat.startsWith('périm');
-		const titre = !liable(x) ? `${x.libelle} : ${x.etat}.` : perime ? `La liaison de ${m.nom} à Mnemo est périmée.` : `${m.nom} n’est pas lié à Mnemo.`;
-		return { ...base, titre, motif: !liable(x) || perime ? (x.detail ?? null) : motifNonLie(points), geste: 'lier', commande: aLier.remede ?? null };
+		const titre = !liable(x) ? titres.point(libellePoint(x, t), x.etat) : perime ? titres.perimee(m.nom) : titres.nonLie(m.nom);
+		return { ...base, titre, motif: !liable(x) || perime ? (x.detail ?? null) : motifNonLie(points, t), geste: 'lier', commande: aLier.remede ?? null };
 	}
-	if (x.cle === 'commande') return { ...base, titre: x.etat === 'introuvable' ? 'Pas installé sur ce poste.' : `${m.nom} introuvable maintenant.`, motif: x.detail ?? null, geste: null };
+	if (x.cle === 'commande') return { ...base, titre: x.etat === 'introuvable' ? titres.pasInstalle : titres.introuvable(m.nom), motif: x.detail ?? null, geste: null };
 	if (x.cle === 'approbation') {
 		return {
 			...base,
-			titre: x.ok === null ? `Approbation des hooks inconnue dans ${m.nom}.` : `Hooks à approuver dans ${m.nom}.`,
-			motif: 'Tant qu’ils ne le sont pas, Mnemo ne suit pas ses sessions.',
+			titre: x.ok === null ? titres.approbationInconnue(m.nom) : titres.hooksAApprouver(m.nom),
+			motif: t.reglages.moteurs.motifs.approbation,
 			geste: commande === null ? null : 'copier',
 		};
 	}
-	return { ...base, titre: `${x.libelle} : ${x.etat}.`, motif: x.detail ?? null, geste: commande === null ? null : 'copier' };
+	return { ...base, titre: titres.point(libellePoint(x, t), x.etat), motif: x.detail ?? null, geste: commande === null ? null : 'copier' };
 }

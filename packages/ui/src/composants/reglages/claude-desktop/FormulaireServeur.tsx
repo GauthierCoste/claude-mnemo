@@ -7,6 +7,7 @@
  */
 import type { ServeurMcpEcriture, ServeurMcpVue } from '@mnemo/contrat';
 import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useLangue } from '../../../langue/langue.tsx';
 import { useNavigation } from '../../../navigation.tsx';
 import { demandeDe, SAISIE_VIDE, saisieDe, type SaisieServeur } from '../../../reglages/serveur-mcp.ts';
 import { Bouton } from '../../commun/Bouton.tsx';
@@ -25,12 +26,14 @@ export function FormulaireServeur(p: {
 	autreBrouillon?: boolean;
 }): ReactNode {
 	const id = useId();
+	const { t } = useLangue();
+	const f = t.reglages.appClaude.formulaire;
 	const [depart] = useState<SaisieServeur>(() => (p.serveur ? saisieDe(p.serveur) : SAISIE_VIDE));
 	const [saisie, setSaisie] = useState(depart);
 	const [erreur, setErreur] = useState<string | null>(null);
 	const modifie = JSON.stringify(saisie) !== JSON.stringify(depart);
 	const modification = p.serveur !== undefined;
-	const titre = modification ? `Modifier le serveur « ${p.serveur!.nom} »` : 'Ajouter un serveur MCP';
+	const titre = modification ? f.modifier(p.serveur!.nom) : f.ajouter;
 
 	const nav = useNavigation();
 	const { surModifie } = p;
@@ -38,7 +41,7 @@ export function FormulaireServeur(p: {
 
 	const changer = (champ: keyof SaisieServeur) => (e: { target: { value: string } }) => setSaisie((x) => ({ ...x, [champ]: e.target.value }));
 	const enregistrer = async (): Promise<boolean> => {
-		const lue = demandeDe(saisie, p.serveur?.env ?? []);
+		const lue = demandeDe(saisie, p.serveur?.env ?? [], t);
 		if (!lue.ok) {
 			setErreur(lue.motif);
 			return false;
@@ -64,39 +67,37 @@ export function FormulaireServeur(p: {
 		>
 			<h4 className={s.titreFormulaire}>{titre}</h4>
 			<label className={s.champ}>
-				<span className={d.libelle}>Nom</span>
+				<span className={d.libelle}>{f.nom}</span>
 				<input className={d.champTexte} spellCheck={false} autoComplete="off" value={saisie.nom} onChange={changer('nom')} />
 			</label>
 			<label className={s.champ}>
-				<span className={d.libelle}>Commande</span>
-				<input className={d.champTexte} spellCheck={false} autoComplete="off" placeholder="npx, uvx, chemin d’un exécutable…" value={saisie.commande} onChange={changer('commande')} />
+				<span className={d.libelle}>{f.commande}</span>
+				<input className={d.champTexte} spellCheck={false} autoComplete="off" placeholder={f.exempleCommande} value={saisie.commande} onChange={changer('commande')} />
 			</label>
 			<label className={s.champ}>
-				<span className={d.libelle}>Arguments</span>
-				<span className={d.discret}>Un par ligne.</span>
+				<span className={d.libelle}>{f.arguments}</span>
+				<span className={d.discret}>{f.unParLigne}</span>
 				<textarea className={d.texteLong} rows={3} spellCheck={false} value={saisie.args} onChange={changer('args')} />
 			</label>
 			<label className={s.champ}>
-				<span className={d.libelle}>Variables</span>
+				<span className={d.libelle}>{f.variables}</span>
 				<span id={`${id}-variables`} className={d.discret}>
-					{modification
-						? 'NOM=valeur, une par ligne. Les valeurs enregistrées ne sont jamais montrées : NOM seul garde la valeur actuelle, une ligne effacée retire la variable.'
-						: 'NOM=valeur, une par ligne.'}
+					{modification ? f.aideVariablesModification : f.aideVariables}
 				</span>
 				<textarea className={d.texteLong} rows={3} spellCheck={false} autoComplete="off" aria-describedby={`${id}-variables`} value={saisie.env} onChange={changer('env')} />
 			</label>
 			{nav.sortieRetenue && modifie && !p.autreBrouillon && (
 				<div className={d.avis} role="alert">
-					<p>Serveur MCP non enregistré : l’enregistrer avant de quitter les Réglages ?</p>
+					<p>{f.sortie}</p>
 					<div className={d.actions}>
 						<Bouton genre="primaire" disabled={p.envoi} onClick={() => void enregistrerPuisPartir()}>
-							Enregistrer
+							{t.commun.actions.enregistrer}
 						</Bouton>
 						<Bouton disabled={p.envoi} onClick={nav.poursuivreSortie}>
-							Abandonner
+							{t.reglages.gestes.abandonner}
 						</Bouton>
 						<Bouton disabled={p.envoi} onClick={nav.annulerSortie}>
-							Rester
+							{t.reglages.gestes.rester}
 						</Bouton>
 					</div>
 				</div>
@@ -108,10 +109,10 @@ export function FormulaireServeur(p: {
 			)}
 			<div className={d.actions}>
 				<Bouton type="submit" petit genre="primaire" disabled={p.envoi || saisie.nom.trim() === '' || saisie.commande.trim() === ''}>
-					{modification ? 'Enregistrer' : 'Ajouter'}
+					{modification ? t.commun.actions.enregistrer : f.ajouterBouton}
 				</Bouton>
 				<Bouton petit disabled={p.envoi} onClick={p.annuler}>
-					Annuler
+					{t.commun.actions.annuler}
 				</Bouton>
 			</div>
 		</form>

@@ -8,6 +8,7 @@ import { useId, type ReactNode } from 'react';
 import { enValeur, valeurLisible, type Saisie } from '../../../reglages/brouillon.ts';
 import type { ChampDispose } from '../../../reglages/disposition.ts';
 import { useEntrainement } from '../../../client/hooks.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { phraseEffet, remarqueSeuilInjection } from '../../../reglages/phrases-effet.ts';
 import c from '../Cartes.module.css';
 import { BadgeEffet, Defaut } from './Defaut.tsx';
@@ -40,9 +41,10 @@ function glissiere(p: Props, id: string, affichee: string) {
 
 export function Curseur(p: Props): ReactNode {
 	const id = useId();
+	const t = useTextes();
 	const n = nombreDe(p.champ, p.saisie);
-	const phrase = phraseEffet(p.champ.cle, n, p.valeurDe);
-	const affichee = p.dispose.format?.(n) ?? valeurLisible(p.champ, n);
+	const phrase = phraseEffet(p.champ.cle, n, p.valeurDe, t);
+	const affichee = p.dispose.format?.(n) ?? valeurLisible(p.champ, n, t);
 	return (
 		<div className={c.curseur}>
 			<span className={c.libelle}>
@@ -68,17 +70,19 @@ export function Curseur(p: Props): ReactNode {
 
 /** Sous le seuil d'injection : ce qu'il fait vraiment, selon la note de confiance (sans effet tant qu'elle est refusée). */
 function RemarqueSeuil(p: { n: number }): ReactNode {
-	const remarque = remarqueSeuilInjection(p.n, useEntrainement().donnees?.note.niveaux);
+	const t = useTextes();
+	const remarque = remarqueSeuilInjection(p.n, useEntrainement().donnees?.note.niveaux, t);
 	return remarque === null ? null : <p className={c.remarque}>{remarque}</p>;
 }
 
 export function Barre(p: Props): ReactNode {
 	const id = useId();
+	const mots = useTextes().reglages.champ;
 	const n = nombreDe(p.champ, p.saisie);
-	const affichee = p.champ.genre === 'decimal' ? n.toFixed(2).replace('.', ',') : String(n);
+	const affichee = p.champ.genre === 'decimal' ? mots.decimalBarre(n) : String(n);
 	return (
 		<div className={c.barre}>
-			<label htmlFor={id} title={`${p.dispose.libelle} : ${p.champ.explication}`}>
+			<label htmlFor={id} title={mots.infobulleBarre(p.dispose.libelle, p.champ.explication)}>
 				{p.dispose.libelle}
 			</label>
 			<input {...glissiere(p, id, affichee)} />

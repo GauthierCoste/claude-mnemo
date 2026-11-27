@@ -5,6 +5,7 @@
  */
 import type { ChampReglageVue } from '@mnemo/contrat';
 import type { ReactNode } from 'react';
+import { useTextes } from '../../../langue/langue.tsx';
 import { OUI, NON, type Saisie } from '../../../reglages/brouillon.ts';
 import type { ChampDispose } from '../../../reglages/disposition.ts';
 import { Bascule } from '../../commun/Bascule.tsx';
@@ -12,12 +13,13 @@ import c from '../Cartes.module.css';
 import { BadgeEffet, Defaut } from './Defaut.tsx';
 
 export function Interrupteurs(p: { champ: ChampReglageVue; dispose: ChampDispose; saisie: Saisie; surSaisie(v: Saisie): void }): ReactNode {
+	const mots = useTextes().reglages.champ;
 	const coches = Array.isArray(p.saisie) ? p.saisie : [];
 	const choix = p.champ.choix ?? [];
 	const allume = (valeur: string, valeurs: readonly unknown[]) => (p.dispose.inverse === true ? !valeurs.includes(valeur) : valeurs.includes(valeur));
 	// le défaut dit par les interrupteurs allumés, pas par la valeur du service (inversée pour l'archiviste)
 	const allumesParDefaut = choix.filter((x) => allume(x.valeur, Array.isArray(p.champ.defaut) ? p.champ.defaut : []));
-	const defaut = allumesParDefaut.length === choix.length ? 'tous' : allumesParDefaut.length === 0 ? 'aucun' : allumesParDefaut.map((x) => x.libelle).join(', ');
+	const defaut = allumesParDefaut.length === choix.length ? mots.tous : allumesParDefaut.length === 0 ? mots.aucun : allumesParDefaut.map((x) => x.libelle).join(', ');
 	const basculer = (valeur: string) => {
 		const avec = !coches.includes(valeur);
 		p.surSaisie(choix.map((x) => x.valeur).filter((v) => (v === valeur ? avec : coches.includes(v))));

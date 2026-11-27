@@ -5,6 +5,7 @@
  */
 import { MOTIF_NOM_VARIABLE } from '@mnemo/commun';
 import type { ServeurMcpEcriture, ServeurMcpVue } from '@mnemo/contrat';
+import { TEXTES, type Textes } from '../langue/textes.ts';
 
 export type SaisieServeur = { nom: string; commande: string; args: string; env: string };
 
@@ -21,21 +22,22 @@ const lignes = (texte: string): string[] =>
 
 /**
  * Demande à envoyer, ou le motif d'un refus. `existantes` : noms des variables du serveur modifié (vide pour un ajout) ;
- * seules elles peuvent être écrites sans valeur.
+ * seules elles peuvent être écrites sans valeur. Le motif dans la langue de `t`.
  */
-export function demandeDe(saisie: SaisieServeur, existantes: readonly string[]): { ok: true; demande: ServeurMcpEcriture } | { ok: false; motif: string } {
+export function demandeDe(saisie: SaisieServeur, existantes: readonly string[], t: Textes = TEXTES.fr): { ok: true; demande: ServeurMcpEcriture } | { ok: false; motif: string } {
+	const motifs = t.reglages.appClaude.motifs;
 	const env: Record<string, string | null> = {};
 	for (const [i, ligne] of lignes(saisie.env).entries()) {
 		const egal = ligne.indexOf('=');
 		const nom = (egal < 0 ? ligne : ligne.slice(0, egal)).trim();
 		// jamais la ligne dans le motif : elle porte une valeur, peut-être secrète ; ni un nom invalide (une valeur collée
 		// seule, sans « NOM= », en serait un) : seulement le rang de la ligne
-		if (nom === '') return { ok: false, motif: 'Variable sans nom : une ligne commence par « = ».' };
+		if (nom === '') return { ok: false, motif: motifs.sansNom };
 		if (!MOTIF_NOM_VARIABLE.test(nom))
-			return { ok: false, motif: `Variables, ligne ${i + 1} : nom invalide (lettres, chiffres et « _ », sans chiffre au début), à écrire NOM=valeur.` };
-		if (Object.hasOwn(env, nom)) return { ok: false, motif: `Variable « ${nom} » écrite deux fois.` };
+			return { ok: false, motif: motifs.nomInvalide(i + 1) };
+		if (Object.hasOwn(env, nom)) return { ok: false, motif: motifs.double(nom) };
 		if (egal < 0) {
-			if (!existantes.includes(nom)) return { ok: false, motif: `Variable « ${nom} » sans valeur : écrire ${nom}=valeur.` };
+			if (!existantes.includes(nom)) return { ok: false, motif: motifs.sansValeur(nom) };
 			env[nom] = null;
 		} else env[nom] = ligne.slice(egal + 1);
 	}

@@ -1042,6 +1042,21 @@ export const REGLAGES_DEMO: ChampReglageVue[] = [
 		effet: 'immediat',
 	},
 	{ cle: 'interface.accent', groupe: 'interface', libelle: 'Couleur principale de l’interface', explication: 'Couleur des éléments actifs, des liens, des titres, du focus et du logo.', genre: 'couleur', defaut: ACCENT_PAR_DEFAUT, valeur: ACCENT_PAR_DEFAUT, effet: 'immediat' },
+	{
+		cle: 'interface.langue',
+		groupe: 'interface',
+		libelle: 'Langue de l’interface',
+		explication: 'Langue de l’interface et de l’app de bureau ; « systeme » suit la langue du système. Le contenu de la mémoire n’est jamais traduit.',
+		genre: 'choix',
+		defaut: 'systeme',
+		valeur: 'systeme',
+		choix: [
+			{ valeur: 'systeme', libelle: 'systeme' },
+			{ valeur: 'fr', libelle: 'fr' },
+			{ valeur: 'en', libelle: 'en' },
+		],
+		effet: 'immediat',
+	},
 	{ cle: 'service.port', groupe: 'service', libelle: 'Port du service', explication: 'Port local de l’interface ; le changer change son adresse (favori, application installée, lanceur).', genre: 'entier', defaut: 4747, valeur: 4747, min: 1024, max: 65535, effet: 'service' },
 	{
 		cle: 'service.navigateur',

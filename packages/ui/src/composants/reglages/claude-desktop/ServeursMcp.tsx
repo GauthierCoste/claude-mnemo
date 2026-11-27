@@ -8,6 +8,8 @@ import { ROUTES, type ClaudeDesktopVue, type ServeurMcpEcriture, type ServeurMcp
 import { useState, type ReactNode } from 'react';
 import { useClient } from '../../../client/contexte.tsx';
 import { avecId } from '../../../client/hooks.ts';
+import { useLangue } from '../../../langue/langue.tsx';
+import type { Textes } from '../../../langue/textes.ts';
 import { ligneDeCommande } from '../../../reglages/serveur-mcp.ts';
 import { Bouton } from '../../commun/Bouton.tsx';
 import c from '../Cartes.module.css';
@@ -19,13 +21,15 @@ import s from './AppClaude.module.css';
 type Edition = { genre: 'ajout' } | { genre: 'modification'; serveur: ServeurMcpVue };
 
 /** Ce que la ligne dit d'un serveur, sous son nom ; `complet` : l'infobulle, qui dit aussi pourquoi un serveur est en lecture seule. */
-function detailDe(x: ServeurMcpVue, complet = false): string {
-	if (!x.modifiable) return `${x.commande === '' ? '' : `${x.commande} · `}lecture seule${complet ? ' : décrit autrement que par une commande, Mnemo ne le modifie pas, il peut seulement le retirer' : ''}`;
-	return `${ligneDeCommande(x)}${x.env.length > 0 ? ` · variables : ${x.env.join(', ')}` : ''}`;
+function detailDe(x: ServeurMcpVue, t: Textes['reglages']['appClaude']['serveurs'], complet = false): string {
+	if (!x.modifiable) return `${x.commande === '' ? '' : `${x.commande} · `}${t.lectureSeule(complet)}`;
+	return `${ligneDeCommande(x)}${x.env.length > 0 ? t.variables(x.env.join(', ')) : ''}`;
 }
 
 export function ServeursMcp(p: { serveurs: ServeurMcpVue[]; envoi: boolean; ecrire: Ecrire; surModifie?(modifie: boolean): void; autreBrouillon?: boolean }): ReactNode {
 	const { api } = useClient();
+	const { langue, t: textes } = useLangue();
+	const t = textes.reglages.appClaude.serveurs;
 	const [edition, setEdition] = useState<Edition | null>(null);
 	const [aRetirer, setARetirer] = useState<string | null>(null);
 	const [erreur, setErreur] = useState<string | null>(null);
@@ -61,39 +65,39 @@ export function ServeursMcp(p: { serveurs: ServeurMcpVue[]; envoi: boolean; ecri
 	return (
 		<>
 			{p.serveurs.length > 0 && (
-				<ul className={`${c.lignes} ${s.serveurs}`} aria-label="Serveurs MCP">
+				<ul className={`${c.lignes} ${s.serveurs}`} aria-label={t.liste}>
 					{p.serveurs.map((x) => (
 						<li key={x.nom} className={c.prise} aria-label={x.nom}>
 							<span className={c.logo} aria-hidden="true">
-								{x.nom.charAt(0).toLocaleUpperCase('fr')}
+								{x.nom.charAt(0).toLocaleUpperCase(langue)}
 							</span>
 							<span className={c.ident}>
 								<span className={c.nom}>{x.nom}</span>
-								<code className={s.commande} title={detailDe(x, true)}>
-									{detailDe(x)}
+								<code className={s.commande} title={detailDe(x, t, true)}>
+									{detailDe(x, t)}
 								</code>
 							</span>
 							<span className={c.droite}>
 								{x.modifiable && (
 									<Bouton petit disabled={p.envoi || edition !== null} onClick={() => ouvrir({ genre: 'modification', serveur: x })}>
-										Modifier
+										{t.modifier}
 									</Bouton>
 								)}
 								{aRetirer !== x.nom && (
 									<Bouton petit disabled={p.envoi || edition !== null} onClick={() => demanderRetrait(x.nom)}>
-										Retirer…
+										{t.retirerDemande}
 									</Bouton>
 								)}
 							</span>
 							{aRetirer === x.nom && (
 								<div className={`${c.sousLigne} ${c.avis}`} role="alert">
-									<p>Retirer le serveur « {x.nom} » de l’app Claude ? Sa configuration (variables comprises) est effacée du fichier.</p>
+									<p>{t.confirmer(x.nom)}</p>
 									<div className={c.actions}>
 										<Bouton petit disabled={p.envoi} onClick={() => void retirer(x.nom)}>
-											Retirer
+											{t.retirer}
 										</Bouton>
 										<Bouton petit genre="primaire" disabled={p.envoi} onClick={() => setARetirer(null)}>
-											Garder
+											{t.garder}
 										</Bouton>
 									</div>
 								</div>
@@ -110,7 +114,7 @@ export function ServeursMcp(p: { serveurs: ServeurMcpVue[]; envoi: boolean; ecri
 			{edition === null ? (
 				<p className={s.ajouter}>
 					<Bouton petit disabled={p.envoi} onClick={() => ouvrir({ genre: 'ajout' })}>
-						+ Ajouter un serveur
+						{t.ajouter}
 					</Bouton>
 				</p>
 			) : (

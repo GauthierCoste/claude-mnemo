@@ -4,12 +4,14 @@
  */
 import type { ChampReglageVue } from '@mnemo/contrat';
 import { useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useTextes } from '../../../langue/langue.tsx';
 import { enValeur, type Saisie } from '../../../reglages/brouillon.ts';
 import type { ChampDispose } from '../../../reglages/disposition.ts';
 import c from '../Cartes.module.css';
 import { BadgeEffet, Defaut } from './Defaut.tsx';
 
 export function Puces(p: { champ: ChampReglageVue; dispose: ChampDispose; saisie: Saisie; surSaisie(v: Saisie): void }): ReactNode {
+	const t = useTextes().reglages.puces;
 	const v = enValeur(p.champ, p.saisie);
 	const noms = Array.isArray(v) ? v : [];
 	const [ajout, setAjout] = useState<string | null>(null);
@@ -36,7 +38,7 @@ export function Puces(p: { champ: ChampReglageVue; dispose: ChampDispose; saisie
 				{noms.map((nom) => (
 					<li key={nom} className={c.puce}>
 						{nom}
-						<button type="button" aria-label={`Retirer ${nom}`} onClick={() => ecrire(noms.filter((x) => x !== nom))}>
+						<button type="button" aria-label={t.retirer(nom)} onClick={() => ecrire(noms.filter((x) => x !== nom))}>
 							×
 						</button>
 					</li>
@@ -44,13 +46,13 @@ export function Puces(p: { champ: ChampReglageVue; dispose: ChampDispose; saisie
 				<li>
 					{ajout === null ? (
 						<button type="button" className={c.ajout} onClick={() => setAjout('')}>
-							+ ajouter
+							{t.ajouter}
 						</button>
 					) : (
 						<input
 							className={c.saisiePuce}
-							aria-label={`Ajouter : ${p.dispose.libelle}`}
-							placeholder="ex. Makefile"
+							aria-label={t.ajouterA(p.dispose.libelle)}
+							placeholder={t.exemple}
 							spellCheck={false}
 							autoFocus
 							value={ajout}

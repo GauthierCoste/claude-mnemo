@@ -11,15 +11,16 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import { CONTRASTE_MINIMAL, contraste, normaliserHex } from '../../../reglages/accent.ts';
 import type { Saisie } from '../../../reglages/brouillon.ts';
 import type { ChampDispose } from '../../../reglages/disposition.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import c from '../Cartes.module.css';
 import { BadgeEffet, Defaut } from './Defaut.tsx';
 
 /** Les pastilles : le jeton qui les peint et celui où lire leur valeur. Le vert d'origine est le défaut, connu sans lecture. */
 const PASTILLES = [
-	{ nom: 'Violet', fond: 'var(--violet)', jeton: '--violet' },
-	{ nom: 'Bleu', fond: 'var(--blue)', jeton: '--blue' },
-	{ nom: 'Ambre', fond: 'var(--amber)', jeton: '--amber' },
-	{ nom: 'Rouge', fond: 'var(--red)', jeton: '--red' },
+	{ nom: 'violet', fond: 'var(--violet)', jeton: '--violet' },
+	{ nom: 'bleu', fond: 'var(--blue)', jeton: '--blue' },
+	{ nom: 'ambre', fond: 'var(--amber)', jeton: '--amber' },
+	{ nom: 'rouge', fond: 'var(--red)', jeton: '--red' },
 ] as const;
 
 const ID_CODE_INVALIDE = 'nuancier-code-invalide';
@@ -31,15 +32,16 @@ function lireJeton(jeton: string): string | null {
 }
 
 export function Nuancier(p: { champ: ChampReglageVue; dispose: ChampDispose; saisie: Saisie; surSaisie(v: Saisie): void }): ReactNode {
+	const t = useTextes().reglages.nuancier;
 	const pastilles = useMemo(
 		() => [
-			{ nom: 'Vert d’origine', fond: 'var(--vert)', hex: ACCENT_PAR_DEFAUT },
+			{ nom: t.vertOrigine, fond: 'var(--vert)', hex: ACCENT_PAR_DEFAUT },
 			...PASTILLES.flatMap((x) => {
 				const hex = lireJeton(x.jeton);
-				return hex === null ? [] : [{ nom: x.nom, fond: x.fond, hex }];
+				return hex === null ? [] : [{ nom: t[x.nom], fond: x.fond, hex }];
 			}),
 		],
-		[],
+		[t],
 	);
 	const choisie = typeof p.saisie === 'string' ? p.saisie.toLowerCase() : '';
 	const autre = estCouleurHex(choisie) && !pastilles.some((x) => x.hex === choisie);
@@ -61,17 +63,17 @@ export function Nuancier(p: { champ: ChampReglageVue; dispose: ChampDispose; sai
 					/>
 				))}
 				<span className={c.libre}>
-					<label className={c.autre} data-choisie={autre || undefined} title="Ouvrir le sélecteur de couleur du système">
+					<label className={c.autre} data-choisie={autre || undefined} title={t.selecteur}>
 						<span className={c.temoin} data-couleur={autre || undefined} style={autre ? ({ '--c': choisie } as CSSProperties) : undefined} aria-hidden="true" />
-						Personnalisée
-						<input type="color" aria-label="Couleur personnalisée" value={estCouleurHex(choisie) ? choisie : ACCENT_PAR_DEFAUT} onChange={(e) => p.surSaisie(e.target.value)} />
+						{t.personnalisee}
+						<input type="color" aria-label={t.couleurPersonnalisee} value={estCouleurHex(choisie) ? choisie : ACCENT_PAR_DEFAUT} onChange={(e) => p.surSaisie(e.target.value)} />
 					</label>
 					<CodeHex couleur={choisie} surSaisie={p.surSaisie} surInvalide={poserCodeInvalide} />
 				</span>
 			</div>
 			{codeInvalide && (
 				<p id={ID_CODE_INVALIDE} className={c.erreurHex} role="alert">
-					Code attendu : # puis 6 caractères (0 à 9, a à f)
+					{t.codeInvalide}
 				</p>
 			)}
 			<AvertissementContraste couleur={choisie} />
@@ -86,6 +88,7 @@ export function Nuancier(p: { champ: ChampReglageVue; dispose: ChampDispose; sai
  * couleur en vigueur quand elle change ailleurs (pastille, sélecteur du système, Rétablir).
  */
 function CodeHex(p: { couleur: string; surSaisie(v: Saisie): void; surInvalide(signale: boolean): void }): ReactNode {
+	const t = useTextes().reglages.nuancier;
 	const [texte, poserTexte] = useState(p.couleur);
 	const [quitte, poserQuitte] = useState(true);
 	useEffect(() => {
@@ -99,7 +102,7 @@ function CodeHex(p: { couleur: string; surSaisie(v: Saisie): void; surInvalide(s
 		<input
 			className={c.hex}
 			type="text"
-			aria-label="Code hexadécimal de la couleur"
+			aria-label={t.codeHex}
 			aria-invalid={signale || undefined}
 			aria-describedby={signale ? ID_CODE_INVALIDE : undefined}
 			placeholder="#rrggbb"
@@ -123,13 +126,14 @@ function CodeHex(p: { couleur: string; surSaisie(v: Saisie): void; surInvalide(s
 
 /** Prévient quand l'accent se lit mal sur le fond (contraste sous 3:1). */
 function AvertissementContraste(p: { couleur: string }): ReactNode {
+	const t = useTextes().reglages.nuancier;
 	const fond = lireJeton('--bg');
 	if (!estCouleurHex(p.couleur) || fond === null) return null;
 	const rapport = contraste(p.couleur, fond);
 	if (rapport >= CONTRASTE_MINIMAL) return null;
 	return (
 		<p className={c.avertissement} role="status">
-			Cette couleur se lit mal sur le fond sombre (contraste {rapport.toFixed(1).replace('.', ',')}:1, au moins {CONTRASTE_MINIMAL}:1 conseillé) : les liens, filets et titres seront peu visibles.
+			{t.contraste(rapport, CONTRASTE_MINIMAL)}
 		</p>
 	);
 }

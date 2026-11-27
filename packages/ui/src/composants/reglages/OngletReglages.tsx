@@ -8,18 +8,24 @@
  * (réglages ou serveur MCP) est retenu par la vue Réglages ; quitter les Réglages l'est ici : un avertissement propose
  * d'enregistrer, d'abandonner ou de rester. Avec les deux saisies, un seul avertissement les nomme, Branchements montré :
  * « Enregistrer les réglages » laisse le serveur à enregistrer (la sortie reste retenue), « Tout abandonner » perd les deux.
+ * Libellés, explications et choix des réglages du service : dans la langue de l'interface (`reglages/libelles.ts`). La langue
+ * enregistrée (`interface.langue`) s'applique tout de suite : la vue rendue par le service remplace celle du cache, que
+ * `LangueFournie` lit.
  */
 import type { ReglagesVue } from '@mnemo/contrat';
 import { ROUTES } from '@mnemo/contrat';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ErreurApi } from '../../client/api.ts';
-import { useClient } from '../../client/contexte.tsx';
+import { useCacheRessources, useClient } from '../../client/contexte.tsx';
 import { useMoteurs, useReglages } from '../../client/hooks.ts';
+import { publierRessource } from '../../client/ressources.ts';
+import { useTextes } from '../../langue/langue.tsx';
 import { attendUnGeste } from '../../moteurs/circuit.ts';
 import { useNavigation } from '../../navigation.tsx';
 import { appliquerAccent } from '../../reglages/accent.ts';
 import { enSaisie, enValeur, modifications, type Saisie } from '../../reglages/brouillon.ts';
-import { CARTES_REGLAGES, champsNonDisposes, sectionDuChamp } from '../../reglages/disposition.ts';
+import { cartesReglages, champsNonDisposes, sectionDuChamp } from '../../reglages/disposition.ts';
+import { champsTraduits } from '../../reglages/libelles.ts';
 import { oublierSectionDemandee, sectionDemandeeALire, type SectionReglages } from '../../reglages/onglet-retenu.ts';
 import { Bouton } from '../commun/Bouton.tsx';
 import { raccourciAlt } from '../../raccourcis.ts';
@@ -31,20 +37,21 @@ import c from './Cartes.module.css';
 import d from './Panneau.module.css';
 import r from './Reglages.module.css';
 
-const SECTIONS: readonly { cle: SectionReglages; titre: string; sous: string }[] = [
-	{ cle: 'branchements', titre: 'Branchements', sous: 'moteurs et app Claude' },
-	{ cle: 'memoire', titre: 'Mémoire', sous: 'rappel, recherche, confiance' },
-	{ cle: 'systeme', titre: 'Système', sous: 'service, modèles, couleur' },
-];
+const SECTIONS: readonly SectionReglages[] = ['branchements', 'memoire', 'systeme'];
 
 const saisiesDe = (vue: ReglagesVue | undefined): Record<string, Saisie> => Object.fromEntries((vue?.champs ?? []).map((x) => [x.cle, enSaisie(x, x.valeur)]));
 
 /** `surModifie` : prévenu quand une saisie diffère (ou plus) de ce qui est enregistré (changement d'onglet retenu). */
 export function OngletReglages(p: { surModifie(modifie: boolean): void }): ReactNode {
 	const { api } = useClient();
+	const cache = useCacheRessources();
+	const t = useTextes();
+	const o = t.reglages.onglet;
 	const ressource = useReglages();
 	const [enregistree, setEnregistree] = useState<ReglagesVue | null>(null);
 	const vue = enregistree ?? ressource.donnees;
+	const champs = useMemo(() => champsTraduits(vue?.champs ?? [], t), [vue, t]);
+	const cartes = useMemo(() => cartesReglages(t), [t]);
 	// « Voir dans Réglages » d'une autre vue : la section demandée ouverte d'emblée
 	const [section, setSection] = useState<SectionReglages>(() => sectionDemandeeALire() ?? 'branchements');
 	useEffect(() => oublierSectionDemandee(), []);
@@ -93,12 +100,13 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 		setEnvoi(true);
 		setErreur(null);
 		try {
-			setEnregistree(await api.remplacer<ReglagesVue>(ROUTES.reglages, { valeurs: aEnvoyer }));
-			// le cache des réglages suit : la couleur principale ne dépend pas d'une relecture tardive
-			ressource.recharger();
+			const rendue = await api.remplacer<ReglagesVue>(ROUTES.reglages, { valeurs: aEnvoyer });
+			setEnregistree(rendue);
+			// le cache des réglages suit, sans relecture : la couleur principale et la langue de toute l'interface changent tout de suite
+			publierRessource(cache, 'reglages', rendue);
 			return true;
 		} catch (e) {
-			setErreur(e instanceof ErreurApi ? e.message : 'Enregistrement impossible.');
+			setErreur(e instanceof ErreurApi ? e.message : o.erreur);
 			return false;
 		} finally {
 			setEnvoi(false);
@@ -112,7 +120,7 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 
 	const surSaisie = useCallback((cle: string, v: Saisie) => setSaisies((x) => ({ ...x, [cle]: v })), []);
 	const s: Saisies = {
-		champs: vue?.champs ?? [],
+		champs,
 		saisies,
 		surSaisie,
 		valeurDe: (cle) => {
@@ -127,41 +135,41 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 		if (cle === 'branchements')
 			return geste ? (
 				<>
-					<span className={r.pastille} aria-hidden="true" title="Un moteur attend un geste" />
-					<span className={c.horsEcran}>(un moteur attend un geste)</span>
+					<span className={r.pastille} aria-hidden="true" title={o.geste} />
+					<span className={c.horsEcran}>{o.gesteHorsEcran}</span>
 				</>
 			) : null;
-		return Object.keys(aEnvoyer).some((x) => sectionDuChamp(x) === cle) ? <span className={d.badge}>modifié</span> : null;
+		return Object.keys(aEnvoyer).some((x) => sectionDuChamp(x) === cle) ? <span className={d.badge}>{o.modifie}</span> : null;
 	};
-	const libelles = (cles: string[]) => cles.map((cle) => vue?.champs.find((x) => x.cle === cle)?.libelle ?? cle).join(', ');
-	const chargement = <p className={vue === undefined && ressource.erreur !== null ? c.erreur : c.discret}>{ressource.erreur ?? 'Chargement des réglages…'}</p>;
+	const libelles = (cles: string[]) => cles.map((cle) => champs.find((x) => x.cle === cle)?.libelle ?? cle).join(', ');
+	const chargement = <p className={vue === undefined && ressource.erreur !== null ? c.erreur : c.discret}>{ressource.erreur ?? o.chargement}</p>;
 	const port = vue?.champs.find((x) => x.cle === 'service.port')?.valeur;
 
 	return (
 		<div className={d.page}>
-			<nav className={d.liste} aria-label="Sections des réglages">
+			<nav className={d.liste} aria-label={t.reglages.vue.sections}>
 				<ul className={d.lignes}>
-					{SECTIONS.map((x) => (
-						<li key={x.cle}>
-							<button type="button" className={d.ligne} aria-current={x.cle === section ? 'true' : undefined} onClick={() => setSection(x.cle)}>
+					{SECTIONS.map((cle) => (
+						<li key={cle}>
+							<button type="button" className={d.ligne} aria-current={cle === section ? 'true' : undefined} onClick={() => setSection(cle)}>
 								<span className={d.identite}>
 									<span className={d.nom}>
-										{x.titre}
-										{marque(x.cle)}
+										{o.sections[cle].titre}
+										{marque(cle)}
 									</span>
-									<span className={d.description}>{x.sous}</span>
+									<span className={d.description}>{o.sections[cle].sous}</span>
 								</span>
 							</button>
 						</li>
 					))}
 				</ul>
 				<p className={d.discret}>
-					Dans <code>.mnemo/reglages.json</code> ; les règles de la mémoire (confiance, seuil de rappel) dans <code>SCHEMA.md</code>, versionné (un commit). Raccourci : <kbd>{raccourciAlt(',')}</kbd>
+					{o.fichiers(<code>.mnemo/reglages.json</code>, <code>SCHEMA.md</code>, <kbd>{raccourciAlt(',')}</kbd>)}
 				</p>
 			</nav>
 			<div className={c.contenu}>
 				{vue !== undefined && vue.avertissements.length > 0 && (
-					<ul className={c.avis} aria-label="Avertissements">
+					<ul className={c.avis} aria-label={o.avertissements}>
 						{vue.avertissements.map((a) => (
 							<li key={a}>{a}</li>
 						))}
@@ -169,15 +177,15 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 				)}
 				{vue !== undefined && vue.enAttente.length > 0 && (
 					<p className={c.avis} role="status">
-						Redémarrage du service requis pour : {libelles(vue.enAttente)} — « mnemo arreter » puis « mnemo ouvrir ».
+						{o.redemarrage(libelles(vue.enAttente))}
 					</p>
 				)}
 				<div className={c.seule} hidden={section !== 'branchements'}>
 					<section className={c.carte} aria-labelledby="titre-branchements">
 						<h2 id="titre-branchements" className={c.titreCarte}>
-							Branchements
+							{o.sections.branchements.titre}
 						</h2>
-						<p className={c.sous}>Les moteurs des agents, et ce que l’app Claude peut utiliser.</p>
+						<p className={c.sous}>{o.branchements}</p>
 						<Moteurs />
 						<AppClaude surModifie={setServeurModifie} autreBrouillon={reglagesModifies} />
 					</section>
@@ -185,12 +193,12 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 				<div className={c.duo} hidden={section !== 'memoire'}>
 					{vue === undefined
 						? chargement
-						: CARTES_REGLAGES.memoire.map((carte) => <CarteReglages key={carte.cle} carte={carte} s={s} {...(carte.cle === 'rappel' ? { enPlus: champsNonDisposes(vue.champs) } : {})} />)}
+						: cartes.memoire.map((carte) => <CarteReglages key={carte.cle} carte={carte} s={s} {...(carte.cle === 'rappel' ? { enPlus: champsNonDisposes(champs) } : {})} />)}
 				</div>
 				<div className={c.seule} hidden={section !== 'systeme'}>
 					{vue === undefined
 						? chargement
-						: CARTES_REGLAGES.systeme.map((carte) => (
+						: cartes.systeme.map((carte) => (
 								<CarteReglages
 									key={carte.cle}
 									carte={carte}
@@ -204,22 +212,19 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 						{nav.sortieRetenue && reglagesModifies && (
 							<div className={c.avis} role="alert">
 								{serveurModifie ? (
-									<p>
-										Deux saisies non enregistrées : des réglages (Mémoire, Système) et un serveur MCP (ci-dessus, dans Branchements). Enregistrer les réglages
-										laisse le serveur à enregistrer ensuite ; Tout abandonner perd les deux.
-									</p>
+									<p>{o.sortieDouble}</p>
 								) : (
-									<p>Modifications non enregistrées : les enregistrer avant de quitter les Réglages ?</p>
+									<p>{o.sortie}</p>
 								)}
 								<div className={c.actions}>
 									<Bouton genre="primaire" disabled={envoi} onClick={() => void enregistrerPuisPartir()}>
-										{serveurModifie ? 'Enregistrer les réglages' : 'Enregistrer'}
+										{serveurModifie ? o.enregistrerReglages : t.commun.actions.enregistrer}
 									</Bouton>
 									<Bouton disabled={envoi} onClick={nav.poursuivreSortie}>
-										{serveurModifie ? 'Tout abandonner' : 'Abandonner'}
+										{serveurModifie ? t.reglages.gestes.toutAbandonner : t.reglages.gestes.abandonner}
 									</Bouton>
 									<Bouton disabled={envoi} onClick={nav.annulerSortie}>
-										Rester
+										{t.reglages.gestes.rester}
 									</Bouton>
 								</div>
 							</div>
@@ -231,19 +236,19 @@ export function OngletReglages(p: { surModifie(modifie: boolean): void }): React
 						)}
 						<div className={c.actions}>
 							{reglagesModifies ? (
-								<p className={c.etat}>Modifié, non enregistré</p>
+								<p className={c.etat}>{o.nonEnregistre}</p>
 							) : (
 								enregistree !== null && (
 									<p className={c.statut} role="status">
-										Enregistré.
+										{o.enregistre}
 									</p>
 								)
 							)}
 							<Bouton disabled={!reglagesModifies || envoi} onClick={() => setSaisies(saisiesDe(vue))}>
-								Annuler
+								{t.commun.actions.annuler}
 							</Bouton>
 							<Bouton genre="primaire" disabled={!reglagesModifies || envoi} onClick={() => void enregistrer()}>
-								Enregistrer
+								{t.commun.actions.enregistrer}
 							</Bouton>
 						</div>
 					</footer>

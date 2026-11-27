@@ -13,6 +13,7 @@ import { Bouton } from '../../commun/Bouton.tsx';
 import { copierTexte } from '../../commun/copier.ts';
 import r from '../../commun/Reflet.module.css';
 import { useLiaisonMoteur } from '../../commun/useLiaisonMoteur.ts';
+import { useTextes } from '../../../langue/langue.tsx';
 import { useToast } from '../../Toast.tsx';
 import c from '../Cartes.module.css';
 import s from './Moteurs.module.css';
@@ -20,27 +21,28 @@ import s from './Moteurs.module.css';
 /** `lecture` : une vérification du poste en cours (« Relire »). */
 export function ActionMoteur(p: { id: IdMoteur; moteur: string; action: Action; lecture: boolean }): ReactNode {
 	const a = p.action;
+	const t = useTextes().reglages.moteurs.action;
 	const toast = useToast();
 	const { enCours, retour, lier, effacer } = useLiaisonMoteur(p.id, p.moteur);
-	const copier = (texte: string) => copierTexte(texte, toast, 'Commande copiée.');
+	const copier = (texte: string) => copierTexte(texte, toast, t.copiee);
 	// une nouvelle vérification du poste : le retour de la dernière liaison n'est plus à jour
 	useEffect(() => {
 		if (p.lecture) effacer();
 	}, [p.lecture, effacer]);
 
 	const commande = a.commande;
-	const ouDans = commande?.dans === 'moteur' ? `À taper dans ${p.moteur} :` : a.geste === 'lier' ? 'Ou dans un terminal :' : 'Dans un terminal :';
+	const ouDans = commande?.dans === 'moteur' ? t.dansMoteur(p.moteur) : a.geste === 'lier' ? t.ouTerminal : t.terminal;
 	return (
 		<>
 			<span className={c.droite}>
 				{a.geste === 'lier' && (
 					<Bouton petit genre="primaire" disabled={enCours || p.lecture} onClick={() => void lier()}>
-						{enCours ? <span className={r.reflet}>Liaison…</span> : 'Lier à Mnemo'}
+						{enCours ? <span className={r.reflet}>{t.liaison}</span> : t.lier}
 					</Bouton>
 				)}
 				{a.geste === 'copier' && commande !== null && (
-					<Bouton petit aria-label={`Copier « ${commande.texte} »`} onClick={() => copier(commande.texte)}>
-						Copier « {commande.texte} »
+					<Bouton petit aria-label={t.copierCommande(commande.texte)} onClick={() => copier(commande.texte)}>
+						{t.copierCommande(commande.texte)}
 					</Bouton>
 				)}
 			</span>
@@ -61,11 +63,11 @@ export function ActionMoteur(p: { id: IdMoteur; moteur: string; action: Action; 
 						<span>{ouDans}</span>
 						<code>{commande.texte}</code>
 						{a.geste === 'lier' && (
-							<Bouton petit aria-label={`Copier « ${commande.texte} »`} onClick={() => copier(commande.texte)}>
-								Copier
+							<Bouton petit aria-label={t.copierCommande(commande.texte)} onClick={() => copier(commande.texte)}>
+								{t.copier}
 							</Bouton>
 						)}
-						<span>puis « Relire ».</span>
+						<span>{t.puisRelire}</span>
 					</p>
 				)}
 			</div>

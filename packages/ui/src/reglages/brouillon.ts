@@ -3,6 +3,7 @@
  * à envoyer (seulement les champs changés ; `null` quand on revient au défaut). La validation reste au service.
  */
 import type { ChampReglageVue, ValeurReglageVue } from '@mnemo/contrat';
+import { TEXTES, type Textes } from '../langue/textes.ts';
 
 /** Saisie d'un champ : texte (nombre, liste séparée par des virgules, choix, `oui`/`non` d'une case) ou cases cochées. */
 export type Saisie = string | string[];
@@ -13,7 +14,7 @@ export const NON = 'non';
 
 export const egales = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
-/** Nombre décimal écrit à la française (virgule), dans le champ comme sur la ligne « Défaut ». */
+/** Nombre décimal écrit à la française (virgule) dans la saisie ; `enValeur` lit la virgule comme le point. */
 const decimal = (n: number): string => String(n).replace('.', ',');
 
 export function enSaisie(champ: ChampReglageVue, valeur: ValeurReglageVue): Saisie {
@@ -52,11 +53,12 @@ export function modifications(champs: readonly ChampReglageVue[], saisies: Reado
 	return sortie;
 }
 
-/** Une valeur lisible : libellés des choix, « aucun » pour une liste vide, unité ajoutée. */
-export function valeurLisible(champ: ChampReglageVue, valeur: ValeurReglageVue): string {
+/** Une valeur lisible, dans la langue de `t` : libellés des choix, « aucun » pour une liste vide, unité ajoutée. */
+export function valeurLisible(champ: ChampReglageVue, valeur: ValeurReglageVue, t: Textes = TEXTES.fr): string {
+	const mots = t.reglages.champ;
 	const libelle = (v: string) => champ.choix?.find((c) => c.valeur === v)?.libelle ?? v;
-	if (Array.isArray(valeur)) return valeur.length === 0 ? 'aucun' : valeur.map(libelle).join(', ');
-	if (typeof valeur === 'boolean') return valeur ? 'oui' : 'non';
-	const texte = typeof valeur === 'string' ? libelle(valeur) : champ.genre === 'decimal' ? decimal(valeur) : String(valeur);
+	if (Array.isArray(valeur)) return valeur.length === 0 ? mots.aucun : valeur.map(libelle).join(', ');
+	if (typeof valeur === 'boolean') return valeur ? mots.oui : mots.non;
+	const texte = typeof valeur === 'string' ? libelle(valeur) : champ.genre === 'decimal' ? mots.decimal(valeur) : String(valeur);
 	return champ.unite === undefined ? texte : `${texte} ${champ.unite}`;
 }
