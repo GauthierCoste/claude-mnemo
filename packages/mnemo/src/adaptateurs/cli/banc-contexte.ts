@@ -10,6 +10,7 @@ import type { MesuresNiveau, RejeuJugements } from '../../application/banc-rejeu
 import { syntheseDe } from '../../application/banc-signaux.ts';
 import type { GestesDuBanc } from '../../application/banc-signaux.ts';
 import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
+import { reglageDInjectionDe } from '../../domaine/acceptation-note.ts';
 import { compterGestes, GESTES } from '../../domaine/gestes.ts';
 import type { ComptesDesGestes } from '../../domaine/gestes.ts';
 import { echelleDesSignaux } from '../../domaine/modele-de-note.ts';
@@ -318,8 +319,11 @@ async function apprendre(racine: string, fichier: string, o: Options): Promise<v
 			dep.index.fermer();
 		}
 		// l'échelle des signaux : les réglages de la mémoire, ceux avec lesquels le banc a calculé le signal de session
-		const echelle = echelleDesSignaux(lireReglagesDuDossier(racine).reglages.contexte);
-		const options = { empreinteDe, empreintes: o.empreintes, date: instantDApprentissage(), installes: ggufInstalles(), echelle, ...(o.module === null ? {} : { module: o.module }), depart: o.depart };
+		const contexte = lireReglagesDuDossier(racine).reglages.contexte;
+		const echelle = echelleDesSignaux(contexte);
+		// le seuil d'injection de la mémoire : la note se mesure là où elle injectera
+		const reglage = reglageDInjectionDe(contexte);
+		const options = { empreinteDe, empreintes: o.empreintes, date: instantDApprentissage(), installes: ggufInstalles(), echelle, reglage, ...(o.module === null ? {} : { module: o.module }), depart: o.depart };
 		const { rapport, texte } = await apprendreAuBanc(racine, cas, options).catch((e: unknown) => {
 			throw e instanceof ErreurCli ? e : enErreurCli(e);
 		});

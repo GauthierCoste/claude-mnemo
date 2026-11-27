@@ -11,6 +11,16 @@ import s from './Entrainer.module.css';
 
 type NiveauResultat = ResultatApprentissageVue['niveaux'][number];
 
+/**
+ * Ce qu'est devenu le modèle d'alors. Un modèle refusé ne remplace jamais un accepté : refusé à tous les niveaux, il a remplacé
+ * un modèle qui ne donnait pas de % non plus, et la note reste sans %.
+ */
+function phraseRemplacement(r: ResultatApprentissageVue): string {
+	if (!r.remplace) return 'Le modèle d’alors a été gardé.';
+	if (r.niveaux.every((n) => !n.accepte)) return 'Toujours refusé : ce modèle remplace celui d’alors, sans % non plus, et ordonne le classement.';
+	return 'Son modèle a remplacé le modèle d’alors.';
+}
+
 /** L'état du modèle appris pour ce niveau : accepté, refusé, ou rien d'appris (aucune fiche jugée pour ce niveau). */
 const etatDu = (n: NiveauResultat) => (n.accepte ? 'accepte' : n.paires === 0 ? 'non_appris' : 'refuse');
 
@@ -26,7 +36,7 @@ export function ResultatApprentissage(p: { resultat: ResultatApprentissageVue })
 					{dateEtHeure(r.date)} – {accorder(r.messages, 'message')} de {accorder(r.sessions, 'session')}
 				</span>
 			</div>
-			<p className={s.remplace}>{r.remplace ? 'Son modèle a remplacé le modèle d’alors.' : 'Le modèle d’alors a été gardé.'}</p>
+			<p className={s.remplace}>{phraseRemplacement(r)}</p>
 			<div className={s.grilleNiveaux}>
 				{r.niveaux.map((n) => {
 					const etat = etatDu(n);
@@ -47,7 +57,7 @@ export function ResultatApprentissage(p: { resultat: ResultatApprentissageVue })
 									</ul>
 								</>
 							)}
-							{n.fiabilite.length > 0 && <Fiabilite tranches={n.fiabilite} paires={n.paires} />}
+							{n.fiabilite.length > 0 && <Fiabilite tranches={n.fiabilite} />}
 						</div>
 					);
 				})}
@@ -56,15 +66,22 @@ export function ResultatApprentissage(p: { resultat: ResultatApprentissageVue })
 	);
 }
 
-function Fiabilite(p: { tranches: TrancheFiabiliteVue[]; paires: number }): ReactNode {
+/**
+ * La table compte des jugements : une fiche jugée pour un message (la même fiche, jugée pour deux messages, compte deux fois),
+ * notée hors de l'apprentissage. Son total est celui de ses lignes.
+ */
+function Fiabilite(p: { tranches: TrancheFiabiliteVue[] }): ReactNode {
+	const total = p.tranches.reduce((n, t) => n + t.paires, 0);
 	return (
 		<details className={s.fiabilite}>
-			<summary>Table de fiabilité ({accorder(p.paires, 'fiche jugée', 'fiches jugées')})</summary>
+			<summary>Table de fiabilité ({accorder(total, 'jugement', 'jugements')})</summary>
 			<table className={s.tableNombres}>
 				<thead>
 					<tr>
 						<th scope="col">Note</th>
-						<th scope="col">Fiches</th>
+						<th scope="col" title="Une fiche jugée pour un message : la même fiche jugée pour deux messages compte deux fois">
+							Jugements
+						</th>
 						<th scope="col">Note moyenne</th>
 						<th scope="col">Réellement utiles</th>
 					</tr>

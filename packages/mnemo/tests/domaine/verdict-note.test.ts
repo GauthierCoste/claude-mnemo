@@ -40,10 +40,10 @@ describe('verdict de la note en mots simples (D9)', () => {
 		const { refus } = accepter(MAUVAISES);
 		expect(refus).toHaveLength(8);
 		for (const r of refus) expect(critereEnClair(r)).not.toBe(r);
-		expect(refus.map(critereEnClair)).toEqual([
-			'trop peu de fiches au-dessus de 90 % : 2, il en faut 25',
+		expect(refus.map((r) => critereEnClair(r))).toEqual([
+			'trop peu de fiches que Mnemo injecterait (note au-dessus de 90 %) : 2, il en faut 25',
 			'trop peu de sessions où Mnemo injecterait : 1, il en faut 10',
-			'les fiches au-dessus de 90 % ne sont utiles que 50 % du temps, il en faut 90 %',
+			'les fiches que Mnemo injecterait ne sont utiles que 50 % du temps (non jugées comptées inutiles), il en faut 90 %',
 			'trop peu de jugements pour être sûr de la précision : 20 % au pire, il en faut 80 %',
 			"précision trop variable d'un tirage à l'autre : 30 % au pire, il en faut 80 %",
 			'les % ne suivent pas assez ce qui est utile (pente 2,00, attendue entre 0,8 et 1,25)',
@@ -54,6 +54,25 @@ describe('verdict de la note en mots simples (D9)', () => {
 		expect(critereEnClair(servis)).toBe("Mnemo injecterait une fiche dans 10 % des messages où rien n'est utile, 5 % au plus");
 		// accords au singulier
 		expect(critereEnClair('pas assez de messages silence : 1 de 1 sessions réelles (au moins 5 de 3)')).toBe("trop peu de messages « Rien d'utile ici » : 1 venu de 1 session, il en faut 5 venus de 3");
+	});
+
+	it('au seuil réglé (80 %) : critères de précision décalés d’autant, textes au seuil mesuré', () => {
+		const refus = accepter({ ...MAUVAISES, seuil: 0.8, precisionPessimiste: 0.75 }).refus;
+		expect(refus).toContain('précision 75 % (au moins 80 %)');
+		expect(refus).toContain('borne basse de Wilson 20 % (au moins 70 %)');
+		expect(critereEnClair(refus[0]!, 0.8)).toBe('trop peu de fiches que Mnemo injecterait (note au-dessus de 80 %) : 2, il en faut 25');
+		expect(verdictEnClair('accepte', 0.8)).toBe('Accepté : les % sont justes et Mnemo injecte seul au-dessus de 80 %');
+	});
+
+	it('sans assez de fiches injectées, les critères de précision ne sont pas montrés (ils ne mesurent que quelques fiches)', () => {
+		const { refus } = accepter(MAUVAISES);
+		const modele = { accepte: false, refus, mesures: null };
+		const criteres = criteresEnClair(modele, 'refuse');
+		expect(criteres).toHaveLength(5);
+		expect(criteres.some((c) => /utiles que|Wilson|sûr de la précision|tirage|mises de côté/u.test(c))).toBe(false);
+		// assez de fiches : tous montrés
+		const assez = accepter({ ...MAUVAISES, injections: 40 }).refus;
+		expect(criteresEnClair({ accepte: false, refus: assez, mesures: null }, 'refuse')).toHaveLength(7);
 	});
 
 	it('les refus de l’apprentissage et des modèles de départ ; inconnu : tel quel', () => {

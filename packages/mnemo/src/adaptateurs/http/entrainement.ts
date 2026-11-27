@@ -24,6 +24,7 @@ import type { Dependances, EtatSessions, Modeles, Pilotage, Reranker, Sens } fro
 import { modelesSuivis } from '../../application/suivi-injection.ts';
 import type { SuiviDesInjections } from '../../application/suivi-injection.ts';
 import { DOSSIER_LOCAL } from '../../domaine/dossier-memoire.ts';
+import { reglageDInjectionDe } from '../../domaine/acceptation-note.ts';
 import { echelleDesSignaux } from '../../domaine/modele-de-note.ts';
 import { requeteJointe } from '../../domaine/requete-du-message.ts';
 import { estObjet } from '../../domaine/valeurs.ts';
@@ -129,6 +130,7 @@ export function entrainementDuService(s: ServicePourEntrainement, remplacements:
 			modeles: () => modelesSuivis(pil.etat, modelesActifs(dep), s.suivi),
 			installes,
 			echelle: () => echelleDesSignaux(dep.reglages().contexte),
+			reglage: () => reglageDInjectionDe(dep.reglages().contexte),
 			empreintes: async () => new Map((await dep.index.fiches()).map((f) => [f.chemin, f.empreinte])),
 		},
 		apprenti: apprentiNote(),

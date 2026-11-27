@@ -27,8 +27,8 @@
  * Niveau Complets comme au hook : chaque message est d'abord noté par le modèle Sens seul ; seules ses 8 premières reçoivent la
  * note Complets (logit du reranker) et peuvent être injectées ; les autres gardent la note Sens seul (panneau, pistes).
  */
-import { accepter, calibration, grilleDesSeuils, mesurerAcceptation, SESSION_MANUELLE } from '../domaine/acceptation-note.ts';
-import type { CandidateNotee, CaseDeSeuils, MesuresDAcceptation, MessageNote, StatutDeJugement } from '../domaine/acceptation-note.ts';
+import { accepter, calibration, criteresDePrecision, grilleDesSeuils, mesurerAcceptation, REGLAGE_PAR_DEFAUT, SESSION_MANUELLE } from '../domaine/acceptation-note.ts';
+import type { CandidateNotee, ReglageDInjection, CaseDeSeuils, MesuresDAcceptation, MessageNote, StatutDeJugement } from '../domaine/acceptation-note.ts';
 import { plisParSessionMelanges } from '../domaine/mesures-banc.ts';
 import type { TrancheFiabilite } from '../domaine/mesures-banc.ts';
 import { echelleDesSignaux, identiteDifferente, MAXIMUMS_DES_POIDS, modeleNonAppris, NIVEAUX_DE_NOTE, RERANKEES_SIMULEES, VARIABLES_DU_NIVEAU, VARIABLES_MAX, variablesDeNote } from '../domaine/modele-de-note.ts';
@@ -48,8 +48,6 @@ export const PLIS_EXTERIEURS = 5;
 export const PLIS_INTERIEURS = 4;
 /** Graines des découpages répétés des sessions. */
 export const GRAINES = [1, 2, 3];
-/** Précision pessimiste minimale de chaque découpage. */
-export const PIRE_PRECISION_MIN = 0.85;
 /** L'a priori n'est essayé que s'il est non nul sur au moins tant de paires, venues d'au moins tant de sessions. */
 export const APRIORI_PAIRES_MIN = 30;
 export const APRIORI_SESSIONS_MIN = 5;
@@ -353,6 +351,8 @@ export type OptionsApprentissage = {
 	echelle?: EchelleDesSignaux;
 	/** Paires implicites des gestes : apprises, jamais mesurées. */
 	implicites?: readonly Implicite[];
+	/** Le réglage d'injection de la mémoire : la note se mesure là où elle injectera ; défaut : seuil de 90 %. */
+	reglage?: ReglageDInjection;
 };
 
 const mediane = (valeurs: readonly (number | null)[]): number | null => {
@@ -399,6 +399,7 @@ export function validationEmboitee(
 	graine: number,
 	lambdas: readonly number[],
 	toutesImplicites: readonly Implicite[] = [],
+	reglage: ReglageDInjection = REGLAGE_PAR_DEFAUT,
 ): Tirage & { notes: MessageNote[] } {
 	const plis = plisParSessionMelanges(jeu.messages, PLIS_EXTERIEURS, graine);
 	const notes: MessageNote[] = [];
@@ -429,7 +430,7 @@ export function validationEmboitee(
 			if (n !== null) notes.push(n);
 		}
 	}
-	return { graine, mesures: mesurerAcceptation(notes), grille: grilleDesSeuils(notes), configurations, nonConverges, apprentissages, notes };
+	return { graine, mesures: mesurerAcceptation(notes, reglage), grille: grilleDesSeuils(notes, reglage), configurations, nonConverges, apprentissages, notes };
 }
 
 function apprendreNiveau(
@@ -450,15 +451,16 @@ function apprendreNiveau(
 		const implicites = { utilisees: 0, ecartees: o.implicites.length };
 		return { rapport: { niveau, retenue: null, pertes: lignes, tirages: [], mediane: null, pirePrecision: null, grille: [], stabilite: [], fiabilite: [], implicites, modele }, final: null };
 	}
-	const tirages = o.graines.map((graine) => validationEmboitee(jeu, niveau, graine, o.lambdas, o.implicites));
+	const tirages = o.graines.map((graine) => validationEmboitee(jeu, niveau, graine, o.lambdas, o.implicites, o.reglage));
 	const medianes = medianeDes(tirages.map((t) => t.mesures))!;
 	const pirePrecision = Math.min(...tirages.map((t) => t.mesures.precisionPessimiste ?? 0));
 	const grille = tirages[0]!.grille.map((c, i) => ({ ...medianeDes(tirages.map((t) => t.grille[i]!))!, seuil: c.seuil, seuilPiste: c.seuilPiste }));
 	const compte = new Map<string, number>();
 	for (const t of tirages) for (const c of t.configurations) compte.set(c, (compte.get(c) ?? 0) + 1);
 	const refus = accepter(medianes).refus;
-	if (pirePrecision < PIRE_PRECISION_MIN) {
-		refus.push(`un découpage des sessions donne une précision de ${Math.round(pirePrecision * 1000) / 10} % (au moins ${PIRE_PRECISION_MIN * 100} % à chaque découpage)`);
+	const { pirePrecisionMin } = criteresDePrecision(o.reglage.seuil);
+	if (pirePrecision < pirePrecisionMin) {
+		refus.push(`un découpage des sessions donne une précision de ${Math.round(pirePrecision * 1000) / 10} % (au moins ${Math.round(pirePrecisionMin * 100)} % à chaque découpage)`);
 	}
 	if (jeu.installes.sens === null || (niveau === 'complets' && jeu.installes.reranker === null)) refus.push('modèles installés inconnus');
 	if (jeu.identite.manquante > 0) refus.push(`identité des modèles absente sur ${jeu.identite.manquante} cas (--completer la recalcule)`);
@@ -511,6 +513,7 @@ export function apprendreNote(jeu: JeuDApprentissage, options: OptionsApprentiss
 		lambdas: options.lambdas ?? LAMBDAS,
 		echelle: options.echelle ?? echelleDesSignaux(REGLAGES_PAR_DEFAUT.contexte),
 		implicites: options.implicites ?? [],
+		reglage: options.reglage ?? REGLAGE_PAR_DEFAUT,
 	};
 	const sens = apprendreNiveau(jeu, 'sens', o, null);
 	const complets = apprendreNiveau(jeu, 'complets', o, sens.final);

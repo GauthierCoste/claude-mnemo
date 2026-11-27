@@ -136,6 +136,7 @@ const DEPART: NoteDuNiveauVue[] = (['complets', 'sens'] as const).map((niveau) =
 	etat: 'depart',
 	origine: 'depart',
 	date: '2026-11-25T18:00:00.000Z',
+	seuil: null,
 	verdict: VERDICTS.depart,
 	criteres: ['note de départ livrée avec Mnemo, pas encore entraînée sur les jugements'],
 	refus: ['note de départ, à entraîner'],
@@ -145,7 +146,7 @@ const DEPART: NoteDuNiveauVue[] = (['complets', 'sens'] as const).map((niveau) =
 function apprentissageRefuse(date: string, messages: number, sessions: number, paires: number): { note: NoteDuNiveauVue[]; resultat: ResultatApprentissageVue } {
 	const complets = {
 		refus: ['2 injections simulées (au moins 25)', 'pas assez de messages silence : 1 de 1 sessions réelles (au moins 5 de 3)'],
-		criteres: ['trop peu de fiches au-dessus de 90 % : 2, il en faut 25', "trop peu de messages « Rien d'utile ici » : 1 venu de 1 session, il en faut 5 venus de 3"],
+		criteres: ['trop peu de fiches que Mnemo injecterait (note au-dessus de 90 %) : 2, il en faut 25', "trop peu de messages « Rien d'utile ici » : 1 venu de 1 session, il en faut 5 venus de 3"],
 	};
 	const sens = { refus: ['précision - (au moins 0.85)'], criteres: ['aucune fiche au-dessus de 90 % pour mesurer si les % sont justes'] };
 	const fiabilite = (decalage: number) =>
@@ -158,8 +159,8 @@ function apprentissageRefuse(date: string, messages: number, sessions: number, p
 		].map(([de, a, pMoyen, frequence], i) => ({ de: de!, a: a!, paires: Math.max(0, Math.round(paires * [0.34, 0.22, 0.18, 0.16, 0.1][i]!) - decalage), pMoyen: pMoyen!, frequence: frequence! }));
 	return {
 		note: [
-			{ niveau: 'complets', etat: 'refuse', origine: 'appris', date, verdict: VERDICTS.refuse, ...complets },
-			{ niveau: 'sens', etat: 'refuse', origine: 'appris', date, verdict: VERDICTS.refuse, ...sens },
+			{ niveau: 'complets', etat: 'refuse', origine: 'appris', date, seuil: 0.9, verdict: VERDICTS.refuse, ...complets },
+			{ niveau: 'sens', etat: 'refuse', origine: 'appris', date, seuil: 0.9, verdict: VERDICTS.refuse, ...sens },
 		],
 		resultat: {
 			date,

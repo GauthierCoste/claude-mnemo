@@ -1059,7 +1059,8 @@ export type NiveauNoteVue = 'complets' | 'sens';
  * avec Mnemo, `non_appris`) ; `date` d'apprentissage (ISO ; null : jamais) ; `verdict` en une phrase ; `criteres` : les critères
  * manqués en clair ; `refus` : les mêmes, bruts (rapport).
  */
-export type NoteDuNiveauVue = { niveau: NiveauNoteVue; etat: EtatNoteVue; origine: 'appris' | 'depart' | 'non_appris'; date: string | null; verdict: string; criteres: string[]; refus: string[] };
+/** `seuil` : le seuil d'injection où le modèle a été mesuré (0 à 1) ; null : pas mesuré. */
+export type NoteDuNiveauVue = { niveau: NiveauNoteVue; etat: EtatNoteVue; origine: 'appris' | 'depart' | 'non_appris'; date: string | null; seuil: number | null; verdict: string; criteres: string[]; refus: string[] };
 /**
  * Le banc des messages à juger : `messages` préparés (sautés exclus), `valides` (jugés : validés, silence ou toutes leurs fiches
  * jugées), `aJuger`, `aRelire` (propositions du juge en attente de relecture), `aPrejuger` (messages sans proposition : autant

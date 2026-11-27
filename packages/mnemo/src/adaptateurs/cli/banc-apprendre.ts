@@ -16,6 +16,7 @@ import { rapportEnTexte } from '../../application/rapport-apprentissage.ts';
 import type { CasContexte } from '../../application/banc-contexte.ts';
 import { enregistrerApprentissage } from '../../application/entrainement.ts';
 import { echelleDesSignaux, enModelesDeDepart, moduleDeCoefficients } from '../../domaine/modele-de-note.ts';
+import type { ReglageDInjection } from '../../domaine/acceptation-note.ts';
 import type { EchelleDesSignaux, IdentiteDesModeles } from '../../domaine/modele-de-note.ts';
 import { modelesDeNote } from '../../domaine/note-de-confiance.ts';
 import { REGLAGES_PAR_DEFAUT } from '../../domaine/reglages.ts';
@@ -57,6 +58,8 @@ export async function apprendreAuBanc(
 		installes: IdentiteDesModeles;
 		/** Échelle des signaux de la mémoire (ses réglages du signal de session), enregistrée avec les modèles. */
 		echelle?: EchelleDesSignaux;
+		/** Réglage d'injection de la mémoire, où la note se mesure ; défaut : seuil de 90 %. */
+		reglage?: ReglageDInjection;
 		module?: string;
 		depart?: boolean;
 		graines?: readonly number[];
@@ -66,7 +69,7 @@ export async function apprendreAuBanc(
 	if (options.depart === true && module === undefined) throw new ErreurCli('--depart : le module à écrire manque (--module <chemin>).');
 	const echelle = options.echelle ?? echelleDesSignaux(REGLAGES_PAR_DEFAUT.contexte);
 	const jeu = jeuDApprentissage(cas, options.empreinteDe, { empreintes: options.empreintes, installes: options.installes });
-	const rapport = apprendreNote(jeu, { date: options.date, echelle, ...(options.graines === undefined ? {} : { graines: options.graines }) });
+	const rapport = apprendreNote(jeu, { date: options.date, echelle, ...(options.reglage === undefined ? {} : { reglage: options.reglage }), ...(options.graines === undefined ? {} : { graines: options.graines }) });
 	if (options.depart === true) {
 		const depart = { ...rapport, coefficients: enModelesDeDepart(rapport.coefficients) };
 		await ecrireEntier(module!, moduleDeCoefficients(depart.coefficients));

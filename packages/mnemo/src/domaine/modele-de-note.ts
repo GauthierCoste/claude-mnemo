@@ -115,7 +115,7 @@ export function identiteDifferente(enregistree: IdentiteDesModeles, installee: I
 }
 
 /**
- * Résumé des mesures d'acceptation en validation croisée emboîtée, au seuil par défaut : la médiane des découpages répétés ;
+ * Résumé des mesures d'acceptation en validation croisée emboîtée, au seuil d'injection de la mémoire (`seuil`) : la médiane des découpages répétés ;
  * `pirePrecision` : la plus basse précision pessimiste d'un découpage.
  */
 export type MesuresDuModele = Pick<

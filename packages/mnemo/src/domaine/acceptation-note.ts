@@ -37,6 +37,15 @@ export type ReglageDInjection = {
 
 export const REGLAGE_PAR_DEFAUT: ReglageDInjection = { seuil: 0.9, injectionsParMessage: 2, garde: GARDE_APRIORI, seuilPiste: 0.1, pistesParMessage: 3 };
 
+/**
+ * Le réglage d'injection des réglages de la mémoire (`contexte`, seuils en %) : la note se mesure là où elle injectera. Un seuil
+ * de 100 % (jamais d'injection) se mesure au seuil par défaut, faute de mieux.
+ */
+export function reglageDInjectionDe(contexte: { seuilInjection: number; injectionsParMessage: number; seuilPiste: number; pistesParMessage: number }): ReglageDInjection {
+	const seuil = contexte.seuilInjection >= 100 ? REGLAGE_PAR_DEFAUT.seuil : contexte.seuilInjection / 100;
+	return { seuil, injectionsParMessage: contexte.injectionsParMessage, garde: GARDE_APRIORI, seuilPiste: Math.min(contexte.seuilPiste / 100, seuil), pistesParMessage: contexte.pistesParMessage };
+}
+
 const estReelle = (session: string) => session !== SESSION_MANUELLE;
 const part = (n: number, d: number): number | null => (d === 0 ? null : n / d);
 
@@ -237,13 +246,18 @@ export function mesurerAcceptation(messages: readonly MessageNote[], r: ReglageD
 	};
 }
 
-/** Critères d'acceptation (spec § 4.3, revus le 25/11), au seuil par défaut. */
+/**
+ * Critères d'acceptation (spec § 4.3, revus le 25/11), au seuil par défaut. Les critères de précision suivent le seuil mesuré
+ * (`criteresDePrecision`) : une note juste injecte au-dessus de 80 % des fiches utiles au moins 80 % du temps.
+ */
 export const CRITERES = {
 	injectionsMin: 25,
 	sessionsMin: 10,
 	precisionMin: 0.9,
 	wilsonBasseMin: 0.8,
 	bootstrapMin: 0.8,
+	/** Précision pessimiste minimale de chaque découpage des sessions (`apprendre-note.ts`). */
+	pirePrecisionMin: 0.85,
 	penteMin: 0.8,
 	penteMax: 1.25,
 	silencesMin: 20,
@@ -253,10 +267,22 @@ export const CRITERES = {
 } as const;
 
 const pc = (x: number) => `${Math.round(x * 1000) / 10} %`;
+const centieme = (x: number) => Math.round(x * 100) / 100;
+
+/** Les critères de précision au seuil `seuil` : décalés d'autant que le seuil l'est du seuil par défaut (identiques à 90 %). */
+export function criteresDePrecision(seuil: number): Record<'precisionMin' | 'wilsonBasseMin' | 'bootstrapMin' | 'pirePrecisionMin', number> {
+	const ecart = seuil - REGLAGE_PAR_DEFAUT.seuil;
+	return {
+		precisionMin: centieme(CRITERES.precisionMin + ecart),
+		wilsonBasseMin: centieme(CRITERES.wilsonBasseMin + ecart),
+		bootstrapMin: centieme(CRITERES.bootstrapMin + ecart),
+		pirePrecisionMin: centieme(CRITERES.pirePrecisionMin + ecart),
+	};
+}
 
 /** Le modèle est-il accepté ? `refus` : chaque critère manqué, en clair (aucun texte de fiche). */
 export function accepter(m: MesuresDAcceptation): { accepte: boolean; refus: string[] } {
-	const c = CRITERES;
+	const c = { ...CRITERES, ...criteresDePrecision(m.seuil) };
 	const refus: string[] = [];
 	if (m.injections < c.injectionsMin) refus.push(`${m.injections} injections simulées (au moins ${c.injectionsMin})`);
 	if (m.sessions < c.sessionsMin) refus.push(`${m.sessions} sessions réelles servies (au moins ${c.sessionsMin})`);

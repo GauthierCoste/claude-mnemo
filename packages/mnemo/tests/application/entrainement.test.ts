@@ -7,6 +7,7 @@ import type { LigneHistorique, PortsEntrainement } from '../../src/application/e
 import { modeleNonAppris, REFUS_DEPART } from '../../src/domaine/modele-de-note.ts';
 import type { CoefficientsNote, ModeleDeNote } from '../../src/domaine/modele-de-note.ts';
 import type { ModelesDeNote } from '../../src/domaine/note-de-confiance.ts';
+import { REGLAGE_PAR_DEFAUT } from '../../src/domaine/acceptation-note.ts';
 
 const MAINTENANT = new Date('2026-11-26T10:00:00.000Z');
 
@@ -78,6 +79,7 @@ function faux(cas: CasContexte[], o: Partial<PortsEntrainement> & { modeles?: Mo
 		note: {
 			modeles: async () => modeles,
 			installes: () => ({ sens: 'sens.gguf@1', reranker: 'reranker.gguf@2' }),
+			reglage: () => REGLAGE_PAR_DEFAUT,
 			echelle: () => ({ poidsInjection: 1, demiVieInjection: 3, apriori: 'v1' }),
 			empreintes: async () => new Map(),
 			ecrire: async (c) => {
@@ -148,8 +150,9 @@ describe("entraînement de la note : l'état", () => {
 				etat: 'refuse',
 				origine: 'appris',
 				date: '2026-11-20T10:00:00.000Z',
+				seuil: null,
 				verdict: 'Refusé : la note ordonne le classement, sans %',
-				criteres: ['trop peu de fiches au-dessus de 90 % : 3, il en faut 25'],
+				criteres: ['trop peu de fiches que Mnemo injecterait (note au-dessus de 90 %) : 3, il en faut 25'],
 				refus: ['3 injections simulées (au moins 25)'],
 			},
 			{
@@ -157,6 +160,7 @@ describe("entraînement de la note : l'état", () => {
 				etat: 'depart',
 				origine: 'depart',
 				date: '2026-11-20T10:00:00.000Z',
+				seuil: null,
 				verdict: 'Note de départ, à entraîner : elle ordonne le classement, sans %',
 				criteres: ['note de départ livrée avec Mnemo, pas encore entraînée sur les jugements'],
 				refus: [REFUS_DEPART],
@@ -469,7 +473,7 @@ describe('entraînement de la note : apprendre et revenir (D6)', () => {
 		const vue = await e.etat();
 		expect(vue.note.avant).toBe(true);
 		expect(vue.resultat).toMatchObject({ date: MAINTENANT.toISOString(), messages: 12, sessions: 4 });
-		expect(vue.resultat!.niveaux[0]).toMatchObject({ niveau: 'complets', accepte: false, verdict: 'Refusé : la note ordonne le classement, sans %', criteres: ['trop peu de fiches au-dessus de 90 % : 3, il en faut 25'], paires: 40 });
+		expect(vue.resultat!.niveaux[0]).toMatchObject({ niveau: 'complets', accepte: false, verdict: 'Refusé : la note ordonne le classement, sans %', criteres: ['trop peu de fiches que Mnemo injecterait (note au-dessus de 90 %) : 3, il en faut 25'], paires: 40 });
 		expect(vue.resultat!.niveaux[1]!.criteres).toEqual(["trop peu de messages « Rien d'utile ici » : 2 venus de 1 session, il en faut 20 venus de 5"]);
 		expect(vue.historique[0]!.origine).toBe('manuel');
 	});

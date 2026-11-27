@@ -216,6 +216,14 @@
 	color: var(--mu);
 }
 
+/* Sous la phrase d'effet : ce que le réglage ne fait pas encore (seuil d'injection sans note acceptée). */
+.remarque {
+	grid-column: 1 / -1;
+	margin: 0;
+	font-size: 11.5px;
+	color: var(--amber);
+}
+
 /* « Rétablir » : un lien dans la phrase du défaut */
 .lien {
 	padding: 0;

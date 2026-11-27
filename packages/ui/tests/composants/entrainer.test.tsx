@@ -18,7 +18,7 @@ function vue(o: Partial<Omit<VueEntrainement, 'banc'>> & { banc?: Partial<VueEnt
 	const { banc, ...reste } = o;
 	return {
 		note: {
-			niveaux: (['complets', 'sens'] as const).map((niveau) => ({ niveau, etat: 'depart', origine: 'depart', date: '2026-11-25T18:00:00.000Z', verdict: DEPART, criteres: [], refus: [] })),
+			niveaux: (['complets', 'sens'] as const).map((niveau) => ({ niveau, etat: 'depart', origine: 'depart', date: '2026-11-25T18:00:00.000Z', seuil: null, verdict: DEPART, criteres: [], refus: [] })),
 			avant: false,
 		},
 		// sans apprentissage, tous les messages validés sont nouveaux
@@ -41,7 +41,7 @@ const RESULTAT: VueEntrainement['resultat'] = {
 			niveau: 'complets',
 			accepte: false,
 			verdict: REFUSE,
-			criteres: ['trop peu de fiches au-dessus de 90 % : 2, il en faut 25'],
+			criteres: ['trop peu de fiches que Mnemo injecterait (note au-dessus de 90 %) : 2, il en faut 25'],
 			refus: ['2 injections simulées (au moins 25)'],
 			paires: 40,
 			fiabilite: [{ de: 0.8, a: 1, paires: 6, pMoyen: 0.86, frequence: 0.5 }],
@@ -152,11 +152,13 @@ describe('Mémoire › Entraîner', () => {
 		);
 		const resultat = (await screen.findByRole('heading', { name: 'Dernier apprentissage' })).closest('section')!;
 		expect(resultat.textContent).toContain('Son modèle a remplacé le modèle d’alors.');
-		expect(resultat.textContent).toContain('trop peu de fiches au-dessus de 90 % : 2, il en faut 25');
+		expect(resultat.textContent).toContain('trop peu de fiches que Mnemo injecterait (note au-dessus de 90 %) : 2, il en faut 25');
 		expect(resultat.textContent).toContain('Acceptée');
 		const details = resultat.querySelector('details')!;
 		expect(details.open).toBe(false);
 		expect(within(details).getByText('86 %')).toBeTruthy();
+		// le total du titre est celui des lignes (des jugements fiche × message), pas les paires d'apprentissage
+		expect(details.querySelector('summary')!.textContent).toBe('Table de fiabilité (6 jugements)');
 		const historique = screen.getByRole('heading', { name: 'Historique' }).closest('section')!;
 		const lignes = within(historique).getAllByRole('row');
 		expect(lignes[1]!.textContent).toContain('Automatique');
@@ -167,6 +169,13 @@ describe('Mémoire › Entraîner', () => {
 		// tout est jugé, l'apprentissage date d'avant : rien de neuf, Préparer est mis en avant, la carte Apprendre le dit
 		expect((await etape(/Préparer des messages/)).getAttribute('aria-current')).toBe('step');
 		expect((await etape(/Apprendre/)).textContent).toContain('Aucun message jugé depuis le dernier apprentissage');
+	});
+
+	it('résultat refusé partout qui remplace : dit « toujours refusé », pas un succès', async () => {
+		monter(vue({ resultat: { ...RESULTAT, niveaux: RESULTAT!.niveaux.map((n) => ({ ...n, accepte: false })) } }));
+		const resultat = (await screen.findByRole('heading', { name: 'Dernier apprentissage' })).closest('section')!;
+		expect(resultat.textContent).toContain('Toujours refusé : ce modèle remplace celui d’alors, sans % non plus, et ordonne le classement.');
+		expect(resultat.textContent).not.toContain('Son modèle a remplacé');
 	});
 
 	it('résultat gardé : le verdict en clair de chaque niveau (il diffère de la note actuelle)', async () => {

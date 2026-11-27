@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accepter, bootstrapPrecision, grilleDesSeuils, penteDeCalibration, SESSION_MANUELLE, simulerInjections } from '../../src/domaine/acceptation-note.ts';
+import { accepter, bootstrapPrecision, CRITERES, criteresDePrecision, reglageDInjectionDe, grilleDesSeuils, penteDeCalibration, SESSION_MANUELLE, simulerInjections } from '../../src/domaine/acceptation-note.ts';
 import type { CandidateNotee, MesuresDAcceptation, MessageNote } from '../../src/domaine/acceptation-note.ts';
 
 let numero = 0;
@@ -149,5 +149,17 @@ describe('accepter', () => {
 	it('refuse sans assez de messages silence', () => {
 		expect(accepter({ ...bonnes, silences: 19 }).refus[0]).toMatch(/^pas assez de messages silence/u);
 		expect(accepter({ ...bonnes, sessionsSilence: 4 }).refus[0]).toMatch(/^pas assez de messages silence/u);
+	});
+});
+
+describe('le seuil où la note se mesure', () => {
+	it('réglage de la mémoire (en %) : seuil, injections et pistes ; 100 % (jamais) se mesure à 90 % ; pistes jamais au-dessus du seuil', () => {
+		expect(reglageDInjectionDe({ seuilInjection: 80, injectionsParMessage: 2, seuilPiste: 25, pistesParMessage: 3 })).toMatchObject({ seuil: 0.8, injectionsParMessage: 2, seuilPiste: 0.25, pistesParMessage: 3 });
+		expect(reglageDInjectionDe({ seuilInjection: 100, injectionsParMessage: 2, seuilPiste: 95, pistesParMessage: 3 })).toMatchObject({ seuil: 0.9, seuilPiste: 0.9 });
+	});
+
+	it('critères de précision : ceux de la spec à 90 %, décalés d’autant ailleurs', () => {
+		expect(criteresDePrecision(0.9)).toEqual({ precisionMin: CRITERES.precisionMin, wilsonBasseMin: CRITERES.wilsonBasseMin, bootstrapMin: CRITERES.bootstrapMin, pirePrecisionMin: CRITERES.pirePrecisionMin });
+		expect(criteresDePrecision(0.8)).toEqual({ precisionMin: 0.8, wilsonBasseMin: 0.7, bootstrapMin: 0.7, pirePrecisionMin: 0.75 });
 	});
 });

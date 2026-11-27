@@ -7,7 +7,8 @@ import type { ChampReglageVue } from '@mnemo/contrat';
 import { useId, type ReactNode } from 'react';
 import { enValeur, valeurLisible, type Saisie } from '../../../reglages/brouillon.ts';
 import type { ChampDispose } from '../../../reglages/disposition.ts';
-import { phraseEffet } from '../../../reglages/phrases-effet.ts';
+import { useEntrainement } from '../../../client/hooks.ts';
+import { phraseEffet, remarqueSeuilInjection } from '../../../reglages/phrases-effet.ts';
 import c from '../Cartes.module.css';
 import { BadgeEffet, Defaut } from './Defaut.tsx';
 
@@ -59,9 +60,16 @@ export function Curseur(p: Props): ReactNode {
 					{phrase}
 				</p>
 			)}
+			{p.champ.cle === 'contexte.seuilInjection' && <RemarqueSeuil n={n} />}
 			<Defaut champ={p.champ} saisie={p.saisie} surSaisie={p.surSaisie} />
 		</div>
 	);
+}
+
+/** Sous le seuil d'injection : ce qu'il fait vraiment, selon la note de confiance (sans effet tant qu'elle est refusée). */
+function RemarqueSeuil(p: { n: number }): ReactNode {
+	const remarque = remarqueSeuilInjection(p.n, useEntrainement().donnees?.note.niveaux);
+	return remarque === null ? null : <p className={c.remarque}>{remarque}</p>;
 }
 
 export function Barre(p: Props): ReactNode {

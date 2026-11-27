@@ -25,11 +25,12 @@ import type { Implicite, JeuDApprentissage, OptionsApprentissage, RapportDAppren
 import { aPrejuger, fusionnerPrejugements, prejuger } from './prejuger.ts';
 import type { Juge } from './prejuger.ts';
 import { NIVEAUX_DE_NOTE } from '../domaine/modele-de-note.ts';
+import type { ReglageDInjection } from '../domaine/acceptation-note.ts';
 import type { CoefficientsNote, EchelleDesSignaux, IdentiteDesModeles, ModeleDeNote, NiveauDeNote } from '../domaine/modele-de-note.ts';
 import { etatDuModele, garderLesNiveauxSansPaire } from '../domaine/note-de-confiance.ts';
 import type { EtatDuModele, ModelesDeNote } from '../domaine/note-de-confiance.ts';
 import { requeteJointe } from '../domaine/requete-du-message.ts';
-import { criteresEnClair, verdictEnClair } from '../domaine/verdict-note.ts';
+import { criteresEnClair, seuilMesure, verdictEnClair } from '../domaine/verdict-note.ts';
 import type { TrancheFiabilite } from '../domaine/mesures-banc.ts';
 
 // ——— Ports ———
@@ -52,6 +53,8 @@ export type FichiersDeNote = {
 	modeles(): Promise<ModelesDeNote>;
 	installes(): IdentiteDesModeles;
 	echelle(): EchelleDesSignaux;
+	/** Le réglage d'injection de la mémoire, où la note se mesure. */
+	reglage(): ReglageDInjection;
 	empreintes(): Promise<ReadonlyMap<string, string>>;
 	ecrire(coefficients: CoefficientsNote): Promise<void>;
 	/** `remplace` : le modèle de l'essai a été écrit (le rapport le dit). */
@@ -90,7 +93,8 @@ export type OrigineApprentissage = 'manuel' | 'automatique';
 export type LigneHistorique = { date: string; origine: OrigineApprentissage; verdicts: Record<NiveauDeNote, EtatDuModele>; remplace: boolean; erreur?: string };
 /** Les paires implicites des gestes, données ou calculées au début de la tâche (sous son exclusion, arrêtables). */
 export type ImplicitesDApprentissage = readonly Implicite[] | ((signal: AbortSignal) => Promise<readonly Implicite[]>);
-export type NoteDuNiveau = { niveau: NiveauDeNote; etat: EtatDuModele; origine: 'appris' | 'depart' | 'non_appris'; date: string | null; verdict: string; criteres: string[]; refus: string[] };
+/** `seuil` : le seuil d'injection où le modèle a été mesuré (0 à 1) ; null : pas mesuré (note de départ, jamais apprise). */
+export type NoteDuNiveau = { niveau: NiveauDeNote; etat: EtatDuModele; origine: 'appris' | 'depart' | 'non_appris'; date: string | null; seuil: number | null; verdict: string; criteres: string[]; refus: string[] };
 /** `nouveauxDepuisApprentissage` : messages jugés depuis le dernier apprentissage (`nouveauxDepuis`), tous sans apprentissage. */
 export type BancEntrainement = { messages: number; valides: number; aJuger: number; aRelire: number; aPrejuger: number; silences: number; sautes: number; paires: number; nouveauxDepuisApprentissage: number };
 /** `remplace` : le modèle de cet essai a remplacé le modèle d'alors (faux : l'ancien est gardé). */
@@ -367,7 +371,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 
 	const noteDuNiveau = (niveau: NiveauDeNote, m: ModelesDeNote): NoteDuNiveau => {
 		const { modele, etat } = m[niveau];
-		return { niveau, etat, origine: origineDu(modele, etat), date: modele.apprisLe, verdict: verdictEnClair(etat), criteres: criteresEnClair(modele, etat), refus: [...modele.refus] };
+		return { niveau, etat, origine: origineDu(modele, etat), date: modele.apprisLe, seuil: modele.mesures?.seuil ?? null, verdict: verdictEnClair(etat, seuilMesure(modele)), criteres: criteresEnClair(modele, etat), refus: [...modele.refus] };
 	};
 
 	const resultatDu = ({ rapport: r, remplace }: DernierRapport): ResultatApprentissage => ({
@@ -377,7 +381,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 		sessions: r.sessions,
 		niveaux: r.niveaux.map((n) => {
 			const etat: EtatDuModele = n.modele.apprisLe === null || Object.keys(n.modele.poids).length === 0 ? 'non_appris' : n.modele.accepte ? 'accepte' : 'refuse';
-			return { niveau: n.niveau, accepte: n.modele.accepte, verdict: verdictEnClair(etat), criteres: criteresEnClair(n.modele, etat), refus: [...n.modele.refus], paires: n.modele.paires, fiabilite: n.fiabilite };
+			return { niveau: n.niveau, accepte: n.modele.accepte, verdict: verdictEnClair(etat, seuilMesure(n.modele)), criteres: criteresEnClair(n.modele, etat), refus: [...n.modele.refus], paires: n.modele.paires, fiabilite: n.fiabilite };
 		}),
 	});
 
@@ -466,7 +470,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 				const implicites = typeof o.implicites === 'function' ? await o.implicites(signal) : o.implicites;
 				if (signal.aborted) return;
 				const jeu = jeuDApprentissage(cas, await p.note.empreintes(), { empreintes: 'exclure', installes: p.note.installes() });
-				const rapport = await p.apprenti.apprendre(jeu, { date, echelle: p.note.echelle(), ...(implicites === undefined ? {} : { implicites }) }, signal);
+				const rapport = await p.apprenti.apprendre(jeu, { date, echelle: p.note.echelle(), reglage: p.note.reglage(), ...(implicites === undefined ? {} : { implicites }) }, signal);
 				if (signal.aborted) return;
 				await enFileNote(() => enregistrerApprentissage(p, rapport, { date, origine: o.origine, remplacer: o.remplacer }));
 			};
