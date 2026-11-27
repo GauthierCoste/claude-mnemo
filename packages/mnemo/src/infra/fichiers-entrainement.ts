@@ -167,7 +167,9 @@ function lireLigne(v: unknown): LigneHistorique | null {
 	if (!estObjet(v) || typeof v['date'] !== 'string' || (v['origine'] !== 'manuel' && v['origine'] !== 'automatique') || !estObjet(v['verdicts'])) return null;
 	const verdicts = v['verdicts'];
 	if (!NIVEAUX_DE_NOTE.every((n) => (ETATS as readonly unknown[]).includes(verdicts[n]))) return null;
-	return { date: v['date'], origine: v['origine'], verdicts: verdicts as LigneHistorique['verdicts'], remplace: v['remplace'] === true, ...(typeof v['erreur'] === 'string' ? { erreur: v['erreur'] } : {}) };
+	return { date: v['date'], origine: v['origine'], verdicts: verdicts as LigneHistorique['verdicts'], remplace: v['remplace'] === true, ...(typeof v['erreur'] === 'string' ? { erreur: v['erreur'] } : {}),
+		...(typeof v['avancement'] === 'number' && v['avancement'] >= 0 && v['avancement'] <= 1 ? { avancement: v['avancement'] } : {}),
+	};
 }
 
 /** L'historique des apprentissages (`.mnemo/entrainements.json`) ; illisible : vide. */

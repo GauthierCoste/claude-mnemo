@@ -381,6 +381,7 @@ function resumer(m: MesuresDAcceptation, pirePrecision: number | null): MesuresD
 		sessions: m.sessions,
 		injectionsParMessage: m.injectionsParMessage,
 		silences: m.silences,
+		sessionsSilence: m.sessionsSilence,
 		partSilencesAvecInjection: m.partSilencesAvecInjection,
 		pente: m.pente,
 		ordonnee: m.ordonnee,

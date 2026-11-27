@@ -24,7 +24,10 @@ import { jeuDApprentissage } from './apprendre-note.ts';
 import type { Implicite, JeuDApprentissage, OptionsApprentissage, RapportDApprentissage } from './apprendre-note.ts';
 import { aPrejuger, fusionnerPrejugements, prejuger } from './prejuger.ts';
 import type { Juge } from './prejuger.ts';
+import { avancementDes, volumesDe } from '../domaine/avancement-note.ts';
+import type { Volume } from '../domaine/avancement-note.ts';
 import { NIVEAUX_DE_NOTE } from '../domaine/modele-de-note.ts';
+import { CRITERES } from '../domaine/acceptation-note.ts';
 import type { ReglageDInjection } from '../domaine/acceptation-note.ts';
 import type { CoefficientsNote, EchelleDesSignaux, IdentiteDesModeles, ModeleDeNote, NiveauDeNote } from '../domaine/modele-de-note.ts';
 import { etatDuModele, garderLesNiveauxSansPaire } from '../domaine/note-de-confiance.ts';
@@ -89,8 +92,11 @@ export type PortsEntrainement = {
 export type GenreTache = 'preparer' | 'prejuger' | 'apprendre';
 export type TacheEntrainement = { genre: GenreTache; fait: number; total: number; depuis: string };
 export type OrigineApprentissage = 'manuel' | 'automatique';
-/** `erreur` : l'essai a échoué (réapprentissage automatique) ; `verdicts` sont alors ceux des modèles gardés. */
-export type LigneHistorique = { date: string; origine: OrigineApprentissage; verdicts: Record<NiveauDeNote, EtatDuModele>; remplace: boolean; erreur?: string };
+/**
+ * `erreur` : l'essai a échoué (réapprentissage automatique) ; `verdicts` sont alors ceux des modèles gardés. `avancement` : celui
+ * de cet essai vers les premiers % (0 à 1, `meilleurAvancement`) ; absent : essai en échec, ou d'avant la 1.11.5.
+ */
+export type LigneHistorique = { date: string; origine: OrigineApprentissage; verdicts: Record<NiveauDeNote, EtatDuModele>; remplace: boolean; erreur?: string; avancement?: number };
 /** Les paires implicites des gestes, données ou calculées au début de la tâche (sous son exclusion, arrêtables). */
 export type ImplicitesDApprentissage = readonly Implicite[] | ((signal: AbortSignal) => Promise<readonly Implicite[]>);
 /** `seuil` : le seuil d'injection où le modèle a été mesuré (0 à 1) ; null : pas mesuré (note de départ, jamais apprise). */
@@ -105,8 +111,25 @@ export type ResultatApprentissage = {
 	sessions: number;
 	niveaux: { niveau: NiveauDeNote; accepte: boolean; verdict: string; criteres: string[]; refus: string[]; paires: number; fiabilite: TrancheFiabilite[] }[];
 };
+/**
+ * Avancement vers les premiers % (null : une note est acceptée, les % sont là). `part` : celle du niveau le plus avancé, de 0 à 1
+ * (null : rien d'appris encore) ; `parNiveau` ; `volumes` du niveau le plus avancé (sans apprentissage : les messages « Rien
+ * d'utile ici » jugés) ; `qualite` : volume atteint, le critère de qualité qui manque, en clair ; `ecart` : en points depuis
+ * l'essai d'avant qui a mesuré un avancement.
+ */
+export type AvancementNote = {
+	part: number | null;
+	niveau: NiveauDeNote | null;
+	parNiveau: { niveau: NiveauDeNote; part: number }[];
+	volumes: Volume[];
+	qualite: string | null;
+	ecart: { points: number; depuis: string } | null;
+	/** Seuil d'injection où l'avancement a été mesuré (0 à 1) ; null : rien d'appris. */
+	seuil: number | null;
+};
 export type EtatEntrainement = {
 	note: { niveaux: NoteDuNiveau[]; avant: boolean };
+	avancement: AvancementNote | null;
 	banc: BancEntrainement;
 	tache: TacheEntrainement | null;
 	historique: LigneHistorique[];
@@ -197,6 +220,45 @@ export function nouveauxDepuis(cas: readonly CasContexte[], depuis: string | nul
 /** Ce qu'il faut pour enregistrer un apprentissage : les fichiers de la note et l'historique. */
 export type PortsEnregistrement = { note: Pick<FichiersDeNote, 'modeles' | 'installes' | 'echelle' | 'ecrire' | 'ecrireRapport'>; historique: HistoriqueDesApprentissages };
 
+/** L'avancement de chaque niveau mesuré d'un rapport, et le niveau le plus avancé ; null : aucun niveau mesuré. */
+export function meilleurAvancement(rapport: Pick<RapportDApprentissage, 'niveaux'>): { niveau: NiveauDeNote; part: number; parNiveau: { niveau: NiveauDeNote; part: number }[] } | null {
+	const parNiveau = rapport.niveaux.flatMap((n) => (n.modele.mesures === null ? [] : [{ niveau: n.niveau, part: avancementDes(volumesDe(n.modele.mesures)) }]));
+	if (parNiveau.length === 0) return null;
+	const meilleur = parNiveau.reduce((a, b) => (b.part > a.part ? b : a));
+	return { niveau: meilleur.niveau, part: meilleur.part, parNiveau };
+}
+
+/**
+ * L'avancement montré sur la page (`AvancementNote`) : aucun si une note est acceptée ; sans apprentissage, les messages « Rien
+ * d'utile ici » déjà jugés (`silences`) ; sinon celui du dernier rapport, son critère de qualité manqué une fois le volume
+ * atteint, et l'écart avec l'essai d'avant de l'historique qui a mesuré un avancement.
+ */
+export function avancementDeLaNote(
+	niveaux: readonly NoteDuNiveau[],
+	dernier: DernierRapport | null,
+	resultat: ResultatApprentissage | null,
+	historique: readonly LigneHistorique[],
+	silences: number,
+): AvancementNote | null {
+	if (niveaux.some((n) => n.etat === 'accepte' || n.etat === 'coupe')) return null;
+	const meilleur = dernier === null ? null : meilleurAvancement(dernier.rapport);
+	if (dernier === null || meilleur === null) {
+		return { part: null, niveau: null, parNiveau: [], volumes: [{ nom: 'silences', fait: silences, cible: CRITERES.silencesMin }], qualite: null, ecart: null, seuil: null };
+	}
+	const mesures = dernier.rapport.niveaux.find((n) => n.niveau === meilleur.niveau)!.modele.mesures!;
+	const qualite = meilleur.part >= 1 ? (resultat?.niveaux.find((n) => n.niveau === meilleur.niveau)?.criteres[0] ?? null) : null;
+	const avant = historique.find((l) => l.avancement !== undefined && l.date !== dernier.rapport.date);
+	return {
+		part: meilleur.part,
+		niveau: meilleur.niveau,
+		parNiveau: meilleur.parNiveau,
+		volumes: volumesDe(mesures),
+		qualite,
+		ecart: avant === undefined ? null : { points: Math.round(meilleur.part * 100) - Math.round(avant.avancement! * 100), depuis: avant.date },
+		seuil: mesures.seuil,
+	};
+}
+
 /** Ajoute une ligne en tête de l'historique (les `HISTORIQUE_MAX` plus récentes gardées). */
 export const ajouterAlHistorique = async (historique: HistoriqueDesApprentissages, ligne: LigneHistorique): Promise<void> =>
 	historique.ecrire([ligne, ...(await historique.lire())].slice(0, HISTORIQUE_MAX));
@@ -221,7 +283,8 @@ export async function enregistrerApprentissage(
 	const installes = p.note.installes();
 	const echelle = p.note.echelle();
 	const verdicts = Object.fromEntries(NIVEAUX_DE_NOTE.map((n) => [n, etatDuModele(coefficients[n], n, installes, echelle)])) as Record<NiveauDeNote, EtatDuModele>;
-	await ajouterAlHistorique(p.historique, { date: o.date, origine: o.origine, verdicts, remplace });
+	const avancement = meilleurAvancement(rapport)?.part;
+	await ajouterAlHistorique(p.historique, { date: o.date, origine: o.origine, verdicts, remplace, ...(avancement === undefined ? {} : { avancement }) });
 	return { coefficients, remplace };
 }
 
@@ -393,8 +456,11 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 			const pr = progression(cas);
 			const juge = p.juge();
 			const depuis = dateDuDernierApprentissage(historique, modeles);
+			const niveaux = NIVEAUX_DE_NOTE.map((n) => noteDuNiveau(n, modeles));
+			const resultat = rapport === null ? null : resultatDu(rapport);
 			return {
-				note: { niveaux: NIVEAUX_DE_NOTE.map((n) => noteDuNiveau(n, modeles)), avant },
+				note: { niveaux, avant },
+				avancement: avancementDeLaNote(niveaux, rapport, resultat, historique, pr.silences),
 				banc: {
 					messages: pr.messages,
 					valides: pr.messagesJuges,
@@ -409,7 +475,7 @@ export function creerEntrainement(p: PortsEntrainement): Entrainement {
 				tache,
 				historique: historique.slice(0, HISTORIQUE_MAX),
 				juge: 'juge' in juge ? { disponible: true } : { disponible: false, raison: juge.raison },
-				resultat: rapport === null ? null : resultatDu(rapport),
+				resultat,
 				...(derniereErreur === undefined ? {} : { derniereErreur }),
 			};
 		},

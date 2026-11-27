@@ -1,6 +1,7 @@
 /**
  * En-tête de la page Entraîner : la note de confiance de chaque niveau (Complets, Sens seul), en un mot (puce) et en une phrase,
- * avec d'où elle vient ; les deux niveaux sur une ligne quand ils disent la même chose. Le menu ⋯ porte le geste rare,
+ * avec d'où elle vient ; les deux niveaux sur une ligne quand ils disent la même chose ; dessous, tant qu'aucune n'est
+ * acceptée, le bandeau d'avancement vers les vrais résultats. Le menu ⋯ porte le geste rare,
  * « Revenir au modèle d'avant » (s'il y en a un), réversible : pas de confirmation, un toast.
  */
 import type { VueEntrainement } from '@mnemo/contrat';
@@ -10,6 +11,7 @@ import { lignesDeNote, NOMS_ETATS_NOTE, nomsDesNiveaux, origineDeNote, suiteDuVe
 import { Puce } from '../../commun/Puce.tsx';
 import { useToast } from '../../Toast.tsx';
 import s from './Entrainer.module.css';
+import { AvancementNote } from './AvancementNote.tsx';
 import { MenuNote } from './MenuNote.tsx';
 import { useGeste } from './useGeste.ts';
 
@@ -48,6 +50,7 @@ export function EnteteNote(p: { vue: VueEntrainement }): ReactNode {
 					);
 				})}
 			</ul>
+			{v.avancement !== null && <AvancementNote avancement={v.avancement} />}
 			{geste.refus !== null && (
 				<p className={s.refus} role="alert">
 					{geste.refus.message}

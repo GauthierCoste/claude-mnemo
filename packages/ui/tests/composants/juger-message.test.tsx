@@ -28,6 +28,7 @@ function message(indice: number, o: Partial<VueMessageAJuger> = {}): VueMessageA
 
 const ETAT: VueEntrainement = {
 	note: { niveaux: [], avant: false },
+	avancement: null,
 	banc: { messages: 3, valides: 0, aJuger: 3, aRelire: 0, aPrejuger: 0, silences: 0, sautes: 0, paires: 0, nouveauxDepuisApprentissage: 0 },
 	tache: null,
 	historique: [],

@@ -8,6 +8,7 @@
  */
 import {
 	ROUTES,
+	type AvancementNoteVue,
 	type CandidateAJugerVue,
 	type EtatNoteVue,
 	type JugementVue,
@@ -214,11 +215,33 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 		return dates.reduce<string | null>((a, d) => (a === null || d > a ? d : a), null);
 	};
 
+	/** Comme le service : sans apprentissage, les messages « Rien d'utile ici » jugés ; sinon l'avancement crédible d'un petit banc. */
+	const avancement = (): AvancementNoteVue => {
+		if (resultat === null) return { part: null, niveau: null, parNiveau: [], volumes: [{ nom: 'silences', fait: banc.filter((c) => c.silence).length, cible: 20 }], qualite: null, ecart: null, seuil: null };
+		return {
+			part: 0.08,
+			niveau: 'complets',
+			parNiveau: [
+				{ niveau: 'complets', part: 0.08 },
+				{ niveau: 'sens', part: 0 },
+			],
+			volumes: [
+				{ nom: 'injections', fait: 2, cible: 25 },
+				{ nom: 'sessions', fait: 2, cible: 10 },
+				{ nom: 'silences', fait: 16, cible: 20, sessions: { fait: 11, cible: 5 } },
+			],
+			qualite: null,
+			ecart: { points: 3, depuis: new Date(Date.now() - 3 * JOUR).toISOString() },
+			seuil: 0.9,
+		};
+	};
+
 	function vue(): VueEntrainement {
 		const presents = banc.filter((c) => !c.saute);
 		const depuis = dernierApprentissage();
 		return {
 			note: { niveaux: structuredClone(note), avant: avant !== null },
+			avancement: avancement(),
 			banc: {
 				messages: presents.length,
 				valides: presents.filter((c) => c.valide).length,

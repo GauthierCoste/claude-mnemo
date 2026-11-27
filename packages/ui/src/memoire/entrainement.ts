@@ -3,7 +3,7 @@
  * le ton de sa puce), le verdict du service sans son premier mot, les niveaux regroupés quand ils disent la même chose,
  * l'étape utile, les dates et les libellés des tâches. Vocabulaire (spec, D9) : « note de confiance », « injecter ».
  */
-import type { EtatNoteVue, NiveauNoteVue, NoteDuNiveauVue, TacheEntrainementVue, VueEntrainement } from '@mnemo/contrat';
+import type { AvancementNoteVue, EtatNoteVue, NiveauNoteVue, NoteDuNiveauVue, TacheEntrainementVue, VolumeNoteVue, VueEntrainement } from '@mnemo/contrat';
 
 /** Messages validés conseillés pour un premier apprentissage (la jauge de « Préparer »). */
 export const MESSAGES_CONSEILLES = 100;
@@ -103,3 +103,61 @@ export const pourcent = (x: number): string => `${Math.round(x * 100)} %`;
 
 /** Accord en nombre : `1 message`, `3 messages` (le pluriel régulier par défaut). */
 export const accorder = (n: number, singulier: string, pluriel = `${singulier}s`): string => `${n} ${n > 1 ? pluriel : singulier}`;
+
+/** Date courte d'un écart d'avancement : « 26/11 ». */
+const jourMois = (iso: string): string => {
+	const d = new Date(iso);
+	return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
+/** Ce qu'un volume compte, en clair, pour son infobulle. */
+const SENS_DES_VOLUMES: Record<VolumeNoteVue['nom'], (cible: number, seuil: string) => string> = {
+	injections: (cible, seuil) => `Fiches que Mnemo injecterait seul, notées au-dessus de ${seuil} (il en faut ${cible}).`,
+	sessions: (cible) => `Sessions où Mnemo injecterait au moins une fiche (il en faut ${cible}).`,
+	silences: (cible) => `Messages jugés « Rien d'utile ici » (il en faut ${cible}).`,
+};
+const NOMS_DES_VOLUMES: Record<VolumeNoteVue['nom'], string> = { injections: 'fiches injectables', sessions: 'sessions', silences: '« Rien d’utile ici »' };
+
+/**
+ * Les textes du bandeau d'avancement (page Entraîner) : libellé et son explication, pourcentage (« — » sans apprentissage),
+ * écart, puis les volumes (nom, fait, cible, infobulle) ou, volume atteint, le critère de qualité qui manque.
+ */
+export function textesAvancement(a: AvancementNoteVue): {
+	explication: string;
+	pourcentage: string;
+	ecart: { texte: string; titre: string } | null;
+	volumes: { nom: string; fait: number; cible: number; titre: string }[];
+	qualite: string | null;
+	sansApprentissage: boolean;
+} {
+	const seuil = a.seuil === null ? '90 %' : pourcent(a.seuil);
+	const parNiveau = a.parNiveau.length > 1 ? ` ${a.parNiveau.map((n) => `${NOMS_NIVEAUX_NOTE[n.niveau]} ${pourcent(n.part)}`).join(', ')}.` : '';
+	const explication =
+		a.part === null
+			? 'Les vrais résultats (des % justes, et Mnemo qui injecte seul) viennent quand assez de fiches, de sessions et de messages « Rien d’utile ici » sont jugés. L’avancement est connu au premier apprentissage.'
+			: `Les vrais résultats (des % justes, et Mnemo qui injecte seul) viennent quand les trois volumes sont atteints, puis la précision. L’avancement est celui du volume le plus en retard : c’est lui qui bloque. Mesuré au dernier apprentissage, au seuil de ${seuil}.${parNiveau}`;
+	const ecart =
+		a.ecart === null
+			? null
+			: {
+					texte: a.ecart.points === 0 ? `inchangé depuis le ${jourMois(a.ecart.depuis)}` : `${a.ecart.points > 0 ? '+' : '−'}${Math.abs(a.ecart.points)} pts depuis le ${jourMois(a.ecart.depuis)}`,
+					titre: `Écart avec l’apprentissage du ${dateEtHeure(a.ecart.depuis)}.`,
+				};
+	const volumes =
+		a.part !== null && a.part >= 1
+			? []
+			: a.volumes.map((v) => ({
+					nom: NOMS_DES_VOLUMES[v.nom],
+					fait: v.fait,
+					cible: v.cible,
+					titre: SENS_DES_VOLUMES[v.nom](v.cible, seuil) + (v.sessions === undefined ? '' : ` Venus de ${v.sessions.fait} sessions, il en faut ${v.sessions.cible}.`),
+				}));
+	return {
+		explication,
+		pourcentage: a.part === null ? '—' : pourcent(a.part),
+		ecart,
+		volumes,
+		qualite: a.part !== null && a.part >= 1 ? (a.qualite ?? 'volume atteint ; reste la qualité') : null,
+		sansApprentissage: a.part === null,
+	};
+}

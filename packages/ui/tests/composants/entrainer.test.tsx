@@ -21,6 +21,7 @@ function vue(o: Partial<Omit<VueEntrainement, 'banc'>> & { banc?: Partial<VueEnt
 			niveaux: (['complets', 'sens'] as const).map((niveau) => ({ niveau, etat: 'depart', origine: 'depart', date: '2026-11-25T18:00:00.000Z', seuil: null, verdict: DEPART, criteres: [], refus: [] })),
 			avant: false,
 		},
+		avancement: null,
 		// sans apprentissage, tous les messages validés sont nouveaux
 		banc: { messages: 0, valides: 0, aJuger: 0, aRelire: 0, aPrejuger: 0, silences: 0, sautes: 0, paires: 0, nouveauxDepuisApprentissage: banc?.valides ?? 0, ...banc },
 		tache: null,

@@ -572,3 +572,49 @@
 		animation: none;
 	}
 }
+
+/* ---------- bandeau d'avancement vers les vrais résultats : la ligne entière est la barre (fond léger jusqu'à --part) ---------- */
+.avancement {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 2px var(--esp-2);
+	margin: 0;
+	padding: 6px 10px;
+	border: 1px solid var(--bd);
+	border-radius: var(--r-2);
+	font-size: 12px;
+	color: var(--mu);
+	background: linear-gradient(90deg, color-mix(in srgb, var(--ac) 14%, transparent) var(--part, 0%), transparent var(--part, 0%));
+}
+
+/* un curseur d'aide a toujours son infobulle (attribut title) */
+.aideSurvol {
+	cursor: help;
+	border-bottom: 1px dotted var(--dim);
+}
+
+.pctAvancement {
+	font: 600 12px var(--mono);
+	color: var(--tx);
+	font-variant-numeric: tabular-nums;
+}
+
+.ecartAvancement {
+	font: 11px var(--mono);
+	color: var(--dim);
+}
+
+.sepAvancement {
+	color: var(--dim);
+}
+
+.volume {
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.volume b {
+	font-weight: 600;
+	color: var(--tx);
+}

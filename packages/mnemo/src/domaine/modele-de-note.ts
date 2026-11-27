@@ -138,7 +138,11 @@ export type MesuresDuModele = Pick<
 	| 'rappel'
 	| 'utilesAtteintes'
 	| 'rappel10'
-> & { pirePrecision: number | null };
+> & {
+	pirePrecision: number | null;
+	/** Sessions réelles d'où viennent les messages silence ; absent : modèle appris avant la 1.11.5. */
+	sessionsSilence?: number;
+};
 
 /**
  * Un modèle de note pour un niveau : `p = σ(biais + Σ poids·variable)`. `gguf` : fichiers des modèles de sens et du reranker

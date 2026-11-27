@@ -1073,7 +1073,7 @@ export type BancEntrainementVue = { messages: number; valides: number; aJuger: n
 export type TacheEntrainementVue = { genre: 'preparer' | 'prejuger' | 'apprendre'; fait: number; total: number; depuis: string };
 /** Une ligne de l'historique des apprentissages (les 10 derniers) : `remplace` : le nouveau modèle a remplacé l'ancien. */
 /** `erreur` : l'essai (automatique) a échoué ; `verdicts` sont alors ceux des modèles gardés. */
-export type LigneHistoriqueVue = { date: string; origine: 'manuel' | 'automatique'; verdicts: Record<NiveauNoteVue, EtatNoteVue>; remplace: boolean; erreur?: string };
+export type LigneHistoriqueVue = { date: string; origine: 'manuel' | 'automatique'; verdicts: Record<NiveauNoteVue, EtatNoteVue>; remplace: boolean; erreur?: string; avancement?: number };
 /** Une tranche de la table de fiabilité : notes de `de` à `a`, `paires`, note moyenne `pMoyen`, part réellement utile `frequence`. */
 export type TrancheFiabiliteVue = { de: number; a: number; paires: number; pMoyen: number; frequence: number };
 /**
@@ -1094,8 +1094,25 @@ export type ResultatApprentissageVue = {
  * derniers, plus récents d'abord) ; `juge` (Claude Code trouvé, sinon la raison) ; `resultat` du dernier apprentissage ;
  * `derniereErreur` de la dernière tâche (absente si elle a réussi ou a été arrêtée).
  */
+/** Un volume vers les vrais résultats : `fait` sur `cible` ; les messages « Rien d'utile ici » disent aussi leurs sessions. */
+export type VolumeNoteVue = { nom: 'injections' | 'sessions' | 'silences'; fait: number; cible: number; sessions?: { fait: number; cible: number } };
+/**
+ * Avancement vers les vrais résultats (des % justes, Mnemo qui injecte seul) ; null dans la vue : une note est acceptée.
+ * `part` : celle du volume le plus en retard du niveau le plus avancé, de 0 à 1 (null : rien d'appris) ; `qualite` : volume
+ * atteint, le critère de qualité qui manque ; `ecart` : en points depuis l'essai d'avant ; `seuil` : seuil mesuré (0 à 1).
+ */
+export type AvancementNoteVue = {
+	part: number | null;
+	niveau: NiveauNoteVue | null;
+	parNiveau: { niveau: NiveauNoteVue; part: number }[];
+	volumes: VolumeNoteVue[];
+	qualite: string | null;
+	ecart: { points: number; depuis: string } | null;
+	seuil: number | null;
+};
 export type VueEntrainement = {
 	note: { niveaux: NoteDuNiveauVue[]; avant: boolean };
+	avancement: AvancementNoteVue | null;
 	banc: BancEntrainementVue;
 	tache: TacheEntrainementVue | null;
 	historique: LigneHistoriqueVue[];
