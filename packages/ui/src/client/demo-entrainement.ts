@@ -4,7 +4,8 @@
  * deux lignes d'historique. Toutes les routes `entrainement…` répondent comme le service : préparer, pré-juger et apprendre
  * lancent une tâche qui progresse (diffusée par `{ type: 'entrainement' }`), arrêtable ; apprendre finit sur un verdict
  * refusé crédible ; revenir échange les modèles ; message, annuler et « Accepter les sûres » tiennent le banc. Messages et
- * fiches fictifs. `&entrainement=vide` : rien de préparé, note de départ ; `sansjuge` : Claude Code introuvable.
+ * fiches fictifs. `&entrainement=vide` : rien de préparé, note de départ ; `sansjuge` : Claude Code introuvable ;
+ * `volume` : volume atteint, la qualité décide (bandeau « Vers les vrais résultats » à 100 %, coche verte).
  */
 import {
 	ROUTES,
@@ -27,7 +28,7 @@ import {
 import { ErreurApi } from './api.ts';
 
 /** Départs de `&entrainement=`. */
-export type DepartEntrainementDemo = 'vide' | 'sansjuge';
+export type DepartEntrainementDemo = 'vide' | 'sansjuge' | 'volume';
 
 const JOUR = 86_400_000;
 /** Cadence des fausses tâches : un message préparé, un message pré-jugé, la durée d'un apprentissage. */
@@ -217,6 +218,24 @@ export function creerEntrainementDemo(diffuser: (m: MessageServeur) => void, dep
 
 	/** Comme le service : sans apprentissage, les messages « Rien d'utile ici » jugés ; sinon l'avancement crédible d'un petit banc. */
 	const avancement = (): AvancementNoteVue => {
+		if (depart === 'volume') {
+			return {
+				part: 1,
+				niveau: 'complets',
+				parNiveau: [
+					{ niveau: 'complets', part: 1 },
+					{ niveau: 'sens', part: 0.64 },
+				],
+				volumes: [
+					{ nom: 'injections', fait: 31, cible: 25 },
+					{ nom: 'sessions', fait: 12, cible: 10 },
+					{ nom: 'silences', fait: 24, cible: 20, sessions: { fait: 9, cible: 5 } },
+				],
+				qualite: 'les fiches que Mnemo injecterait ne sont utiles que 72 % du temps (non jugées comptées inutiles), il en faut 80 %',
+				ecart: { points: 12, depuis: new Date(Date.now() - 3 * JOUR).toISOString() },
+				seuil: 0.8,
+			};
+		}
 		if (resultat === null) return { part: null, niveau: null, parNiveau: [], volumes: [{ nom: 'silences', fait: banc.filter((c) => c.silence).length, cible: 20 }], qualite: null, ecart: null, seuil: null };
 		return {
 			part: 0.08,

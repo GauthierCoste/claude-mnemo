@@ -711,7 +711,7 @@ export type OptionsDemo = {
 	coupure?: boolean;
 	/** Suggestion de la règle des 3 sessions sur la première session, sa fiche écartée ici (`&suggestion=1`). */
 	suggestion?: boolean;
-	/** Départ de Mémoire › Entraîner (`&entrainement=vide` ou `sansjuge`) ; absent : un banc entamé. */
+	/** Départ de Mémoire › Entraîner (`&entrainement=vide`, `sansjuge` ou `volume`) ; absent : un banc entamé. */
 	entrainement?: DepartEntrainementDemo;
 };
 

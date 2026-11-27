@@ -36,7 +36,7 @@ async function creerClient(): Promise<{ client: Client | null; depart?: Depart; 
 		const avecEnPlus = depart ? { ...depart, ...enPlus } : Object.keys(enPlus).length ? { vue: 'sessions' as const, ...enPlus } : undefined;
 		const modeles = parametres.get('modeles');
 		const entrainement = parametres.get('entrainement');
-		const departEntrainement = entrainement === 'vide' || entrainement === 'sansjuge' ? { entrainement: entrainement as 'vide' | 'sansjuge' } : {};
+		const departEntrainement = entrainement === 'vide' || entrainement === 'sansjuge' || entrainement === 'volume' ? { entrainement: entrainement as 'vide' | 'sansjuge' | 'volume' } : {};
 		// classement vivant : `&coupure=1` (injection automatique coupée par le suivi), `&suggestion=1` (règle des 3 sessions)
 		const classement = { ...(parametres.get('coupure') === '1' ? { coupure: true } : {}), ...(parametres.get('suggestion') === '1' ? { suggestion: true } : {}) };
 		return { client: creerClientDemo({ ...conflit, ...classement, ...departEntrainement, ...(modeles !== null ? { modeles } : {}) }), ...(avecEnPlus ? { depart: avecEnPlus } : {}) };
@@ -59,7 +59,7 @@ const FICHE_DEMO = 'projets/erp-saas/Module stocks.md';
  * fiche par une « autre fenêtre » 2,5 s après le départ (avis de conflit, 409 à l'enregistrement) ; `&archiviste=1` ouvre
  * le tiroir de l'archiviste, `&palette=<texte>` la palette avec ce texte ; `&modeles=<état>` l'état des modèles locaux
  * (`veille`, `chargement`, `prets`, `vectorisation`, `recherche`, `sens`, `coupes`, `echec`, ou `anime`) ; `&entrainement=`
- * le départ de Mémoire › Entraîner (`vide`, `sansjuge`) ; pour les captures.
+ * le départ de Mémoire › Entraîner (`vide`, `sansjuge`, `volume`) ; pour les captures.
  */
 function departDemo(vue: string | null, zoom: number, fiche: string | null, edition: boolean): { depart?: Depart } {
 	const enGrand = zoom > 0 ? { zoom } : {};

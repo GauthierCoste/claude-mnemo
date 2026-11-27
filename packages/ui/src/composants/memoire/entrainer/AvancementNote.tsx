@@ -1,7 +1,8 @@
 /**
  * Bandeau d'avancement vers les vrais résultats, sous la note de confiance (page Entraîner) : toute la ligne est la barre,
  * remplie d'un fond léger jusqu'à son pourcentage. « Vers les vrais résultats », le pourcentage, l'écart depuis l'apprentissage
- * d'avant, puis les volumes en clair (fait / il en faut) ou, le volume atteint, le critère de qualité qui manque. Chaque
+ * d'avant, puis les volumes en clair (fait / il en faut) ou, le volume atteint, le critère de qualité qui manque et une coche
+ * verte en bout de ligne. Chaque
  * élément au curseur d'aide a son infobulle. Absent quand une note est acceptée (les % sont là).
  */
 import type { AvancementNoteVue } from '@mnemo/contrat';
@@ -31,6 +32,7 @@ export function AvancementNote(p: { avancement: AvancementNoteVue }): ReactNode 
 				<>
 					<span className={s.sepAvancement}>·</span>
 					<span>volume atteint ; reste la qualité : {t.qualite}</span>
+					<CocheVolume />
 				</>
 			)}
 			{t.sansApprentissage && (
@@ -48,5 +50,15 @@ export function AvancementNote(p: { avancement: AvancementNoteVue }): ReactNode 
 				</Fragment>
 			))}
 		</p>
+	);
+}
+
+/** Coche verte en bout de ligne : le volume est atteint (le vert est fixe, une couleur de sens). */
+function CocheVolume(): ReactNode {
+	return (
+		<svg className={s.cocheVolume} viewBox="0 0 16 16" width="14" height="14" role="img" aria-label="Volume atteint">
+			<title>Volume atteint</title>
+			<path d="M3 8.5 6.5 12 13 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+		</svg>
 	);
 }

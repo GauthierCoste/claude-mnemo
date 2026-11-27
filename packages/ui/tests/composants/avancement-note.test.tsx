@@ -45,9 +45,11 @@ describe('bandeau d’avancement vers les vrais résultats', () => {
 		const { container, rerender } = render(<AvancementNote avancement={{ ...EN_COURS, part: 1, qualite: 'les fiches que Mnemo injecterait ne sont utiles que 72 % du temps' }} />);
 		expect(container.textContent).toContain('volume atteint ; reste la qualité : les fiches que Mnemo injecterait ne sont utiles que 72 % du temps');
 		expect(container.textContent).not.toContain('fiches injectables');
+		expect(screen.getByRole('img', { name: 'Volume atteint' })).toBeTruthy();
 		rerender(<AvancementNote avancement={{ part: null, niveau: null, parNiveau: [], volumes: [{ nom: 'silences', fait: 3, cible: 20 }], qualite: null, ecart: null, seuil: null }} />);
 		expect(container.textContent).toContain('—');
 		expect(container.textContent).toContain('connu au premier apprentissage');
+		expect(screen.queryByRole('img', { name: 'Volume atteint' })).toBeNull();
 		expect(container.textContent).toContain('« Rien d’utile ici » 3/20');
 	});
 });

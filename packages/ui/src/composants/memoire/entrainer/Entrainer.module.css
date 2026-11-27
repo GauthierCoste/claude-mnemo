@@ -618,3 +618,11 @@
 	font-weight: 600;
 	color: var(--tx);
 }
+
+/* volume atteint : coche verte en bout de ligne (vert fixe, couleur de sens) */
+.cocheVolume {
+	flex: none;
+	margin-left: auto;
+	align-self: center;
+	color: var(--vert);
+}
