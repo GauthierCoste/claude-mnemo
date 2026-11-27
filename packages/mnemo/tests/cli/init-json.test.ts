@@ -1,6 +1,6 @@
 /** `mnemo init` pilotable : options explicites, sortie `--json`, échec d'une étape hors mémoire qui n'arrête pas la suite. */
 import { execFile } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import type { LigneInit } from '@mnemo/contrat';
@@ -423,5 +423,42 @@ describe('journalInit', () => {
 		json.progression({ nom: 'sens', libelle: 's' }, 2, null);
 		expect(vues).toEqual([JSON.stringify({ etape: 'modeles', etat: 'progression', piece: 'sens', libelle: 's', recu: 1, total: null })]);
 		expect(PAS_PROGRESSION_MS).toBe(1000);
+	});
+});
+
+describe('mnemo init --langue', () => {
+	const reglages = (racine: string): unknown => JSON.parse(readFileSync(join(racine, '.mnemo', 'reglages.json'), 'utf8'));
+
+	it('options : fr ou en ; valeur manquante, inconnue ou répétée : erreur d’usage (code 2) ; la valeur n’est pas un dossier', () => {
+		expect(lireOptionsInit(['d', '--langue', 'en', '--json'])).toEqual({ dossier: 'd', oui: false, json: true, mcp: null, moteurs: [], modeles: null, commande: null, lanceur: null, langue: 'en' });
+		expect(lireOptionsInit(['--langue', 'fr'])).toMatchObject({ dossier: undefined, langue: 'fr' });
+		expect(lireOptionsInit(['d'])).not.toHaveProperty('langue');
+		for (const args of [['--langue'], ['--langue', '--json'], ['--langue', 'de'], ['--langue', 'systeme'], ['--langue', 'fr', '--langue', 'en']]) {
+			expect(() => lireOptionsInit(args)).toThrow(expect.objectContaining({ code: 2, message: expect.stringContaining('--langue') }));
+		}
+	});
+
+	it('écrit interface.langue dans .mnemo/reglages.json, sans toucher les autres réglages ; sans l’option, rien n’est écrit', async () => {
+		const racine = await dossierTemporaire();
+		mkdirSync(join(racine, '.mnemo'), { recursive: true });
+		writeFileSync(join(racine, '.mnemo', 'reglages.json'), JSON.stringify({ interface: { accent: '#112233' }, futur: { cle: 1 } }));
+		const sortie = capture();
+		await commandeInit([racine, '--json', '--sans-mcp', '--sans-modeles', '--sans-commande', '--sans-lanceur', '--langue', 'en'], { sortie: sortie.flux, plateforme: 'linux', actions: actions() });
+		expect(reglages(racine)).toEqual({ interface: { accent: '#112233', langue: 'en' }, futur: { cle: 1 } });
+		expect(lignesJson(sortie.texte()).at(-1)).toEqual({ fin: true, racine, ok: true });
+		// mémoire existante : la langue est écrite quand même
+		await commandeInit([racine, '--json', '--sans-mcp', '--langue', 'fr'], { sortie: capture().flux, plateforme: 'linux', actions: actions() });
+		expect(reglages(racine)).toMatchObject({ interface: { accent: '#112233', langue: 'fr' } });
+
+		const sans = await dossierTemporaire();
+		await commandeInit([sans, '--json', '--sans-mcp'], { sortie: capture().flux, plateforme: 'linux', actions: actions() });
+		expect(existsSync(join(sans, '.mnemo', 'reglages.json'))).toBe(false);
+	});
+
+	it('mode texte : la langue écrite est dite', async () => {
+		const racine = await dossierTemporaire();
+		const sortie = capture();
+		await commandeInit([racine, '--sans-mcp', '--langue', 'en'], { sortie: sortie.flux, interactif: false, plateforme: 'linux', actions: actions() });
+		expect(sortie.texte()).toContain('Langue de l’interface : en (interface.langue).');
 	});
 });

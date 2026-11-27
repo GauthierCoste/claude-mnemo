@@ -27,6 +27,8 @@ import { journalInit } from './init-journal.ts';
 import { lireOptionsInit } from './init-options.ts';
 import type { ChoixExplicite } from './init-options.ts';
 import { DOSSIER_MEMOIRE } from '../../domaine/dossier-memoire.ts';
+import { modifierReglages } from '../../domaine/reglages.ts';
+import { ecrireReglagesDuDossier, lireReglagesDuDossier } from '../../infra/reglages-fichier.ts';
 
 const MAIN = fileURLToPath(new URL('./main.ts', import.meta.url));
 const SCHEMA = new URL('../../../modeles/SCHEMA.md', import.meta.url);
@@ -136,6 +138,8 @@ class EchecMotive extends Error {
  * `--codex` : déclare aussi le serveur MCP chez Codex et installe les hooks de Mnemo dans `~/.codex/hooks.json` (sans
  * question ; sans `--codex`, Codex n'est jamais touché) ; de même `--mistral` chez Mistral Vibe (`~/.vibe/config.toml` et
  * `~/.vibe/hooks.toml`).
+ * `--langue fr|en` : la langue de l'interface (`interface.langue`) écrite dans `.mnemo/reglages.json` avec la mémoire (son
+ * échec est celui de l'étape `memoire`) ; les autres réglages restent tels quels.
  */
 export async function commandeInit(args: string[], o: OptionsInit = {}): Promise<void> {
 	const choix = lireOptionsInit(args);
@@ -205,6 +209,7 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 			} finally {
 				dependances.index.fermer();
 			}
+			if (choix.langue !== undefined) ecrireLangue(racine, choix.langue);
 		} catch (erreur) {
 			// sans mémoire, rien d'autre n'est tenté : l'erreur part sur la sortie d'erreur
 			j.evenement('memoire', 'echec', texteErreur(erreur));
@@ -212,6 +217,7 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 			throw erreur;
 		}
 		j.evenement('memoire', 'fait', messagesInit(racine, resultat, null)[0]!);
+		if (choix.langue !== undefined) ecrire(`Langue de l’interface : ${choix.langue} (interface.langue).`);
 
 		// la déclaration touche la configuration de Claude Code : seulement sur réponse, avec --oui ou --mcp
 		let declaration: ResultatDeclaration | null = null;
@@ -357,6 +363,16 @@ export async function commandeInit(args: string[], o: OptionsInit = {}): Promise
 	} finally {
 		q?.fermer();
 	}
+}
+
+/**
+ * `--langue` : `interface.langue` écrit dans `.mnemo/reglages.json` du dossier, comme le fait le service (validé par
+ * `modifierReglages`, seule cette clé écrite : les autres réglages du fichier restent tels quels).
+ */
+export function ecrireLangue(racine: string, langue: string): void {
+	const modifies = modifierReglages(lireReglagesDuDossier(racine).reglages, { 'interface.langue': langue });
+	if (!modifies.ok) throw new Error(`Langue refusée : ${modifies.motifs.join(' ')}`);
+	ecrireReglagesDuDossier(racine, modifies.reglages, ['interface.langue']);
 }
 
 /**
