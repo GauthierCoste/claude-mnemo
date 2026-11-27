@@ -9,7 +9,8 @@ import { pathToFileURL } from 'node:url';
 import { BrowserWindow, dialog, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron';
 import type { ExecutableMnemo } from '../domaine/assistant.ts';
 import { CANAUX_ASSISTANT as C, lienAutorise } from '../domaine/assistant-pont.ts';
-import { optionsBarreTitre } from '../domaine/fenetre.ts';
+import { barreDesMenusCachee, optionsBarreTitre } from '../domaine/fenetre.ts';
+import { NOM_APP } from '../domaine/identite-app.ts';
 import { plateformeApp } from '../domaine/plateforme.ts';
 import { controleurAssistant, type FinAssistant } from '../infra/assistant.ts';
 
@@ -63,7 +64,7 @@ export function ouvrirAssistant(o: OptionsAssistant): BrowserWindow {
 		minWidth: 640,
 		minHeight: 540,
 		show: false,
-		title: 'Mnemo',
+		title: NOM_APP,
 		...optionsBarreTitre(plateformeApp(process.platform), null),
 		backgroundColor: '#050506',
 		webPreferences: {
@@ -77,6 +78,7 @@ export function ouvrirAssistant(o: OptionsAssistant): BrowserWindow {
 			navigateOnDragDrop: false,
 		},
 	});
+	if (barreDesMenusCachee(plateformeApp(process.platform))) fenetre.setMenuBarVisibility(false);
 	ouverte = fenetre;
 	const wc = fenetre.webContents;
 	fenetre.once('ready-to-show', () => fenetre.show());

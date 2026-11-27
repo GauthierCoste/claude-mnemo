@@ -10,6 +10,7 @@ import { app, BrowserWindow, screen, shell } from 'electron';
 import {
 	adresseFenetre,
 	agentUtilisateur,
+	barreDesMenusCachee,
 	type Bornes,
 	bornesAOuvrir,
 	decisionNavigation,
@@ -20,6 +21,7 @@ import {
 	TAILLE_DEFAUT,
 	TAILLE_MIN,
 } from '../domaine/fenetre.ts';
+import { NOM_APP } from '../domaine/identite-app.ts';
 import { plateformeApp } from '../domaine/plateforme.ts';
 import type { ServiceLocal } from '../infra/service-local.ts';
 
@@ -74,12 +76,13 @@ export function creerFenetre(o: OptionsFenetre): Fenetre {
 			...(b === null ? { width: TAILLE_DEFAUT.largeur, height: TAILLE_DEFAUT.hauteur, center: true } : { x: b.x, y: b.y, width: b.largeur, height: b.hauteur }),
 			minWidth: TAILLE_MIN.largeur,
 			minHeight: TAILLE_MIN.hauteur,
-			title: 'Mnemo',
+			title: NOM_APP,
 			show: false,
 			...optionsBarreTitre(plateformeApp(process.platform), POSITION_BOUTONS_FENETRE),
 			backgroundColor: FOND_FENETRE,
 			webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true, spellcheck: false },
 		});
+		if (barreDesMenusCachee(plateformeApp(process.platform))) f.setMenuBarVisibility(false);
 		const contenu = f.webContents;
 		// avant tout chargement : l'interface se met en pleine fenêtre quand elle voit la marque de l'app
 		contenu.setUserAgent(agentUtilisateur(contenu.getUserAgent(), app.getVersion()));

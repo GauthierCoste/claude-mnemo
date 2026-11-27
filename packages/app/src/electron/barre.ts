@@ -16,8 +16,8 @@ export type Barre = {
 	detruire(): void;
 };
 
-/** Image aux deux échelles (16 et 32 px) ; « template » (teintée par macOS) si `template`. */
-export function imageTemplate(octets: OctetsImage, template = true): NativeImage {
+/** Image de la barre aux deux échelles (16 et 32 px) ; « template » (teintée par macOS) si `template`. */
+export function imageDeuxEchelles(octets: OctetsImage, template = true): NativeImage {
 	const image = nativeImage.createEmpty();
 	image.addRepresentation({ scaleFactor: 1, buffer: octets.x1 });
 	image.addRepresentation({ scaleFactor: 2, buffer: octets.x2 });
@@ -47,7 +47,7 @@ export function creerBarre(o: { images: ReadonlyMap<string, OctetsImage>; surAct
 		if (i === undefined) {
 			const octets = o.images.get(nom);
 			if (octets === undefined) throw new Error(`Image de la barre des menus absente : ${nom}`);
-			i = imageTemplate(octets, nom.endsWith('Template'));
+			i = imageDeuxEchelles(octets, nom.endsWith('Template'));
 			cache.set(nom, i);
 		}
 		return i;

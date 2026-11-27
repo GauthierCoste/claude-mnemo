@@ -62,15 +62,22 @@ export const BOUTONS_WINDOWS = { color: '#101114', symbolColor: '#eceef2', heigh
 /**
  * Options de barre de titre d'une fenêtre (celle de l'app, celle de l'assistant) selon la plateforme, à passer telles
  * quelles à `BrowserWindow`. macOS : boutons incrustés à `position` ; Windows : boutons du système par-dessus la barre de
- * l'interface, et barre des menus cachée (les raccourcis du menu restent actifs).
+ * l'interface (la barre des menus : `barreDesMenusCachee`).
  */
 export function optionsBarreTitre(
 	plateforme: PlateformeApp,
 	position: { x: number; y: number } | null,
-): { titleBarStyle: 'hidden' | 'hiddenInset'; trafficLightPosition?: { x: number; y: number }; titleBarOverlay?: typeof BOUTONS_WINDOWS; autoHideMenuBar?: true } {
-	if (plateforme === 'win32') return { titleBarStyle: 'hidden', titleBarOverlay: BOUTONS_WINDOWS, autoHideMenuBar: true };
+): { titleBarStyle: 'hidden' | 'hiddenInset'; trafficLightPosition?: { x: number; y: number }; titleBarOverlay?: typeof BOUTONS_WINDOWS } {
+	if (plateforme === 'win32') return { titleBarStyle: 'hidden', titleBarOverlay: BOUTONS_WINDOWS };
 	return position === null ? { titleBarStyle: 'hiddenInset' } : { titleBarStyle: 'hidden', trafficLightPosition: position };
 }
+
+/**
+ * Windows : la barre des menus de la fenêtre est cachée pour de bon (`setMenuBarVisibility(false)`, sans `autoHideMenuBar`,
+ * qui la montrait à chaque appui sur Alt seul) : rien à y montrer, l'interface a ses propres menus ; les raccourcis du menu
+ * de l'application (Ctrl+Q, édition, zoom) restent actifs. macOS : barre des menus de l'écran, rien à cacher.
+ */
+export const barreDesMenusCachee = (plateforme: PlateformeApp): boolean => plateforme === 'win32';
 
 /** Agent utilisateur de la fenêtre : celui d'Electron suivi de ` MnemoApp/<version>`. */
 export function agentUtilisateur(defaut: string, version: string): string {
