@@ -2,10 +2,12 @@
  * Couleur principale de l'interface (réglage `interface.accent`) : posée sur `--ac` de la page à l'exécution ; les fonds
  * atténués en dérivent par `color-mix` dans les CSS. Le texte posé sur l'accent (`--sur-accent`) est sombre ou clair selon
  * la luminance de l'accent : le rapport de contraste le plus grand l'emporte (formule WCAG), donc texte sombre sur un accent
- * clair, texte clair sur un accent foncé. Le logo n'en dépend pas (il garde le vert de Mnemo).
+ * clair, texte clair sur un accent foncé. Le logo suit : celui de la barre de titre par `var(--ac)`, l'icône de la page
+ * (onglet du navigateur, Dock de l'app de bureau) redessinée à la couleur choisie (`icone-page.ts`).
  */
 
 import { ACCENT_PAR_DEFAUT, estCouleurHex } from '@mnemo/commun';
+import { poserIconePage } from './icone-page.ts';
 
 export { ACCENT_PAR_DEFAUT };
 
@@ -50,10 +52,25 @@ export function surChangementAccent(racine: HTMLElement, f: () => void): () => v
 /** Jeton du texte sur l'accent, écrit en entier : chaque `var(--…)` reste lisible (et vérifiable) dans `jetons.css`. */
 const JETONS_SUR_ACCENT = { sombre: 'var(--sur-accent-sombre)', clair: 'var(--sur-accent-clair)' } as const;
 
-/** Pose l'accent (`--ac`) et le texte qui s'y lit (`--sur-accent`) sur `racine` ; une valeur invalide pose le défaut ; prévient les abonnés (`surChangementAccent`). */
+/**
+ * Saisie libre d'une couleur, normalisée en `#rrggbb` minuscule : `#` facultatif, forme courte `#rgb` dépliée, espaces
+ * ignorés ; null si ce n'est pas une couleur hexadécimale.
+ */
+export function normaliserHex(texte: string): string | null {
+	const brut = texte.trim().replace(/^#/, '').toLowerCase();
+	const long = /^[0-9a-f]{3}$/.test(brut) ? [...brut].map((x) => x + x).join('') : brut;
+	return /^[0-9a-f]{6}$/.test(long) ? `#${long}` : null;
+}
+
+/**
+ * Pose l'accent (`--ac`) et le texte qui s'y lit (`--sur-accent`) sur `racine` ; une valeur invalide pose le défaut ; redessine
+ * l'icône de la page à cette couleur ; prévient les abonnés (`surChangementAccent`).
+ */
 export function appliquerAccent(racine: HTMLElement, accent: unknown): void {
 	const hex = estCouleurHex(accent) ? accent.toLowerCase() : ACCENT_PAR_DEFAUT;
 	racine.style.setProperty('--ac', hex);
 	racine.style.setProperty('--sur-accent', JETONS_SUR_ACCENT[texteSurAccent(hex)]);
+	const fond = getComputedStyle(racine).getPropertyValue('--s1').trim().toLowerCase();
+	if (estCouleurHex(fond)) poserIconePage({ fond, trait: hex });
 	racine.dispatchEvent(new CustomEvent(EVENEMENT_ACCENT));
 }

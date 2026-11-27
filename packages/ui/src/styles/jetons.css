@@ -14,7 +14,7 @@
 	--mu: #8b90a0;
 	--dim: #5b6070;
 	--ac: #7df0c6;
-	/* Vert de Mnemo, fixe : identité (avatar, puce verte) et état « travaille » ; ne suit pas la couleur principale. */
+	/* Vert de Mnemo, fixe : couleur de sens (succès, prêt, en marche, état « travaille ») et couleur d’agent ; ne suit pas la couleur principale. */
 	--vert: #7df0c6;
 	--violet: #a394ff;
 	--blue: #6cb6ff;

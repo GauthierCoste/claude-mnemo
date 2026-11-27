@@ -8,9 +8,10 @@
  * personnel de `HOME`, voir `infra/dossiers.ts`), celui de `config.json`, de `preferences.json` et du journal de l'app ; en
  * essai, un dossier temporaire.
  */
-import { app, Notification, shell } from 'electron';
+import { app, nativeImage, Notification, shell } from 'electron';
 import type { Configuration, Lancement } from '../domaine/configuration.ts';
 import { bilanDesinstallation, type EntreeDesinstallation, planDesinstallation } from '../domaine/desinstallation.ts';
+import { iconeDockDeLaPage } from '../domaine/dock.ts';
 import { toutesLesImages } from '../domaine/icone.ts';
 import type { ActionMenu } from '../domaine/menu.ts';
 import { ARGUMENT_OUVERTURE_SESSION, ouverteParLaSession } from '../domaine/ouverture-session.ts';
@@ -162,6 +163,13 @@ async function demarrerInterface(home: string, images: string, configurationLue:
 		surVisibilite(visible) {
 			if (visible) void app.dock?.show();
 			else app.dock?.hide();
+		},
+		// l'icône du Dock suit la couleur de l'interface : celle que la page redessine (PNG `data:`)
+		surIconePage(adresses) {
+			const adresse = iconeDockDeLaPage(adresses);
+			if (adresse === null || app.dock === undefined) return;
+			const image = nativeImage.createFromDataURL(adresse);
+			if (!image.isEmpty()) app.dock.setIcon(image);
 		},
 	});
 	const suivi: SuiviService = creerSuivi({ acces: accesReel(configuration), fenetreAuFocus: () => fenetre.auFocus() });

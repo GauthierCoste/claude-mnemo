@@ -422,7 +422,8 @@
 .nuancier {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 8px;
+	align-items: center;
+	gap: 10px 8px;
 }
 
 .nuance {
@@ -435,8 +436,11 @@
 	cursor: pointer;
 }
 
+/* choisie : un anneau détaché de la pastille, visible sur toute couleur (un liseré clair se perd sur une couleur claire) */
 .nuance[aria-pressed='true'] {
-	border-color: var(--tx);
+	box-shadow:
+		0 0 0 2px var(--s2),
+		0 0 0 4px var(--tx);
 }
 
 .nuance:focus-visible {
@@ -444,25 +448,59 @@
 	outline-offset: 2px;
 }
 
-/* couleur choisie à la main : le sélecteur du système, dans une case du nuancier */
+/* choix libre, après les pastilles : « Personnalisée » (sélecteur du système) et le code hexadécimal */
+.libre {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+/* un écart de plus entre les pastilles et le choix libre (en fin de ligne : invisible quand le choix libre passe dessous) */
+.nuance:last-of-type {
+	margin-right: 8px;
+}
+
 .autre {
 	position: relative;
-	width: 34px;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
 	height: 34px;
-	border: 2px dashed var(--bd2);
+	padding: 0 12px 0 6px;
+	border: 1px solid var(--bd2);
 	border-radius: var(--r-3);
-	background: var(--c);
+	background: var(--s3);
+	color: var(--tx);
+	font-size: 12.5px;
 	cursor: pointer;
+	white-space: nowrap;
+}
+
+.autre:hover {
+	border-color: var(--mu);
 }
 
 .autre[data-choisie] {
-	border-style: solid;
-	border-color: var(--tx);
+	border: 2px solid var(--tx);
+	padding: 0 11px 0 5px;
 }
 
 .autre:focus-within {
 	outline: 2px solid var(--tx);
 	outline-offset: 2px;
+}
+
+/* la couleur choisie à la main ; sans elle, toutes les teintes : on peut tout choisir */
+.temoin {
+	width: 22px;
+	height: 22px;
+	border-radius: var(--r-2);
+	background: conic-gradient(var(--red), var(--amber), var(--vert), var(--blue), var(--violet), var(--pink), var(--red));
+}
+
+.temoin[data-couleur] {
+	background: var(--c);
 }
 
 .autre input {
@@ -472,6 +510,33 @@
 	height: 100%;
 	opacity: 0;
 	cursor: pointer;
+}
+
+.hex {
+	width: 6.5rem;
+	height: 34px;
+	background: var(--s3);
+	border: 1px solid var(--bd2);
+	border-radius: var(--r-3);
+	padding: 0 10px;
+	color: var(--tx);
+	font: 12.5px var(--mono);
+	text-transform: lowercase;
+}
+
+.hex:focus-visible {
+	outline: 2px solid var(--tx);
+	outline-offset: 2px;
+}
+
+.hex[aria-invalid='true'] {
+	border-color: var(--red);
+}
+
+.erreurHex {
+	margin: 8px 0 0;
+	font-size: 12px;
+	color: var(--red);
 }
 
 .avertissement {

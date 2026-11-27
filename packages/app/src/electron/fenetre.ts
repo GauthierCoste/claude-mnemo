@@ -37,6 +37,8 @@ export type OptionsFenetre = {
 	retenirBornes: (b: Bornes) => void;
 	/** Appelé quand la fenêtre est montrée ou cachée (Dock). */
 	surVisibilite: (visible: boolean) => void;
+	/** Appelé quand la page change d'icône (adresses de `<link rel="icon">`) : l'interface la redessine à sa couleur. */
+	surIconePage: (adresses: readonly string[]) => void;
 };
 
 /** Permissions accordées à l'interface : écrire dans le presse-papiers (« Copier »), le plein écran. */
@@ -115,6 +117,7 @@ export function creerFenetre(o: OptionsFenetre): Fenetre {
 				f.setFullScreen(false);
 			} else f.hide();
 		});
+		contenu.on('page-favicon-updated', (_e, adresses) => o.surIconePage(adresses));
 		f.on('hide', () => o.surVisibilite(false));
 		f.on('show', () => o.surVisibilite(true));
 		// première peinture : l'interface a posé sa marque de pleine fenêtre (pas de saut de marge à l'affichage)

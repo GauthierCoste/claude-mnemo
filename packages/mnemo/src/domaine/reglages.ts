@@ -324,7 +324,7 @@ export const CHAMPS_REGLAGES: readonly ChampReglage[] = [
 		cle: 'interface.accent',
 		groupe: 'interface',
 		libelle: 'Couleur principale de l’interface',
-		explication: 'Couleur des éléments actifs, des liens, des titres et du focus ; le logo ne change pas.',
+		explication: 'Couleur des éléments actifs, des liens, des titres, du focus et du logo.',
 		genre: 'couleur',
 		defaut: ACCENT_PAR_DEFAUT,
 		effet: 'immediat',

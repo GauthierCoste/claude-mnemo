@@ -1041,7 +1041,7 @@ export const REGLAGES_DEMO: ChampReglageVue[] = [
 		],
 		effet: 'immediat',
 	},
-	{ cle: 'interface.accent', groupe: 'interface', libelle: 'Couleur principale de l’interface', explication: 'Couleur des éléments actifs, des liens, des titres et du focus ; le logo ne change pas.', genre: 'couleur', defaut: ACCENT_PAR_DEFAUT, valeur: ACCENT_PAR_DEFAUT, effet: 'immediat' },
+	{ cle: 'interface.accent', groupe: 'interface', libelle: 'Couleur principale de l’interface', explication: 'Couleur des éléments actifs, des liens, des titres, du focus et du logo.', genre: 'couleur', defaut: ACCENT_PAR_DEFAUT, valeur: ACCENT_PAR_DEFAUT, effet: 'immediat' },
 	{ cle: 'service.port', groupe: 'service', libelle: 'Port du service', explication: 'Port local de l’interface ; le changer change son adresse (favori, application installée, lanceur).', genre: 'entier', defaut: 4747, valeur: 4747, min: 1024, max: 65535, effet: 'service' },
 	{
 		cle: 'service.navigateur',

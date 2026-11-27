@@ -140,8 +140,11 @@ cover project markers (◆ in the folder tree), the injected context (thresholds
 notes injected and leads per message), minimum similarity of search, model shutdown after inactivity, note types whose
 proposed information needs a confirmation, service port, launcher browser and the main colour of the interface (green by
 default). The table of settings and defaults is in [installation.md](installation.md#settings).
-The main colour is picked among preset swatches (the original green and the agent colours) or with « Autre couleur », and applied as soon as it is picked; a warning appears when a colour is
-hard to read on the dark background (contrast under 3:1). The logo and the session state colours keep their own colours.
+The main colour is picked among preset swatches (the original green and the agent colours) or freely: « Personnalisée »
+opens the system colour picker, and the hexadecimal code field (`#rrggbb`, `#` optional, short `#rgb` accepted) takes a
+typed or pasted colour. It is applied as soon as it is picked, logo included (title bar, browser tab, Dock icon of the
+desktop app); a warning appears when a colour is hard to read on the dark background (contrast under 3:1). Colours that
+carry a meaning keep their own: session states, success and errors, agent colours.
 
 ### Engines
 
