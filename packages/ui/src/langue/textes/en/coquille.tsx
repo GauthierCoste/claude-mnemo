@@ -58,7 +58,7 @@ export const coquille: Forme<typeof fr> = {
 			absents: 'Words only: models not installed.',
 			chargement: 'Models loading: scores will come with the next search.',
 			coupes: 'Words only: models turned off.',
-			sens: 'No scores: meaning only, no reranking.',
+			sens: 'No scores: semantic only, no reranking.',
 		},
 		session: (id) => `Session ${id}`,
 		noteReranker: 'Reranker score',

@@ -212,7 +212,7 @@ export const memoire: Forme<typeof fr> = {
 		rienEcrit: 'No changes: nothing was written',
 	},
 	entrainer: {
-		niveaux: { complets: 'Full', sens: 'Meaning only' },
+		niveaux: { complets: 'Full', sens: 'Semantic only' },
 		etats: { accepte: 'Accepted', coupe: 'Injection stopped', refuse: 'Rejected', depart: 'Default', non_appris: 'Not trained' },
 		nomsDesNiveaux: (noms) => LISTE.format(noms),
 		pourcent: (part) => `${Math.round(part * 100)}%`,

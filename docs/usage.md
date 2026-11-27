@@ -781,7 +781,7 @@ validate them, and your gestures help it learn, never measure it.
 **The Train page.** Memory › Train. A badge on the tab counts the messages pre-judged by Claude that
 wait for your review. From top to bottom:
 
-- **The state of the score**, for each level (« Full », « Meaning only »; one line when both say the same): a word
+- **The state of the score**, for each level (« Full », « Semantic only »; one line when both say the same): a word
   (« Accepted », « Rejected », « Default »…), a sentence, where it comes from (« shipped with Mnemo » for the starting
   score) and its date. The ⋯ menu holds « Go back to the previous model » (below).
 - **The task under way**, if any: its name, its progress (« 12 of 30 ») and « Stop ». Only one task runs at
@@ -1102,7 +1102,7 @@ Benchmarks measure Mnemo on fictitious corpora shipped with it (`packages/mnemo/
      subscription**, two at a time, without any tool or MCP server. The propositions are saved after each message and
      never replace a judgement; they count once a message is validated on the Train page. Run it again to resume
      the messages left.
-  3. `--apprendre [--module <path>]` learns one model per level (« Full » and « Meaning only ») on the judgements,
+  3. `--apprendre [--module <path>]` learns one model per level (« Full » and « Semantic only ») on the judgements,
      validated on sessions it did not learn from, and decides whether each one is accepted: at least 25 simulated
      injections in at least 10 real sessions, a pessimistic precision of 90 % or more (80 % or more at its lower Wilson
      bound and at the 2.5th percentile of a bootstrap by session), a calibration slope between 0.8 and 1.25, at least 20

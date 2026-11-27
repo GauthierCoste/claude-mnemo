@@ -231,7 +231,7 @@ export const sessions: Forme<typeof fr> = {
 			seuil: (seuil) => `injection threshold ${seuil}`,
 			coupe: (seuil) => `threshold ${seuil} – off`,
 		},
-		niveaux: { complets: 'full models', sens: 'semantics only' },
+		niveaux: { complets: 'full models', sens: 'semantic only' },
 		coupure: (niveau) => (
 			<>
 				<b>Automatic injection turned off</b>
@@ -262,7 +262,7 @@ export const sessions: Forme<typeof fr> = {
 		demarrer: 'Start',
 		notesAbsents: 'Scores unavailable: models not installed',
 		modelesEnChargement: 'Models loading: scores will come with the next message.',
-		notesSans: (coupes, pourLaSession) => `Scores unavailable: ${coupes ? 'models off' : 'semantics only'}${pourLaSession ? ' for this session' : ''}`,
+		notesSans: (coupes, pourLaSession) => `Scores unavailable: ${coupes ? 'models off' : 'semantic only'}${pourLaSession ? ' for this session' : ''}`,
 		sousLeSeuil: (n) => `Below the threshold (${n})`,
 		ecartees: (n) => `Set aside (${n})`,
 		retablir: 'Restore',
